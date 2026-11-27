@@ -84,16 +84,32 @@ impl ApiKeyDriver {
 
     /// `await __apiKeyForTest(…)`: `sub`'s real key, minted once per harness into the store.
     fn real_key(&self, sub: TsExpr) -> TsExpr {
+        let now = self.now();
+        self.real_key_at(sub, now)
+    }
+
+    /// The time the seam reads (the harness clock, which `advance Clock` moves), so a key minted
+    /// here expires and is last used on the clock that verifies it.
+    fn now(&self) -> TsExpr {
+        let env = member(call(ident("__makeHarness"), Vec::new()), self.env.clone());
+        await_expr(call(ident("__apiKeyNow"), vec![env]))
+    }
+
+    /// `by Expired` (slice 3): the real key of an identity of its own, minted the actor's `ttl` and
+    /// an hour before the harness clock, so it expired an hour ago.
+    fn expired_key(&self) -> TsExpr {
+        let ttl = self.seam.ttl_ms.unwrap_or_default();
+        let now = binary(TsBinaryOp::Sub, self.now(), num_lit(ttl + 3_600_000));
+        self.real_key_at(str_lit(EXPIRED_SUB), now)
+    }
+
+    /// `sub`'s real key, minted (once per harness) as at `now`, in milliseconds.
+    fn real_key_at(&self, sub: TsExpr, now: TsExpr) -> TsExpr {
         let env = member(call(ident("__makeHarness"), Vec::new()), self.env.clone());
         let factory = crate::emitter::agent_factory_name(
             &bynk_check::api_key::key_owner_agent_name(&self.actor),
         );
         let req = |f: &str| member(ident("__req"), f);
-        let now = binary(
-            TsBinaryOp::Mul,
-            call(ident("__bynkNow"), Vec::new()),
-            num_lit(1000),
-        );
         let store = arrow_with(
             vec![TsParam::new("__req".to_string(), None)],
             true,
@@ -193,22 +209,29 @@ pub(super) struct KeyRoute<'a> {
 /// (`bynk-test`), so revoking it changes no other principal's key.
 const REVOKED_SUB: &str = "bynk-test-revoked";
 
+/// The identity `by Expired` mints its back-dated key for (slice 3).
+const EXPIRED_SUB: &str = "bynk-test-expired";
+
 /// The bad keys, each with the store comparisons the seam must make for it: every one, and those
 /// against the dummy digest.
-const BAD_KEYS: [(&str, (i64, i64)); 5] = [
+/// `expired` (slice 3) is compared against the record before its expiry is checked, so the work is
+/// a forged key's.
+const BAD_KEYS: [(&str, (i64, i64)); 6] = [
     ("malformed", (0, 0)),
     ("unknownkey", (1, 1)),
     ("unknownhandle", (1, 1)),
     ("forged", (1, 0)),
     ("revoked", (1, 1)),
+    ("expired", (1, 0)),
 ];
 
-/// The principals and the bad keys each presents in turn.
-const PRINCIPALS: [(&str, &str, &[&str]); 4] = [
+/// The principals and the bad keys each presents in turn. `Expired` only for an actor with a `ttl`.
+const PRINCIPALS: [(&str, &str, &[&str]); 5] = [
     ("malformed", "Malformed", &["malformed"]),
     ("unknown", "Unknown", &["unknownkey", "unknownhandle"]),
     ("forged", "Forged", &["forged"]),
     ("revoked", "Revoked", &["revoked"]),
+    ("expired", "Expired", &["expired"]),
 ];
 
 /// The failure drivers of an `ApiKey` route: one per bad key (typed, and raw when the route takes
@@ -228,12 +251,18 @@ pub(super) fn push_api_key_drivers(
         headers.push(driver.header_entry(ident("__key")));
         request_init(verb, headers, body.clone())
     };
+    let expiring = driver.seam.ttl_ms.is_some();
     for (bad, _) in BAD_KEYS {
+        if bad == "expired" && !expiring {
+            continue;
+        }
         let name = ["key", bad].concat();
         let sign = const_(
             "__key",
             if bad == "revoked" {
                 driver.revoked_key()
+            } else if bad == "expired" {
+                driver.expired_key()
             } else {
                 call(
                     ident("__apiKeyBadKey"),
@@ -285,6 +314,9 @@ pub(super) fn push_api_key_drivers(
         &[false]
     };
     for (principal, written, keys) in PRINCIPALS {
+        if principal == "expired" && !expiring {
+            continue;
+        }
         for &raw in prefixes {
             routes.push(principal_driver(
                 (sname, key),

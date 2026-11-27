@@ -136,6 +136,16 @@ pub fn api_key_seam_for(
     api_key_seam_of(actor, by.binder.as_ref().map(|b| b.name.clone()))
 }
 
+/// #3939 (slice 3): whether a `by` clause names a single local `ApiKey` actor with a `ttl`, whose
+/// keys `by Expired` can present expired.
+pub fn by_clause_is_expiring_api_key(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    !by.is_sum()
+        && actors
+            .get(&by.primary().name)
+            .and_then(|a| api_key_seam_of(a, None))
+            .is_some_and(|s| s.ttl_ms.is_some())
+}
+
 /// Whether a `by` clause names a single local `ApiKey` actor.
 pub fn by_clause_is_api_key(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
     !by.is_sum() && actors.get(&by.primary().name).is_some_and(is_api_key_actor)
@@ -541,10 +551,10 @@ pub(crate) fn expired_needs_ttl(span: Span) -> CompileError {
     CompileError::new(
         "bynk.test.expired_needs_bearer_route",
         span,
-        "`by Expired` sends an expired key, but this route's `ApiKey` actor's keys do not expire",
+        "`by Expired` sends an expired key, but this route's `ApiKey` actor declares no `ttl`, so its keys do not expire",
     )
     .with_note(
-        "an `ApiKey` actor has no `ttl` yet; test its seam with `by Nobody`, `by Malformed`, `by Unknown` or `by Forged`",
+        "give the actor a `ttl` (`ttl = 90.days`) to test expiry; without one, test its seam with `by Nobody`, `by Malformed`, `by Unknown`, `by Forged` or `by Revoked`",
     )
 }
 
@@ -574,7 +584,7 @@ pub fn remote_unsupported_api_key(
                 b @ (BadCredential::Malformed | BadCredential::Unknown),
             )) => Some(format!("drives `by {}`", b.name())),
             crate::checker::Callee::Principal(CallSitePrincipal::BadCredential(
-                b @ (BadCredential::Forged | BadCredential::Revoked),
+                b @ (BadCredential::Forged | BadCredential::Revoked | BadCredential::Expired),
             )) if calls_api_key_route => Some(format!(
                 "drives `by {}` at a route an `ApiKey` actor guards",
                 b.name()

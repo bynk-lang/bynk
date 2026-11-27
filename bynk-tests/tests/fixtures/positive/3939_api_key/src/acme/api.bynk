@@ -8,8 +8,9 @@ type AccountId = String where NonEmpty && MaxLength(64)
 type NewKey = { label: ApiKeyLabel }
 
 // #3939: an API key actor. Keys look like `acme_<id>_<secret><checksum>` and are read from
-// `Authorization: Bearer <key>`.
-actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"), identity = AccountId }
+// `Authorization: Bearer <key>`. A key lasts 90 days (slice 3), and `CLIENT_KEY_PEPPER_PREV`, when
+// set, holds the pepper being rotated out.
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", previous = "CLIENT_KEY_PEPPER_PREV", prefix = "acme", ttl = 90.days), identity = AccountId }
 
 capability PerIp = RateLimit @limit(1000) @period(60.seconds)
 
@@ -66,6 +67,14 @@ service api from http {
 	on DELETE("/accounts/:id/keys/:key") (id: AccountId, key: ApiKeyId) -> Effect[HttpResult[()]] by Visitor {
 		let gone <- Client.revoke(id, key)
 		if gone { NoContent } else { NotFound }
+	}
+
+	// #3939 (slice 3, §7): `sweep` removes the identity's expired keys and keys under neither pepper,
+	// and answers how many remain under `previous`: the keys dropping it now would end.
+	@rateLimit(PerIp, key: clientIp)
+	on POST("/accounts/:id/sweep") (id: AccountId) -> Effect[HttpResult[Int]] by Visitor given Clock {
+		let n <- Client.sweep(id)
+		Ok(n)
 	}
 
 	// `revokeAll` is legal in an agent's handler too, as an account-closure workflow needs.

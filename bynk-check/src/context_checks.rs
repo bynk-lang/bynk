@@ -2449,11 +2449,12 @@ fn check_by_clause_contracts(
 /// scheme they are refused here, because their seams read a string or an integer and would otherwise
 /// drop the value quietly (a `Signature` `tolerance = 5.minutes` reads as no tolerance at all, which
 /// would turn the replay window off). A repeated `SignedCookie` key is refused too, since the first
-/// would win quietly in a scheme that guards a session.
+/// would win quietly in a scheme that guards a session. #3939 (slice 3): an `ApiKey` actor's `ttl`
+/// is a duration too, checked with its other keys.
 fn check_scheme_arg_kinds(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
     use crate::actors::Scheme;
-    let signed_cookie =
-        actor.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) == Some(Scheme::SignedCookie);
+    let scheme = actor.auth.as_ref().and_then(|a| Scheme::from_name(&a.name));
+    let signed_cookie = scheme == Some(Scheme::SignedCookie);
     let mut seen: HashSet<&str> = HashSet::new();
     for arg in &actor.auth_config {
         if signed_cookie && !seen.insert(arg.key.name.as_str()) {
@@ -2471,7 +2472,11 @@ fn check_scheme_arg_kinds(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
                 ),
             );
         }
+        let api_key_ttl = scheme == Some(Scheme::ApiKey)
+            && arg.key.name == "ttl"
+            && matches!(arg.value, bynk_syntax::ast::SchemeArgValue::Duration { .. });
         if !signed_cookie
+            && !api_key_ttl
             && matches!(
                 arg.value,
                 bynk_syntax::ast::SchemeArgValue::Duration { .. }
@@ -2488,7 +2493,7 @@ fn check_scheme_arg_kinds(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
                     ),
                 )
                 .with_note(
-                    "a duration or a bare name is accepted only by `SignedCookie`; give a whole number (a `Signature` `tolerance` is in seconds: `tolerance = 300`) or a quoted string",
+                    "a duration or a bare name is accepted only by `SignedCookie` (and a duration by an `ApiKey` actor's `ttl`); give a whole number (a `Signature` `tolerance` is in seconds: `tolerance = 300`) or a quoted string",
                 ),
             );
         }
