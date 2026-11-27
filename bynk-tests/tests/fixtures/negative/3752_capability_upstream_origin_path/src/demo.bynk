@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+// #3752 (D13): an origin has no path, so a route can't be steered past it.
+capability Pages = Upstream @origin("https://upstream.example/blog")
+
+service proxy from http {
+  on ANY("/blog/*path") (path: String) -> Effect[PassThrough] by Visitor given Pages {
+    Respond(NotFound)
+  }
+}
