@@ -8,7 +8,7 @@ import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } fr
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
-import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
+import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __registerFrameEncoder, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
 
 import { RoomId as __CommonsRoomId } from "../../ids.js";
 import { __serialise_RoomId, __deserialise_RoomId } from "../../ids.js";
@@ -149,7 +149,7 @@ export class Room {
     if (url.pathname === "/_bynk/ws/open/ChatGateway") {
       const __pair = __newWebSocketPair();
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; identity: string; exp?: number };
-      const connection = __acceptHibernatableConnection<ServerFrame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, max: 1048576, exp: __payload.exp });
+      const connection = __acceptHibernatableConnection<ServerFrame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, max: 1048576, svc: "ChatGateway", exp: __payload.exp });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       await this.__wsOpen_ChatGateway(connection, __payload.args[0] as RoomId, { identity: __payload.identity as UserId, ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client, __webSocketBearerProtocol(request.headers.get("Sec-WebSocket-Protocol")));
@@ -184,6 +184,8 @@ export class Room {
   }
 }
 
+__registerFrameEncoder("ChatGateway", (frame: ServerFrame) => __serialise_ServerFrame(frame));
+
 const __RoomWire: __AgentWire = {
   track: { args: [{ enc: __serialise_UserId, dec: __deserialise_UserId }, __AGENT_WIRE_PASS], result: { enc: (__v: void) => null, dec: (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError> } },
 };
@@ -194,6 +196,24 @@ export function __makeRoom(key: RoomId, env?: { ROOM?: __DurableObjectNamespace 
 
 export function __resetAgents(): void {
   __RoomRegistry.reset();
+}
+
+export function __serialise_ServerFrame(value: ServerFrame): __JsonValue {
+  return {
+    text: value.text as __JsonValue,
+  };
+}
+
+export function __deserialise_ServerFrame(json: __JsonValue, path: string = "$"): Result<ServerFrame, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  return Ok({ text: __text } as ServerFrame);
 }
 
 export function __serialise_UserId(value: UserId): __JsonValue {
