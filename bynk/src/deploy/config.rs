@@ -295,6 +295,11 @@ pub(crate) struct Resources {
     /// leaves its agents' state behind. A group's comes from its `bynk-agents.json`; a
     /// Worker that is one context owns its own durable-object classes.
     pub(crate) agent_contexts: BTreeMap<String, Vec<String>>,
+    /// #3565: each context of [`Resources::agent_contexts`] that carries class tombstones (a
+    /// `replaces` or a `removed agent`), with the old classes they name. A supported move of such
+    /// a context is refused in v1: where its tombstones belong after the move is unsettled. A
+    /// group's comes from its `bynk-agents.json`; a Worker that is one context carries its own.
+    pub(crate) agent_tombstones: BTreeMap<String, Vec<String>>,
     /// The workers this one binds to — the edges the deploy order respects.
     /// Adapters are already excluded upstream (they are not Workers), and
     /// foreign Workers are in [`Resources::foreign_services`], so every edge
@@ -488,6 +493,7 @@ impl Default for Resources {
         Self {
             members: Vec::new(),
             agent_contexts: BTreeMap::new(),
+            agent_tombstones: BTreeMap::new(),
             binds_to: Vec::new(),
             foreign_services: Vec::new(),
             queues: Vec::new(),
@@ -719,6 +725,7 @@ fn read_worker(config: &Path, declared: DeclaredBindings) -> Result<Resources, S
         // Filled in by `project_resources`, from the layout and the agents manifest.
         members: Vec::new(),
         agent_contexts: BTreeMap::new(),
+        agent_tombstones: BTreeMap::new(),
     })
 }
 
@@ -751,6 +758,9 @@ pub(crate) fn project_resources(
             .map_err(|e| format!("could not read the configuration for `{worker}`: {e}"))?;
         resources.agent_contexts =
             read_agent_contexts(&workers_dir.join(worker), worker, &resources)
+                .map_err(|e| format!("could not read the agent classes of `{worker}`: {e}"))?;
+        resources.agent_tombstones =
+            read_agent_tombstones(&workers_dir.join(worker), &resources)
                 .map_err(|e| format!("could not read the agent classes of `{worker}`: {e}"))?;
         // Each group Worker's members, which a push records in the version's
         // deploy facts (#3562).
@@ -794,6 +804,37 @@ fn read_agent_contexts(
         BTreeMap::new()
     } else {
         BTreeMap::from([(super::secrets::context_of(worker), own)])
+    })
+}
+
+/// #3565: the contexts of one Worker that host agents and carry class tombstones, with the old
+/// classes those name. A group's `bynk-agents.json` says so per context; a Worker that is one
+/// context carries its own `renamed` and `deleted` tombstones.
+fn read_agent_tombstones(
+    dir: &Path,
+    resources: &Resources,
+) -> Result<BTreeMap<String, Vec<String>>, String> {
+    #[derive(Deserialize)]
+    struct File {
+        #[serde(default)]
+        tombstones: BTreeMap<String, Vec<String>>,
+    }
+    if let Ok(text) = std::fs::read_to_string(dir.join(bynk_emit::AGENTS_MANIFEST)) {
+        return serde_json::from_str::<File>(&text)
+            .map(|f| f.tombstones)
+            .map_err(|e| format!("{}: {e}", bynk_emit::AGENTS_MANIFEST));
+    }
+    let mut old: Vec<String> = resources
+        .renamed_durable_objects
+        .iter()
+        .map(|(o, _)| o.clone())
+        .chain(resources.deleted_durable_objects.iter().cloned())
+        .collect();
+    old.sort();
+    old.dedup();
+    Ok(match resources.agent_contexts.keys().next() {
+        Some(context) if !old.is_empty() => BTreeMap::from([(context.clone(), old)]),
+        _ => BTreeMap::new(),
     })
 }
 
@@ -3059,6 +3100,22 @@ service = "legacy-billing"
         .unwrap();
         let read = read_agent_contexts(&dir, "core", &resources).unwrap();
         assert_eq!(read["shop.orders"], ["Cart"]);
+        // #3565: a manifest without `tombstones` carries none; one with names them per context.
+        assert!(read_agent_tombstones(&dir, &resources).unwrap().is_empty());
+        std::fs::write(
+            dir.join(bynk_emit::AGENTS_MANIFEST),
+            r#"{"agents":{"shop.orders":["Cart"]},"tombstones":{"shop.orders":["Trolley"]}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            read_agent_tombstones(&dir, &resources).unwrap()["shop.orders"],
+            ["Trolley"]
+        );
+        // An older bynk reads the agents as before: its reader knows no `tombstones` and skips it.
+        assert_eq!(
+            read_agent_contexts(&dir, "core", &resources).unwrap()["shop.orders"],
+            ["Cart"]
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

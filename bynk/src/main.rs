@@ -132,6 +132,7 @@ fn run() -> ExitCode {
             confirm_delete,
             confirm_jurisdiction,
             accept_fresh_agent,
+            move_agent,
             accept_compatible_skew,
             wrangler_args,
         } => {
@@ -157,6 +158,7 @@ fn run() -> ExitCode {
                     confirm_delete,
                     confirm_jurisdiction,
                     accept_fresh_agent,
+                    move_agent,
                     accept_compatible_skew,
                     wrangler_args,
                 },
