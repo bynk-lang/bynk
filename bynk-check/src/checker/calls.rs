@@ -5589,6 +5589,13 @@ fn resolve_test_address<'a>(
     None
 }
 
+/// A principal whose address resolves to no test handler is still checked on its own.
+fn report_unresolved_principal(principal: Option<&bynk_syntax::ast::CallSiteActor>, ctx: &mut Ctx) {
+    if let Some(p) = principal {
+        report_principal_actor(p, ctx);
+    }
+}
+
 /// v0.182 (#664): validate the call-site principal of a test `effect_let`
 /// against the ADDRESSED HANDLER. This is where per-case identity isolation is
 /// enforced: an identity-carrying handler driven with a unit principal (`by
@@ -5613,21 +5620,15 @@ pub(crate) fn check_effect_let_principal(
         ..
     } = &value.kind
     else {
-        if let Some(p) = principal {
-            report_principal_actor(p, ctx);
-        }
+        report_unresolved_principal(principal, ctx);
         return;
     };
     let ExprKind::Ident(id) = &receiver.kind else {
-        if let Some(p) = principal {
-            report_principal_actor(p, ctx);
-        }
+        report_unresolved_principal(principal, ctx);
         return;
     };
     let Some(sig) = ctx.test_services.get(&id.name).cloned() else {
-        if let Some(p) = principal {
-            report_principal_actor(p, ctx);
-        }
+        report_unresolved_principal(principal, ctx);
         return;
     };
     // #3051: a connection's principal is established once, at `open`
