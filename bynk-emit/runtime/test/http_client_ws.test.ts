@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { ClientOptions } from "../src/client/http_client.ts";
+import { CleartextCredential, type ClientOptions } from "../src/client/http_client.ts";
 import { __webSocket, type __WsSpec } from "../src/client/http_client_ws.ts";
 import { Err, Ok } from "../src/result.ts";
 
@@ -379,4 +379,75 @@ test("close() on a connection that is already closed does not tell the listeners
   c.close();
   await tick();
   assert.deepEqual(closes, [1000]);
+});
+
+// #4610: a token is never offered over cleartext `ws:` / `http:`, except to loopback.
+const at = (baseUrl: string): ClientOptions => ({ baseUrl, webSocket: FakeSocket as unknown as typeof WebSocket });
+function connectAt(baseUrl: string, s = spec(), credentials: unknown = { bearer: "tok" }, extra?: object) {
+  FakeSocket.made = [];
+  return __webSocket(at(baseUrl), s, build, credentials, extra) as ReturnType<typeof __webSocket> & any;
+}
+
+test("a bearer or OIDC token to a remote ws:// or http:// base throws before any socket is made", () => {
+  for (const base of ["ws://api.example.com", "http://api.example.com", "http://localhost.evil.com", "ws://127.0.0.1.evil.com", "http://localhost@evil.com"]) {
+    assert.throws(
+      () => connectAt(base),
+      (e: unknown) => {
+        assert.ok(e instanceof CleartextCredential, base);
+        assert.match(e.message, /wss:\/\//);
+        assert.ok(!e.message.includes("tok"), "the error does not echo the token");
+        return true;
+      },
+      base,
+    );
+    assert.deepEqual(FakeSocket.made, [], `${base} makes no socket`);
+  }
+  assert.throws(() => connectAt("http://api.example.com", spec("oidc"), { oidc: "jwt" }), CleartextCredential);
+  assert.deepEqual(FakeSocket.made, []);
+});
+
+test("a token to loopback over ws:// or http:// is offered, as is one over wss://", async () => {
+  for (const base of ["ws://localhost:8787", "http://localhost:8787", "ws://app.localhost", "http://127.0.0.1:8787", "ws://127.9.9.9", "ws://[::1]:8787", "wss://api.example.com"]) {
+    connectAt(base);
+    await tick();
+    assert.equal(FakeSocket.made.length, 1, `${base} connects`);
+    assert.deepEqual(FakeSocket.made[0]!.protocols, ["bynk.bearer", "tok"], base);
+  }
+});
+
+test("a service that offers no token connects over a remote ws://", async () => {
+  // Anonymous and cookie services send no token (a cookie is the browser's to govern with `Secure`).
+  for (const credential of ["none", "cookie"] as const) {
+    connectAt("ws://api.example.com", spec(credential), undefined);
+    await tick();
+    assert.equal(FakeSocket.made.length, 1, credential);
+    assert.equal(FakeSocket.made[0]!.protocols, undefined);
+  }
+  // A `bearer?` service with no token given connects anonymously.
+  connectAt("ws://api.example.com", spec("bearer?"), {});
+  await tick();
+  assert.equal(FakeSocket.made.length, 1);
+  assert.equal(FakeSocket.made[0]!.protocols, undefined);
+  // ... but with a token given, or a reconnect that will read one, it is refused.
+  assert.throws(() => connectAt("ws://api.example.com", spec("bearer?"), { bearer: "tok" }), CleartextCredential);
+  assert.throws(
+    () => connectAt("ws://api.example.com", spec("bearer?"), {}, { reconnect: { credentials: () => ({ bearer: "fresh" }) } }),
+    CleartextCredential,
+  );
+  assert.deepEqual(FakeSocket.made, []);
+});
+
+test("a page's own origin is checked when there is no baseUrl", async () => {
+  const had = Object.getOwnPropertyDescriptor(globalThis, "location");
+  try {
+    Object.defineProperty(globalThis, "location", { value: { origin: "http://app.example.com" }, configurable: true });
+    assert.throws(() => connectAt(""), CleartextCredential);
+    Object.defineProperty(globalThis, "location", { value: { origin: "http://localhost:5173" }, configurable: true });
+    connectAt("");
+    await tick();
+    assert.equal(FakeSocket.made.length, 1);
+  } finally {
+    if (had === undefined) Reflect.deleteProperty(globalThis, "location");
+    else Object.defineProperty(globalThis, "location", had);
+  }
 });

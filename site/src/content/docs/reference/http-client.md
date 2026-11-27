@@ -125,7 +125,9 @@ bearer or OIDC token, from `headers`, the call's `init` or a typed `headers` rec
 `localhost`, a `*.localhost` name, `127.0.0.0/8` or `[::1]`, as `bynk dev` and the test tiers use.
 Use an `https://` base URL for anything else. A relative `baseUrl` is checked against
 `location.origin`. Anonymous calls are unaffected, and so are cookie credentials, which the browser
-governs with `Secure`.
+governs with `Secure`. A WebSocket `connect` follows the same rule: a bearer or OIDC token (given, or
+read by `reconnect.credentials`) to a remote `ws:` or `http:` base URL throws `CleartextCredential`
+before a socket is made.
 
 Each function takes the route's parameters in order (path parameters, then the
 `body`, then the `query`) and an optional last `init`, a standard `RequestInit`
