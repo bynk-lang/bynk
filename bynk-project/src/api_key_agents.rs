@@ -198,9 +198,13 @@ agent {agent} {{\n\
 \t\t\t}} else {{\n\
 \t\t\t\tEffect.pure(())\n\
 \t\t\t}}\n\
-\t\t\tknown := live\n\
-\t\t\tknownAt := now\n\
-\t\t\tEffect.pure(true)\n\
+\t\t\tif live != known {{\n\
+\t\t\t\tknown := live\n\
+\t\t\t\tknownAt := now\n\
+\t\t\t\tEffect.pure(true)\n\
+\t\t\t}} else {{\n\
+\t\t\t\tEffect.pure(true)\n\
+\t\t\t}}\n\
 \t\t}} else {{\n\
 \t\t\tEffect.pure(false)\n\
 \t\t}}\n\

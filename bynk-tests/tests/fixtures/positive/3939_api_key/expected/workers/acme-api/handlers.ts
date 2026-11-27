@@ -567,9 +567,13 @@ export class ClientKeys {
           await __state.used.put(String(keyNo), now);
           return undefined;
         })() : globalThis.Promise.resolve(undefined));
-        __state.known = live;
-        __state.knownAt = now;
-        return true;
+        if (!__bynkEq(live, __state.known)) {
+          __state.known = live;
+          __state.knownAt = now;
+          return true;
+        } else {
+          return true;
+        }
       } else {
         return false;
       }
