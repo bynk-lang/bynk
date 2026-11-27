@@ -281,7 +281,12 @@ fn ws_out_roots(commons: &TypedCommons) -> Vec<TypeRef> {
         .into_iter()
         .filter_map(|s| match &s.protocol {
             bynk_syntax::ast::ServiceProtocol::WebSocket { out_type, .. } => Some(out_type.clone()),
-            _ => None,
+            bynk_syntax::ast::ServiceProtocol::Call
+            | bynk_syntax::ast::ServiceProtocol::Http
+            | bynk_syntax::ast::ServiceProtocol::Cron
+            | bynk_syntax::ast::ServiceProtocol::Queue { .. }
+            | bynk_syntax::ast::ServiceProtocol::Events { .. }
+            | bynk_syntax::ast::ServiceProtocol::Email { .. } => None,
         })
         .collect()
 }
