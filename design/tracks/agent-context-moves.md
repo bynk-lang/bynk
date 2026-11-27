@@ -5,6 +5,9 @@
   other decision as recommended ([ruling](https://github.com/bynk-lang/bynk/issues/3565#issuecomment-7210442841)). Spine bynk-lang/bynk#3565 (label `track`). It follows on from #3562
   (Worker grouping, #551) and its V0 verification
   ([#3562 comment](https://github.com/bynk-lang/bynk/issues/3562#issuecomment-6896203799)).
+  The live check (slice 0, S1–S15) was run on the scratch account on 27 November 2026 with
+  wrangler 4.168.0 ([results](https://github.com/bynk-lang/bynk/issues/3565#issuecomment-7211117297)), and its results are folded in below, each marked with
+  its S-number (§10.1).
 - **Ruling already given (maintainer, 27 November 2026, on #3565):** this goes into 1.0. The
   brief window of `1101` errors between phases 2 and 3 is **accepted and documented** in the
   first version; draining or queueing calls can come later. `bynk.deploy.agent_move_refused`
@@ -90,8 +93,38 @@ Observed in V0 and not in the docs: phase 1 with a binding fails with `100406`; 
 through the target between the source's commit and the target's cleanup deploy fail with
 `1101`; a target redeployed unchanged after the commit fails with
 `phase_one_transfer_after_commit_mismatch`; the V0 source **dropped** the class from its code
-in phase 2 and the transfer still committed. The docs say to keep it in code, so this design
-follows the docs, and the live check (§10, S4) tries both.
+in phase 2 and the transfer still committed. The docs say to keep it in code; the live check
+(S4) found that both forms commit, so the docs' form is not required.
+
+**Measured in the live check** ([results](https://github.com/bynk-lang/bynk/issues/3565#issuecomment-7211117297), wrangler 4.168.0), and not in the docs:
+
+1. **The window's errors are not the platform's `1101`.** In phase 1 the receiver forwards over
+   a Service Binding, and after the commit the source has no binding for the class, so a
+   request in the window gets the *forwarding or binding answer* of the code it reaches (the
+   probe's own `503`), not `1101` (S1, S12). In Bynk that is whatever the forwarded member or
+   the receiver's entry answers (§5).
+2. **The namespace keeps its id, and the listing flips its `script` to `St` at the commit**
+   (phase 2), not at phase 3. A pending transfer (after phase 1) is **invisible** in the
+   listing (S5).
+3. **Phase 3 without a commit is accepted and creates an empty namespace** (`Created: Counter`;
+   the receiver reads nothing, the source still holds the data), and the pending transfer is
+   silently dropped: the source's later commit is refused with `transferred_pending_not_found`
+   (S6). Cloudflare does not guard this, so Bynk must (§7.1).
+4. **Every phase is repeatable** (S3), and a push killed part-way is all or nothing on the
+   server, except that wrangler's triggers step is separate: a phase 1 killed after its upload
+   left the version deployed and the transfer recorded but `workers.dev` disabled (`error code:
+   1042`) until the phase was repeated (S2).
+5. **A hand `wrangler rollback` of the source to its pre-move version is accepted**: the
+   source's binding then resolves to the receiver's namespace (same id), and a new, empty,
+   orphan namespace is created on the source. The receiver's rollback to its phase 1 version is
+   refused with `phase_one_transfer_target_class_provisioned` (code `100402`) (S8).
+6. **A cancel works and clears the pending transfer**: a later phase 1 works, a commit after a
+   cancel is refused (`transferred_pending_not_found`), and a move back commits with the data
+   (S7).
+7. **One push can carry several transfers**: a phase 1 naming two sources (S13), and a phase 2
+   naming two receivers (S14), are both accepted.
+8. **Environments work** with env-qualified names in `transfer_from` and `transferred_to`
+   (S11), and **deleting the emptied source** leaves the data on the receiver (S10).
 
 ## 3. The orchestration in `bynk deploy`
 
@@ -106,8 +139,8 @@ receiver** (fan-in), and a group split into two Workers makes one set with one s
 receivers (fan-out). A set is moved as one unit, with **one push per Worker per phase**. A
 receiver's phase 1 push carries one `expecting-transfer` entry per incoming class, each with
 its own `transfer_from`, and a source's phase 2 push carries one `transferred` entry per
-outgoing class, each with its own `transferred_to`. Whether one push may carry several
-sources' entries is live check S13. A Worker that is both a source and a receiver in one run
+outgoing class, each with its own `transferred_to`; one push may carry several of either
+(S13, S14). A Worker that is both a source and a receiver in one run
 is refused (`chained`, D9).
 
 ### 3.2 The phases
@@ -121,7 +154,7 @@ beside the normal one (§9, slice 2). The normal provision → secrets → push 
 | Phase | Workers | What each pushes | Effect |
 |---|---|---|---|
 | **1, receive** | each receiver `Wt` (`St`) | `Wt`'s new build with each incoming `c` as a **forwarded member**: the receiver's dispatcher hands every request that `c` would own (its routes, and `/_bynk/call/<service>` and `/_bynk/event/<service>` for `c`'s services) unchanged to `c` on `Sf` over a Service Binding, and runs none of `c`'s code itself. The same build also carries the class code of `K` exported, each class as `state = "expecting-transfer"`, `storage = "sqlite"`, `transfer_from = "<Sf>"`, and **no** Durable Object binding for it. A brand-new `St` is a first deploy. | `St` expects the classes and answers for `c` by forwarding. Nothing has moved; the data is still `Sf`'s, and every call to `c`, wherever it arrives, is served by `c` on `Sf`. |
-| **2, commit** | each source `Wf` (`Sf`) | `Wf`'s new build (or, when `Wf` is no longer a Worker of the build, a **stub**: a `fetch` that answers `503`), with each outgoing class still exported in code, its binding removed, and `state = "transferred"`, `transferred_to = "<St>"`. | Cloudflare reassigns the namespaces to `St`. From here the data is `St`'s. **The window opens** with the first of these pushes. |
+| **2, commit** | each source `Wf` (`Sf`) | `Wf`'s new build (or, when `Wf` is no longer a Worker of the build, a **stub**: a `fetch` that answers `503`), with each outgoing class's binding removed and `state = "transferred"`, `transferred_to = "<St>"`. The class is not exported in code: both forms commit (S4). | Cloudflare reassigns the namespaces to `St`. From here the data is `St`'s. **The window opens** with the first of these pushes. |
 | **3, go live** | each receiver `Wt` (`St`) | `Wt`'s normal new build: `c` a member, each class plain live, with its binding. | `St` serves `K` with the old data. **The window closes** with the last of these pushes. |
 
 Because phase 1 forwards `c` rather than running it, it opens no window. A member of `St`'s
@@ -131,10 +164,20 @@ body included, so `c` on `Sf` verifies it as it does today. That needs each edge
 callers to keep its value when the caller is rebound from `Sf` to `St` (slice 4 tests it).
 The only window is the one the ruling accepted, from phase 2 to phase 3.
 
+**Crons, queue consumers and email addresses stay on the source until phase 3.** One queue has
+one consumer and an address one Worker, so the receive build leaves the moving context's
+crons, consumers and addresses out (§9, slice 2). The source drops them at phase 2 and the
+receiver takes them at phase 3. In the window a cron tick can be missed, a queue's messages
+wait (they are not lost: the queue holds them until a consumer is bound), and mail to the
+moving context's addresses gets the error Email Routing gives for an address with no Worker.
+
 **Placement in the run's order** (`gates.rs:ordered`, callee first). The set is ordered as
 **two nodes**. *Receive* (every phase 1 push) depends on every Worker that the receivers call
 outside the set. *Commit* (every phase 2 push, then every phase 3 push, back to back with no
-prompt and nothing else between them) depends on *receive*, on every Worker that the sources
+prompt and nothing else between them; the phase 2 pushes of a set run **concurrently**, then,
+once every commit is confirmed (§3.4), its phase 3 pushes concurrently, so the window is about
+one push long whatever the set's size: S13's serial fan-in took 10.3 s, S14's fan-out 3.8 s and
+7.7 s for its two receivers) depends on *receive*, on every Worker that the sources
 call outside the set, and on **every Worker that calls a moved context**. So those callers
 are pushed between the two nodes, already bound to `St`, while `St` still forwards to `Sf`.
 If the order cannot be built (a cycle through the two nodes), the run is refused
@@ -151,13 +194,13 @@ several pushes.
 
 | When | Ledger: the set's `step` | Also recorded |
 |---|---|---|
-| Before phase 1 | `receiving` | a fresh random `move` id; the moves (`context → classes`, `from`, `to`); `started`; the bynk version; the **live deployment id of every Worker of the set**, as read just before the push (`none` for a brand-new `St`); the ledger `version` becomes 2 (D5) |
+| Before phase 1 | `receiving` | a fresh random `move` id; the moves (`context → classes`, `from`, `to`); `started`; the bynk version; the **live deployment id of every Worker of the set**, as read just before the push (`none` for a brand-new `St`); the **namespace id of every moved class**, from the listing (S5: the id survives the move); the ledger `version` becomes 2 (D5) |
 | After each receiver's phase 1 push | `receiving` | that receiver in `done`, with its new deployment id |
 | All receivers done | `received` | `done` cleared |
 | Before phase 2 | `committing` | each source's live deployment id as read just before its push |
 | After each source's phase 2 push | `committing` | that source in `done`, with its new deployment id; its Worker record as for any push (its members no longer list the contexts it gave up; its `transferred` tombstones in a new `transferred_classes` map beside `deleted_classes`) |
 | All sources done | `committed` | `done` cleared |
-| Before phase 3 | `going_live` | nothing more |
+| Before phase 3 | `going_live`, written only once the listing confirms every commit (§3.4) | nothing more |
 | After each receiver's phase 3 push | `going_live` | that receiver in `done`; its Worker record as for any push (`contexts`, `script`, contracts) |
 | All receivers done | record **removed** | the ledger `version` returns to 1 when no record is open |
 
@@ -170,27 +213,41 @@ treated the same way: not recorded as done.
 A re-run reads the open record and **resumes the same set** without `--move-agent` being
 passed again (the record is the consent already given), provided the manifest still asks for
 the same moves. Before each push it reads the account (D7): the namespace listing for each
-class of `K` (`sweep.rs:Cloudflare::namespaces`, which reports a namespace's `script`), and the
-deployments of every Worker of the set, with the facts of each one's newest version.
+class of `K` (`sweep.rs:Cloudflare::namespaces`, which reports a namespace's `id` and
+`script`), and the deployments of every Worker of the set, with the facts of each one's newest
+version.
+
+**Every phase is repeatable, and a resume always repeats the step that was under way** (S3,
+S2). A push killed part-way is all or nothing on the server, but wrangler's triggers step is
+separate: a phase 1 killed after its upload left `workers.dev` disabled until the phase was
+repeated. So a resume never skips a Worker whose push was in progress, even when that push
+landed; it pushes it again, and only a Worker recorded `done` is skipped.
 
 **Own push or someone else's.** Every phase push carries the set's `move` id and its phase in
 its deploy facts (`transfer.move`, `transfer.phase`, §4.2). A deployment of a Worker of the
 set that is newer than the id the record holds for it is **this move's own push** only if its
 version's facts carry this `move` id and the phase the record says was under way for that
-Worker. Then it is the push that landed but was never recorded: the run records it as done
-and does not push it again. Any other newer deployment (no facts, another `move` id, another
-phase, or a version with no `transfer` where one was expected) was made by something else,
-and the run stops with `bynk.deploy.move_interleaved` (§7.2). Phase 3 versions also carry the
-`move` id while the record is open, so the same test covers them.
+Worker; the resume then repeats that push. Any other newer deployment (no facts, another
+`move` id, another phase, or a version with no `transfer` where one was expected) was made by
+something else, and the run stops with `bynk.deploy.move_interleaved` (§7.2). Phase 3 versions
+also carry the `move` id while the record is open, so the same test covers them.
+
+**Phase 3 only after a confirmed commit** (S6, S5). Phase 3 pushed before the commit is
+accepted by Cloudflare and creates an empty namespace, dropping the pending transfer. So before
+the first phase 3 push, the run reads the namespace listing and requires that **every moved
+class's namespace has `script` equal to its `St` and the id recorded before phase 1**. If any
+does not, the run stops with **`bynk.deploy.move_commit_unconfirmed`**, naming each class, the
+script its namespace is on and the one expected, and leaves the record at `committing`, so
+the next run repeats the commit. Phase 1 cannot be confirmed this way (a pending transfer is
+invisible in the listing, S5); it rests on the push's own success and the ledger.
 
 | Recorded step | What the account shows, per Worker not yet `done` | The re-run |
 |---|---|---|
-| `receiving` | no deployment newer than the recorded id | pushes its phase 1 |
-| `receiving` | a newer deployment that is this move's own phase 1 | records it `done` |
-| `received`, `committing` | `K`'s namespaces still on `Sf`, and no newer deployment of `Sf` | pushes its phase 2 (S3 gates this row for a source whose phase 2 may already have been attempted) |
-| `committing` | a newer deployment of `Sf` that is this move's own phase 2, and `K`'s namespaces on `St` | records it `done` |
-| `committed`, `going_live` | `K`'s namespaces on `St` | pushes its phase 3, or records it `done` if its newest deployment is this move's own phase 3 |
-| `committed`, `going_live` | `K`'s namespaces on `Sf`, or on neither | **stops**: `bynk.deploy.move_state_unknown`, naming the classes and both scripts. Never declares `K` live on `St` (§7.1) |
+| `receiving` | no newer deployment, or a newer one that is this move's own phase 1 | pushes its phase 1 (again) |
+| `received`, `committing` | no newer deployment of `Sf`, or a newer one that is this move's own phase 2 | pushes its phase 2 (again; a repeat is accepted, S3) |
+| `committing`, every source `done` | every moved class's namespace on its `St`, with its recorded id | records `committed`, then `going_live`, then pushes phase 3 |
+| `committing`, every source `done` | any moved class's namespace not on its `St`, or with another id | **stops**: `bynk.deploy.move_commit_unconfirmed`; the record stays at `committing` |
+| `committed`, `going_live` | the same confirmation holds | pushes its phase 3 (again) |
 | any | a newer deployment that is not this move's own | **stops**: `bynk.deploy.move_interleaved` |
 | any | the manifest no longer asks for these moves | **stops**: `bynk.deploy.move_open` (D8) |
 
@@ -200,26 +257,14 @@ and every phase is one. So no step of the orchestration, and no recovery from a 
 interrupted phase, uses `wrangler rollback`: a failed phase is repeated or the move goes on to
 the next one. Before any phase 2 push has landed, the one way back is Cloudflare's documented
 cancel (D8), which is itself a forward deploy of each receiver. From the first landed phase 2
-push on, there is no way back except a second, forward move (§6). This is also why
-`bynk revert` refuses across a move.
+push on, there is no way back except a second, forward move (§6), which commits (S7). This is
+also why `bynk revert` refuses across a move.
 
-**Resuming is idempotent.** Before each push, the re-read asks whether that push already took
-effect (its own deployment is there, by the test above). If it did, the push is recorded as
-done and not repeated. When the re-read before a source's phase 2 finds `K`'s namespaces
-already on `St` and that source's newest deployment is this move's phase 2, the source is
-recorded `done` and not pushed again. The guarantee is that each phase **takes effect** at
-most once per Worker. It is not that each phase is *pushed* at most once: a push that failed
-before it took effect is pushed again (the first two rows of each step), and live check S3
-must show that repeating phases 1 and 2 is safe before those rows are built. Phase 3 is a
-plain redeploy, so repeating it is always safe.
-
-The namespace listing is the single source of truth for "who holds the data", and the ledger
-only says where the run had got to. This keeps ADR 0194 D1's rule that the ledger records
-what was pushed and never claims to know the namespaces (`ledger.rs:Environment::deleted_classes`'s
-comment; the "Understand" box in the deploy guide's *Durable Objects* section). Whether the
-listing shows the reassignment at phase 2, and whether it shows an `expecting-transfer`
-namespace at all, is live check S5. If it does not, the resume relies on the deploy facts'
-`move` and `phase` alone, which the test above already uses.
+The namespace listing is the source of truth for "who holds the data", and the ledger only
+says where the run had got to. This keeps ADR 0194 D1's rule that the ledger records what was
+pushed and never claims to know the namespaces (`ledger.rs:Environment::deleted_classes`'s
+comment; the "Understand" box in the deploy guide's *Durable Objects* section): the namespace
+ids the record holds are what the listing said before phase 1, kept only to compare against.
 
 ## 4. The ledger and `BYNK_DEPLOY_FACTS`
 
@@ -256,6 +301,10 @@ to_script = "core"
 shop-orders = "…"
 shop-billing = "…"
 core = "…"                    # "none" for a receiver that did not exist
+
+[environments.default.agent_moves.namespaces]    # each moved class's namespace id, read before phase 1
+Cart = "…"
+Ledger = "…"
 ```
 
 This example is a fan-in: two standalone Workers joining group `core`, part-way through
@@ -310,27 +359,36 @@ additive except the temporary `version = 2`, which is there to stop an older rea
 
 ## 5. The error window
 
-**Accepted** (ruling). Between the first phase 2 push landing and the last phase 3 push landing,
-a request for `c` fails. One that reaches `K` on `St` fails with `1101` (observed in V0), and
-one that `St` still forwards reaches `Sf` without `c` (its router's 404) or the stub (503).
-For a set with one source and one receiver the window is two pushes long at best, the end of
-phase 2's push plus the whole of phase 3's push. It is one push longer for each further
-source or receiver, and Cloudflare's
-docs add that phase 3 should follow "once the source rollout is complete", which is also
-propagation time. The live check (S1) measures it; until then the docs give no number.
+**Accepted** (ruling), and **measured** ([results](https://github.com/bynk-lang/bynk/issues/3565#issuecomment-7211117297)). Between the first phase 2 push
+landing and the last phase 3 push landing, a request for `c` fails:
 
-**What a caller sees:**
+| Measurement | Window |
+|---|---|
+| S1, through the receiver, 5 runs | p50 **3.7 s**, max **4.0 s** (3809, 4009, 3612, 3712 and 701 ms) |
+| S4, the dropped-code form | 3.6 s |
+| S11, a named environment | 3.5 s |
+| S12, a caller over a Service Binding | 3.7 s, the same window |
+| S15, a forwarded signed call, as the caller sees it | 3.3 s |
+| S13, fan-in, commits pushed one after the other | 10.3 s |
+| S14, fan-out, two receivers pushed one after the other | 3.8 s and 7.7 s |
+
+A phase 2 or phase 3 push takes about 3.4–4.0 s. With a set's phase 2 pushes run concurrently
+and then its phase 3 pushes (§3.2), the window is about one push long whatever the set's size.
+
+**The error a caller sees is Bynk's, not the platform's** (S1, S12, §2 item 1): no request in
+the window met a `1101`.
 
 | Caller | During the window | After |
 |---|---|---|
-| A route or custom domain on `St` that reaches `K` | `500` (Cloudflare error `1101`) | normal |
-| Another member of `St`'s group calling `c` in-process | the callee's throw, answered as the plain `500` a Service Binding gives, which a Bynk caller receives as a callee fault (ADR 0874, G3-2) | normal |
-| A Worker that calls `c` (rebound to `St` before phase 2, §3.2) | `St` forwards to `Sf`, which no longer has `c`: `404` from `Sf`'s router, or `503` from the stub | normal |
-| A route or custom domain still on `Sf` (D12) | as above | moved to `St` in phase 3, or refused |
+| A route or custom domain on `St` that reaches `c` | what `St`'s receive entry answers: the forward to `Sf`, which has given `c` up (`Sf`'s router's `404`, or the stub's `503`) | normal |
+| Another member of `St`'s group calling `c` | the same, through the dispatcher's forward, received by a Bynk caller as the callee's answer (ADR 0874, G3-2) | normal |
+| A Worker that calls `c` (rebound to `St` before phase 2, §3.2) | the same: `St` forwards to `Sf` | normal |
+| A route or custom domain still on `Sf` | refused in v1 (D12) | — |
 | Anything that does not touch `c` | unaffected | — |
 
 Every caller is rebound before phase 2, so no caller is in the window for longer than phase 2
-to phase 3. The plan lists them.
+to phase 3. The plan lists them. The plan's warning and the guide quote the measured window
+(about 4 s, and about one push long for a larger set).
 
 **Where the docs say it:**
 
@@ -347,7 +405,9 @@ to phase 3. The plan lists them.
 - `reference/tooling/bynk-cli.md`: the `--move-agent` row, the new codes in the JSON plan
   table, and the `override` change on `bynk.deploy.agent_move_refused`;
 - `book/guides/projects-build-and-deployment/roll-back-a-deployment.md`: the two new revert
-  refusals;
+  refusals, and a warning: **never roll back a moved source by hand** with `wrangler rollback`
+  (S8: Cloudflare accepts it, the old version then reads the receiver's data and an empty
+  orphan namespace is made on the source); undo a move with a forward move;
 - `bynk explain` entries for each new error code.
 
 Draining or queueing calls during the window is out of scope (ruling) and is left as a
@@ -367,10 +427,15 @@ Bynk refuses before it asks, with a reason:
 | Closed; the target is a phase 1 or phase 2 version | **refused**, `bynk.revert.move_version`: a version from the middle of a move (its facts carry `transfer`); also caught by `class_changed`, but named for what it is |
 | Closed; the target is after the move (both versions carry `K` live, same members) | judged as today |
 
-**Undoing a move is a forward move back**, with `--move-agent` the other way. A transfer back
-is unprobed (§2); if S7 shows it does not work, a move whose receiver is a script the class
-was transferred off is refused (`reason = "transferred_back"`) until it does, and the docs say
-so.
+**Undoing a move is a forward move back**, with `--move-agent` the other way: a transfer back
+commits with the data (S7), so no `transferred_back` refusal is needed.
+
+**A hand rollback is the one way round these refusals, and it is unsafe** (S8). Cloudflare
+refuses to roll the receiver back to its phase 1 version (`phase_one_transfer_target_class_provisioned`,
+code `100402`), but **accepts** rolling the source back to its pre-move version: that version's
+binding then resolves to the receiver's namespace (same id), so the old code reads and writes
+the receiver's data, and a new, empty, orphan namespace is created on the source. `bynk revert`
+never does this; the rollback guide warns against doing it by hand.
 
 ## 7. Threat and failure model
 
@@ -379,7 +444,9 @@ so.
 The reason the refusal exists (P4). The invariants:
 
 1. A class of `K` is declared plain live on `St` **only** in phase 3, and phase 3 runs only
-   from `committed`/`going_live`, after every source's phase 2 has landed and the account shows `K`'s namespaces on `St` (§3.4).
+   after every source's phase 2 has landed **and the namespace listing shows each moved class's
+   namespace on its `St` with the id recorded before phase 1** (§3.4). Otherwise the run stops
+   with `bynk.deploy.move_commit_unconfirmed` and the record stays at `committing`.
 2. A move that is not named (`--move-agent`) and has no open record is refused exactly as
    today (`bynk.deploy.agent_move_refused`); nothing in this design weakens the gate for an
    unnamed move.
@@ -388,8 +455,10 @@ The reason the refusal exists (P4). The invariants:
    `phase_one_transfer_target_class_provisioned`); the plan checks the namespace listing
    first and refuses (`reason = "receiver_has_class"`), which covers a receiver that was
    started fresh by an earlier `--accept-fresh-agent`.
-5. Phase 3 attempted without a commit (S6 asks what Cloudflare does) can never be reached by
-   the orchestration; the check is there in case of a bug, not as a path.
+5. **This guard is the one Cloudflare does not provide** (S6): a phase 3 pushed without a
+   commit is accepted, creates an empty namespace and silently drops the pending transfer, and
+   the source's later commit is then refused (`transferred_pending_not_found`). Item 1's check
+   is therefore a hard gate before every phase 3 push, on a fresh run and on a resume alike.
 
 ### 7.2 Concurrent deploys
 
@@ -443,8 +512,10 @@ confirmation, nowhere a refusal).
 
 **[DECISION]** Recommend §3.2. Phase 1 pushes each receiver with the moved contexts as
 forwarded members. Then every caller of a moved context is pushed, rebound to the receiver.
-Then phases 2 and 3 run back to back. So the only window is phase 2 to phase 3, for every
-caller, as the ruling accepted.
+Then phases 2 and 3 run back to back: a set's phase 2 pushes concurrently, then (after the
+commit is confirmed, D7) its phase 3 pushes concurrently, so the window stays about one push
+long (S13, S14). So the only window is phase 2 to phase 3, for every caller, as the ruling
+accepted.
 *Rejected:* phase 1 pushing the receiver's plain new build (the receiver's own members, and
 any caller rebound to it, would call `c` there without its binding from phase 1 onward,
 which is earlier than the accepted window); rebinding callers after phase 3 (each caller
@@ -485,7 +556,13 @@ facts" to an older revert).
 ### D7. The account is read before each phase; no lock — **accepted in review: as recommended**
 
 **[DECISION]** Recommend reading the namespace listing and the deployments before each phase,
-and recording deployment ids (§3.4, §7.2). *Rejected:* an account-side lock (none exists for
+and recording deployment ids and each moved class's namespace id before phase 1 (§3.4, §7.2).
+The listing confirms the commit, not the receive: it flips a namespace's `script` to `St` at
+phase 2 and keeps its id, but shows nothing of a pending transfer (S5), so phase 1 rests on
+the push's own success and the ledger. **Before every phase 3 push** the listing must show
+each moved class's namespace on its `St` with its recorded id, or the run stops with
+`bynk.deploy.move_commit_unconfirmed` and the record stays at `committing` (S6: Cloudflare
+accepts a phase 3 without a commit and makes an empty namespace). *Rejected:* an account-side lock (none exists for
 deploys; a lock Worker or KV key is new infrastructure on the user's account for one
 feature); trusting the ledger alone (a second checkout's ledger is not this one's).
 
@@ -500,7 +577,9 @@ one unit. The plan lists every context it cancels. It pushes each receiver witho
 so a caller already rebound to the receiver still reaches `c` on `Sf`. Then it removes the
 record. The forwarding goes with the next ordinary deploy of a manifest that no longer puts
 `c` on the receiver; a manifest that still does needs `--move-agent` again. From the first landed phase 2 push on, a cancel is refused
-and the only way is forward. *Rejected:* requiring `--move-agent` again on resume (a CI re-run would
+and the only way is forward. The live check bears this out (S7): a cancel is accepted and
+clears the pending transfer, a later phase 1 works, a commit after a cancel is refused
+(`transferred_pending_not_found`), and a move back commits. *Rejected:* requiring `--move-agent` again on resume (a CI re-run would
 refuse a half-done move it should finish); cancelling implicitly when the manifest changes
 (a typo in `bynk.toml` would undo a move).
 
@@ -531,9 +610,11 @@ and the intermediate groups are not ones the user wants).
 
 ### D10. Revert refuses across a move; undo is a forward move — **accepted in review: as recommended**
 
-**[DECISION]** Recommend §6, with two new codes. *Rejected:* a revert that reverses a move by
-transferring back (a revert is a version rollback, and Cloudflare cannot roll back across
-the change).
+**[DECISION]** Recommend §6, with two new codes, and the rollback guide's warning: **never roll
+back a moved source by hand** (S8: Cloudflare accepts it, the old version reads the receiver's
+data, and an empty orphan namespace is created on the source); undo a move with a forward
+move, which commits (S7). *Rejected:* a revert that reverses a move by transferring back (a
+revert is a version rollback, and Cloudflare cannot roll back across the change).
 
 ### D11. The window: accepted, measured, documented — **accepted in review: as recommended**
 
@@ -546,6 +627,10 @@ measured numbers, and the caller table. No draining.
 refused (`reason = "routes"`), unless live check S9 shows phase 1 can claim them cleanly
 behind the forwarding, in which case they are supported from the start. The recommendation
 below is what was ruled.
+
+**S9 was not run** (the scratch account has no zone), so **the refusal stands**: in v1 a move
+whose routes or custom domains would change script is refused (`reason = "routes"`). It can be
+lifted later by running S9 on an account with a zone.
 
 ADR 0874 lists this as an open limit: a domain attaches to one Worker at a time, so a context
 whose own routes move to `St` has them on `Sf` until `St` claims them. With phase 1
@@ -573,10 +658,10 @@ move for a store that is wiped freely).
 ### D14. A dissolved source becomes a stub, then an orphan — **accepted in review: as recommended**
 
 **[DECISION]** Recommend that phase 2 pushes a stub for a source the build no longer has (it
-answers `503` and exports `K` in code with the `transferred` tombstones), and that the orphan
-report then lists it as "moved its agents to `St`; holds no agent state" instead of the
-`fresh_agents` "do not delete" note, once S10 shows deleting it leaves the data on `St`.
-Until then the report says it must be kept.
+answers `503` and carries the `transferred` tombstones; the class need not be in its code,
+S4), and that the orphan report then lists it as "moved its agents to `St`; holds no agent
+state", safe to delete, instead of the `fresh_agents` "do not delete" note. Deleting the
+emptied source leaves the data on `St` (S10).
 
 ## 9. Slices
 
@@ -585,11 +670,11 @@ as it is until slice 4 (ruling).
 
 | # | Slice | Done when |
 |---|---|---|
-| 0 | **Live check** (§10), run by the coordinator on the scratch account | S1–S10 have results posted on #3565, and any result that contradicts §3 or D9–D14 is folded back into this doc |
+| 0 | **Live check** (§10), run by the coordinator on the scratch account | **Done** (27 November 2026): S1–S15 results on #3565 ([results](https://github.com/bynk-lang/bynk/issues/3565#issuecomment-7211117297)), folded in here (§10.1); S9 not run |
 | 1 | **Ledger and facts shapes.** `agent_moves` record type and its read/write, the `version` 1↔2 rule, `Facts::transfer`, `transferred_classes`; no behaviour uses them | round-trip tests; a ledger with an open record writes `version = 2` and an older-format reader refuses it; a ledger with none is byte-identical to today's; a facts record with `transfer` decodes in the old struct with `transfer` ignored and `classes` without `K` |
-| 2 | **Emitter phase variants.** The receive build (forwarded members, `expecting-transfer` entries, no bindings for `K`), the commit config and the dissolved-source stub | golden fixtures for into, out of (staying and dissolved), between groups, fan-in and fan-out; a forwarded member passes a request through unchanged (body and signature); the normal `wrangler.toml` is byte-identical (`positive_fixtures`); the receive config has no binding for `K` |
+| 2 | **Emitter phase variants.** The receive build (forwarded members, `expecting-transfer` entries, no bindings for `K`, and none of the moving context's crons, consumers or addresses), the commit config (tombstones only; the class not in code, S4) and the dissolved-source stub | golden fixtures for into, out of (staying and dissolved), between groups, fan-in and fan-out; a forwarded member passes a request through unchanged (body and signature); the normal `wrangler.toml` is byte-identical (`positive_fixtures`); the receive config has no binding for `K` |
 | 3 | **Planning.** `--move-agent`, move sets, the two-node placement in the order, the new `reason`s, `move_agent_unused`, the plan's move section, the JSON `moves` array and `agent_move_window` warning, `override` change. A non-dry run with a move is still refused (`agent_move_refused`, unchanged) | `--dry-run` and `--format json` show each supported shape and each refusal; `deploy_plan_json.rs` covers them; the refusal is unchanged without `--dry-run` |
-| 4 | **Apply and resume.** The three phases, the record before and after each, the account reads, `move_state_unknown`, `move_interleaved`, `move_open`, `--cancel-move`; the refusal is lifted for supported shapes | `apply_tests.rs` fixtures for every row of §3.4, with a fake account and a ledger watch (`ledger::write_watch`) pinning each write; an interrupted push at each phase resumes to completion; phase 3 is never pushed unless the fake account shows the namespace on `St` |
+| 4 | **Apply and resume.** The three phases (a set's phase 2 pushes concurrently, then its phase 3 pushes), the record before and after each, the account reads, `move_commit_unconfirmed`, `move_interleaved`, `move_open`, `--cancel-move`; the refusal is lifted for supported shapes | `apply_tests.rs` fixtures for every row of §3.4, with a fake account and a ledger watch (`ledger::write_watch`) pinning each write; an interrupted push at each phase resumes by **repeating** that push, never skipping it; **phase 3 is never pushed unless the fake account's listing shows every moved class's namespace on its `St` with the id recorded before phase 1, and a test pins `move_commit_unconfirmed` with the record left at `committing`** (S6) |
 | 5 | **Revert.** `bynk.revert.move_open`, `bynk.revert.move_version`, and the JSON verdict vocabulary | `revert.rs` tests for each row of §6 |
 | 6 | **Docs, explain and ADR.** The §5 pages with the measured window, `bynk explain` entries and fixtures for every new error code, the new ADR amending ADR 0874 G5 | docs-consistency and explain-coverage pass; the guide states the measured window from slice 0 |
 
@@ -623,6 +708,29 @@ body; times are taken from the client's clock and each push's start and end.
 
 S1, S2 and S5 are the ones the ruling asks for; S3 gates the repeat rows of §3.4; S6, S7, S9,
 S10, S13 and S14 settle D8, D9, D12 and D14; S15 the phase 1 shape (D2).
+
+### 10.1 Results (27 November 2026)
+
+Run on the scratch account with wrangler 4.168.0 and Node 22, on `moveprobe-*` Workers, all
+torn down afterwards ([results](https://github.com/bynk-lang/bynk/issues/3565#issuecomment-7211117297)).
+
+| # | Result | Where it is folded in |
+|---|---|---|
+| S1 | Window through the receiver p50 3.7 s, max 4.0 s; data survived 5/5; errors were the probe's own `503`, not `1101` | §2, §5 |
+| S2 | A killed push is all or nothing, except the separate triggers step (`workers.dev` disabled, `error code: 1042`, until repeated) | §2, §3.4 |
+| S3 | Every phase can be repeated | §3.4 |
+| S4 | Keeping or dropping the class code both commit | §2, §3.2, D14, slice 2 |
+| S5 | The namespace keeps its id; `script` flips to `St` at phase 2; a pending transfer is invisible | §2, §3.4, D7 |
+| S6 | ⚠️ Phase 3 without a commit is accepted and creates an empty namespace; the pending transfer is dropped | §2, §3.4, §7.1, D7, slice 4 |
+| S7 | A cancel clears the pending transfer; a move back commits | §3.4, §6, D8 |
+| S8 | ⚠️ A hand rollback of the source is accepted (it reads the receiver's data; an orphan namespace is made); the receiver's is refused (`100402`) | §2, §5, §6, D10 |
+| S9 | Not run (no zone); the refusal stands | D12 |
+| S10 | Deleting the emptied source is safe | D14 |
+| S11 | A named environment commits with env-qualified names (3.5 s) | §2, §5 |
+| S12 | A Service Binding caller sees the same window (3.7 s) | §5 |
+| S13 | One phase 1 push may name two sources; serial commits gave 10.3 s | §3.1, §3.2, §5, D2 |
+| S14 | One phase 2 push may name two receivers; serial go-lives gave 3.8 s and 7.7 s | §3.1, §3.2, §5, D2 |
+| S15 | Forwarding passes requests unchanged, signature included (3.3 s as the caller sees it) | §3.2, §5 |
 
 ## 11. Docs delta
 
