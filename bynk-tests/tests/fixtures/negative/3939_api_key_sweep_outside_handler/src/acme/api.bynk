@@ -1,6 +1,6 @@
 context acme.api
 
-consumes bynk { Clock }
+consumes bynk { ApiKeySweep, Clock }
 
 type AccountId = String where NonEmpty
 
@@ -13,7 +13,7 @@ agent Accounts {
 
 	store swept: Cell[Int] = 0
 
-	on call tidy() -> Effect[Int] given Clock {
+	on call tidy() -> Effect[ApiKeySweep] given Clock {
 		Client.sweep(self.id)
 	}
 }
