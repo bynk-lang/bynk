@@ -66,6 +66,57 @@ pub struct EffectWrite {
     /// (`items.put(id, …)` → `id`), for the label.
     pub key: Option<String>,
     pub span: Span,
+    /// #3803: what the write stores, from the field's declared kind. `None` when the field is not
+    /// one of the agent's `store` fields (an assignment to a local).
+    pub stored: Option<StoredType>,
+}
+
+/// #3803: the type a store write leaves in storage, read from the field's declared kind, so it
+/// is the checker's own answer and needs no inference.
+#[derive(Debug, Clone)]
+pub struct StoredType {
+    /// The value the write puts in: a cell's `T` (`:=` or `update`), a map's or cache's `V`
+    /// (`put` or `update`), a set's `T` (`add`), a log's `T` (`append`). `None` for a write that
+    /// stores no value (`remove`).
+    pub value: Option<TypeRef>,
+    /// The field's declared kind, `Map[K, V]` or `Cell[T]`: what the field holds once the write
+    /// has happened.
+    pub kind: StoreKind,
+}
+
+impl PartialEq for StoredType {
+    fn eq(&self, other: &Self) -> bool {
+        let text = |t: &StoredType| {
+            (
+                t.value.as_ref().map(crate::symbols::type_ref_str),
+                crate::symbols::store_kind_text(&t.kind),
+            )
+        };
+        text(self) == text(other)
+    }
+}
+
+/// Which of a store kind's type arguments a write by `op` stores, or `None` for a write that
+/// stores no value (`remove`). `:=` is a cell assignment. Every mutating operation of the
+/// checker's store-op registry is classified: a test walks the registry, so a new one cannot be
+/// missed silently.
+fn stored_arg(head: &str, op: &str) -> Option<usize> {
+    match (head, op) {
+        ("Cell", ":=" | "update") => Some(0),
+        ("Map" | "Cache", "put" | "update" | "upsert") => Some(1),
+        ("Set", "add") | ("Log", "append") => Some(0),
+        _ => None,
+    }
+}
+
+/// What a write to `field` by `op` stores, per the agent's declared store kinds.
+fn stored_type(kinds: &HashMap<String, StoreKind>, field: &str, op: &str) -> Option<StoredType> {
+    let kind = kinds.get(field)?;
+    let value = stored_arg(&kind.head.name, op).and_then(|i| kind.args.get(i).cloned());
+    Some(StoredType {
+        value,
+        kind: kind.clone(),
+    })
 }
 
 /// The effects of every handler of `agent`. `agents` names the agents a
@@ -73,12 +124,18 @@ pub struct EffectWrite {
 /// lists them).
 pub fn agent_effects(agent: &AgentDecl, agents: &HashSet<String>) -> Vec<HandlerEffects> {
     let store = store_kinds(agent);
+    let kinds: HashMap<String, StoreKind> = agent
+        .store_fields
+        .iter()
+        .map(|f| (f.name.name.clone(), f.kind.clone()))
+        .collect();
     agent
         .handlers
         .iter()
         .map(|h| {
             let mut w = Walker {
                 store: &store,
+                kinds: &kinds,
                 agents,
                 bound: h.params.iter().map(|p| p.name.name.clone()).collect(),
                 truncated: false,
@@ -140,6 +197,7 @@ impl Path {
 
 struct Walker<'a> {
     store: &'a HashMap<String, String>,
+    kinds: &'a HashMap<String, StoreKind>,
     agents: &'a HashSet<String>,
     bound: Vec<String>,
     truncated: bool,
@@ -177,6 +235,7 @@ impl Walker<'_> {
                         op: ":=".to_string(),
                         key: None,
                         span: a.span,
+                        stored: stored_type(self.kinds, &a.target.name, ":="),
                     });
                 }
                 paths
@@ -250,6 +309,7 @@ impl Walker<'_> {
                             op: w.method.name.clone(),
                             key: key.clone(),
                             span: inner.span,
+                            stored: stored_type(self.kinds, &w.field.name, &w.method.name),
                         });
                     }
                     // A store write yields `()`: no outcome.
@@ -363,6 +423,26 @@ fn simple_text(arg: &Expr) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    /// #3803: every mutating store operation either stores one of the kind's arguments or is a
+    /// `remove`, so a new operation in the registry has to be classified here.
+    #[test]
+    fn every_mutating_store_op_is_classified() {
+        for head in ["Map", "Cache", "Set", "Cell", "Log"] {
+            for op in bynk_check::store_ops::ops_for(head)
+                .iter()
+                .filter(|o| o.mutates)
+            {
+                let stores = stored_arg(head, op.name).is_some();
+                assert_eq!(
+                    stores,
+                    op.name != "remove",
+                    "{head}.{} is not classified by `stored_arg`",
+                    op.name
+                );
+            }
+        }
+    }
+
     use super::*;
 
     fn effects(src: &str, agent: &str, agents: &[&str]) -> Vec<HandlerEffects> {

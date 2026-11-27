@@ -16,11 +16,12 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use bynk_ide::agent_effects::{self, HandlerEffects};
+use crate::wire_contract_request::{WcInst, WcRef, WcType, wc_ref};
+use bynk_ide::agent_effects::{self, HandlerEffects, StoredType};
 use bynk_ide::agent_state::{
     self, AgentInvariant, AgentStateModel, Certainty, InvariantKind, Target,
 };
-use bynk_syntax::ast::{AgentDecl, CommonsItem, SourceUnit, TypeDecl};
+use bynk_syntax::ast::{AgentDecl, CommonsItem, SourceUnit, TypeDecl, TypeRef};
 use bynk_syntax::span::Span;
 use tower_lsp::lsp_types::Range;
 
@@ -86,6 +87,13 @@ pub struct WireAgentStateModel {
     /// declares neither.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub invariants: Vec<WireInvariant>,
+    /// #3803: the wire contract's type table for the agent's `store` types, which the writes'
+    /// `valueRef`s and `fieldRef`s point into; omitted when the agent has no named or generic
+    /// store type.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub types: Vec<crate::wire_contract_request::WcType>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub instantiations: Vec<crate::wire_contract_request::WcInst>,
 }
 
 /// #3608: one declared `invariant` or `transition`.
@@ -135,11 +143,29 @@ pub struct WireEffectRow {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WireEffectWrite {
     pub field: String,
     pub op: String,
     pub key: Option<String>,
     pub range: Range,
+    /// #3803: the type of the value the write stores, as source text (`List[Line]`): a cell's
+    /// `T`, a map's `V`, an `append`ed or `add`ed element. Omitted for a write that stores none
+    /// (`remove`) and for a field that is not a `store` field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value_type: Option<String>,
+    /// #3803: the field's type once the write has happened: the cell's `T`, or the collection
+    /// (`Map[String, Order]`, `Log[Line]`), so an `append` or `put` reports the element and the
+    /// collection it grew.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field_type: Option<String>,
+    /// #3803: [`Self::value_type`] as a reference into this model's `types` and `instantiations`,
+    /// the table `bynk/wireContract` uses, when the type has a wire shape.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value_ref: Option<crate::wire_contract_request::WcRef>,
+    /// #3803: [`Self::field_type`] as a reference, for a cell, whose field type is a value type.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field_ref: Option<crate::wire_contract_request::WcRef>,
 }
 
 /// #2198: the effects of `agent`'s handlers, with `agents` naming the
@@ -210,14 +236,83 @@ pub enum WireTarget {
     Unchanged,
 }
 
+/// A type as source text, each qualified key read as its declaration's name, as
+/// `bynk/wireContract` shows its types.
+fn type_text(t: &TypeRef) -> String {
+    bynk_check::symbols::display_type_names_in(&bynk_ide::symbols::type_ref_str(t))
+}
+
+/// `t` as a reference into the wire contract's type table, when it has a wire shape: a function,
+/// query, stream, connection or history type has none, and is never a stored value.
+fn type_ref_of(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> Option<WcRef> {
+    match t {
+        TypeRef::Fn(..)
+        | TypeRef::Query(..)
+        | TypeRef::Stream(..)
+        | TypeRef::Connection(..)
+        | TypeRef::History(..) => None,
+        _ => Some(wc_ref(&bynk_check::wire::wire_ref(t, types))),
+    }
+}
+
+/// #3803: the type fields of one write, from what its field's declared kind stores.
+fn stored_fields(
+    stored: Option<&StoredType>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> (Option<String>, Option<String>, Option<WcRef>, Option<WcRef>) {
+    let Some(stored) = stored else {
+        return (None, None, None, None);
+    };
+    let value = stored.value.as_ref();
+    let cell_type = (stored.kind.head.name == "Cell")
+        .then(|| stored.kind.args.first())
+        .flatten();
+    let field_type = match cell_type {
+        Some(t) => type_text(t),
+        None => bynk_check::symbols::display_type_names_in(&bynk_ide::symbols::store_kind_text(
+            &stored.kind,
+        )),
+    };
+    (
+        value.map(type_text),
+        Some(field_type),
+        value.and_then(|t| type_ref_of(t, types)),
+        cell_type.and_then(|t| type_ref_of(t, types)),
+    )
+}
+
+/// [`to_wire_with_types`] with no type table: the writes still say what they store, as text.
 pub fn to_wire(
     agent: &AgentDecl,
     model: &AgentStateModel,
     effects: &[HandlerEffects],
     text: &str,
 ) -> WireAgentStateModel {
+    to_wire_with_types(
+        agent,
+        model,
+        effects,
+        text,
+        &HashMap::new(),
+        (Vec::new(), Vec::new()),
+    )
+}
+
+/// `table` is the wire contract's type table for the agent's `store` types
+/// ([`crate::wire_contract_request::store_type_table`]), which the writes' references point into;
+/// `types` is the unit's combined type table.
+pub fn to_wire_with_types(
+    agent: &AgentDecl,
+    model: &AgentStateModel,
+    effects: &[HandlerEffects],
+    text: &str,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    table: (Vec<WcType>, Vec<WcInst>),
+) -> WireAgentStateModel {
     let range = |s: Span| crate::position::span_to_range(text, s);
     WireAgentStateModel {
+        types: table.0,
+        instantiations: table.1,
         invariants: wire_invariants(&model.invariants, text),
         effects: effects
             .iter()
@@ -232,11 +327,19 @@ pub fn to_wire(
                         writes: r
                             .writes
                             .iter()
-                            .map(|w| WireEffectWrite {
-                                field: w.field.clone(),
-                                op: w.op.clone(),
-                                key: w.key.clone(),
-                                range: range(w.span),
+                            .map(|w| {
+                                let (value_type, field_type, value_ref, field_ref) =
+                                    stored_fields(w.stored.as_ref(), types);
+                                WireEffectWrite {
+                                    field: w.field.clone(),
+                                    op: w.op.clone(),
+                                    key: w.key.clone(),
+                                    range: range(w.span),
+                                    value_type,
+                                    field_type,
+                                    value_ref,
+                                    field_ref,
+                                }
                             })
                             .collect(),
                         reads: r.reads.clone(),
