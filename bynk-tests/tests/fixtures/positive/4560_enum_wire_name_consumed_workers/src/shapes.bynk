@@ -1,0 +1,8 @@
+// #4560: an enum a context exports transparently. Under Workers the consumer reads and builds
+// its values itself, so `wireName` and `fromWireName` lower in the consumer from the
+// enum's declaration, with no value import across the Worker boundary.
+context shapes
+
+exports transparent { Status }
+
+type Status = enum { @name("open") Open, @name("shipped-out") Shipped, Delivered }

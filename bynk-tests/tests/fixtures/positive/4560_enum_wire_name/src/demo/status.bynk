@@ -1,0 +1,19 @@
+---
+#4560: an enum's wire name as text, and its inverse. `wireName` reads the name the codecs
+use, `@name` included; `fromWireName` is exact and case-sensitive.
+---
+commons demo.status
+
+type Status = enum { @name("open") Open, @name("shipped-out") Shipped, Delivered }
+
+type Light =
+  | Red
+  | Green
+
+fn label(s: Status) -> String {
+  s.wireName()
+}
+
+fn parse(text: String) -> Option[Status] {
+  Status.fromWireName(text)
+}
