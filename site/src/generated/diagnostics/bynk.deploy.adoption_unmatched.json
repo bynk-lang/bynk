@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.adoption_unmatched",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An entry under `[deploy.vectorize]` or `[deploy.containers]` in `bynk.toml` names no capability of this project, so `bynk deploy` stopped before planning: an entry that matches nothing would have the deploy create a new, empty index or build an image instead of adopting yours. The message names the entry and the nearest capability."
+}
