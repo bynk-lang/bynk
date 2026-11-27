@@ -1,0 +1,25 @@
+// #4613: a system case calls a lambda whose parameter has a record type. The generated test module
+// annotates the parameter with that type's name, so it has to bind it: a type this context owns
+// (`Item`), and a type a commons owns (`Line`), which no participant context declares.
+context shop.orders
+
+uses shop.values
+consumes shop.payment as Payment
+
+type Item = { sku: String, qty: Int }
+
+service items {
+  on call() -> Effect[List[Item]] by Caller {
+    Effect.pure([Item { sku: "a", qty: 1 }, Item { sku: "b", qty: 2 }])
+  }
+}
+
+service pay {
+  on call(amount: Int) -> Effect[Bool] by Caller { Payment.authorise(amount) }
+}
+
+service lines {
+  on call() -> Effect[List[Line]] by Caller {
+    Effect.pure([Line { sku: "x", qty: 3 }, Line { sku: "y", qty: 4 }])
+  }
+}
