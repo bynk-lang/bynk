@@ -1640,6 +1640,7 @@ pub const BUILTIN_GATED: &[(&str, &str)] = &[
     ("bynk.ApiKeyId", "bynk.actor.ApiKey"),
     ("bynk.ApiKeyInfo", "bynk.actor.ApiKey"),
     ("bynk.ApiKeyLabel", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeyPepper", "bynk.actor.ApiKey"),
     ("bynk.ApiKeySecret", "bynk.actor.ApiKey"),
     ("bynk.ApiKeyValue", "bynk.actor.ApiKey"),
     ("bynk.TooManyKeys", "bynk.actor.ApiKey"),
@@ -1824,6 +1825,7 @@ mod tests {
                 "created: Instant,",
                 "expires: Option[Instant],",
                 "lastUsed: Option[Instant],",
+                "pepper: ApiKeyPepper,",
             ]
         );
     }

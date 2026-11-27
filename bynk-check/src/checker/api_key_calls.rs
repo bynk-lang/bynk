@@ -134,6 +134,9 @@ enum Member {
     List,
     Revoke,
     RevokeAll,
+    /// #3939 (slice 3): prune expired keys and keys under neither pepper; answer how many remain
+    /// under `previous`.
+    Sweep,
 }
 
 impl Member {
@@ -143,6 +146,7 @@ impl Member {
             "list" => Self::List,
             "revoke" => Self::Revoke,
             "revokeAll" => Self::RevokeAll,
+            "sweep" => Self::Sweep,
             _ => return None,
         })
     }
@@ -153,13 +157,14 @@ impl Member {
             Self::List => "list",
             Self::Revoke => "revoke",
             Self::RevokeAll => "revokeAll",
+            Self::Sweep => "sweep",
         }
     }
 
     fn arity(self) -> usize {
         match self {
             Self::Mint | Self::Revoke => 2,
-            Self::List | Self::RevokeAll => 1,
+            Self::List | Self::RevokeAll | Self::Sweep => 1,
         }
     }
 
@@ -167,7 +172,7 @@ impl Member {
         match self {
             Self::Mint => "the identity and a label",
             Self::Revoke => "the identity and a key's id",
-            Self::List | Self::RevokeAll => "the identity",
+            Self::List | Self::RevokeAll | Self::Sweep => "the identity",
         }
     }
 
@@ -178,9 +183,15 @@ impl Member {
         }
     }
 
-    /// `mint` stamps the key's creation time, and `list` will prune expired keys (§9).
+    /// `mint` stamps the key's creation and expiry; `list` and `sweep` prune expired keys (§9).
     fn needs_clock(self) -> bool {
-        matches!(self, Self::Mint | Self::List)
+        matches!(self, Self::Mint | Self::List | Self::Sweep)
+    }
+
+    /// `mint` and `sweep` need the pepper (the live `kid`s come from it), which reaches a service
+    /// handler only.
+    fn needs_pepper(self) -> bool {
+        matches!(self, Self::Mint | Self::Sweep)
     }
 
     /// The second argument's type: an `ApiKeyLabel` for `mint`, an `ApiKeyId` for `revoke`.
@@ -188,7 +199,7 @@ impl Member {
         match self {
             Self::Mint => std_named(ctx, "ApiKeyLabel"),
             Self::Revoke => std_named(ctx, "ApiKeyId"),
-            Self::List | Self::RevokeAll => None,
+            Self::List | Self::RevokeAll | Self::Sweep => None,
         }
     }
 
@@ -202,29 +213,33 @@ impl Member {
             )),
             Self::List => tys.intern(Ty::List(std_named(ctx, "ApiKeyInfo")?)),
             Self::Revoke => tys.intern(Ty::Base(BaseType::Bool)),
-            Self::RevokeAll => tys.intern(Ty::Base(BaseType::Int)),
+            Self::RevokeAll | Self::Sweep => tys.intern(Ty::Base(BaseType::Int)),
         })
     }
 }
 
-/// Where a member is legal. `mint` hashes the key under the pepper, which reaches a service
-/// handler only (`bynk.actor.api_key_mint_outside_handler`). The others need no pepper, only calls
+/// Where a member is legal. `mint` hashes the key under the pepper, and `sweep` reads the live
+/// `kid`s from it, and the pepper reaches a service handler only
+/// (`bynk.actor.api_key_mint_outside_handler`). The others need no pepper, only calls
 /// to the generated agents, so they are legal wherever an agent can be called: a service handler
 /// or an agent's handler, not a provider or a function (`bynk.actor.api_key_member_in_provider`).
 fn check_where(member: Member, name: &str, span: Span, ctx: &mut Ctx) {
     if ctx.in_test_body {
         return;
     }
-    if member == Member::Mint {
+    if member.needs_pepper() {
         if !ctx.in_service_handler {
             ctx.errors.push(
                 CompileError::new(
                     "bynk.actor.api_key_mint_outside_handler",
                     span,
-                    format!("`{name}.mint` can only be called in a service handler"),
+                    format!(
+                        "`{name}.{}` can only be called in a service handler",
+                        member.name()
+                    ),
                 )
                 .with_note(
-                    "the pepper a key is hashed with reaches a service handler, not a provider, an agent or a function: mint the key in the handler and return it",
+                    "`mint` and `sweep` need the pepper (`mint` hashes the key with it, `sweep` tells the live pepper's keys from the rest), and the pepper reaches a service handler, not a provider, an agent or a function: call it in the handler",
                 ),
             );
         }

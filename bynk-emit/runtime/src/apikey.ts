@@ -504,21 +504,72 @@ export async function mintApiKey<R>(
 /** An `Option[String]` as an agent call answers it. */
 type HandleOption = { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" };
 
+/** The generated `<Actor>Keys` handlers `list` and `sweep` call. */
+export interface ApiKeyStore {
+  expire(now: number, deps: unknown): Promise<number>;
+  labelsOf(deps: unknown): Promise<ReadonlyMap<string, string>>;
+  createdOf(deps: unknown): Promise<ReadonlyMap<string, number>>;
+  expiresOf(deps: unknown): Promise<ReadonlyMap<string, number>>;
+  usedOf(deps: unknown): Promise<ReadonlyMap<string, number>>;
+  kidsOf(deps: unknown): Promise<ReadonlyMap<string, string>>;
+  knownOf(deps: unknown): Promise<readonly string[]>;
+  sweep(now: number, live: readonly string[], current: string, deps: unknown): Promise<number>;
+}
+
 /**
- * `list`: the identity's keys, as `ApiKeyInfo` values, from its current store's labels and
- * creation times. No handle, or a retired store, is no keys. Only a key in both maps is listed,
- * so a key revoked between the two reads is left out, never half-shown. Never a secret or a digest.
+ * #3939 (slice 3): the `kid`s of the actor's peppers now held, `secret`'s first, when the pepper
+ * reaches this handler (a service handler's `deps.__apiKey`), else `null` (an agent's handler).
+ */
+export async function apiKeyLiveKidsOf(
+  deps: unknown,
+  actor: string,
+  names: { readonly secret: string; readonly previous?: string },
+): Promise<string[] | null> {
+  const peppers = (deps as { __apiKey?: Record<string, ApiKeyPeppers> } | null | undefined)?.__apiKey?.[actor];
+  if (peppers === undefined) return null;
+  return (await loadApiKeyPeppers(peppers, names)).map((p) => p.kid);
+}
+
+const PEPPER_CURRENT = { tag: "Current" } as const;
+const PEPPER_PREVIOUS = { tag: "Previous" } as const;
+const PEPPER_RETIRED = { tag: "Retired" } as const;
+
+/** Which pepper a record's `kid` names, among the live ones (`secret`'s first). With none known
+ *  (a store no key has reached since slice 3), every key reads as `Current`. */
+function pepperOf(kid: string | undefined, live: readonly string[]) {
+  if (live.length === 0) return PEPPER_CURRENT;
+  if (kid === live[0]) return PEPPER_CURRENT;
+  if (kid !== undefined && live.includes(kid)) return PEPPER_PREVIOUS;
+  return PEPPER_RETIRED;
+}
+
+/**
+ * `list`: the identity's keys, as `ApiKeyInfo` values. Expired keys are removed first (§9). Each
+ * key's `pepper` is read against `live`, the peppers this handler holds; in an agent's handler,
+ * which holds none, against the `kid`s the store last saw (its last mint, sweep or admitted key).
+ * No handle, or a retired store, is no keys. Only a key in both the label and creation maps is
+ * listed, so a key revoked between the reads is left out, never half-shown. Never a secret or a
+ * digest.
  */
 export async function apiKeyList<R>(
   prefix: string,
   handle: HandleOption,
-  labelsOf: (handle: string) => Promise<ReadonlyMap<string, string>>,
-  createdOf: (handle: string) => Promise<ReadonlyMap<string, number>>,
+  nowMs: number,
+  live: readonly string[] | null,
+  store: (handle: string) => ApiKeyStore,
+  deps: unknown,
 ): Promise<R> {
   if (handle.tag !== "Some") return [] as unknown as R;
   const h = handle.value;
-  const labels = await labelsOf(h);
-  const created = await createdOf(h);
+  const keys = store(h);
+  await keys.expire(nowMs, deps);
+  const labels = await keys.labelsOf(deps);
+  const created = await keys.createdOf(deps);
+  const expires = await keys.expiresOf(deps);
+  const used = await keys.usedOf(deps);
+  const kids = await keys.kidsOf(deps);
+  const against = live ?? (await keys.knownOf(deps));
+  const some = (v: number | undefined) => (v === undefined ? { tag: "None" } : { tag: "Some", value: v });
   const out: unknown[] = [];
   for (const [keyNo, label] of labels) {
     const at = created.get(keyNo);
@@ -527,11 +578,29 @@ export async function apiKeyList<R>(
       id: apiKeyIdOf(prefix, h, keyNo),
       label,
       created: at,
-      expires: { tag: "None" },
-      lastUsed: { tag: "None" },
+      expires: some(expires.get(keyNo)),
+      lastUsed: some(used.get(keyNo)),
+      pepper: pepperOf(kids.get(keyNo), against),
     });
   }
   return out as unknown as R;
+}
+
+/**
+ * #3939 (slice 3): `sweep`: remove the identity's expired keys and its keys under neither pepper,
+ * and answer how many remain under `previous`, the keys dropping `previous` now would end. `live`
+ * comes from the pepper, which a service handler holds; `sweep` is legal nowhere else.
+ */
+export async function apiKeySweep(
+  handle: HandleOption,
+  nowMs: number,
+  live: readonly string[] | null,
+  store: (handle: string) => ApiKeyStore,
+  deps: unknown,
+): Promise<number> {
+  if (live === null) pepperFault("`sweep` needs the API key pepper, which reaches a service handler only");
+  if (handle.tag !== "Some") return 0;
+  return store(handle.value).sweep(nowMs, live, live[0], deps);
 }
 
 /**

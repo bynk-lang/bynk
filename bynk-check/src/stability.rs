@@ -473,6 +473,7 @@ mod tests {
             "ApiKeyId",
             "ApiKeyInfo",
             "ApiKeyLabel",
+            "ApiKeyPepper",
             "ApiKeySecret",
             "ApiKeyValue",
             "TooManyKeys",

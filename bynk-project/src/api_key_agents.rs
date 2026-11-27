@@ -265,7 +265,24 @@ agent {agent} {{\n\
 \t\tEffect.pure(Map.of(es))\n\
 \t}}\n\
 \n\
-\ton call prune(now: Int, live: List[String]) -> Effect[Int] {{\n\
+\ton call expire(now: Int) -> Effect[Int] {{\n\
+\t\tlet es <- expires.entries.collect()\n\
+\t\tlet ended = es.filter((e) => e.value <= now).map((e) => e.key)\n\
+\t\tlet _ <- ended.forEach((k: String) => digests.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => kids.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => labels.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => created.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => expires.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => used.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => scopes.remove(k))\n\
+\t\tEffect.pure(ended.length())\n\
+\t}}\n\
+\n\
+\ton call knownOf() -> Effect[List[String]] {{\n\
+\t\tEffect.pure(known)\n\
+\t}}\n\
+\n\
+\ton call sweep(now: Int, live: List[String], current: String) -> Effect[Int] {{\n\
 \t\tlet ks <- kids.entries.collect()\n\
 \t\tlet es <- expires.entries.collect()\n\
 \t\tlet unkeyed = ks.filter((e) => !live.any((l: String) => l == e.value)).map((e) => e.key)\n\
@@ -278,7 +295,9 @@ agent {agent} {{\n\
 \t\tlet _ <- dead.forEach((k: String) => expires.remove(k))\n\
 \t\tlet _ <- dead.forEach((k: String) => used.remove(k))\n\
 \t\tlet _ <- dead.forEach((k: String) => scopes.remove(k))\n\
-\t\tEffect.pure(dead.length())\n\
+\t\tknown := live\n\
+\t\tlet left <- kids.values.collect()\n\
+\t\tEffect.pure(left.filter((k: String) => k != current).length())\n\
 \t}}\n\
 \n\
 \ton call revoke(keyNo: String) -> Effect[Bool] {{\n\
