@@ -104,6 +104,10 @@ rusqlite = { version = "0.43", default-features = false, features = ["bundled", 
 # (`pg_query`) was rejected: it needs libclang to build.
 sqlparser = "0.64.0"
 proptest = "1"
+# #3927 (typed HTML, §11.2): dev-only. The tokeniser's differential test parses what the
+# compiler accepts with a browser-grade parser (scripting on); never a compiler dependency (Q2).
+html5ever = "0.40"
+markup5ever_rcdom = "0.40"
 serde = { version = "1", features = ["derive"] }
 toml = "1.1"
 # P7.4 (#1305, review): `toml::Table` round-trips through a `BTreeMap` with no
