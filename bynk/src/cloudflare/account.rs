@@ -275,9 +275,12 @@ impl CloudflareApi for Account<'_> {
 
     /// Followed while a page is full, which, with no paging documented, is one request; never
     /// past [`rest::vectorize::MAX_PAGES`], and not past a page that brings no name not already
-    /// listed (an endpoint that ignored `?page=N` would repeat its first).
+    /// listed (an endpoint that ignored `?page=N` would repeat its first). A listing stopped that
+    /// way before its end is an error, never a shorter list: an index it could not see would read
+    /// as absent, and `--prune` must never take that as "forget it".
     fn vectorize_names(&self) -> Result<Vec<String>, CloudflareError> {
         let mut names: Vec<String> = Vec::new();
+        let mut cut_short = None;
         let rule = Numbered {
             cap: Some(rest::vectorize::MAX_PAGES),
             missing_total: MissingTotal::WhileFull,
@@ -291,9 +294,29 @@ impl CloudflareApi for Account<'_> {
             let fresh: Vec<String> = listed.into_iter().filter(|n| !names.contains(n)).collect();
             let repeated = fresh.is_empty();
             names.extend(fresh);
-            Ok(Page::of(&body, entries).done_if(repeated))
+            let read = Page::of(&body, entries);
+            let more = read.total_pages.map_or_else(
+                || {
+                    read.per_page
+                        .is_some_and(|per| entries as u64 >= per && entries > 0)
+                },
+                |total| page < total,
+            );
+            if more && (repeated || page == rest::vectorize::MAX_PAGES) {
+                cut_short = Some(if repeated {
+                    format!("page {page} repeated an earlier one")
+                } else {
+                    format!("it did not end within {} pages", rest::vectorize::MAX_PAGES)
+                });
+            }
+            Ok(read.done_if(repeated))
         })?;
-        Ok(names)
+        match cut_short {
+            Some(why) => Err(CloudflareError::Other(format!(
+                "the account's Vectorize index listing could not be read to its end ({why}), so which indexes exist is not known"
+            ))),
+            None => Ok(names),
+        }
     }
 
     fn vectorize_config(&self, name: &str) -> Result<IndexConfig, CloudflareError> {
@@ -583,6 +606,7 @@ mod tests {
 
     /// #4568 review: the index listing is followed while pages are full, and stops at a page
     /// that brings no new name, so an endpoint that ignored `?page=N` is asked twice, not forever.
+    /// A listing stopped before its end, by that or by the cap, is an error, not the names seen.
     #[test]
     fn the_index_listing_follows_full_pages_and_stops_on_a_repeat() {
         let page = |from: usize, to: usize| -> &'static str {
@@ -619,11 +643,43 @@ mod tests {
         let answers: &'static [(u16, &'static str)] =
             Box::leak(Box::new([(200, page(0, 2)), (200, page(0, 2))]));
         let (base, seen) = answering_in_turn(answers);
+        let said = account(base, &root)
+            .vectorize_names()
+            .unwrap_err()
+            .to_string();
+        assert!(
+            said.contains("could not be read to its end (page 2 repeated an earlier one)"),
+            "{said}"
+        );
+        assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
+        // Full pages to the cap, with no end in sight: an error, not the names seen so far.
+        let pages = rest::vectorize::MAX_PAGES as usize;
+        let answers: &'static [(u16, &'static str)] = Box::leak(
+            (0..pages)
+                .map(|p| (200, page(2 * p, 2 * p + 2)))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        );
+        let (base, seen) = answering_in_turn(answers);
+        let said = account(base, &root)
+            .vectorize_names()
+            .unwrap_err()
+            .to_string();
+        assert!(said.contains("it did not end within 100 pages"), "{said}");
+        assert_eq!(seen.join().unwrap().len(), pages);
+        // An empty last page is the listing's end.
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, page(0, 2)),
+            (
+                200,
+                r#"{"success":true,"result":[],"result_info":{"per_page":2}}"#,
+            ),
+        ]));
+        let (base, _) = answering_in_turn(answers);
         assert_eq!(
             account(base, &root).vectorize_names().unwrap(),
             ["ix-0", "ix-1"]
         );
-        assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
     }
 
     /// 1D.4d: the queues listing is followed while pages are full (when `total_pages` is left out)
