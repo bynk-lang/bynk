@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.move_commit_unconfirmed",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An agent move's sources had pushed their commit, but the account's Durable Object namespace listing did not show each moved class's namespace on its receiving script with the id recorded before the move, so `bynk deploy` stopped before the receiver went live: serving a class before its commit starts it empty and drops the transfer. Nothing is lost; the move's record in `bynk.deploy.lock` stays at `committing`, and the next `bynk deploy` pushes the unconfirmed sources' commit again."
+}

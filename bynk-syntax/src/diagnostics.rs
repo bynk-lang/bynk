@@ -8637,6 +8637,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `--move-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
     ),
     d(
+        "bynk.deploy.move_commit_unconfirmed",
+        "An agent move's sources had pushed their commit, but the account's Durable Object namespace listing did not show each moved class's namespace on its receiving script with the id recorded before the move, so `bynk deploy` stopped before the receiver went live: serving a class before its commit starts it empty and drops the transfer. Nothing is lost; the move's record in `bynk.deploy.lock` stays at `committing`, and the next `bynk deploy` pushes the unconfirmed sources' commit again.",
+    ),
+    d(
+        "bynk.deploy.move_interleaved",
+        "A Worker of an agent move was deployed by something other than the move since the move recorded it (another checkout, a hand `wrangler deploy`), or a move is already under way or done for a checkout whose `bynk.deploy.lock` does not record it, so `bynk deploy` stopped rather than push over that deployment. Pull `bynk.deploy.lock`, and deploy from the checkout that holds the move's record.",
+    ),
+    d(
+        "bynk.deploy.move_open",
+        "An agent move is under way in this environment, and this run cannot finish it: the manifest no longer puts a moving context on its receiver, or a new `--move-agent` move shares a Worker script with it. A move under way resumes on a plain `bynk deploy` with the manifest it started with; finish it first.",
+    ),
+    d(
+        "bynk.deploy.move_transfer_lost",
+        "An agent move's commit was refused because the receiver no longer expects the class (`transferred_pending_not_found`): its pending transfer was cancelled, or the receiver was pushed with the class live. Nothing has committed and the data is safe on the source; the next `bynk deploy` pushes the receiver's phase 1 again, then the commit.",
+    ),
+    d(
         "bynk.deploy.multiple_websocket_members",
         "More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member, which takes every upgrade request whatever the path.",
     ),

@@ -1599,6 +1599,10 @@
 /reference/diagnostics/bynk.deploy.hyperdrive_unresolved/
 /reference/diagnostics/bynk.deploy.ledger_unreadable/
 /reference/diagnostics/bynk.deploy.move_agent_unused/
+/reference/diagnostics/bynk.deploy.move_commit_unconfirmed/
+/reference/diagnostics/bynk.deploy.move_interleaved/
+/reference/diagnostics/bynk.deploy.move_open/
+/reference/diagnostics/bynk.deploy.move_transfer_lost/
 /reference/diagnostics/bynk.deploy.multiple_websocket_members/
 /reference/diagnostics/bynk.deploy.no_workers_built/
 /reference/diagnostics/bynk.deploy.not_a_context/

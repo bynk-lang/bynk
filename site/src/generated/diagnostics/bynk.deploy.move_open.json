@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.move_open",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An agent move is under way in this environment, and this run cannot finish it: the manifest no longer puts a moving context on its receiver, or a new `--move-agent` move shares a Worker script with it. A move under way resumes on a plain `bynk deploy` with the manifest it started with; finish it first."
+}
