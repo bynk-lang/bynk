@@ -158,6 +158,16 @@ deployments of `Sf` and `St`.
 | any | a deployment of `Sf` or `St` newer than the one recorded, made by anything else | **stops**: `bynk.deploy.move_interleaved` (§7.2) |
 | any | the manifest no longer asks for this move | **stops**: `bynk.deploy.move_open` (D8) |
 
+**Resuming is idempotent.** The rule behind the rows above: before each phase, the re-read
+asks whether that phase's effect is already on the account, and if it is, the phase counts as
+already applied. The run records the "after" step without pushing and goes on to the next
+phase. In particular, when the re-read before phase 2 finds `K`'s namespaces already owned by
+`St`, phase 2 is not pushed again: the run records `committed` (with `Sf`'s newest deployment
+id) and goes straight to phase 3. When the re-read before phase 1 finds `St`'s newest version
+already marking `expecting` for `K`, phase 1 is not repeated. So however many times a run is
+interrupted and started again, each phase is applied at most once, and only phase 3, a plain
+redeploy, is ever pushed twice.
+
 The namespace listing is the single source of truth for "who holds the data", and the ledger
 only says where the run had got to. This keeps ADR 0194 D1's rule that the ledger records
 what was pushed and never claims to know the namespaces (`ledger.rs:Environment::deleted_classes`'s
