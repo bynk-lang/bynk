@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+// #3752 (D7): the body belongs to the upstream.
+service proxy from http {
+  on ANY("/blog/*path") (path: String, body: String) -> Effect[PassThrough] by Visitor {
+    Respond(NotFound)
+  }
+}

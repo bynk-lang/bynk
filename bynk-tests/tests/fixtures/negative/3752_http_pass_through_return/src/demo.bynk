@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+// #3752 (D7): an `ANY` route returns `Effect[PassThrough]`.
+service proxy from http {
+  on ANY("/blog/*path") (path: String) -> Effect[HttpResult[String]] by Visitor {
+    Ok(path)
+  }
+}

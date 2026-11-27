@@ -519,6 +519,8 @@ mod system {
     mod par_gate_workerd;
     #[path = "par_traverse_behaviour.rs"]
     mod par_traverse_behaviour;
+    #[path = "pass_through_check_behaviour.rs"]
+    mod pass_through_check_behaviour;
     #[path = "property_behaviour.rs"]
     mod property_behaviour;
     #[path = "question_in_case_behaviour.rs"]

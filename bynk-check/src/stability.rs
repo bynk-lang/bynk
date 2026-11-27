@@ -424,6 +424,11 @@ mod tests {
                 "bynk.Fetch.receiveStream",
                 "bynk.Fetch.sendStream",
                 "bynk.Logger.log",
+                "bynk.Upstream",
+                "bynk.InboundRequest",
+                "bynk.Forwarded",
+                "bynk.PassThrough",
+                "bynk.UpstreamError",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
@@ -454,6 +459,7 @@ mod tests {
                 "bynk.RequestHeaders.entries",
                 "bynk.actor.ApiKey",
                 "bynk.given.parameters",
+                "bynk.http.ANY",
                 "bynk.http.rest"
             ]
         );
