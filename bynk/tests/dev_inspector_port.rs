@@ -10,7 +10,7 @@
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 #[path = "support/dev_child.rs"]
@@ -61,7 +61,7 @@ fn start(proj: &Path, extra: &[String]) -> Session {
     let log = proj.join("bynk-dev.log");
     let (out, err) = dev_child::log_to(&log);
     dev_child::warm_wrangler();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
+    let mut cmd = dev_child::bynk_command();
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let dev = Group(
         cmd.arg("dev")
@@ -145,7 +145,7 @@ fn a_taken_inspector_port_is_reported_by_bynk_not_wrangler() {
     let held = std::net::TcpListener::bind("127.0.0.1:0").expect("hold a port");
     let port = held.local_addr().unwrap().port();
     let proj = project("taken");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynk"))
+    let out = dev_child::bynk_command()
         .arg("dev")
         .arg(&proj)
         .arg("--inspect-port")
