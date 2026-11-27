@@ -2058,9 +2058,19 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Region =\n    | Domestic\n    | International\n    | Refunded(reason: String)\nevent Paid = { id: String, region: Region }\n\nservice onPaid from Events(Paid { region: Region.Refunded, .. }) {   // ✗ `Refunded` carries a `reason`\n\nservice onPaid from Events(Paid { region: Region.Domestic, .. }) {   // ✓ no payload",
     },
     Explain {
+        code: "bynk.event.queue_name_collision",
+        blurb: "On Workers each `from Events` service will receive its events through a queue the compiler creates, named `bynk-ev-` followed by its context and service and a short hash of them, with a matching `bynk-dl-` dead-letter queue. The name has to fit Cloudflare's 63 characters, so the context and service may be cut short and the hash is only 8 hex digits: two different services can, rarely, get the same name, in every environment or only in one with a long name. They would then share a queue, which has one consumer, so one of them would never see its events. The compiler knows every subscriber in the project, so it refuses such a pair and names both. Rename one of the two services.",
+        example: "service notify23278 from Events(Paid) {\n    on event(e: Paid) -> Effect[()] { … }\n}\n\nservice notify24925 from Events(Paid) {   // ✗ its event queue's name would be `notify23278`'s\nservice notifyRefund from Events(Paid) {   // ✓\n    on event(e: Paid) -> Effect[()] { … }\n}",
+    },
+    Explain {
         code: "bynk.event.return_not_effect_unit",
         blurb: "Emission is fire-and-forget: nothing receives a subscriber's result, so an `on event` handler returns `Effect[()]` and anything else is refused. Return `Effect.pure(())` once its work is done, and move a value it computes into an effect the handler performs, such as a write. A handler that does not return an `Effect` at all is `bynk.service.return_not_effect`.",
         example: "service onPaid from Events(Paid) {\n    on event(e: Paid) -> Effect[Int] { … }   // ✗ the result has nowhere to go\n    on event(e: Paid) -> Effect[()] { … }    // ✓\n}",
+    },
+    Explain {
+        code: "bynk.event.unbounded_payload",
+        blurb: "On Workers an event will travel as one Cloudflare Queue message, which holds at most 128 KB, so an emission larger than about 127,000 bytes will fault its handler. Its size is known only at run time, so the compiler cannot check it, but it can point at where large events come from: a `Bytes` field, or a `List`, `Map` or `Set` of records, sums or other collections, with no refinement that bounds it. A payload of scalars and `String`s does not warn. Store the large value elsewhere (R2 or D1) and send a reference to it, or bound it with a refinement. It is only a warning: a field that is small in practice may stay as it is.",
+        example: "event Uploaded = { name: String, data: Bytes }   // ⚠ `data` has no size bound\n\nevent Uploaded = { name: String, key: String }   // ✓ the bytes are stored in R2 under `key`",
     },
     Explain {
         code: "bynk.event.unknown_annotation",
@@ -8914,6 +8924,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.event.pattern_variant_payload",
         "A `from Events(E { ... })` subscription pattern's variant value names a variant that carries a payload — only nullary variants are admitted, since testing the tag alone would silently ignore the payload.",
     ),
+    d(
+        "bynk.event.queue_name_collision",
+        "Two `from Events` services would get the same compiler-owned event queue name in some environment.",
+    ),
     dg(
         "bynk.event.return_not_effect_unit",
         "An `on event` handler returns an `Effect` of something other than `()`; emission is fire-and-forget, so it returns `Effect[()]`.",
@@ -8923,6 +8937,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.event.schema_version_mismatch",
         "An event's `@schema(N)` annotation disagrees with the version the schema registry computes from the event's build history.",
     ),
+    warn(d(
+        "bynk.event.unbounded_payload",
+        "An `event`'s payload reaches a `Bytes`, or a `List`, `Map` or `Set` of a non-scalar type, with no refinement bounding it (warning).",
+    )),
     d(
         "bynk.event.unknown_annotation",
         "An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set.",

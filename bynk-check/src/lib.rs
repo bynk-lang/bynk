@@ -69,6 +69,8 @@ pub mod embeds;
 pub mod emitted_names;
 pub mod entailment;
 pub mod env_consts;
+mod event_payload_size;
+mod event_queue_names;
 pub mod exec_plan;
 pub mod exports;
 pub mod expr_types;

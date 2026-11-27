@@ -1,0 +1,18 @@
+context shop
+
+// Durable event delivery §8.1 (#3898): `bynk.event.unbounded_payload` warns where a large
+// event comes from, a `Bytes` or a collection of a non-scalar type, and not on a payload of
+// scalars and `String`s.
+type Line = { sku: String, quantity: Int }
+
+event Uploaded = { name: String, data: Bytes }
+
+event Ordered = { id: String, lines: List[Line] }
+
+event Tagged = { id: String, tags: List[String], counts: Map[String, Int] }
+
+service onTagged from Events(Tagged) {
+  on event(e: Tagged) -> Effect[()] {
+    Effect.pure(())
+  }
+}

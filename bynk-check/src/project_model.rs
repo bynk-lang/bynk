@@ -5677,6 +5677,7 @@ pub fn phase_topology(
     crate::email::phase_duplicate_addresses(parsed, groups, kinds, errors);
     crate::email_fallback::phase_fallback_claimed(parsed, groups, kinds, errors);
     crate::queue_consumers::phase_duplicate_queue_consumers(parsed, groups, kinds, errors);
+    crate::event_queue_names::phase_event_queue_collisions(parsed, groups, kinds, errors);
     phase_workers_ws_open_split(target, parsed, groups, kinds, unit_tables, errors);
 }
 

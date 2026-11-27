@@ -141,3 +141,54 @@ export function queueReplayKey(consumer: string, queue: string, id: string): str
   return `bynk.queue.${consumer}.${queue}.${id}`;
 }
 
+// Durable event delivery D3 and §8.1 (#3898): an event will travel as one signed queue message,
+// and Cloudflare takes 128 KB per message (1,000 bytes per KB, with about 100 bytes of the
+// platform's metadata), so the budget for the message Bynk writes is 127,000 bytes. Until the
+// cut-over this only warns, so a project finds its large events from its own traffic a release
+// before they fault: `EventNearLimit`, once per event type per isolate, from three quarters of
+// the budget.
+export const EVENT_MESSAGE_BUDGET_BYTES = 127_000;
+export const EVENT_NEAR_LIMIT_BYTES = 96_000;
+
+/** An HMAC-SHA256 signature in hex is 64 characters; the measurement uses one of that length. */
+const SIGNATURE_PLACEHOLDER = "0".repeat(64);
+
+interface EmittedEvent {
+  readonly type: string;
+  readonly payload: unknown;
+  readonly envelope: { readonly eventId: string; readonly publisherId: string; readonly emittedAt: number };
+}
+
+/** The UTF-8 length of the signed queue message `event` will be sent as. */
+export function eventMessageBytes(event: EmittedEvent): number {
+  const message: SignedQueueEnvelope = {
+    bynk: {
+      v: QUEUE_SIGNING_VERSION,
+      from: event.envelope.publisherId,
+      id: event.envelope.eventId,
+      ts: Math.floor(event.envelope.emittedAt / 1000),
+      sig: SIGNATURE_PLACEHOLDER,
+    },
+    body: event,
+  };
+  return encoder.encode(JSON.stringify(message)).length;
+}
+
+const warnedEventTypes = new Set<string>();
+
+/**
+ * `Events.emit`'s measurement: logs `EventNearLimit` the first time in this isolate an emission
+ * of the event's type comes within a quarter of the budget, or over it, and returns the event.
+ */
+export function measureEvent<E extends EmittedEvent>(event: E): E {
+  if (warnedEventTypes.has(event.type)) return event;
+  const size = eventMessageBytes(event);
+  if (size >= EVENT_NEAR_LIMIT_BYTES) {
+    warnedEventTypes.add(event.type);
+    console.warn("EventNearLimit", { event: event.type, size, budget: EVENT_MESSAGE_BUDGET_BYTES });
+  }
+  return event;
+}
+
+// #1653: the `__` aliases emitted code imports.
+export { measureEvent as __bynkMeasureEvent };

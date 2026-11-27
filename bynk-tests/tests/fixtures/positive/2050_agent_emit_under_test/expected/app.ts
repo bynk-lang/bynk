@@ -8,6 +8,7 @@ import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "./__bynk_runtime/boundary.js";
 import { HttpResult } from "./__bynk_runtime/httpresult.js";
+import { __bynkMeasureEvent } from "./__bynk_runtime/queue_signing.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "./__bynk_runtime/agent.js";
 
 export interface Bumped {
@@ -75,7 +76,7 @@ export class Counter {
         return undefined;
       })();
       return (async () => {
-        __events.push({ type: "Bumped", payload: { n: 1 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Bumped", payload: { n: 1 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
     })();
     await this.commitState(__state);
@@ -97,7 +98,7 @@ export const api = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Bumped", payload: { n: 0 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Bumped", payload: { n: 0 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return HttpResult.Ok(undefined);
     })();

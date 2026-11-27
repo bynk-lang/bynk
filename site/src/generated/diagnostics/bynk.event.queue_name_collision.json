@@ -1,0 +1,10 @@
+{
+  "blurb": "On Workers each `from Events` service will receive its events through a queue the compiler creates, named `bynk-ev-` followed by its context and service and a short hash of them, with a matching `bynk-dl-` dead-letter queue. The name has to fit Cloudflare's 63 characters, so the context and service may be cut short and the hash is only 8 hex digits: two different services can, rarely, get the same name, in every environment or only in one with a long name. They would then share a queue, which has one consumer, so one of them would never see its events. The compiler knows every subscriber in the project, so it refuses such a pair and names both. Rename one of the two services.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.queue_name_collision",
+  "constructs": [],
+  "example": "service notify23278 from Events(Paid) {\n    on event(e: Paid) -> Effect[()] { … }\n}\n\nservice notify24925 from Events(Paid) {   // ✗ its event queue's name would be `notify23278`'s\nservice notifyRefund from Events(Paid) {   // ✓\n    on event(e: Paid) -> Effect[()] { … }\n}",
+  "severity": "error",
+  "summary": "Two `from Events` services would get the same compiler-owned event queue name in some environment."
+}

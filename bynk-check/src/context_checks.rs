@@ -817,6 +817,11 @@ pub fn check_context_declarations(
     );
 
     check_event_annotations(table, &mut errors);
+    crate::event_payload_size::check_event_payload_sizes(
+        table.events.values(),
+        &table.types,
+        &mut errors,
+    );
 
     // #4105: every handler body is checked, so each `AnalyticsSql.select[T]` can be written from the
     // record its instance writes.

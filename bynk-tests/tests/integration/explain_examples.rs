@@ -126,6 +126,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/3536_unselected_type_warns` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.event.unbounded_payload",
+        "a warning; `positive/3898_event_unbounded_payload` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.http.cookie_untyped_has_field",
         "a warning; `positive/3446_cookie_untyped_has_field` holds it with `expected_warnings.txt`",
     ),

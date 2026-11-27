@@ -980,7 +980,10 @@ pub(in crate::emitter) fn lower_events_emit_call(
                 ("payload", payload),
                 ("envelope", envelope),
             ]);
-            let push = expr_stmt(call(member(ident("__events"), "push"), vec![entry]));
+            // Durable event delivery §8.1 (#3898): the size the event's queue message will have
+            // is measured as it is buffered, on every target, and warned of near the budget.
+            let measured = call(ident("__bynkMeasureEvent"), vec![entry]);
+            let push = expr_stmt(call(member(ident("__events"), "push"), vec![measured]));
             call(paren(block_arrow(vec![], true, vec![push])), vec![])
         });
     }
