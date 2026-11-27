@@ -389,6 +389,19 @@ export function apiKeyFirstDigest(digests: readonly ApiKeyDigest[]): Uint8Array 
   return digests[0].digest;
 }
 
+/** #3939 (slice 3): the `kid` of the pepper now live (`secret`'s). A record `verify` admits under
+ *  any other is re-hashed under this one, in the same commit (§7). */
+export function apiKeyCurrentKid(digests: readonly ApiKeyDigest[]): string {
+  return digests[0].kid;
+}
+
+/** #3939 (slice 3): the time the seam passes the key store, for expiry and last use: the harness
+ *  clock when the run sets one (`env.__bynkClock`), else the wall clock. */
+export async function apiKeyNow(env: unknown): Promise<number> {
+  const clock = (env as { __bynkClock?: { now(): Promise<number> | number } } | null | undefined)?.__bynkClock;
+  return clock === undefined ? Date.now() : await clock.now();
+}
+
 /** The fixed dummy digest (32 zero bytes). An HMAC-SHA-256 output equals it with probability
  *  2^-256, and `verify` also refuses whenever it compared the dummy, so it never admits. */
 export function apiKeyDummyDigest(): Uint8Array {
@@ -417,6 +430,19 @@ export interface MintRequest {
   readonly keyNo: string;
   readonly digest: Uint8Array;
   readonly kid: string;
+  /** #3939 (slice 3): when the key expires (`now + ttl`), or `None` for an actor with no `ttl`. */
+  readonly until: { readonly tag: "Some"; readonly value: number } | { readonly tag: "None" };
+  /** #3939 (slice 3, §7): the `kid`s of the peppers now held, `secret`'s first. The store prunes
+   *  each record under neither, with the expired ones, before it checks the cap. */
+  readonly live: readonly string[];
+}
+
+/** What `mintApiKey` reads beyond the pepper: the actor's `ttl` and its `previous` variable. */
+export interface MintOptions {
+  /** The actor's `ttl` in milliseconds; absent or `null`, keys do not expire. */
+  readonly ttlMs?: number | null;
+  /** The name of the actor's `previous` variable, for the fault message. */
+  readonly previous?: string;
 }
 
 /**
@@ -434,9 +460,20 @@ export async function mintApiKey<R>(
   nowMs: number,
   limit: number,
   store: (req: MintRequest) => Promise<{ readonly tag: "Ok"; readonly value: string } | { readonly tag: "Err"; readonly error: number }>,
+  opts: MintOptions = {},
 ): Promise<R> {
-  const fresh = await freshApiKey(await loadApiKeyPeppers(peppers, { secret: pepperName }));
-  const stored = await store({ handle: fresh.handle, keyNo: fresh.keyNo, digest: fresh.digest, kid: fresh.kid });
+  const held = await loadApiKeyPeppers(peppers, { secret: pepperName, previous: opts.previous });
+  const fresh = await freshApiKey(held);
+  const ttl = opts.ttlMs ?? null;
+  const until = ttl === null ? ({ tag: "None" } as const) : ({ tag: "Some", value: nowMs + ttl } as const);
+  const stored = await store({
+    handle: fresh.handle,
+    keyNo: fresh.keyNo,
+    digest: fresh.digest,
+    kid: fresh.kid,
+    until,
+    live: held.map((p) => p.kid),
+  });
   // `R` is the call's checked `Result[ApiKeySecret, TooManyKeys]`, whose `ApiKeyId` and
   // `ApiKeyLabel` are brands: the id is well-formed by construction and the label was checked
   // as an `ApiKeyLabel` before the call, so the structural value is that type.
@@ -449,7 +486,7 @@ export async function mintApiKey<R>(
       key: new BynkSecret(formatApiKey(prefix, handle, fresh.keyNo, fresh.secret)),
       label,
       created: nowMs,
-      expires: { tag: "None" },
+      expires: until,
     },
   };
   return minted as unknown as R;
@@ -526,6 +563,7 @@ export async function apiKeyForTest(
   nowMs: number,
   limit: number,
   store: (req: MintRequest) => Promise<{ readonly tag: "Ok"; readonly value: string } | { readonly tag: "Err"; readonly error: number }>,
+  opts: MintOptions = {},
 ): Promise<string> {
   const memo = (env.__bynkApiKeys ??= new Map<string, string>()) as Map<string, string>;
   const k = `${actor}:${sub}`;
@@ -539,6 +577,7 @@ export async function apiKeyForTest(
       nowMs,
       limit,
       store,
+      opts,
     );
     if (minted.tag !== "Ok") throw new Error(`bynk: the test identity \`${sub}\` holds the most keys it may`);
     key = minted.value.key.reveal();
@@ -653,4 +692,4 @@ export function apiKeyExpectCompares(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { apiKeyEqual as __apiKeyEqual, apiKeyList as __apiKeyList, apiKeyRevoke as __apiKeyRevoke, apiKeyBadKey as __apiKeyBadKey, apiKeyRevokedForTest as __apiKeyRevokedForTest, apiKeyCountCompares as __apiKeyCountCompares, apiKeyExpectCompares as __apiKeyExpectCompares, apiKeyForTest as __apiKeyForTest, apiKeyPeppersOf as __apiKeyPeppersOf, mintApiKey as __mintApiKey, apiKeyDummyDigest as __apiKeyDummyDigest, apiKeyFirstDigest as __apiKeyFirstDigest, apiKeyPresented as __apiKeyPresented, apiKeyCredentialOf as __apiKeyCredentialOf, apiKeyDigests as __apiKeyDigests, apiKeyIdOf as __apiKeyIdOf, formatApiKey as __formatApiKey, freshApiKey as __freshApiKey, loadApiKeyPeppers as __loadApiKeyPeppers, newApiKeyHandle as __newApiKeyHandle, newApiKeyPepper as __newApiKeyPepper, parseApiKey as __parseApiKey, parseApiKeyId as __parseApiKeyId };
+export { apiKeyEqual as __apiKeyEqual, apiKeyList as __apiKeyList, apiKeyRevoke as __apiKeyRevoke, apiKeyBadKey as __apiKeyBadKey, apiKeyRevokedForTest as __apiKeyRevokedForTest, apiKeyCountCompares as __apiKeyCountCompares, apiKeyExpectCompares as __apiKeyExpectCompares, apiKeyForTest as __apiKeyForTest, apiKeyPeppersOf as __apiKeyPeppersOf, mintApiKey as __mintApiKey, apiKeyCurrentKid as __apiKeyCurrentKid, apiKeyDummyDigest as __apiKeyDummyDigest, apiKeyNow as __apiKeyNow, apiKeyFirstDigest as __apiKeyFirstDigest, apiKeyPresented as __apiKeyPresented, apiKeyCredentialOf as __apiKeyCredentialOf, apiKeyDigests as __apiKeyDigests, apiKeyIdOf as __apiKeyIdOf, formatApiKey as __formatApiKey, freshApiKey as __freshApiKey, loadApiKeyPeppers as __loadApiKeyPeppers, newApiKeyHandle as __newApiKeyHandle, newApiKeyPepper as __newApiKeyPepper, parseApiKey as __parseApiKey, parseApiKeyId as __parseApiKeyId };

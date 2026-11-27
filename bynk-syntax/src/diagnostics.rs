@@ -150,7 +150,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.actor.api_key_unknown_key",
-        blurb: "An `ApiKey` actor's config keys are a closed set: `secret`, `prefix` and `header`. Any other key is refused rather than ignored, because an ignored key is a rule you believed you had written. `ttl` (key expiry) and `previous` (pepper rotation) are reserved for a later release and refused until then: a key does not expire yet, and changing the pepper ends every key.",
+        blurb: "An `ApiKey` actor's config keys are a closed set: `secret`, `previous`, `prefix`, `header` and `ttl`. Any other key is refused rather than ignored, because an ignored key is a rule you believed you had written.",
         example: "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefx = \"acme\"), identity = AccountId }   // ✗ misspelt\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"acme\"), identity = AccountId }   // ✓",
     },
     Explain {
@@ -7692,7 +7692,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.actor.api_key_unknown_key",
-        "An `ApiKey` config has a key outside the closed set, or one not supported yet (#3939).",
+        "An `ApiKey` config has a key outside the closed set (#3939).",
     ),
     warn(d(
         "bynk.actor.api_key_unlimited",

@@ -43,6 +43,8 @@ pub(super) struct ApiKeyDriver {
     secret: String,
     /// The pepper as the harness reads it (a case's `env` entry, else the run's test pepper).
     secret_read: TsExpr,
+    /// #3939 (slice 3): the actor's `ttl` and `previous`, as `mint` reads them.
+    seam: bynk_check::api_key::ApiKeySeam,
 }
 
 impl ApiKeyDriver {
@@ -61,10 +63,11 @@ impl ApiKeyDriver {
             ns: ns.to_string(),
             env: crate::testgen::names::env_binding(ns),
             secret_read: secret_read_of(&seam.secret),
-            actor: seam.actor,
-            prefix: seam.prefix,
-            header: seam.header,
-            secret: seam.secret,
+            actor: seam.actor.clone(),
+            prefix: seam.prefix.clone(),
+            header: seam.header.clone(),
+            secret: seam.secret.clone(),
+            seam,
         })
     }
 
@@ -110,6 +113,8 @@ impl ApiKeyDriver {
                     req("kid"),
                     str_lit("bynk-test"),
                     now.clone(),
+                    req("until"),
+                    req("live"),
                     num_lit(bynk_project::api_key_agents::KEY_CAP),
                     // `KeyOwner.mint` calls the key store, so its `deps` carry the `env`.
                     TsExpr::object(vec![("env".to_string(), env.clone())]),
@@ -128,6 +133,7 @@ impl ApiKeyDriver {
                 now,
                 num_lit(bynk_project::api_key_agents::KEY_CAP),
                 store,
+                crate::emitter::lower_call::api_key::mint_options(&self.seam),
             ],
         ))
     }

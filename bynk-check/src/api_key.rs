@@ -25,10 +25,6 @@ pub const DEFAULT_PREFIX: &str = "bk";
 /// The keys an `ApiKey` actor's config admits.
 const KEYS: &[&str] = &["secret", "previous", "prefix", "header", "ttl"];
 
-/// The keys this slice reads. `previous` and `ttl` arrive with expiry and rotation (track §14,
-/// slice 3), and until then are refused rather than read and ignored.
-const KEYS_NOW: &[&str] = &["secret", "prefix", "header"];
-
 /// The marker the generated agents' documentation begins with, so the checker can tell them from
 /// an author's declaration of the same (reserved) name.
 pub const GENERATED_MARKER: &str = "Generated for the `ApiKey` actor";
@@ -51,6 +47,12 @@ pub struct ApiKeySeam {
     pub header: Option<String>,
     /// The identity type the key store answers.
     pub identity_type: String,
+    /// #3939 (slice 3, §7): the environment variable holding the pepper being rotated out, read
+    /// for verification only; `None` when the actor names none.
+    pub previous: Option<String>,
+    /// #3939 (slice 3): how long a minted key is valid, in milliseconds; `None`, keys do not
+    /// expire.
+    pub ttl_ms: Option<i64>,
 }
 
 impl ApiKeySeam {
@@ -105,6 +107,13 @@ pub fn api_key_seam_of(actor: &ActorDecl, binder: Option<String>) -> Option<ApiK
             .and_then(|a| a.value.as_str())
             .map(str::to_string),
         identity_type: id.name.clone(),
+        previous: actor
+            .scheme_arg("previous")
+            .and_then(|a| a.value.as_str())
+            .map(str::to_string),
+        ttl_ms: actor
+            .scheme_arg("ttl")
+            .and_then(|a| a.value.as_duration_millis()),
     })
 }
 
@@ -171,6 +180,7 @@ pub(crate) fn check_api_key_actor(
     check_keys(actor, errors);
     check_secret(actor, auth, table, errors);
     check_prefix(actor, table, errors);
+    check_previous_and_ttl(actor, errors);
     check_header(actor, errors);
     check_reserved_names(actor, table, errors);
     match &actor.identity {
@@ -189,7 +199,7 @@ fn bad_arg(span: Span, key: &str, want: &str) -> CompileError {
         format!("an `ApiKey` actor's `{key}` must be {want}"),
     )
     .with_note(
-        "write `auth = ApiKey(secret = \"<ENV_NAME>\")`; the optional keys are `prefix` (default `bk`) and `header` (default `Authorization: Bearer`)",
+        "write `auth = ApiKey(secret = \"<ENV_NAME>\")`; the optional keys are `previous` (the pepper being rotated out), `prefix` (default `bk`), `header` (default `Authorization: Bearer`) and `ttl` (default: keys do not expire)",
     )
 }
 
@@ -226,18 +236,7 @@ fn check_keys(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
                     arg.key.span,
                     format!("unknown `ApiKey` config key `{key}`"),
                 )
-                .with_note("the keys are `secret`, `prefix` and `header`"),
-            );
-        } else if !KEYS_NOW.contains(&key) {
-            errors.push(
-                CompileError::new(
-                    "bynk.actor.api_key_unknown_key",
-                    arg.key.span,
-                    format!("the `ApiKey` config key `{key}` is not supported yet"),
-                )
-                .with_note(
-                    "key expiry (`ttl`) and pepper rotation (`previous`) arrive in a later release; until then a key does not expire, and the pepper is rotated only by revoking every key",
-                ),
+                .with_note("the keys are `secret`, `previous`, `prefix`, `header` and `ttl`"),
             );
         }
     }
@@ -295,6 +294,42 @@ fn check_secret(
                     "a pepper hashes one actor's keys only: a variable shared with another scheme would let that scheme's credentials be checked against it; give each actor its own variable",
                 ),
             );
+        }
+    }
+}
+
+/// #3939 (slice 3): `previous` names another environment variable than `secret`, and `ttl` is a
+/// positive whole number of seconds. Sharing `previous` with another actor is
+/// `bynk.actor.api_key_secret_shared`, reported from that actor's `secret`.
+fn check_previous_and_ttl(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
+    if let Some(arg) = actor.scheme_arg("previous") {
+        match arg.value.as_str() {
+            None => errors.push(bad_arg(
+                arg.span,
+                "previous",
+                "an env binding name, as a string",
+            )),
+            Some(p) if actor.scheme_arg("secret").and_then(|s| s.value.as_str()) == Some(p) => {
+                errors.push(bad_arg(
+                    arg.span,
+                    "previous",
+                    "another variable than `secret`: it holds the pepper being rotated out",
+                ));
+            }
+            Some(_) => {}
+        }
+    }
+    if let Some(arg) = actor.scheme_arg("ttl") {
+        let ok = arg
+            .value
+            .as_duration_millis()
+            .is_some_and(|ms| ms > 0 && ms % 1000 == 0);
+        if !ok {
+            errors.push(bad_arg(
+                arg.span,
+                "ttl",
+                "a positive whole number of seconds, such as `90.days`",
+            ));
         }
     }
 }

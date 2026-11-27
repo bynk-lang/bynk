@@ -62,6 +62,8 @@ pub(in crate::emitter) fn lower_api_key_mint(
                 req("kid"),
                 ident("__label"),
                 ident("__now"),
+                req("until"),
+                req("live"),
                 num_lit(bynk_project::api_key_agents::KEY_CAP),
                 deps_node.clone(),
             ],
@@ -81,6 +83,7 @@ pub(in crate::emitter) fn lower_api_key_mint(
             ident("__now"),
             num_lit(bynk_project::api_key_agents::KEY_CAP),
             store,
+            mint_options(&seam),
         ],
     );
     Some(call(
@@ -217,4 +220,19 @@ pub(in crate::emitter) fn lower_api_key_member(
         )),
         vec![identity],
     ))
+}
+
+/// #3939 (slice 3): `{ ttlMs, previous }`, what `__mintApiKey` reads beyond the pepper: the key's
+/// lifetime, and the `previous` variable's name when the actor rotates.
+pub(crate) fn mint_options(seam: &bynk_check::api_key::ApiKeySeam) -> TsExpr {
+    let esc = crate::emitter::escape_ts_string;
+    let mut entries = vec![(
+        "ttlMs".to_string(),
+        seam.ttl_ms
+            .map_or_else(crate::ts_build::null_lit, |ms| num_lit(ms)),
+    )];
+    if let Some(previous) = &seam.previous {
+        entries.push(("previous".to_string(), str_lit(esc(previous))));
+    }
+    TsExpr::object(entries)
 }

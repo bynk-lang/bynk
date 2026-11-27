@@ -107,11 +107,14 @@ agent {agent} {{\n\
 \tstore kids: Map[String, String]\n\
 \tstore labels: Map[String, String]\n\
 \tstore created: Map[String, Int]\n\
+\tstore expires: Map[String, Int]\n\
+\tstore used: Map[String, Int]\n\
 \tstore scopes: Map[String, Set[String]]\n\
 \n\
-\ton call verify(keyNo: String, presented: Map[String, Bytes], first: Bytes, dummy: Bytes) -> Effect[Option[{identity}]]{{\n\
+\ton call verify(keyNo: String, presented: Map[String, Bytes], first: Bytes, current: String, dummy: Bytes, now: Int) -> Effect[Option[{identity}]] {{\n\
 \t\tlet stored <- digests.get(keyNo)\n\
 \t\tlet kid <- kids.get(keyNo)\n\
+\t\tlet until <- expires.get(keyNo)\n\
 \t\tlet nothing: Option[Bytes] = None\n\
 \t\tlet candidate = match kid {{\n\
 \t\t\tSome(k) => presented.get(k),\n\
@@ -132,29 +135,71 @@ agent {agent} {{\n\
 \t\t\tSome(_) => candidate.isSome(),\n\
 \t\t\tNone => false,\n\
 \t\t}}\n\
+\t\tlet live = match until {{\n\
+\t\t\tSome(t) => now < t,\n\
+\t\t\tNone => true,\n\
+\t\t}}\n\
 \t\tlet same <- ApiKey.equal(expected, actual)\n\
 \t\tlet who = owner\n\
-\t\tif same && real && !retired {{\n\
+\t\tif same && real && live && !retired {{\n\
+\t\t\tlet rotated = match kid {{\n\
+\t\t\t\tSome(k) => k != current,\n\
+\t\t\t\tNone => false,\n\
+\t\t\t}}\n\
+\t\t\tlet _ <- if rotated {{\n\
+\t\t\t\tlet _ <- digests.put(keyNo, first)\n\
+\t\t\t\tkids.put(keyNo, current)\n\
+\t\t\t}} else {{\n\
+\t\t\t\tEffect.pure(())\n\
+\t\t\t}}\n\
+\t\t\tlet seen <- used.get(keyNo)\n\
+\t\t\tlet stale = match seen {{\n\
+\t\t\t\tSome(t) => now - t >= 3600000,\n\
+\t\t\t\tNone => true,\n\
+\t\t\t}}\n\
+\t\t\tlet _ <- if stale {{\n\
+\t\t\t\tused.put(keyNo, now)\n\
+\t\t\t}} else {{\n\
+\t\t\t\tEffect.pure(())\n\
+\t\t\t}}\n\
 \t\t\tEffect.pure(who)\n\
 \t\t}} else {{\n\
 \t\t\tEffect.pure(None)\n\
 \t\t}}\n\
 \t}}\n\
 \n\
-\ton call insert(identity: {identity}, keyNo: String, digest: Bytes, kid: String, label: String, now: Int, cap: Int) -> Effect[Int] {{\n\
-\t\tlet n <- digests.size()\n\
+\ton call insert(identity: {identity}, keyNo: String, digest: Bytes, kid: String, label: String, now: Int, until: Option[Int], live: List[String], cap: Int) -> Effect[Int] {{\n\
 \t\tif retired {{\n\
 \t\t\tEffect.pure(2)\n\
-\t\t}} else if n >= cap {{\n\
-\t\t\tEffect.pure(1)\n\
 \t\t}} else {{\n\
-\t\t\towner := Some(identity)\n\
-\t\t\tlet _ <- digests.put(keyNo, digest)\n\
-\t\t\tlet _ <- kids.put(keyNo, kid)\n\
-\t\t\tlet _ <- labels.put(keyNo, label)\n\
-\t\t\tlet _ <- created.put(keyNo, now)\n\
-\t\t\tlet _ <- scopes.put(keyNo, Set.of([]))\n\
-\t\t\tEffect.pure(0)\n\
+\t\t\tlet ks <- kids.entries.collect()\n\
+\t\t\tlet es <- expires.entries.collect()\n\
+\t\t\tlet unkeyed = ks.filter((e) => !live.any((l: String) => l == e.value)).map((e) => e.key)\n\
+\t\t\tlet ended = es.filter((e) => e.value <= now).map((e) => e.key)\n\
+\t\t\tlet dead = unkeyed.concat(ended)\n\
+\t\t\tlet _ <- dead.forEach((k: String) => digests.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => kids.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => labels.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => created.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => expires.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => used.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => scopes.remove(k))\n\
+\t\t\tlet n <- digests.size()\n\
+\t\t\tif n >= cap {{\n\
+\t\t\t\tEffect.pure(1)\n\
+\t\t\t}} else {{\n\
+\t\t\t\towner := Some(identity)\n\
+\t\t\t\tlet _ <- digests.put(keyNo, digest)\n\
+\t\t\t\tlet _ <- kids.put(keyNo, kid)\n\
+\t\t\t\tlet _ <- labels.put(keyNo, label)\n\
+\t\t\t\tlet _ <- created.put(keyNo, now)\n\
+\t\t\t\tlet _ <- match until {{\n\
+\t\t\t\t\tSome(t) => expires.put(keyNo, t),\n\
+\t\t\t\t\tNone => Effect.pure(()),\n\
+\t\t\t\t}}\n\
+\t\t\t\tlet _ <- scopes.put(keyNo, Set.of([]))\n\
+\t\t\t\tEffect.pure(0)\n\
+\t\t\t}}\n\
 \t\t}}\n\
 \t}}\n\
 \n\
@@ -168,6 +213,37 @@ agent {agent} {{\n\
 \t\tEffect.pure(Map.of(es))\n\
 \t}}\n\
 \n\
+\ton call expiresOf() -> Effect[Map[String, Int]] {{\n\
+\t\tlet es <- expires.entries.collect()\n\
+\t\tEffect.pure(Map.of(es))\n\
+\t}}\n\
+\n\
+\ton call usedOf() -> Effect[Map[String, Int]] {{\n\
+\t\tlet es <- used.entries.collect()\n\
+\t\tEffect.pure(Map.of(es))\n\
+\t}}\n\
+\n\
+\ton call kidsOf() -> Effect[Map[String, String]] {{\n\
+\t\tlet es <- kids.entries.collect()\n\
+\t\tEffect.pure(Map.of(es))\n\
+\t}}\n\
+\n\
+\ton call prune(now: Int, live: List[String]) -> Effect[Int] {{\n\
+\t\tlet ks <- kids.entries.collect()\n\
+\t\tlet es <- expires.entries.collect()\n\
+\t\tlet unkeyed = ks.filter((e) => !live.any((l: String) => l == e.value)).map((e) => e.key)\n\
+\t\tlet ended = es.filter((e) => e.value <= now).map((e) => e.key)\n\
+\t\tlet dead = unkeyed.concat(ended)\n\
+\t\tlet _ <- dead.forEach((k: String) => digests.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => kids.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => labels.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => created.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => expires.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => used.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => scopes.remove(k))\n\
+\t\tEffect.pure(dead.length())\n\
+\t}}\n\
+\n\
 \ton call revoke(keyNo: String) -> Effect[Bool] {{\n\
 \t\tlet held <- digests.contains(keyNo)\n\
 \t\tif held && !retired {{\n\
@@ -175,6 +251,8 @@ agent {agent} {{\n\
 \t\t\tlet _ <- kids.remove(keyNo)\n\
 \t\t\tlet _ <- labels.remove(keyNo)\n\
 \t\t\tlet _ <- created.remove(keyNo)\n\
+\t\t\tlet _ <- expires.remove(keyNo)\n\
+\t\t\tlet _ <- used.remove(keyNo)\n\
 \t\t\tlet _ <- scopes.remove(keyNo)\n\
 \t\t\tEffect.pure(true)\n\
 \t\t}} else {{\n\
@@ -189,6 +267,8 @@ agent {agent} {{\n\
 \t\tlet _ <- ks.forEach((k: String) => kids.remove(k))\n\
 \t\tlet _ <- ks.forEach((k: String) => labels.remove(k))\n\
 \t\tlet _ <- ks.forEach((k: String) => created.remove(k))\n\
+\t\tlet _ <- ks.forEach((k: String) => expires.remove(k))\n\
+\t\tlet _ <- ks.forEach((k: String) => used.remove(k))\n\
 \t\tlet _ <- ks.forEach((k: String) => scopes.remove(k))\n\
 \t\tretired := true\n\
 \t\tEffect.pure(n)\n\
@@ -208,17 +288,17 @@ agent {agent} {{\n\
 \n\
 \tstore handle: Cell[Option[String]] = None\n\
 \n\
-\ton call mint(fresh: String, keyNo: String, digest: Bytes, kid: String, label: String, now: Int, cap: Int) -> Effect[Result[String, Int]] {{\n\
+\ton call mint(fresh: String, keyNo: String, digest: Bytes, kid: String, label: String, now: Int, until: Option[Int], live: List[String], cap: Int) -> Effect[Result[String, Int]] {{\n\
 \t\tlet current = match handle {{\n\
 \t\t\tSome(h) => h,\n\
 \t\t\tNone => fresh,\n\
 \t\t}}\n\
-\t\tlet r <- {keys}(current).insert(self.identity, keyNo, digest, kid, label, now, cap)\n\
+\t\tlet r <- {keys}(current).insert(self.identity, keyNo, digest, kid, label, now, until, live, cap)\n\
 \t\tif r == 0 {{\n\
 \t\t\thandle := Some(current)\n\
 \t\t\tEffect.pure(Ok(current))\n\
 \t\t}} else if r == 2 {{\n\
-\t\t\tlet again <- {keys}(fresh).insert(self.identity, keyNo, digest, kid, label, now, cap)\n\
+\t\t\tlet again <- {keys}(fresh).insert(self.identity, keyNo, digest, kid, label, now, until, live, cap)\n\
 \t\t\thandle := Some(fresh)\n\
 \t\t\tif again == 0 {{\n\
 \t\t\t\tEffect.pure(Ok(fresh))\n\

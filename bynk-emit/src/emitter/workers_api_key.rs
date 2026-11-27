@@ -33,6 +33,27 @@ use crate::ts_build::{
     strict_eq, strict_neq,
 };
 
+/// `{ secret: <env read>, previous: <env read> }`: the actor's peppers as the seam and `mint` read
+/// them, `previous` only when the actor names one (#3939, slice 3).
+pub(super) fn pepper_values(seam: &ApiKeySeam) -> TsExpr {
+    let esc = crate::emitter::escape_ts_string;
+    let mut entries = vec![("secret".to_string(), secret_probe_expr(&esc(&seam.secret)))];
+    if let Some(previous) = &seam.previous {
+        entries.push(("previous".to_string(), secret_probe_expr(&esc(previous))));
+    }
+    TsExpr::object(entries)
+}
+
+/// `{ secret: "<NAME>", previous: "<NAME>" }`: the peppers' variable names, for a fault message.
+fn pepper_names(seam: &ApiKeySeam) -> TsExpr {
+    let esc = crate::emitter::escape_ts_string;
+    let mut entries = vec![("secret".to_string(), str_lit(esc(&seam.secret)))];
+    if let Some(previous) = &seam.previous {
+        entries.push(("previous".to_string(), str_lit(esc(previous))));
+    }
+    TsExpr::object(entries)
+}
+
 /// The seam's statements, every refusal through `failure`, and what it leaves the handler.
 pub(super) fn api_key_seam_stmts(
     seam: &ApiKeySeam,
@@ -76,16 +97,7 @@ pub(super) fn api_key_seam_stmts(
                 vec![
                     await_expr(call(
                         ident("__loadApiKeyPeppers"),
-                        vec![
-                            TsExpr::object(vec![(
-                                "secret".to_string(),
-                                secret_probe_expr(&esc(&seam.secret)),
-                            )]),
-                            TsExpr::object(vec![(
-                                "secret".to_string(),
-                                str_lit(esc(&seam.secret)),
-                            )]),
-                        ],
+                        vec![pepper_values(seam), pepper_names(seam)],
                     )),
                     member(ident("__key"), "secret"),
                 ],
@@ -110,7 +122,9 @@ pub(super) fn api_key_seam_stmts(
                 member(ident("__key"), "keyNo"),
                 call(ident("__apiKeyPresented"), vec![ident("__digests")]),
                 call(ident("__apiKeyFirstDigest"), vec![ident("__digests")]),
+                call(ident("__apiKeyCurrentKid"), vec![ident("__digests")]),
                 call(ident("__apiKeyDummyDigest"), vec![]),
+                await_expr(call(ident("__apiKeyNow"), vec![ident("env")])),
                 ident("deps"),
             ],
         )),
@@ -230,15 +244,7 @@ pub(super) fn api_key_deps_entry(table: &bynk_check::symbols::UnitTable) -> Opti
     let esc = crate::emitter::escape_ts_string;
     let peppers = seams
         .iter()
-        .map(|s| {
-            (
-                esc(&s.actor),
-                TsExpr::object(vec![(
-                    "secret".to_string(),
-                    secret_probe_expr(&esc(&s.secret)),
-                )]),
-            )
-        })
+        .map(|s| (esc(&s.actor), pepper_values(s)))
         .collect();
     Some(TsObjectEntry::prop(
         "__apiKey".to_string(),
