@@ -154,8 +154,9 @@ fn event_queue_slug(pair: &str) -> String {
         .collect()
 }
 
-/// The slug cut to at most `budget` characters, without a trailing `-`, which would leave
-/// `--` before the hash.
+/// The slug cut to at most `budget` characters, without a trailing `-`, so the separator
+/// before the hash is a single `-`. A run of `-` inside the slug (from `__`, or `_` before a
+/// `.`) is kept as D2 writes it: Cloudflare accepts it, and the hash keeps names apart.
 fn truncated_slug(slug: &str, budget: usize) -> &str {
     // The slug is ASCII, so any byte index is a character boundary.
     slug[..slug.len().min(budget)].trim_end_matches('-')
@@ -277,7 +278,9 @@ mod tests {
                 assert!(name.len() <= 63, "{name} is {} characters", name.len());
                 let ok = |b: u8| b.is_ascii_lowercase() || b.is_ascii_digit();
                 assert!(name.bytes().all(|b| ok(b) || b == b'-'), "{name}");
-                assert!(!name.contains("--"), "{name}");
+                let hash_at =
+                    name.len() - environment_suffix(environment) - EVENT_QUEUE_HASH_DIGITS;
+                assert!(!name[..hash_at].ends_with("--"), "{name}");
                 assert!(name.bytes().next().is_some_and(ok) && name.bytes().last().is_some_and(ok));
             }
         }
