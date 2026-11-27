@@ -1,0 +1,19 @@
+context split.client
+
+consumes split.graph
+
+// Each call casts its argument to the callee's type, spelled through the callee's namespace: `Dir`
+// and `Entry` live in different files of `split.graph`.
+service relayDir {
+  on call(d: Dir) -> Effect[Dir] by Caller {
+    let r <- split.graph.dirs(d)
+    Effect.pure(r)
+  }
+}
+
+service relayEntry {
+  on call(e: Entry) -> Effect[Entry] by Caller {
+    let r <- split.graph.entries(e)
+    Effect.pure(r)
+  }
+}

@@ -1,0 +1,10 @@
+context split.front
+
+consumes split.shop
+
+service relayItem {
+  on call(i: Item) -> Effect[Item] by Caller {
+    let r <- split.shop.restock(i)
+    Effect.pure(r)
+  }
+}
