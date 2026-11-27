@@ -777,8 +777,11 @@ pub fn check_file_core(
     .with_local_fns(local_fns)
     // #3959: a commons' free functions may declare `given`.
     .with_is_commons(kind == UnitKind::Commons)
-    // #911: the codes a literal `message("code")` here may name.
-    .with_message_codes(local_table.and_then(|t| t.message_codes.clone()))
+    // #911: what a literal `message("code")` here is checked against.
+    .with_message_scope(
+        local_table.and_then(|t| t.message_codes.clone()),
+        crate::symbols::locale_message_span(|u| unit_info.get(u).map(|i| &i.table)),
+    )
     // #1883, slice 1a: this unit's assets plus its `uses`d commons' ([DECISION G]).
     .with_assets(crate::assets::compose_unit_assets(name, unit_info))
     // #2387, slice 1: likewise this unit's embeds and its `uses`d commons'.

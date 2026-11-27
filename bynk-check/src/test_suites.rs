@@ -6472,10 +6472,11 @@ pub fn build_privileged_resolved(
     )
     // #911: a suite is part of the unit it tests, so a literal `message("code")` in a case
     // names a code of that unit's own bundle.
-    .with_message_codes(
+    .with_message_scope(
         unit_tables
             .get(owning_unit)
             .and_then(|t| t.message_codes.clone()),
+        crate::symbols::locale_message_span(|u| unit_tables.get(u)),
     )
     // #1883, slice 3: the target's assets, nameable and fetchable in a case.
     .with_assets(assets)

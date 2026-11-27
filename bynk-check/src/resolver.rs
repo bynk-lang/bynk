@@ -236,8 +236,12 @@ pub struct ResolvedCommons {
     pub(crate) is_commons: bool,
     /// #911: the codes of this unit's `@reference` message bundle (see
     /// [`crate::symbols::UnitTable::message_codes`]). `None` where there is no bundle to check a
-    /// literal `message("code")` against. Set with [`ResolvedCommons::with_message_codes`].
+    /// literal `message("code")` against. Set with [`ResolvedCommons::with_message_scope`].
     pub(crate) message_codes: Option<Arc<std::collections::BTreeSet<String>>>,
+    /// #911: where `bynk.locale`'s `message` is declared, which identifies a call to it however
+    /// the unit spells the import (`Locale.message`, `message as msg`). `None` where the check
+    /// has nothing to compare against.
+    pub(crate) locale_message: Option<Span>,
     /// Names of types brought into scope via `uses` of a *commons*
     /// specifically (as opposed to a local declaration, or a type surfaced
     /// via `consumes`) — every name [`compute_is_uses_commons_type`] accepts
@@ -554,17 +558,21 @@ impl ResolvedCommons {
             stability: Default::default(),
             is_commons: false,
             message_codes: None,
+            locale_message: None,
         }
     }
 
-    /// #911: record the codes of this unit's `@reference` message bundle, which a literal
-    /// `message("code")` in it must name. A builder, so a construction without a bundle need not
-    /// call it.
-    pub fn with_message_codes(
+    /// #911: record what a literal `message("code")` in this unit is checked against: the codes
+    /// of its `@reference` message bundle, and where `bynk.locale`'s `message` is declared (so the
+    /// call is recognised by where the function is from, not how it is spelled). A builder, so a
+    /// construction without a bundle need not call it.
+    pub fn with_message_scope(
         mut self,
         codes: Option<Arc<std::collections::BTreeSet<String>>>,
+        locale_message: Option<Span>,
     ) -> Self {
         self.message_codes = codes;
+        self.locale_message = locale_message;
         self
     }
 
@@ -1084,6 +1092,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             is_commons: false,
             // Single-file mode has no bundle to check a literal code against.
             message_codes: None,
+            locale_message: None,
         };
         (resolved, errors)
     }
@@ -1213,6 +1222,16 @@ pub fn private_imports_in<'a>(
             });
         }
     }
+    // #911: a bundle's `render` as this unit spells it qualified (`Messages.render`). Keyed by the
+    // exact spelling, so `order.render()` on a record, or a `render` of a unit with no bundle, is
+    // never taken for it. A unit that declares its own bundle sees these too: its own `render` is
+    // the bare one only.
+    for (spelling, unit) in &local.bundle_render_spellings {
+        out.entry(spelling.clone()).or_insert(PrivateImport {
+            unit: unit.clone(),
+            kind: crate::symbols::MESSAGE_RENDERER,
+        });
+    }
     out
 }
 
@@ -1273,11 +1292,6 @@ pub fn rewrite_private_references(
                     Some(n) => (*n).to_string(),
                     None => return e,
                 },
-            };
-            // #911: `M.render` for an alias `M` of a bundle's unit is that unit's `render`.
-            let subject = match subject.strip_suffix(".render") {
-                Some(_) if private.contains_key("render") => "render".to_string(),
-                _ => subject,
             };
             let Some(p) = private.get(&subject) else {
                 return e;

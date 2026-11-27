@@ -957,11 +957,13 @@ pub(crate) fn require_callee_given(
 /// code resolves only against the bundles of the unit where `message(code)` is called. A code
 /// the program computes (`message(code)` with `code` a parameter) is not checked, and a unit
 /// with no bundle has nothing to check against: its `render` is `bynk.locale`'s code-echo.
+/// The callee is `bynk.locale`'s `message` by where it is declared, so `Locale.message` and
+/// `message as msg` are checked and a unit's own `message` function is not.
 fn check_message_literal(callee: &FnDecl, args: &[Expr], ctx: &mut Ctx) {
     let Some(codes) = ctx.input.message_codes.clone() else {
         return;
     };
-    if !is_locale_message(callee) {
+    if ctx.input.locale_message != Some(callee.span) {
         return;
     }
     let [arg] = args else {
@@ -995,15 +997,6 @@ fn check_message_literal(callee: &FnDecl, args: &[Expr], ctx: &mut Ctx) {
         );
     }
     ctx.errors.push(err);
-}
-
-/// #911: whether `f` is `bynk.locale`'s `message(code: String) -> Message`: by its name and
-/// signature, since a suite's view of the unit does not carry where each name came from.
-fn is_locale_message(f: &FnDecl) -> bool {
-    f.name.ident().name == "message"
-        && matches!(f.params.as_slice(), [p]
-            if p.name.name == "code" && matches!(p.type_ref, TypeRef::Base(BaseType::String, _)))
-        && matches!(&f.return_type, TypeRef::Named(n) if n.name == "Message")
 }
 
 #[allow(clippy::too_many_arguments)]

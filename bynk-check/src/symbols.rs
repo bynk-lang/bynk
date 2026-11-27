@@ -718,6 +718,10 @@ pub struct UnitTable {
     /// error), where `render` is `bynk.locale`'s code-echo and there is nothing to check against.
     /// Built by `build_unit_table` from the unit's own files.
     pub message_codes: Option<Arc<std::collections::BTreeSet<String>>>,
+    /// #911: each qualified spelling of a used unit's message-bundle `render` this unit writes
+    /// (`Messages.render`), with that unit: what `bynk.messages.cross_unit_render` is reported
+    /// against. Filled by [`crate::uses_view::attach_use_views`].
+    pub bundle_render_spellings: std::collections::BTreeMap<String, String>,
 }
 
 /// One type's methods: its name, then its instance and static methods in key order.
@@ -824,6 +828,7 @@ impl UnitTable {
             use_origin: _,
             // Built by `build_unit_table` from the unit's own files.
             message_codes: _,
+            bundle_render_spellings,
         } = self;
         (
             *kind,
@@ -842,6 +847,7 @@ impl UnitTable {
                 .iter()
                 .map(|(k, ps)| (k, ps.iter().map(|p| &p.form).collect::<Vec<_>>()))
                 .collect::<Vec<_>>(),
+            bundle_render_spellings,
         )
     }
 
@@ -2099,6 +2105,14 @@ fn synthetic_render_fn() -> FnDecl {
         trivia: Trivia::default(),
         private: None,
     }
+}
+
+/// #911: where `bynk.locale`'s `message` is declared, given each unit's table: the identity a call
+/// to it is recognised by, whatever the importing unit calls it.
+pub fn locale_message_span<'a>(table_of: impl Fn(&str) -> Option<&'a UnitTable>) -> Option<Span> {
+    table_of("bynk.locale")
+        .and_then(|t| t.fns.get("message"))
+        .map(|f| f.span)
 }
 
 /// #911: the codes of a unit's `@reference` message block, across its files: what a literal
