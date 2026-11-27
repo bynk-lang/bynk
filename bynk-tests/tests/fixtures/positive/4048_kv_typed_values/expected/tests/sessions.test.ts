@@ -123,7 +123,7 @@ async function test_a_record_with_a_list__a_sum_and_an_option_round_trips() {
     type Other = __ns_sessions.Other;
     type Role = __ns_sessions.Role;
     type Session = __ns_sessions.Session;
-    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorMatchOf, VectorOf, VectorReadOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsReadError = __ns_bynk_cloudflare.AnalyticsReadError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -212,7 +212,9 @@ async function test_a_record_with_a_list__a_sum_and_an_option_round_trips() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorMatchOf<M> = __ns_bynk_cloudflare.VectorMatchOf<M>;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
+    type VectorReadOf<M> = __ns_bynk_cloudflare.VectorReadOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = { user: "ada", roles: [Role.Admin, Role.Member], label: Some("lead") };
     await save.call("s:1", s, deps);
@@ -235,7 +237,7 @@ async function test_a_missing_key_is_None() {
     type Other = __ns_sessions.Other;
     type Role = __ns_sessions.Role;
     type Session = __ns_sessions.Session;
-    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorMatchOf, VectorOf, VectorReadOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsReadError = __ns_bynk_cloudflare.AnalyticsReadError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -324,7 +326,9 @@ async function test_a_missing_key_is_None() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorMatchOf<M> = __ns_bynk_cloudflare.VectorMatchOf<M>;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
+    type VectorReadOf<M> = __ns_bynk_cloudflare.VectorReadOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const back = await load.call("s:none", deps);
     if (!(((__c: boolean) => __c)(back.tag === "None"))) { throw __bynkExpectFailure("tests/sessions.bynk:18:9", 410, 422, "expect back is None", "back", () => __bynkShow(back)); }
@@ -345,7 +349,7 @@ async function test_the_stored_text_is_what_Json_encode_writes() {
     type Other = __ns_sessions.Other;
     type Role = __ns_sessions.Role;
     type Session = __ns_sessions.Session;
-    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorMatchOf, VectorOf, VectorReadOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsReadError = __ns_bynk_cloudflare.AnalyticsReadError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -434,7 +438,9 @@ async function test_the_stored_text_is_what_Json_encode_writes() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorMatchOf<M> = __ns_bynk_cloudflare.VectorMatchOf<M>;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
+    type VectorReadOf<M> = __ns_bynk_cloudflare.VectorReadOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = { user: "bob", roles: [Role.Member], label: None };
     await save.call("s:2", s, deps);
@@ -457,7 +463,7 @@ async function test_a_stored_value_of_the_wrong_shape_faults() {
     type Other = __ns_sessions.Other;
     type Role = __ns_sessions.Role;
     type Session = __ns_sessions.Session;
-    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorMatchOf, VectorOf, VectorReadOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsReadError = __ns_bynk_cloudflare.AnalyticsReadError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -546,7 +552,9 @@ async function test_a_stored_value_of_the_wrong_shape_faults() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorMatchOf<M> = __ns_bynk_cloudflare.VectorMatchOf<M>;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
+    type VectorReadOf<M> = __ns_bynk_cloudflare.VectorReadOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     await saveOther.call("s:3", deps);
     if (!((await (async () => {
@@ -577,7 +585,7 @@ async function test_stored_text_that_is_not_JSON_faults() {
     type Other = __ns_sessions.Other;
     type Role = __ns_sessions.Role;
     type Session = __ns_sessions.Session;
-    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorMatchOf, VectorOf, VectorReadOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsReadError = __ns_bynk_cloudflare.AnalyticsReadError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -666,7 +674,9 @@ async function test_stored_text_that_is_not_JSON_faults() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorMatchOf<M> = __ns_bynk_cloudflare.VectorMatchOf<M>;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
+    type VectorReadOf<M> = __ns_bynk_cloudflare.VectorReadOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     await saveText.call("s:4", "not json", deps);
     if (!((await (async () => {
@@ -697,7 +707,7 @@ async function test_putValue_takes_the_options_of_putWith() {
     type Other = __ns_sessions.Other;
     type Role = __ns_sessions.Role;
     type Session = __ns_sessions.Session;
-    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorMatchOf, VectorOf, VectorReadOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsReadError = __ns_bynk_cloudflare.AnalyticsReadError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -786,7 +796,9 @@ async function test_putValue_takes_the_options_of_putWith() {
     type Vector = __ns_bynk_cloudflare.Vector;
     type VectorError = __ns_bynk_cloudflare.VectorError;
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorMatchOf<M> = __ns_bynk_cloudflare.VectorMatchOf<M>;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
+    type VectorReadOf<M> = __ns_bynk_cloudflare.VectorReadOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const s = { user: "cy", roles: [], label: None };
     const kept = await saveExpiring.call("s:5", s, deps);

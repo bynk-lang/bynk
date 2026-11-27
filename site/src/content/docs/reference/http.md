@@ -334,7 +334,8 @@ it: the seam verifies the credential before the handler runs.
 A route whose `by` actor's seam consumed a credential does not show it in this view. On a `Bearer` or `Oidc`
 route the `Authorization` header is omitted, so `get("authorization")` and `bearer()` are `None`, and
 `entries()` has no `authorization` key; on a
-`Signature` route the signature header is omitted (the body stays readable). A `SignedCookie` route omits its
+`Signature` route the signature header is omitted (the body stays readable). An `ApiKey` route omits the header
+its key is read from (`Authorization`, or the actor's `header`). A `SignedCookie` route omits its
 session cookie, and on an actor sum every member's credential is omitted. A handler that must forward a token
 downstream can't take it from here. A `by v: Visitor` route consumed nothing, so the example above works.
 
@@ -2046,7 +2047,7 @@ From this the compiler synthesises, for that service:
 | Field | Meaning | Default |
 |---|---|---|
 | `origins` | The allowed origins, as string literals or [`String` constants](#origins-from-constants) — an exact allowlist in [serialised form](#origin-form) (`["https://a.com", "https://b.com"]`), or the wildcard `["*"]`; or one `List[String]` constant. **Required.** | — |
-| `headers` | The `Access-Control-Allow-Headers` a preflight advertises. | `content-type` (plus `authorization` when the service has a [Bearer](/reference/actors/) route) |
+| `headers` | The `Access-Control-Allow-Headers` a preflight advertises. | `content-type` (plus `authorization` when the service has a [Bearer](/reference/actors/) or `Oidc` route, and the key's header, `authorization` or its `header`, when it has an [`ApiKey`](/reference/actors/#api-keys) route) |
 | `expose` | The response headers a browser script may read, beside the ones Bynk writes for a client ([below](#exposed-headers)). | the automatic set |
 | `credentials` | Whether credentialed requests (cookies / `Authorization`) are allowed — sends `Access-Control-Allow-Credentials: true`. | `false` |
 | `maxAge` | How long a browser may cache the preflight, as a [`Duration`](/reference/types/#duration) — sent as `Access-Control-Max-Age` seconds. | omitted (browser default) |

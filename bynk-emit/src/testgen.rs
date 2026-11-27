@@ -64,6 +64,7 @@ use bynk_syntax::ast::{Case, Visibility};
 
 // -- v0.7 / v0.118: test declaration processing --
 
+mod api_key_driver;
 mod case_body;
 mod collection_generators;
 mod harness;
@@ -121,6 +122,10 @@ pub const SMOKE_SUITE_SUFFIX: &str = ".smoke.bynk";
 /// #3386: the fixed signing key a `SignedCookie` actor's key variable takes in a test run (base64url of
 /// 32 bytes), as the verifier refuses the short `TEST_SECRET`.
 pub const TEST_SESSION_KEY: &str = "Ynluay10ZXN0LXNlc3Npb24ta2V5LTAxMjM0NTY3ODk";
+
+/// #3939: the fixed pepper an `ApiKey` actor's pepper variable takes in a test run (base64url of
+/// 32 bytes, as the runtime refuses a shorter one). A test run's keys are hashed under it.
+pub const TEST_API_KEY_PEPPER: &str = "Ynluay10ZXN0LWFwaS1rZXktcGVwcGVyLTAxMjM0NTY";
 
 /// The name of the synthetic case. `bynk-driver` lowers a case of this name
 /// with its tail reported, and the run selects it by this name.

@@ -103,7 +103,9 @@ pub(super) fn check(
             BadCredential::WrongIssuer
             | BadCredential::WrongAudience
             | BadCredential::WrongAlgorithm
-            | BadCredential::NoSubject => unreachable!("handled before the member lookup"),
+            | BadCredential::NoSubject
+            | BadCredential::Malformed
+            | BadCredential::Unknown => unreachable!("handled before the member lookup"),
         };
         let err = CompileError::new(
                 code,

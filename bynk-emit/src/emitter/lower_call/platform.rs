@@ -1335,6 +1335,93 @@ fn lower_session_revoke_all(
     ))
 }
 
+/// #4101: lower `Cap.queryValue[M](vector, options)` / `Cap.getByIdsValue[M](ids)` on a derived
+/// `Vectorize` instance, or `None` when the call is not one. The text operation runs as written
+/// (`query` or `getByIds`), then each match's metadata text is read as `M` on its own: `None` when
+/// there is none, `Some(Ok(m))` when it reads as `M` and `Some(Err(e))` when it does not, so one stale
+/// vector is an `Err` for that match and the rest are unaffected.
+pub(in crate::emitter) fn lower_vector_value_read_call(
+    e: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    let Some(Callee::VectorValueRead { cap, meta, by_ids }) =
+        cx.commons().callees.get(&e.id).cloned()
+    else {
+        return None;
+    };
+    let decoder = json_decoder_fn(meta, DecodeSource::Json, cx)
+        .unwrap_or_else(|| cx.missing_fact(e.span, "JSON decoder for a typed Vectorize read"));
+    let lowered: Vec<TsExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    let r = || ident("__r");
+    let m = || ident("__m");
+    let op = if by_ids { "getByIds" } else { "query" };
+    // `metadata`: `None` when there is none, else `Some(<decoded>)`.
+    let metadata = TsExpr::Conditional {
+        test: Box::new(binary(
+            bynk_ts::TsBinaryOp::StrictEq,
+            chain(m(), &["metadata", "tag"]),
+            str_lit("Some"),
+        )),
+        consequent: Box::new(call(
+            ident("Some"),
+            vec![call(
+                ident("__decode"),
+                vec![chain(m(), &["metadata", "value"])],
+            )],
+        )),
+        alternate: Box::new(ident("None")),
+    };
+    let fields: Vec<(&str, TsExpr)> = if by_ids {
+        vec![
+            ("id", member(m(), "id")),
+            ("values", member(m(), "values")),
+            ("metadata", metadata),
+            ("namespace", member(m(), "namespace")),
+        ]
+    } else {
+        vec![
+            ("id", member(m(), "id")),
+            ("score", member(m(), "score")),
+            ("values", member(m(), "values")),
+            ("metadata", metadata),
+            ("namespace", member(m(), "namespace")),
+        ]
+    };
+    let each = arrow_with(
+        vec![TsParam::new("__m", None)],
+        false,
+        paren(object(fields)),
+    );
+    let body = vec![
+        const_typed("__decode", None, decoder),
+        const_typed(
+            "__r",
+            None,
+            TsExpr::Await(Box::new(call(
+                chain(deps_node, &[cap.as_str(), op]),
+                lowered,
+            ))),
+        ),
+        TsStmt::if_stmt(
+            binary(
+                bynk_ts::TsBinaryOp::StrictEq,
+                member(r(), "tag"),
+                str_lit("Err"),
+            ),
+            ret(r()),
+            None,
+        ),
+        ret(call(
+            ident("Ok"),
+            vec![method_call(chain(r(), &["value"]), "map", vec![each])],
+        )),
+    ];
+    Some(call(paren(block_arrow(vec![], true, body)), vec![]))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

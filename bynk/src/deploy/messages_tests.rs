@@ -527,7 +527,10 @@ const REST_OPERATIONS: &[(&str, Run)] = &[
         format!("{:?}", queue_exists(p, "jobs"))
     }),
     ("Queues delete (REST)", |p, _| {
-        shown(delete_queue(p, "jobs"))
+        // `shop-jobs` and `shop-mail` are the project's own Workers; any other consumer is
+        // refused (#4601).
+        let own = BTreeSet::from(["shop-jobs".to_string(), "shop-mail".to_string()]);
+        shown(delete_queue(p, "jobs", &own))
     }),
 ];
 
@@ -538,6 +541,8 @@ type Answers = &'static [(u16, &'static str)];
 /// The calls a stub saw, read once it has served them.
 type Seen = Box<dyn FnOnce() -> Vec<String>>;
 
+/// Each operation's own answers. A consumed queue's consumer is removed before the queue
+/// (#4601): Cloudflare refuses to delete a queue a Worker consumes with 400 `11005`.
 const REST_SPECIAL: &[(&str, &str, Answers)] = &[
     (
         "KV create (REST)",
@@ -782,7 +787,130 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
                 200,
                 r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
             ),
+            (200, r#"{"success":true,"result":[]}"#),
             (200, r#"{"success":true,"errors":[],"result":null}"#),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "consumed: the consumer is removed first",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"}]}"#,
+            ),
+            (200, r#"{"success":true,"result":null}"#),
+            (200, r#"{"success":true,"errors":[],"result":null}"#),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "consumer cannot be removed",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"}]}"#,
+            ),
+            (
+                403,
+                r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#,
+            ),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "consumer already removed, answered 404",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"}]}"#,
+            ),
+            (
+                404,
+                r#"{"success":false,"errors":[{"code":10000,"message":"Consumer not found"}]}"#,
+            ),
+            (200, r#"{"success":true,"errors":[],"result":null}"#),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "queue gone between the listing and the consumer delete, code 10104",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"}]}"#,
+            ),
+            (
+                404,
+                r#"{"success":false,"errors":[{"code":10104,"message":"Queue does not exist"}]}"#,
+            ),
+            (
+                404,
+                r#"{"success":false,"errors":[{"code":10104,"message":"Queue does not exist"}]}"#,
+            ),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "second own consumer cannot be detached",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"},{"consumer_id":"1a2b3c","script":"shop-mail","type":"worker"}]}"#,
+            ),
+            (200, r#"{"success":true,"result":null}"#),
+            (
+                403,
+                r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#,
+            ),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "an HTTP pull consumer refuses the delete, nothing removed",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"},{"consumer_id":"1a2b3c","type":"http_pull"}]}"#,
+            ),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "a foreign Worker consumer refuses the delete, nothing removed",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"billing","type":"worker"}]}"#,
+            ),
         ],
     ),
     (
@@ -801,6 +929,7 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
                 200,
                 r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
             ),
+            (200, r#"{"success":true,"result":[]}"#),
             (
                 404,
                 r#"{"success":false,"errors":[{"code":10104,"message":"Queue does not exist"}]}"#,
