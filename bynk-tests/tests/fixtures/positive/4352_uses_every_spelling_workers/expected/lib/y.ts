@@ -104,7 +104,7 @@ export function __deserialise_AppError(json: __JsonValue, path: string = "$"): R
     case "Other":
       return Ok({ tag: "Other" } as AppError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -121,7 +121,7 @@ export function __deserialise_IoError(json: __JsonValue, path: string = "$"): Re
       case "Net":
         return Ok({ tag: "Net" } as IoError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -133,7 +133,7 @@ export function __deserialise_IoError(json: __JsonValue, path: string = "$"): Re
     case "Net":
       return Ok({ tag: "Net" } as IoError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -169,7 +169,7 @@ export function __deserialise_Point(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["a"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __a = obj["a"];
   return Ok({ a: __a } as Point);
@@ -197,7 +197,7 @@ export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Resu
         return Err({ kind: "StructuralMismatch", path: `${path}.side`, expected: "number", actual: typeof obj["side"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["side"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.side`, expected: "safe integer", actual: String(obj["side"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.side`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["side"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __side = obj["side"];
       return Ok({ tag: "Square", side: __side } as Shape);
@@ -205,7 +205,7 @@ export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Resu
     case "Blob":
       return Ok({ tag: "Blob" } as Shape);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -226,7 +226,7 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
       case "Off":
         return Ok({ tag: "Off" } as Status);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -240,7 +240,7 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
     case "Off":
       return Ok({ tag: "Off" } as Status);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

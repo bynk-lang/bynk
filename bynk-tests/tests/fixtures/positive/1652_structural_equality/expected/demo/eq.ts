@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime
 import { __bynkBytesEqual } from "../__bynk_runtime/bytes.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 
 /**
  * #1652: `==` is structural (type-system §2.3.5). The suite proves it at runtime
@@ -68,7 +68,7 @@ export function decodedGreen(): Light {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Light(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Light);
@@ -156,7 +156,7 @@ export function __deserialise_Light(json: __JsonValue, path: string = "$"): Resu
       case "Green":
         return Ok({ tag: "Green" } as Light);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -170,7 +170,7 @@ export function __deserialise_Light(json: __JsonValue, path: string = "$"): Resu
     case "Green":
       return Ok({ tag: "Green" } as Light);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

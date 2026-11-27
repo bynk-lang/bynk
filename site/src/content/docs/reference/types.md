@@ -790,7 +790,7 @@ rewrites it too). Its fields let a failed decode be explained in Bynk:
 |---|---|
 | `kind` | what went wrong, a `DecodeErrorKind` (below): `Malformed` (the text is not JSON), `StructuralMismatch` (the JSON has the wrong shape or a wrong-typed value), or `RefinementViolation` (a value broke a refined type's predicate); `Yaml.decode` adds the refusals listed under [`Yaml.decode`](#yaml-decode) |
 | `path` | where, as a path from the root `$`: `$` for the whole document, `$.qty` for a field, `$.items[2].id` for a list element's field |
-| `message` | a human-readable description, such as `expected number, got string` |
+| `message` | a human-readable description, such as `expected number, got string`. It names the path, what was expected and the JSON *kind* found (`string`, `number`, `object`, `unrecognised variant`), and it **never contains the value being decoded**, so it is safe to log: a number that is not a safe integer reads `integer outside the safe range` or `non-integer number`, and text that is not JSON reads `not valid JSON at offset 5`, without the parser's own words (which can quote the input) |
 
 A `DecodeError` has no string form, so `"\(e)"` is refused
 (`bynk.types.interpolation_non_scalar`); interpolate its fields instead:

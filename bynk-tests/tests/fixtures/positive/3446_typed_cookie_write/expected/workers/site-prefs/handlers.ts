@@ -83,7 +83,7 @@ export function __deserialise_Prefs(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.__Host-visits`, expected: "number", actual: typeof __d_visits });
   }
   if (!globalThis.Number.isSafeInteger(__d_visits)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.__Host-visits`, expected: "safe integer", actual: String(__d_visits) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.__Host-visits`, expected: "safe integer", actual: globalThis.Number.isInteger(__d_visits) ? "integer outside the safe range" : "non-integer number" });
   }
   const __visits = __d_visits;
   const __r_price = __deserialise_Option_Decimal(obj["price"], `${path}.price`);
@@ -137,7 +137,7 @@ export function __deserialise_Theme(json: __JsonValue, path: string = "$"): Resu
       case "Dark":
         return Ok({ tag: "Dark" } as Theme);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -151,7 +151,7 @@ export function __deserialise_Theme(json: __JsonValue, path: string = "$"): Resu
     case "Dark":
       return Ok({ tag: "Dark" } as Theme);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

@@ -1297,7 +1297,7 @@ export function __deserialise_Receipt(json: __JsonValue, path: string = "$"): Re
     return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "number", actual: typeof obj["id"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["id"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: String(obj["id"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["id"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __id = obj["id"];
   const __r_sku = __deserialise_Sku(obj["sku"], `${path}.sku`);
@@ -1340,7 +1340,7 @@ export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Resu
       return Ok({ tag: "Rect", width: __width, height: __height } as __Wire_Shape);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

@@ -209,21 +209,21 @@ export function __deserialise_Job(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path: `${path}.due`, expected: "number", actual: typeof obj["due"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["due"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.due`, expected: "safe integer", actual: String(obj["due"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.due`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["due"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __due = obj["due"];
   if (typeof obj["score"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "number", actual: typeof obj["score"] });
   }
   if (!globalThis.Number.isFinite(obj["score"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: String(obj["score"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: "non-finite number" });
   }
   const __score = obj["score"];
   if (typeof obj["div"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.div`, expected: "number", actual: typeof obj["div"] });
   }
   if (!globalThis.Number.isFinite(obj["div"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.div`, expected: "finite number", actual: String(obj["div"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.div`, expected: "finite number", actual: "non-finite number" });
   }
   const __div = obj["div"];
   return Ok({ name: __name, priority: __priority, due: __due, score: __score, div: __div } as Job);
@@ -250,7 +250,7 @@ export function __deserialise_Priority(json: __JsonValue, path: string = "$"): R
       case "High":
         return Ok({ tag: "High" } as Priority);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -266,7 +266,7 @@ export function __deserialise_Priority(json: __JsonValue, path: string = "$"): R
     case "High":
       return Ok({ tag: "High" } as Priority);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

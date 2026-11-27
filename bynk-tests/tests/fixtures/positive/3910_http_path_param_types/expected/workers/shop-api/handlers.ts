@@ -90,7 +90,7 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
       case "Closed":
         return Ok({ tag: "Closed" } as Status);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -104,7 +104,7 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
     case "Closed":
       return Ok({ tag: "Closed" } as Status);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

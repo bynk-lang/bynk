@@ -23,7 +23,7 @@ export const Cents = {
 
 export const go = {
   async call(deps: { env: { T_PAY: __ServiceBinding }; identity: string }): globalThis.Promise<number> {
-    return __callService(deps.env.T_PAY, "charge", __serialise_t_pay__Cents(((250 as Cents) as unknown as globalThis.Parameters<typeof __serialise_t_pay__Cents>[0])), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "t.shadow", "7cab123919f1cc13", deps.env, "t.pay");
+    return __callService(deps.env.T_PAY, "charge", __serialise_t_pay__Cents(((250 as Cents) as unknown as globalThis.Parameters<typeof __serialise_t_pay__Cents>[0])), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "t.shadow", "7cab123919f1cc13", deps.env, "t.pay");
   },
 };
 

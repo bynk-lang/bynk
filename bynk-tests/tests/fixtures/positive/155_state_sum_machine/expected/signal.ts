@@ -106,7 +106,7 @@ export function __deserialise_Light(json: __JsonValue, path: string = "$"): Resu
       case "Green":
         return Ok({ tag: "Green" } as Light);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -120,7 +120,7 @@ export function __deserialise_Light(json: __JsonValue, path: string = "$"): Resu
     case "Green":
       return Ok({ tag: "Green" } as Light);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

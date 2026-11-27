@@ -1,0 +1,27 @@
+commons demo.redact
+
+type Status =
+  | Open
+  | Closed(reason: String)
+
+type Account = { pin: Int, ratio: Float, label: String }
+
+type Ticket = { status: Status }
+
+fn message(r: Result[Account, DecodeError]) -> String {
+  match r {
+    Ok(_) => "ok",
+    Err(e) => e.message,
+  }
+}
+
+fn ticketMessage(r: Result[Ticket, DecodeError]) -> String {
+  match r {
+    Ok(_) => "ok",
+    Err(e) => e.message,
+  }
+}
+
+fn account(s: String) -> Result[Account, DecodeError] { Json.decode[Account](s) }
+
+fn ticket(s: String) -> Result[Ticket, DecodeError] { Json.decode[Ticket](s) }

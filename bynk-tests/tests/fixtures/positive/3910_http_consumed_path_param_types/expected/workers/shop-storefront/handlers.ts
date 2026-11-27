@@ -49,7 +49,7 @@ export function __deserialise_Mode(json: __JsonValue, path: string = "$"): Resul
       case "Slow":
         return Ok({ tag: "Slow" } as shop_catalogue.Mode);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -63,7 +63,7 @@ export function __deserialise_Mode(json: __JsonValue, path: string = "$"): Resul
     case "Slow":
       return Ok({ tag: "Slow" } as shop_catalogue.Mode);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

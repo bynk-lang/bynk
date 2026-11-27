@@ -3,7 +3,7 @@
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
 import type { DecodeError } from "./__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "./__bynk_runtime/boundary.js";
 
 export type Status =
     { readonly tag: "Pending" }
@@ -35,7 +35,7 @@ export function load(s: string): Result<Order, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Order(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Order);
@@ -50,7 +50,7 @@ export function loadInferred(s: string): Result<Order, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Order(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Order);
@@ -65,7 +65,7 @@ export function loadMany(s: string): Result<readonly Order[], DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_List_Order(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]);
@@ -80,7 +80,7 @@ export function describe(s: string): string {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Order(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Order);
@@ -123,14 +123,14 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "number", actual: typeof obj["price"] });
   }
   if (!globalThis.Number.isFinite(obj["price"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "finite number", actual: String(obj["price"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "finite number", actual: "non-finite number" });
   }
   const __price = obj["price"];
   if (typeof obj["qty"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["qty"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["qty"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __qty = obj["qty"];
   const __r_status = __deserialise_Status(obj["status"], `${path}.status`);
@@ -169,7 +169,7 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
       return Ok({ tag: "Shipped", tracking: __tracking } as Status);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

@@ -45,7 +45,7 @@ export function __deserialise_Page_Cents(json: __JsonValue, path: string = "$"):
     return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "number", actual: typeof obj["size"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["size"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: String(obj["size"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["size"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __size = obj["size"];
   return Ok({ items: __items, size: __size } as __CommonsPage<__CommonsCents>);

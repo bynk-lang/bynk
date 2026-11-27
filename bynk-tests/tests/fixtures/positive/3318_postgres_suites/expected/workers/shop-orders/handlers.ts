@@ -72,7 +72,7 @@ export function __deserialise_Result_PgRun_PgError(json: __JsonValue, path: stri
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<PgRun, PgError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Result_Option_String_PgError(value: Result<Option<string>, PgError>): __JsonValue {
@@ -96,7 +96,7 @@ export function __deserialise_Result_Option_String_PgError(json: __JsonValue, pa
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<Option<string>, PgError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Option_String(value: Option<string>): __JsonValue {
@@ -162,5 +162,5 @@ export function __deserialise_Result_String_PgError(json: __JsonValue, path: str
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<string, PgError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

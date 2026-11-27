@@ -41,7 +41,7 @@ async function test_a_generic_record_with_a_shorthand_field_from_a_caller_with_i
     const deps = __makeHarness();
     const { Page } = __ns_t_pages;
     type Page<T> = __ns_t_pages.Page<T>;
-    const r = await __callService(deps.env.T_SHADOW, "paged", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "6d6bab196cfd5655", deps.env, "t.shadow");
+    const r = await __callService(deps.env.T_SHADOW, "paged", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "integration", "6d6bab196cfd5655", deps.env, "t.shadow");
     if (!(r === 30)) { throw __bynkExpectFailure("tests/shadow.bynk:5:10", 238, 245, "expect r == 30\n  expected: r == 30\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((30))); }
     return { pass: true };
   } catch (e) {
@@ -59,7 +59,7 @@ async function test_a_generic_record_from_a_caller_with_its_own_Cents() {
     const deps = __makeHarness();
     const { Page } = __ns_t_pages;
     type Page<T> = __ns_t_pages.Page<T>;
-    const r = await __callService(deps.env.T_SHADOW, "listed", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "integration", "f7febdbbf05f2a13", deps.env, "t.shadow");
+    const r = await __callService(deps.env.T_SHADOW, "listed", {}, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "integration", "f7febdbbf05f2a13", deps.env, "t.shadow");
     if (!(r === 5)) { throw __bynkExpectFailure("tests/shadow.bynk:10:10", 369, 375, "expect r == 5\n  expected: r == 5\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((5))); }
     return { pass: true };
   } catch (e) {

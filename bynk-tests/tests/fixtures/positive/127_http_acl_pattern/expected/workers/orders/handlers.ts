@@ -80,7 +80,7 @@ export function __deserialise_CreateOrder(json: __JsonValue, path: string = "$")
     return Err({ kind: "StructuralMismatch", path: `${path}.itemCount`, expected: "number", actual: typeof obj["itemCount"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["itemCount"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.itemCount`, expected: "safe integer", actual: String(obj["itemCount"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.itemCount`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["itemCount"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __itemCount = obj["itemCount"];
   if (!(__itemCount >= 0)) {

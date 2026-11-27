@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 
 /**
  * #3793: a record whose fields were renamed. Each `replaces` names the field's old key,
@@ -42,7 +42,7 @@ export function decoded(s: string): Option<User> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_User(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as User);
@@ -109,7 +109,7 @@ export function writtenUnderNewKeys(u: User): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_NewKeys(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as NewKeys);
@@ -133,7 +133,7 @@ export function writtenUnderOldKey(u: User): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_OldKeys(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as OldKeys);
@@ -175,7 +175,7 @@ export function __deserialise_NewKeys(json: __JsonValue, path: string = "$"): Re
     return Err({ kind: "StructuralMismatch", path: `${path}.age`, expected: "number", actual: typeof obj["age"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["age"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.age`, expected: "safe integer", actual: String(obj["age"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.age`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["age"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __age = obj["age"];
   return Ok({ displayName: __displayName, age: __age } as NewKeys);
@@ -221,7 +221,7 @@ export function __deserialise_User(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.age`, expected: "number", actual: typeof __d_age });
   }
   if (!globalThis.Number.isSafeInteger(__d_age)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.age`, expected: "safe integer", actual: String(__d_age) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.age`, expected: "safe integer", actual: globalThis.Number.isInteger(__d_age) ? "integer outside the safe range" : "non-integer number" });
   }
   const __age = __d_age;
   const __r_nickname = __deserialise_Option_String("nickname" in obj ? obj["nickname"] : obj["handle"], `${path}.nickname`);

@@ -24,7 +24,7 @@ const __entryFieldsOfBoard = [] as const;
 
 function __rehydrateBoardState(s: BoardState, stored: BoardState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "total")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.total as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.total as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Board", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).total = __r.value as unknown as (typeof s)["total"];
   }
@@ -149,14 +149,14 @@ export function __deserialise_Point(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "number", actual: typeof obj["x"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["x"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "safe integer", actual: String(obj["x"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["x"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __x = obj["x"];
   if (typeof obj["y"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.y`, expected: "number", actual: typeof obj["y"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["y"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.y`, expected: "safe integer", actual: String(obj["y"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.y`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["y"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __y = obj["y"];
   return Ok({ x: __x, y: __y } as Point);

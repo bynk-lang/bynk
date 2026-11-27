@@ -1164,7 +1164,7 @@ export function __deserialise_Prefs(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.visits`, expected: "number", actual: typeof __d_visits });
   }
   if (!globalThis.Number.isSafeInteger(__d_visits)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.visits`, expected: "safe integer", actual: String(__d_visits) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.visits`, expected: "safe integer", actual: globalThis.Number.isInteger(__d_visits) ? "integer outside the safe range" : "non-integer number" });
   }
   const __visits = __d_visits;
   return Ok({ theme: __theme, lang: __lang, visits: __visits } as __Wire_Prefs);
@@ -1291,7 +1291,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);

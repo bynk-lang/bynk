@@ -127,7 +127,7 @@ export function __deserialise_Detail(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.count`, expected: "number", actual: typeof obj["count"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["count"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.count`, expected: "safe integer", actual: String(obj["count"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.count`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["count"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __count = obj["count"];
   return Ok({ note: __note, count: __count } as Detail);
@@ -159,7 +159,7 @@ export function __deserialise_Event(json: __JsonValue, path: string = "$"): Resu
     case "Closed":
       return Ok({ tag: "Closed" } as Event);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -232,7 +232,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);

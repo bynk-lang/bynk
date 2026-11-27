@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 
 /**
  * #2837, #2778: reserved words as labels. A GitHub-style payload keyed `type`,
@@ -96,7 +96,7 @@ export function load(s: string): Result<Event, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Event(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Event);
@@ -163,7 +163,7 @@ export function __deserialise_Event(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.from`, expected: "number", actual: typeof obj["from"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["from"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.from`, expected: "safe integer", actual: String(obj["from"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.from`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["from"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __from = obj["from"];
   if (typeof obj["self"] !== "boolean") {

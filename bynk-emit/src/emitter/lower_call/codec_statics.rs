@@ -284,7 +284,7 @@ fn decoder_result_ty(ts: &TsType) -> TsType {
 }
 
 /// `let __j: __JsonValue; try { __j = JSON.parse(__s) as __JsonValue; } catch (__e) { return
-/// Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) }); }`.
+/// Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) }); }`.
 fn json_parse_step() -> Vec<TsStmt> {
     let malformed = TsExpr::object(vec![
         (
@@ -294,7 +294,7 @@ fn json_parse_step() -> Vec<TsStmt> {
         ("path".to_string(), str_lit("$")),
         (
             "message".to_string(),
-            call(ident("String"), vec![ident("__e")]),
+            call(ident("__bynkJsonParseMessage"), vec![ident("__e")]),
         ),
     ]);
     let parsed = TsExpr::As {
