@@ -1,5 +1,5 @@
 ---
-level: patch
+level: minor
 probes: ast_importers
 changelog: An enum's wire name is readable as text: `e.wireName()` and `Status.fromWireName(text)`, which agree with the codecs by construction (`@name` included)
 ---
