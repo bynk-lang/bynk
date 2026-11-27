@@ -1,0 +1,14 @@
+---
+#3959, track §9: a suite-local instance is shared by every suite of its commons, as their
+doubles are, so a second suite file names `Archive` without declaring it.
+---
+suite lib.cache
+
+consumes bynk.cloudflare { Kv }
+
+case "another suite of the commons names the shared instance" {
+	let _ <- Kv.put("k", "v")
+	let moved <- copy("k", given From = Kv, To = Archive)
+	expect moved
+	expect Archive.put called once
+}

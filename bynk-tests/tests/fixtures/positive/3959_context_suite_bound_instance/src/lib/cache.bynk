@@ -1,0 +1,14 @@
+commons lib.cache
+
+consumes bynk.cloudflare { Kv }
+
+fn cached(key: String) -> Effect[String] given Store: Kv {
+	let hit <- Store.get(key)
+	match hit {
+		Some(v) => Effect.pure(v)
+		None => {
+			let _ <- Store.put(key, "fresh")
+			Effect.pure("fresh")
+		}
+	}
+}

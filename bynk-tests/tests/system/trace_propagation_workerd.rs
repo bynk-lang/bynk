@@ -251,18 +251,15 @@ fn one_request_leaves_one_trace_in_every_context_it_reaches() {
 
     // The first request answers once all three Workers are up and the Service
     // Bindings have connected, so it is the readiness probe.
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if let Ok(200) = get(web_port, "/order/probe", &[]) {
-            break;
+    if let Err(why) = wrangler::wait_until_all_ready(
+        &[(&logs[1], orders_port), (&logs[2], audit_port)],
+        (&logs[0], web_port),
+        &|| get(web_port, "/order/probe", &[]) == Ok(200),
+    ) {
+        if skip(&format!("{why} (likely no network to provision wrangler)")) {
+            return;
         }
-        if Instant::now() > deadline {
-            if skip("the Workers did not answer (likely no network to provision wrangler)") {
-                return;
-            }
-            unreachable!()
-        }
-        std::thread::sleep(Duration::from_millis(500));
+        unreachable!()
     }
 
     // An event emitted before the orders Worker's Service Binding to the audit

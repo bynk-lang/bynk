@@ -1,0 +1,11 @@
+---
+#3959, track §4 and §9: a test-only commons function with a capability parameter, which a
+context suite binds to its own instance.
+---
+commons shop.kit for tests
+
+consumes bynk.cloudflare { Kv }
+
+fn prime(key: String) -> Effect[()] given Store: Kv {
+	Store.put(key, "primed")
+}

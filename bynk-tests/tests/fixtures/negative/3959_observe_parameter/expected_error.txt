@@ -1,0 +1,2 @@
+bynk.observe.not_a_seam `Store` is not a capability the unit under test consumes
+# exact

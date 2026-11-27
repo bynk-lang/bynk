@@ -83,8 +83,9 @@ async function test_a_code_no_locale_declares_falls_back_to_bynk_locale_render_s
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const msg = withWhole(message("nope"), "x", 5);
-    if (!(render(("fr" as any), msg) === "nope {x=5}")) { throw __bynkExpectFailure("tests/bundle.test.bynk:25:12", 1033, 1066, "expect render(\"fr\", msg) == \"nope {x=5}\"\n  expected: render(\"fr\", msg) == \"nope {x=5}\"\n  actual:   " + __bynkShow((render(("fr" as any), msg))) + " == " + __bynkShow(("nope {x=5}"))); }
+    const code = "nope";
+    const msg = withWhole(message(code), "x", 5);
+    if (!(render(("fr" as any), msg) === "nope {x=5}")) { throw __bynkExpectFailure("tests/bundle.test.bynk:28:12", 1202, 1235, "expect render(\"fr\", msg) == \"nope {x=5}\"\n  expected: render(\"fr\", msg) == \"nope {x=5}\"\n  actual:   " + __bynkShow((render(("fr" as any), msg))) + " == " + __bynkShow(("nope {x=5}"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

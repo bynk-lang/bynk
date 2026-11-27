@@ -35,7 +35,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_WORKERD";
 
@@ -264,10 +264,7 @@ fn a_typescript_worker_calls_a_bynk_context_through_the_generated_client() {
     )
     .unwrap();
 
-    // Its own band, clear of the other smokes' (20_000 + 2·pid, 30_000 + 4·pid,
-    // 40_000 + 2·pid and 55_000 + 2·pid, each pid mod 4_000).
-    let base = 45_000 + 4 * (pid % 2_000) as u16;
-    let (bynk_port, ts_port) = (base, base + 1);
+    let [bynk_port, ts_port, bynk_inspector, ts_inspector] = wrangler::ports::free_ports();
     let spawn = |dir: &Path,
                  port: u16,
                  inspector: u16,
@@ -303,8 +300,8 @@ fn a_typescript_worker_calls_a_bynk_context_through_the_generated_client() {
     let ts_vars = vec!["--var".to_string(), format!("{secret}:{key}")];
     let bynk_log = tmp.join("bynk-wrangler.log");
     let ts_log = tmp.join("ts-wrangler.log");
-    let a = spawn(&bynk_dir, bynk_port, base + 2, &bynk_vars, &bynk_log);
-    let b = spawn(&ts_dir, ts_port, base + 3, &ts_vars, &ts_log);
+    let a = spawn(&bynk_dir, bynk_port, bynk_inspector, &bynk_vars, &bynk_log);
+    let b = spawn(&ts_dir, ts_port, ts_inspector, &ts_vars, &ts_log);
     let wranglers = match (a, b) {
         (Ok(a), Ok(b)) => Wranglers(vec![a, b]),
         (a, b) => {
@@ -322,24 +319,18 @@ fn a_typescript_worker_calls_a_bynk_context_through_the_generated_client() {
     };
 
     // Both up, and the binding connected: the first real call answers.
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if let Ok(body) = get(ts_port, "/legacy/ping")
-            && body == "42"
-        {
-            break;
-        }
-        if Instant::now() > deadline {
-            let logs = logs();
-            drop(wranglers);
-            skip(&format!(
-                "the two Workers did not answer within the boot window (likely no network \
-                 to provision {})\n{logs}",
-                wrangler::SPEC
-            ));
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+    if let Err(why) =
+        wrangler::wait_until_all_ready(&[(&bynk_log, bynk_port)], (&ts_log, ts_port), &|| {
+            get(ts_port, "/legacy/ping").is_ok_and(|body| body == "42")
+        })
+    {
+        let logs = logs();
+        drop(wranglers);
+        skip(&format!(
+            "{why} (likely no network to provision {})\n{logs}",
+            wrangler::SPEC
+        ));
+        return;
     }
 
     let steps: &[(&str, &str)] = &[

@@ -1,0 +1,26 @@
+---
+#3959, capability parameters slice 3 (track §9): a commons whose functions take
+capability parameters, tested by its own suite through kind doubles and a suite-local instance.
+---
+commons lib.cache
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+fn remember(key: String, value: String) -> Effect[String] given Store: Kv, Logger {
+	let _ <- Logger.info("remember")
+	let _ <- Store.put(key, value)
+	Effect.pure(value)
+}
+
+fn copy(key: String) -> Effect[Bool] given From: Kv, To: Kv {
+	let v <- From.get(key)
+	match v {
+		Some(x) => {
+			let _ <- To.put(key, x)
+			Effect.pure(true)
+		}
+		None => Effect.pure(false)
+	}
+}
+
