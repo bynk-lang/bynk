@@ -607,6 +607,7 @@ mod tests {
         dir
     }
 
+    #[cfg(unix)]
     fn transfer(phase: Phase) -> Transfer {
         Transfer {
             move_id: "m1".into(),
@@ -732,7 +733,10 @@ mod tests {
     }
 
     /// Each phase push uses its phase's config, and its facts carry the move and phase, with the
-    /// incoming class out of `classes` while it is not live (§4.2).
+    /// incoming class out of `classes` while it is not live (§4.2). Unix: the scripted wrangler is
+    /// `sh`, which reads the facts' JSON back only where its arguments arrive as they were passed
+    /// (as `cloudflare/process.rs`'s argument tests).
+    #[cfg(unix)]
     #[test]
     fn a_phase_push_uses_its_config_and_says_its_move_in_its_facts() {
         let dir = scratch("args");
