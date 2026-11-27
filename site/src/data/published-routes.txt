@@ -2207,6 +2207,7 @@
 /reference/diagnostics/bynk.test.forged_needs_signature_route/
 /reference/diagnostics/bynk.test.forged_needs_system/
 /reference/diagnostics/bynk.test.helper_given_at_system/
+/reference/diagnostics/bynk.test.key_principal_needs_api_key_route/
 /reference/diagnostics/bynk.test.no_subject_needs_oidc_route/
 /reference/diagnostics/bynk.test.nobody_needs_secured_route/
 /reference/diagnostics/bynk.test.peek_not_a_database/
@@ -2221,6 +2222,7 @@
 /reference/diagnostics/bynk.test.principal_required/
 /reference/diagnostics/bynk.test.remote_clock_dependent/
 /reference/diagnostics/bynk.test.remote_unsupported_advance/
+/reference/diagnostics/bynk.test.remote_unsupported_api_key/
 /reference/diagnostics/bynk.test.remote_unsupported_asset/
 /reference/diagnostics/bynk.test.remote_unsupported_call/
 /reference/diagnostics/bynk.test.remote_unsupported_env/
