@@ -1,11 +1,6 @@
----
-level: patch
-changelog: When a queue create fails part-way through a Worker's queues, `bynk deploy` now records the queues it made before the failure as its own, so a later `--prune` can delete them instead of finding them on the next run and recording them as reused
----
+# 1118 — A resource step that fails part-way records what it did before its failure is returned
 
-## ADR: a-step-stopped-part-way-records-what-it-did
-title: A resource step that fails part-way records what it did before its failure is returned
-summary: `Applied` can carry the failure that stopped its step, and the apply writes the step's commits before returning it; the queue step uses this for the queues it made before a failed create
+- **Status:** Accepted (v0.831.1)
 
 **Context.** #3999. A Worker's queue step makes every queue it has not yet attempted, then records them all. A create that failed returned its error from inside the loop, and the apply writes no commit for a failed step (1D.2b, #4001 Decision A). The queues made earlier in the step were on the account but not in the ledger. The next run found them and recorded them as reused, which `--prune` never deletes, so they were orphaned for good. The other kinds make one thing a step, so their failed step had nothing to lose.
 

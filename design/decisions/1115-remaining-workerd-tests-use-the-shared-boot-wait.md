@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The remaining workerd system tests wait for wrangler's own Ready line before they probe their Worker, and take their ports from the shared allocator, so they no longer share the start-up races the other workerd tests had
----
+# 1115 — Every workerd system test that boots a Worker waits with `wrangler::wait_until_ready`
 
-## ADR: remaining-workerd-tests-use-the-shared-boot-wait
-title: Every workerd system test that boots a Worker waits with `wrangler::wait_until_ready`
-summary: Fifteen test files move off their own boot loops and pid-derived ports; no assertion changes
+- **Status:** Accepted (v0.829.1)
 
 **Context.** #4521 gave the workerd tests one boot wait, `wrangler::wait_until_ready` (the log has `Ready on http://localhost:<this test's port>` and the boot request answers), and one port allocator, after #4479 found the races that came with each test's own loop: a probe that took any HTTP reply for the Worker (wrangler's start-up `403` and `404` are replies), and a port taken during start-up. Fifteen files kept their own loop, each with a slightly different probe, and four boots, in two files (`http_client` has three, `typescript_client_workerd` one), took their ports from the process id.
 

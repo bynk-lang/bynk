@@ -1,0 +1,11 @@
+# 1110 — Event delivery order is best effort, and every event is its own queue message
+
+- **Status:** Accepted (v0.828.3)
+
+**Context.** [ADR 0290](0290-events-per-publisher-fifo-scope.md) measured two partial guarantees of the fan-out DO: (a) the emissions of one handler arrive in emission order, and (b) successive, non-overlapping calls to one agent arrive in order. Both held only because one DO looped sequentially. Cloudflare Queues promises no order, not even within one `sendBatch` to one queue (track §3). Keeping (a) and (b) on queues would mean serialising delivery (consumer `concurrency: 1` plus a reorder buffer), which costs throughput and brings the bottleneck back. Withdrawing behaviour that is documented and measured went to a ruling (track D4).
+
+**Decision (maintainer ruling of 26 November 2026, option (ii)).** Ordering is best effort. Both ADR 0290 guarantees are withdrawn. Each event is one queue message with its own acknowledgement, retry and dead-letter fate. The guide keeps its existing advice: a subscriber that needs a total order across publishes carries its own sequence number in the event payload. This amends ADR 0290; the design notes' cross-agent *per-sender FIFO* (calls, not events) is unaffected.
+
+**Rejected.** (i) Keeping guarantee (a) by sending one handler's emissions to a subscriber as one array message. A failure of one event would retry all of them, and deduplication claims the message's id, so skipping the events that completed would need a second, per-event claim design with its own lease and settle rules; it also couples the events' fates and applies the size limit to their sum.
+
+**Consequences.** The pages that promise the old order are amended by the slices that the track's §13 assigns: the concepts page's Workers row (the cut-over slice) and `design/bynk-design-notes.md` §7 and its open-questions summary (this slice). The ordering measurement, `bynk-tests/tests/system/events_ordering_workerd.rs`, is retired with the fan-out it measures in the cut-over slice. Room is left for opt-in ordering later (#3545 part 3): an optional `sequence` in the envelope, sourced from the agent outbox's per-instance `<seq>`, and a per-key reorder step declared on the subscription.

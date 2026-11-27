@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `bynk/agentStateModel` reports the type each `store` write stores, as `valueType` and `fieldType` with references into the wire contract's type table, so a client can flag a write of an unbounded value into Durable Object storage
----
+# 1105 — Each store write in the agent state model carries the type it stores
 
-## ADR: agent-state-write-value-types
-title: Each store write in the agent state model carries the type it stores
-summary: A write in `bynk/agentStateModel`'s effects gains `valueType`, `fieldType`, and `valueRef`/`fieldRef` into the wire contract's own type table, read from the field's declared kind
+- **Status:** Accepted (v0.827)
 
 **Context.** #3803. The agent state model gave each handler's `store` writes as a field and an operation, but not the type of the value written, so a client could not tell whether a write puts something unbounded (`Bytes`, a `List`, a `Map`, a long `String`) into Durable Object storage, which caps a key and value at 8 MB for SQLite-backed classes and 128 KiB for legacy KV-backed ones. The VS Code extension's platform-limit hints could not flag agent `store` writes at all.
 

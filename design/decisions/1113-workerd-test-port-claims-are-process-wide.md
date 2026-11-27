@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The workerd system tests no longer collide on a port when two test modules ask for ports at once, and wrangler no longer fetches Request.cf from Cloudflare at start-up in tests
----
+# 1113 — The test port allocator's claim file is the process-wide record of a port
 
-## ADR: workerd-test-port-claims-are-process-wide
-title: The test port allocator's claim file is the process-wide record of a port
-summary: Claims are created atomically and refuse a port this process already holds; wrangler is told not to fetch Request.cf
+- **Status:** Accepted (v0.828.5)
 
 **Context.** #4578: after #4479 one `workers_runtime_smoke` run in twenty still failed with `Address already in use (localhost:29665)`, a port from the allocator's own band. The harness (`wrangler/mod.rs`, with `support/ports.rs`) is included by `#[path]` into about fifteen modules of the one `it` binary, so each module has its own copy of the allocator and its own `issued` set, and `claim` skipped any claim file named for its own pid. Two tests in different modules could therefore each be given the same free port. Separately, `cron_failed` once never saw wrangler ready: miniflare fetches `Request.cf` through the machine's proxy at start-up and the fetch was cancelled.
 

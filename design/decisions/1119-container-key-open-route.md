@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A typed `@instances(by: K)` key no longer silences `bynk.container.unbounded_instances` on a route anyone can call, so a keyed `Container` instance named from request input on an open route now warns (a program that was silent may now warn)
----
+# 1119 — A typed Container instance key does not suppress the unbounded-instances warning on an open route
 
-## ADR: container-key-open-route
-title: A typed Container instance key does not suppress the unbounded-instances warning on an open route
-summary: The maintainer's ruling that amends the suppression in the container-instance-key ADR, and why a key type is not a bound on how many instances there are
+- **Status:** Accepted (v0.832)
 
 **Context.** The container-instance-key ADR (point E), following #4112 decision A, said a keyed instance (`@instances(by: K)`) is not warned about by `bynk.container.unbounded_instances`, on the reasoning that the key's construction is where the author bounds the names. That ADR recorded the weakness: a key type limits the shape of a name and not how many names there are, so `by Visitor` decoding a path parameter straight into `TenantId` lets any client start any number of containers, which costs money, as freely as an untyped `String` does. The warning exists to catch unauthenticated cost growth, and a type does not prevent it.
 

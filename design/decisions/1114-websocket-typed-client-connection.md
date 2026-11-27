@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk client` generates a typed `connect` for each `from websocket` service, on the same client as the HTTP routes. It takes the route's parameters and the credential the service's actor reads, checks frames both ways, and can reconnect after an expired credential
-probes: ast_importers, emit_diagnostics
----
+# 1114 — `bynk client` generates a typed `connect` for each `from websocket` service
 
-## ADR: websocket-typed-client-connection
-title: `bynk client` generates a typed `connect` for each `from websocket` service
-summary: one `connect` per service on the existing client object, taking the route's parameters and the credential its actor reads, with frames encoded and decoded through the server's own codecs, opt-in reconnection, and no dependency beyond the platform `WebSocket`
+- **Status:** Accepted (v0.829)
 
 **Context.** `bynk client` covered `from http` routes only. A front end connecting to a `from websocket` service wrote by hand the URL with its route parameters, the authentication handshake (the `Sec-WebSocket-Protocol` pair of #3900 and #3904), the JSON encoding and decoding of frames without the server's refinement checks, and reconnection, including after a credential expires (#3903). The service's contract (`in`, `out`, route parameters, actor) is typed, and the generator reads the same model for HTTP (#3906).
 

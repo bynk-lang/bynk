@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ast_importers, diagnostic_coverage, explained_codes
-changelog: An `ApiKey` actor authenticates opaque keys a service mints with `Actor.mint(identity, label)` and stores only as peppered hashes in two generated agents; the seam refuses a malformed key before any lookup and every other bad key with one identical `401` (experimental, under `bynk.actor.ApiKey`)
----
+# 1102 — `Actor.mint(identity, label)` makes an API key in a service handler, stores only its digest, and answers it once
 
-## ADR: api-key-mint
-title: `Actor.mint(identity, label)` makes an API key in a service handler, stores only its digest, and answers it once
-summary: The first `ApiKey` member, its type and where it is legal, the generated agents' slice-1 shape and their internal constant-time comparison, and the one experimental gate
+- **Status:** Accepted (v0.824)
 
 **Context.** The API keys track (`design/tracks/api-keys.md`, spine #3939) settles the key format, the peppered storage and the verification contract up front (the three ADRs of slice 0). It records the members' shapes in the slices that ship them. Slice 1 ships verification and `mint`, because a scheme that verifies keys nobody can mint ships nothing usable (§14). It ships in two parts: this one carries the scheme, the seam, `mint` and the generated agents; the next carries `bynk deploy`'s pepper (live check K1), the `system` tier's key principals and the reference pages.
 

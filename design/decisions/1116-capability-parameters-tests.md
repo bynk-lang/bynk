@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A commons suite tests capability-parameter functions through the doubles of the kinds its commons selects (`remember(key, given Store = Kv)`, `stub Kv.get`, `expect Kv.put called`), and may declare a suite-local instance for a second double (`capability Archive = Kv`); a `stub` or `expect … called` that names a parameter says what to name instead (experimental, behind `bynk.given.parameters`)
----
+# 1116 — A commons suite tests capability parameters through kind doubles and suite-local instances
 
-## ADR: capability-parameters-tests
-title: A commons suite tests capability parameters through kind doubles and suite-local instances
-summary: How slice 3 of capability parameters gives a commons suite its doubles, lifts derived instances into a commons suite only, and points a stub of a parameter at what it is bound to
+- **Status:** Accepted (v0.830)
 
 **Context.** #3959, slice 3 of the capability-parameters track (`design/tracks/capability-parameters.md`, §9). Slices 1 and 2 let a commons function take capability parameters and a context bind them. A commons suite had no seams, so a library over a capability could not be tested where it is written. And a function with two parameters of one kind needs two distinct doubles to be tested honestly.
 

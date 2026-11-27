@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A `Container` instance can declare `@instances(by: K)`, a refined or opaque `String` type that its `send`, `receiveBytes` and `sendBytes` take where they take a `String`, so the key's construction is where the set of instance names is bounded (and a keyed instance is not warned about)
----
+# 1101 — A Container instance can type its names with @instances(by: K)
 
-## ADR: container-instance-key
-title: A Container instance can type its names with @instances(by: K)
-summary: Why the key is an option of the instance that re-types the operations, and what makes a type a valid key
+- **Status:** Accepted (v0.823)
 
 **Context.** `Container.send(instance: String, req)` starts one container per distinct name. The warning for a name taken from request input (`bynk.container.unbounded_instances`) says what is wrong but leaves an author with only an authenticated actor, a constant or a closed set to satisfy it. A type that bounds the names is the most direct way to say which names exist.
 

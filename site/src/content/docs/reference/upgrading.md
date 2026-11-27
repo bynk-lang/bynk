@@ -17,6 +17,26 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.834.0
+
+A `Queue @name("…")`, `from queue("…")` or `deadLetter: "…"` whose name starts with `bynk-ev-` or `bynk-dl-` now fails with `bynk.queue.reserved_name`; rename the queue (any other name, including other `bynk-` names, is unaffected)
+
+## v0.833.0
+
+A `uses` of a unit that declares a `messages` bundle no longer brings that unit's `render` in (`bynk.messages.cross_unit_render`), and a literal `message("code")` in a unit that declares a bundle must name a code of its `@reference` block (`bynk.messages.unknown_code`). Declare the code in the unit's reference bundle, or export a function from the unit that owns the bundle that renders it and call that, as `greeter.web` calls `greet` from `greeter.messages`.
+
+## v0.826.0
+
+An `out` frame that holds an `Option` now carries `{ "kind": "Some", "value": … }` or `{ "kind": "None" }`, where it carried the runtime's `{ "tag": "Some", "value": … }` or `{ "tag": "None" }`. A client that read the old shape must read the new one. A `Decimal` or `Instant` field, which the old encoding could not write (a `Decimal` threw) or wrote in its runtime form, is now its codec text or epoch milliseconds. A frame of strings, numbers, booleans, lists and plain records is unchanged. Connections open across the deploy keep the old `Option` shape until they reconnect: a socket accepted before this change records no service name and is sent as before.
+
+## v0.825.0
+
+Every deploy of a project that consumes, sends to or dead-letters into a queue now needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (the token with "Queues: Edit"), even when nothing is created, because each deploy checks its queues; `wrangler login` alone is no longer enough. So does a `--prune` that deletes an orphaned queue. Without them the deploy stops before its confirmation with `set CLOUDFLARE_… to check, create or delete the account's queues: …`, having changed nothing. Set both variables. A failed queue call now reads as a REST failure, such as `POST /queues: Cloudflare answered 403 […]`, instead of wrangler's text.
+
+## v0.820.2
+
+A project with a `Postgres` instance has `postgres` 4.1.1 in its `bynk.lock` and `package.json` now (was 4.0.0). A build run with `--locked` is refused with `bynk.package.lock_out_of_date` ("`bynk.lock` is out of date with the manifests, and `--locked` was given") until you run `bynk fetch` and commit the lock. Nothing else changes: parameter binding, result types and the statement's wire sequence read the same as on 4.0.0.
+
 ## v0.820.0
 
 Two HTTP routes of one context whose emitted handler names collide (`GET /a-b` beside `GET /a_b`, both `http_GET_a_b`, in one service or two), where one handler silently answered both paths, are now refused as `bynk.http.handler_name_collision`; spell one route differently
