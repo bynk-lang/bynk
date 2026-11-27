@@ -112,6 +112,21 @@ fn every_contextual_keyword_has_a_hover_path() {
             "fixture: no hover path — describe_fixture_at returned None"
         );
     }
+    // #3927: `template` is a keyword only at the head of a `template` declaration.
+    let template =
+        "commons Scaffold\n\nuses bynk.html\n\ntemplate shell: Fields = \"embeds/page.html\"\n";
+    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "template") {
+        let offset = template
+            .find(kw.word)
+            .expect("`template` is in the fixture");
+        assert!(
+            symbols::describe_template_at(template, offset).is_some(),
+            "template: no hover path — describe_template_at returned None"
+        );
+        // …and an ordinary name `template` keeps its own hover.
+        let name = "commons Scaffold\n\nfn f(template: Int) -> Int { template }\n";
+        assert!(symbols::describe_template_at(name, name.find("template").unwrap()).is_none());
+    }
     // #3984: `tests` is a keyword only after `for` in a commons header.
     let marker = "commons Scaffold for tests\n\nconst Start: Int = 1\n";
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "tests") {
@@ -134,7 +149,7 @@ fn every_contextual_keyword_has_a_hover_path() {
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| {
         !matches!(
             k.word,
-            "advance" | "by" | "par" | "derives" | "private" | "fixture" | "tests"
+            "advance" | "by" | "par" | "derives" | "private" | "fixture" | "template" | "tests"
         )
     }) {
         let offset = source

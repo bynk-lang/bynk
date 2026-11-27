@@ -96,7 +96,10 @@ pub fn type_carries_html(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> 
     walk(name, types, &mut BTreeSet::new())
 }
 
-/// `bynk.html.at_boundary`: a type that is or holds `Html`, written at `id` in `what`.
+/// `bynk.html.at_boundary`: a type that is or holds `Html`, written at `id` in `what`. `Html` is
+/// markup the compiler checked, and a decoded, restored or received one would skip that check,
+/// so a type that holds one is not data at a boundary. A record field or sum payload may hold
+/// one (a template's fields do); `context_checks::reject_fn_types` refuses every other position.
 pub fn html_at_boundary(id: &Ident, what: &str) -> CompileError {
     CompileError::new(
         AT_BOUNDARY,

@@ -2333,6 +2333,7 @@ mod tests {
                 "bynk.actor.ApiKey",
                 // #3959: capability parameters, a language form with no unit.
                 "bynk.given.parameters",
+                "bynk.html.typed",
                 // #3752 (D7): the pass-through route form.
                 "bynk.http.ANY",
                 // #3752 (D2): the rest segment, a route form.

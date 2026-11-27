@@ -18,6 +18,7 @@ use super::lower::escape_ts_template;
 use super::runtime_use::RuntimeUse;
 use super::ts_ident;
 use super::ts_types::ts_type_of;
+use crate::emit_model::EmitProjectCtx;
 use crate::ts_build::{call, ident};
 
 /// The parameter a template's function takes its fields record as.
@@ -39,8 +40,31 @@ fn text_of(value: TsExpr, base: BaseType, runtime_use: &RuntimeUse) -> TsExpr {
     }
 }
 
+/// The exported declaration of embed `e` (#2387, slice 2): an exported `string` constant holding
+/// its file's text, or, for a template (#3927), [`emit_template`]'s function or constant.
+pub(super) fn emit_embed(e: &EmbedDecl, commons: &TypedCommons, ctx: &EmitProjectCtx) -> TsStmt {
+    let key = bynk_project::assets::normalise_asset_path(&e.path);
+    let text = ctx.embed_text.get(&key).cloned().unwrap_or_else(|| {
+        panic!(
+            "bynk internal error: embed `{}` reached emission without its text",
+            e.name.name
+        )
+    });
+    if e.is_template() {
+        return emit_template(e, &text, commons, &ctx.runtime_use);
+    }
+    TsStmt::decl(
+        TsDecl::Export(Box::new(TsDecl::ConstDecl {
+            name: ts_ident(&e.name.name),
+            ty: Some(TsType::named("string")),
+            init: TsExpr::Lit(bynk_ts::TsLit::Str(text)),
+        })),
+        Some(e.span),
+    )
+}
+
 /// The exported declaration of template `e`, from its file's `text`.
-pub(super) fn emit_template(
+fn emit_template(
     e: &EmbedDecl,
     text: &str,
     commons: &TypedCommons,

@@ -9125,9 +9125,6 @@ pub fn reject_fn_types(
         // memory for the handler that receives it. A record field or sum payload
         // may carry one (that is how a `@multipart` body names its parts), but it
         // is never persisted, sent across a boundary or returned.
-        // #3927 (typed HTML, D1 C): `Html` is markup the compiler checked, and a decoded,
-        // restored or received one would skip that check, so a type that holds one is not data
-        // at a boundary. A record field or sum payload may hold one (a template's fields do).
         TypeRef::Named(id)
             if !stream_passes(what) && crate::templates::type_carries_html(&id.name, types) =>
         {

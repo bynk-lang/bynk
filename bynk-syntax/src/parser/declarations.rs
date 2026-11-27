@@ -360,12 +360,7 @@ impl<'a> Parser<'a> {
                 // placement (context or commons, never an adapter) is the
                 // checker's call (`bynk.embed.outside_context_or_commons`),
                 // the same split as `event`/`messages` above.
-                // Typed HTML (#3927, slice 1): `template name: F = "path"` is an
-                // embed whose text is parsed, so it shares the embed's arm.
-                // `template` is contextual: a keyword only here, before a name.
-                Some(TokenKind::Embed | TokenKind::Ident)
-                    if self.peek_kind() == Some(TokenKind::Embed) || self.at_template_decl() =>
-                {
+                Some(TokenKind::Embed | TokenKind::Ident) if self.at_embed_or_template() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
                     match self.parse_embed_or_template_decl() {
@@ -1790,12 +1785,7 @@ impl<'a> Parser<'a> {
                 // placement (context or commons, never an adapter) is the
                 // checker's call (`bynk.embed.outside_context_or_commons`),
                 // the same split as `event`/`messages` above.
-                // Typed HTML (#3927, slice 1): `template name: F = "path"` is an
-                // embed whose text is parsed, so it shares the embed's arm.
-                // `template` is contextual: a keyword only here, before a name.
-                Some(TokenKind::Embed | TokenKind::Ident)
-                    if self.peek_kind() == Some(TokenKind::Embed) || self.at_template_decl() =>
-                {
+                Some(TokenKind::Embed | TokenKind::Ident) if self.at_embed_or_template() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
                     match self.parse_embed_or_template_decl() {
@@ -2178,12 +2168,7 @@ impl<'a> Parser<'a> {
                 // placement (context or commons, never an adapter) is the
                 // checker's call (`bynk.embed.outside_context_or_commons`),
                 // the same split as `event`/`messages` above.
-                // Typed HTML (#3927, slice 1): `template name: F = "path"` is an
-                // embed whose text is parsed, so it shares the embed's arm.
-                // `template` is contextual: a keyword only here, before a name.
-                Some(TokenKind::Embed | TokenKind::Ident)
-                    if self.peek_kind() == Some(TokenKind::Embed) || self.at_template_decl() =>
-                {
+                Some(TokenKind::Embed | TokenKind::Ident) if self.at_embed_or_template() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
                     match self.parse_embed_or_template_decl() {
@@ -4528,6 +4513,12 @@ impl<'a> Parser<'a> {
         self.peek_kind() == Some(TokenKind::Ident)
             && self.nth_text(0) == "template"
             && self.nth_kind(1) == Some(TokenKind::Ident)
+    }
+
+    /// At an `embed` or a `template` declaration (#3927: a template is an embed whose text is
+    /// parsed, so the two share an arm in every body).
+    fn at_embed_or_template(&self) -> bool {
+        self.peek_kind() == Some(TokenKind::Embed) || self.at_template_decl()
     }
 
     fn parse_embed_or_template_decl(&mut self) -> Result<EmbedDecl, CompileError> {

@@ -599,7 +599,8 @@ mod tests {
         // _lambda_as_pattern. Net +4.
         // #3959 (capability parameters) added: capability_parameter,
         // capability_bindings, capability_binding, _call_arguments. Net +4.
-        assert_eq!(rules.len(), 213);
+        // #3927 (typed HTML templates) added: template_decl. Net +1.
+        assert_eq!(rules.len(), 214);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.
