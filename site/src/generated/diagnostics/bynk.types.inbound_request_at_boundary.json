@@ -1,0 +1,12 @@
+{
+  "blurb": "An `InboundRequest` is the request a pass-through route is answering, and a `Forwarded` an upstream's answer streaming through it. Each lives for that request: a record or sum may hold one, but no value holding one is stored, sent, encoded or returned across a boundary, and it has no codec. Read what you need from it (`request.method()`, `request.headers().get(…)`, `response.status()`) and store or send that. `Upstream.forward`, which takes one and returns the other, is where they belong.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.inbound_request_at_boundary",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "type Held = { request: InboundRequest }\nservice keep { on call(h: Held) -> Effect[Int] by Caller { … } }   // ✗\n\ntype Seen = { method: String }\nservice keep { on call(s: Seen) -> Effect[Int] by Caller { … } }   // ✓",
+  "severity": "error",
+  "summary": "An `InboundRequest` or `Forwarded`, or a type holding one, where a value is stored, sent or returned across a boundary."
+}

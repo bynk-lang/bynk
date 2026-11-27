@@ -1,0 +1,15 @@
+# 1078 — `HttpResult` is extensible, so a `match` that covers it needs a wildcard
+
+- **Status:** Accepted (v0.809)
+
+**Context.** `HttpResult` is a closed built-in sum (`HTTP_VARIANTS`, ADR 0126): a `match` could list every variant and be exhaustive, so every new status variant broke any program that did. Before 1.0 that is a minor-release break, as `RawCreated` and `PartialContent` were; after 1.0, under Foundations stability, it would be a 2.0 event. The vocabulary is curated, not complete, and is expected to grow. The first-party enums that may grow (`FetchError`, `Method`, …) already count one more shape, a future variant only an irrefutable pattern covers (standard-library S3, #1963). Ruled by the maintainer as D23 of the pass-through HTTP track (#4536).
+
+**Decision A — the same rule and diagnostic.** A `match` that covers an `HttpResult[T]` at any depth without a wildcard or binding arm is `bynk.types.extensible_match_needs_wildcard`, naming `HttpResult`, with the future variant shown as `_`; the wildcard is then not `bynk.types.unreachable_arm`. The existing missing-arm quick-fix offers the wildcard. Rejected: a new code, which would split one rule ("this type may gain variants in a minor release") in two.
+
+**Decision B — `HttpResult` only.** `QueueResult` (ADR 0078) is a small verdict whose set is a protocol, not a vocabulary; making it extensible is its own decision. Rejected: every built-in sum at once.
+
+**Decision C — a hard error now, with no warning cycle.** Pre-1.0 the project takes breaking changes in minor releases with a migration note, and the quick-fix makes the change mechanical. A warning first would leave the hole open until 1.0.
+
+**Decision D — one flag beside the registry.** `HTTP_RESULT_EXTENSIBLE`, next to `HTTP_VARIANTS` in `bynk-syntax`, puts `HttpResult` into the per-unit set of extensible names the checker already reads (`extensible_names`), and the checker's `extensible_enum` answers for `Ty::HttpResult` from that set. Because the set is the same one, a suite case body (checked without it) is exempt exactly as it is for `FetchError`: a test is not under the compatibility promise. `HttpResult` is a reserved type name, so no user type is caught. Rejected: moving `HttpResult` into `bynk-std` as an enum (far larger, and out of scope).
+
+**Consequences.** Every exhaustive `match` on an `HttpResult` in a context or commons gains a wildcard arm. Handlers build `HttpResult` far more than they match on it, and suites, which do match on it, are unaffected. Hover on `HttpResult` says it is extensible. A wildcard can hide a genuinely new status an author should handle, the trade-off already accepted for `FetchError`; the reference says so. Relates to ADR 0126 (the vocabulary) and ADR 0468 (stability tiers).

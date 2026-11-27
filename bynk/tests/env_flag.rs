@@ -3,7 +3,10 @@
 //! not set is `bynk.env.missing` there, found before a deploy finds it.
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
+
+#[path = "support/dev_child.rs"]
+mod dev_child;
 
 fn scratch(name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
@@ -35,7 +38,7 @@ fn project(name: &str) -> PathBuf {
 }
 
 fn bynk(args: &[&str], dir: &Path) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_bynk"))
+    dev_child::bynk_command()
         .args(args)
         .arg(dir)
         .output()
@@ -64,7 +67,7 @@ fn check_env_finds_a_required_variable_the_environment_does_not_set() {
 fn compile_and_build_env_resolve_that_environments_values() {
     let dir = project("compile");
     let out = dir.join("out-prod");
-    let o = Command::new(env!("CARGO_BIN_EXE_bynk"))
+    let o = dev_child::bynk_command()
         .args(["compile", "--env", "production", "--output"])
         .arg(&out)
         .arg(&dir)
@@ -76,7 +79,7 @@ fn compile_and_build_env_resolve_that_environments_values() {
     assert!(!emitted.contains("https://app"), "{emitted}");
     // `default` is what a build without the flag resolves.
     let out = dir.join("out-default");
-    let o = Command::new(env!("CARGO_BIN_EXE_bynk"))
+    let o = dev_child::bynk_command()
         .args(["compile", "--output"])
         .arg(&out)
         .arg(&dir)
@@ -86,7 +89,7 @@ fn compile_and_build_env_resolve_that_environments_values() {
     let emitted = std::fs::read_to_string(out.join("config.ts")).unwrap();
     assert!(emitted.contains("https://app"), "{emitted}");
     // A named environment with no value fails the build, naming the variable.
-    let o = Command::new(env!("CARGO_BIN_EXE_bynk"))
+    let o = dev_child::bynk_command()
         .args(["build", "--env", "staging", "--out"])
         .arg(dir.join("out-staging"))
         .arg(&dir)

@@ -17,6 +17,58 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.820.0
+
+Two HTTP routes of one context whose emitted handler names collide (`GET /a-b` beside `GET /a_b`, both `http_GET_a_b`, in one service or two), where one handler silently answered both paths, are now refused as `bynk.http.handler_name_collision`; spell one route differently
+
+## v0.818.0
+
+Every deploy of a project that declares a `Vectorize` now needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (the token with "Vectorize: Edit"), even when nothing is created, because each deploy checks its indexes; `wrangler login` alone is no longer enough. Without them the deploy stops before its confirmation with `set CLOUDFLARE_… to check, create or delete the account's Vectorize indexes: …`, having changed nothing. Set both variables. A failed Vectorize call now reads as a REST failure, such as `GET /vectorize/v2/indexes?page=1: Cloudflare answered 403 […]`, still followed by the permission hint when the token lacks it.
+
+## v0.817.0
+
+A non-GET route whose body calls `Actor.issue(...)` now answers 403 to a request that is cross-site, or that sends neither `Sec-Fetch-Site` nor an `Origin` the service lists, where it used to run the body. A browser sign-in from another origin needs the service to declare `cors { origins: [...], credentials: true }` with that origin; a service with no `cors` accepts an issuing request from its own origin only. A non-browser client (a native app or a server) posting to a sign-in route must send an `Origin` listed in `cors` or `Sec-Fetch-Site: same-origin`, or the route should use a Bearer actor instead.
+
+## v0.812.1
+
+`bynk check <dir>` and `--emit` on a directory that has no `bynk.toml` or `src/` of its own but sits in a project's `[paths] include` trees now run on the enclosing project, where they used to treat the directory as a standalone source tree. `--fix` still edits only the directory named. A run that passed because the manifest was not read (its `[unstable] allow`, `[paths]` and `[env]` ignored) can now fail, or report other findings, as `bynk check` from the project root always did. A directory outside the project's sources, excluded from them, or with its own `src/` is still checked as itself. To check a tree standalone, run `bynk check` from a directory outside any project, or pass a single `.bynk` file; `--each` keeps its refusal inside a project.
+
+## v0.812.0
+
+Creating an R2 bucket or a D1 database now needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (the token with "Workers R2 Storage: Edit" or "D1: Edit"), where `wrangler login` used to be enough. A deploy that needs them and lacks one stops before its confirmation with `set CLOUDFLARE_… to create the account's R2 buckets: …` (or `… D1 databases: …`), having created nothing. Set both variables. A redeploy whose buckets and databases are all recorded still works with `wrangler login` alone, and D1 migrations still run through wrangler. A failed create now reads as a REST failure after the unchanged `could not create …:` prefix, such as `POST /r2/buckets: Cloudflare answered 409 […]`.
+
+## v0.811.0
+
+`Response`, `BytesResponse` and `StreamResponse` gain a `setCookies` field (default `[]`), so a program that `Json.encode`s one now writes `"setCookies":[]` too, and a hand-written TypeScript binding that returns one must supply `setCookies`. A Bynk `Response { … }` literal, including every `stub Fetch.send(_) returns Ok(Response { … })`, still compiles unchanged.
+
+## v0.810.2
+
+building Bynk from source now needs Rust 1.98 or newer (the minimum was 1.95), because `oxc` 0.159 and later set that floor; with `rustup`, run `rustup update stable` or let the repository's `rust-toolchain.toml` install it. A released `bynk` binary, and the output it writes, are unaffected.
+
+## v0.809.0
+
+a `match` that covers an `HttpResult` (at top level, or inside a `Result` or `Option`) by listing every variant, with no wildcard or binding arm, is now the error `bynk.types.extensible_match_needs_wildcard`. Add a last arm `_ => …` (`Ok(_) => …` or `Some(_) => …` where it is wrapped) for the statuses a later release may add; the editor's fill-missing-arms quick-fix inserts it. A `match` in a suite case and `expect r is …` are unaffected.
+
+## v0.807.0
+
+Creating or pruning a KV namespace now needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (the token with "Workers KV Storage: Edit"), where `wrangler login` used to be enough. A deploy that needs them and lacks one stops before its confirmation with `set CLOUDFLARE_… to create or delete the account's KV namespaces: …`, having created nothing. Set both variables (`bynk doctor` shows which is missing). A redeploy whose namespaces are all recorded still works with `wrangler login` alone, with a plan note that the account was not checked for namespaces deleted by hand. A failed KV operation now reads as a REST failure after the unchanged `could not create …:` prefix, such as `POST /storage/kv/namespaces: Cloudflare answered 400 […]`, instead of wrangler's banner.
+
+## v0.805.0
+
+A `Bearer` actor that already wrote `issuer` or `audience`, which were silently ignored, now enforces them, so tokens that lack or differ in that claim start getting `401`: mint them with the claim (`bynk token <Actor>` does) or remove the key. Any other `Bearer` config key is now `bynk.actor.bearer_unknown_key`. Two `Bearer` actors on one secret are now `bynk.actor.bearer_secret_shared`: declare a distinct `audience` on each, mint each actor's tokens with its own (`bynk token <Actor>`), or give each its own secret.
+
+## v0.802.0
+
+A WebSocket frame over 1 MiB, which used to be parsed, is now closed with `1009` unless the service sets a larger `limits { maxFrame }`. A service whose `in:` is `Bytes` now reads and sends binary messages, where it exchanged base64 JSON text; and a binary message to any other service is closed with `1003`, where it used to be read as UTF-8 and parsed. A frame the server sends over `maxFrame` now faults the send.
+
+## v0.800.0
+
+a decode failure on a `@name`d field of a `cookies`, `headers`, `query` or `@form`/`@multipart` `body` record now reports the wire name in its error path (`query.page-size`), not the Bynk name (`query.pageSize`), as every other codec path does; and an enum read from a path, query, header or cookie value is read by its variant's wire name. A client that matches the path text should read the wire name. The codes `bynk.types.field_name_not_request_record` and `bynk.types.field_name_record_not_boundary` are retired, because the restriction they enforced is lifted.
+
+## v0.795.0
+
+a `cors` origin that a browser can never send is now `bynk.http.cors_invalid_origins` at the entry, with the form to write: a trailing slash, a path, a query or fragment, an upper-case scheme or host, no scheme, a default port written out (`:443` for `https`, `:80` for `http`), or a wildcard subdomain (`https://*.example.com`). Such an entry compiled before and matched no request, so every cross-origin call from that site was refused. Write the origin as `scheme://host[:port]` in lower case, for example `"https://app.example.com"`. The origin `"null"` beside `credentials: true` is now `bynk.http.cors_wildcard_credentials`; drop `"null"` or set `credentials: false`.
+
 ## v0.791.1
 
 a literal `Route` tag that breaks the header rules (not `X-`, characters other than letters, digits and `-`, a line break in a value) written in a helper function is now the error `bynk.email.bad_tag`, as it already was in a handler body; before, the runtime dropped the entry. Rename the tag or fix the value.

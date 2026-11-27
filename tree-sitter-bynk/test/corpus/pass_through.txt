@@ -1,0 +1,43 @@
+================================================================================
+#3752: an ANY pass-through route with a rest segment
+================================================================================
+
+context blog
+
+service proxy from http {
+  on ANY("/blog/*path") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor given Pages {
+    Respond(NotFound)
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (service_decl
+      (identifier)
+      (service_protocol)
+      (handler
+        (http_handler
+          (http_method)
+          (string_literal)
+          (param
+            (identifier)
+            (base_type))
+          (param
+            (identifier)
+            (identifier))
+          (generic_type_ref
+            (builtin_type)
+            (identifier))
+          (by_clause
+            (identifier))
+          (given_clause
+            (qualified_name
+              (identifier)))
+          (block
+            (call
+              (identifier)
+              (identifier))))))))

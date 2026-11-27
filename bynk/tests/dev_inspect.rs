@@ -17,11 +17,13 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
+#[path = "support/dev_child.rs"]
+mod dev_child;
 #[path = "../../bynk-tests/tests/support/ports.rs"]
 mod ports;
 
 fn have(tool: &str) -> bool {
-    Command::new(tool)
+    dev_child::tool_command(tool)
         .arg("--version")
         .output()
         .map(|o| o.status.success())
@@ -132,7 +134,7 @@ fn workerd_breakpoint_in_bynk_handler_binds_and_pauses() {
     // reaches *that* process's inspector instead.
     let [inspector_port, app_port] = ports::free_ports();
 
-    let mut cmd = Command::new("wrangler");
+    let mut cmd = dev_child::tool_command("wrangler");
     // #2069: its own process group, so cleanup can stop wrangler *and* the
     // workerd it spawns (a grandchild of this test) without touching any other
     // workerd on the machine.

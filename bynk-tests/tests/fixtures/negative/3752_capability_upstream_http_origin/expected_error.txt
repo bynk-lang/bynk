@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+`@origin("http://upstream.example")` is not `https`

@@ -557,6 +557,47 @@ gets a stream of its own:
 `stub Fetch.receiveStream(_, _) returns Ok(StreamResponse { status: 200, headers: Map.empty(), body: Stream.of([Bytes.fromUtf8("x")]) })`.
 In the browser playground they throw, as `send` does.
 
+### Forwarding to an upstream: `Upstream` {#upstream}
+
+`Upstream` is the capability a [pass-through route](/reference/http/#pass-through-routes)
+forwards with. Each instance names one upstream **origin**, declared, never computed:
+
+```bynk,ignore
+consumes bynk { Upstream, InboundRequest, PassThrough, UpstreamError }
+
+const BlogOrigin: String = env(BLOG_ORIGIN, "https://bynk-blog.pages.dev")
+
+capability Pages = Upstream @origin(BlogOrigin) @timeout(30.seconds)
+```
+
+- **`@origin`** (required) is a serialised origin, `scheme://host[:port]`: lower case, with
+  no path, query, fragment, user information or trailing slash. It is a string literal or a
+  `String` constant, an [`env(…)`](/reference/constants/#values-that-differ-per-environment)
+  one included, read the way `cors` origins are. The scheme is `https`, or `http` for a
+  loopback host only (`localhost`, `127.0.0.1`, `[::1]`). Anything else is
+  `bynk.capability.invalid_option`.
+- **`@timeout`** bounds the wait for the upstream's response head, a positive whole number
+  of seconds (default 30). The body streams after it.
+
+`forward(request: InboundRequest, path: String) -> Effect[Result[Forwarded, UpstreamError]]`
+sends the route's request to the origin with `path` and the request's raw query. The URL is
+built textually, origin then path then query, and its origin is checked before anything is
+sent, so no `path` can change the host. A `path` that doesn't start with `/`, holds `?`, `#`
+or a control character, or has a `.` or `..` segment (encoded or not) is `Err(InvalidPath)`,
+with nothing sent. `UpstreamError` is `Timeout`, `Unreachable` or `InvalidPath`, and may gain
+variants, so a `match` on it needs a wildcard.
+
+`InboundRequest` and `Forwarded` live for the request they belong to. A record or sum may
+hold one, but no value holding one is stored, sent or returned across a boundary
+(`bynk.types.inbound_request_at_boundary`). `Forwarded` has no constructor: only `forward`
+makes one, and `status()` and `header(name)` read it.
+
+All of it is experimental: it needs `bynk.Upstream`, `bynk.InboundRequest`,
+`bynk.Forwarded`, `bynk.PassThrough` and `bynk.UpstreamError` in `[unstable] allow`
+(`bynk.http.ANY` and `bynk.http.rest` for the route). This release checks a program that
+uses it; the router and the exchange arrive in the next increment, and until then a build
+with a pass-through route is refused (`bynk.http.pass_through_not_emitted`).
+
 ### Log levels and structured fields
 
 `debug`, `info`, `warn` and `error` write the message as it is, through the

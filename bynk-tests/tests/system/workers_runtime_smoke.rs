@@ -2100,6 +2100,194 @@ fn a_json_service_refuses_binary_and_oversize_frames_before_parsing_on_workerd()
     );
 }
 
+/// #4549: an `out` frame is written by its type's serialisation codec, the one `in` frames are decoded with, not
+/// as the runtime's own shape. The frame has an `Option` in each state, a `Decimal`, an `Instant`, a sum, a nested
+/// record and a list of `Option`s: each of which `JSON.stringify` of the runtime value wrote differently (an
+/// `Option` as `{"tag":"None"}`, a `Decimal` not at all, since it holds a bigint).
+const WS_OUT_CODEC_SOURCE: &str = r#"context smoke
+
+type UserId = String where NonEmpty
+
+type Shape =
+  | Circle(radius: Int)
+  | Dot
+
+type Inner = { label: String, rank: Option[Int] }
+
+type Ping = { go: Bool }
+
+type Out = {
+  id: Int,
+  note: Option[String],
+  price: Decimal,
+  at: Instant,
+  shape: Shape,
+  inner: Inner,
+  ranks: List[Option[Int]],
+}
+
+actor Member { auth = Bearer(secret = "WS_SECRET"), identity = UserId }
+
+service live from websocket(in: Ping, out: Out) {
+  on open (room: String) -> Effect[()] by user: Member {
+    let _ <- Room(room).join(connection)
+    ()
+  }
+
+  on message (room: String, frame: Ping) -> Effect[()] by user: Member {
+    match Decimal.parse("12.50") {
+      Some(p) => {
+        let _ <- connection.send(Out {
+          id: 1,
+          note: Some("hello"),
+          price: p,
+          at: Instant.fromEpochMillis(1700000000000),
+          shape: Circle(3),
+          inner: Inner { label: "a", rank: Some(7) },
+          ranks: [Some(1), None],
+        })
+        let _ <- connection.send(Out {
+          id: 2,
+          note: None,
+          price: p,
+          at: Instant.fromEpochMillis(0),
+          shape: Dot,
+          inner: Inner { label: "b", rank: None },
+          ranks: [],
+        })
+        ()
+      }
+      None => ()
+    }
+  }
+
+  on close (room: String) -> Effect[()] by user: Member {
+    let _ <- Room(room).left()
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Out]]
+
+  on call join(conn: Connection[Out]) -> Effect[()] {
+    let _ <- conns.put("c", conn)
+    ()
+  }
+
+  on call left() -> Effect[()] {
+    let _ <- conns.remove("c")
+    ()
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+}
+"#;
+
+const WS_OUT_CODEC_CLIENT_JS: &str = r#"
+const crypto = require("node:crypto");
+const [port, secret] = process.argv.slice(2);
+const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+const exp = Math.floor(Date.now() / 1000) + 3600;
+const head = b64({ alg: "HS256", typ: "JWT" });
+const body = b64({ sub: "ada", exp });
+const token = `${head}.${body}.${crypto.createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url")}`;
+const within = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`timed out waiting for ${what}`)), ms))]);
+(async () => {
+  const ws = await within(new Promise((resolve, reject) => {
+    const w = new WebSocket(`ws://127.0.0.1:${port}/?room=r1`, ["bynk.bearer", token]);
+    w.addEventListener("open", () => resolve(w));
+    w.addEventListener("error", () => reject(new Error("upgrade failed")));
+  }), 15000, "the upgrade");
+  const frames = [];
+  const two = within(new Promise((done, fail) => {
+    ws.addEventListener("message", (e) => { frames.push(e.data); if (frames.length === 2) done(); });
+    ws.addEventListener("close", (e) => fail(new Error(`closed ${e.code} ${e.reason} after ${frames.length} frames`)));
+  }), 15000, "two frames");
+  ws.send(JSON.stringify({ go: true }));
+  await two;
+  ws.close();
+  console.log(JSON.stringify(frames));
+  process.exit(0);
+})().catch((e) => { console.error(String(e)); process.exit(1); });
+"#;
+
+#[test]
+fn an_out_frame_is_written_by_its_types_codec_on_workerd() {
+    let secret = "out-codec-secret";
+    let Some(served) = serve_smoke_with_args(
+        &[("smoke.bynk", WS_OUT_CODEC_SOURCE)],
+        "ws-out-codec",
+        None,
+        None,
+        &["--var".to_string(), format!("WS_SECRET:{secret}")],
+    ) else {
+        return;
+    };
+    let port = served
+        .url
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
+        .expect("the served url carries a port");
+    let script = served.tmp.join("ws-out-codec-client.js");
+    fs::write(&script, WS_OUT_CODEC_CLIENT_JS).expect("write the client script");
+    let out = Command::new("node")
+        .arg(&script)
+        .arg(port.to_string())
+        .arg(secret)
+        .output()
+        .expect("node runs");
+    let report = format!(
+        "status: {}\nstdout: {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.status.success(), "the client must run green:\n{report}");
+    let frames: Vec<String> = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("report is a JSON list ({e}):\n{report}"));
+    let parsed: Vec<serde_json::Value> = frames
+        .iter()
+        .map(|f| serde_json::from_str(f).unwrap_or_else(|e| panic!("a frame is JSON ({e}): {f}")))
+        .collect();
+    // The codec's own wire form: `Option` as `{ kind: "Some", value }` / `{ kind: "None" }`, a `Decimal` as its
+    // text, an `Instant` as its epoch milliseconds, a sum as `{ kind, ... }`.
+    assert_eq!(
+        parsed[0],
+        serde_json::json!({
+            "id": 1,
+            "note": { "kind": "Some", "value": "hello" },
+            "price": "12.50",
+            "at": 1700000000000_i64,
+            "shape": { "kind": "Circle", "radius": 3 },
+            "inner": { "label": "a", "rank": { "kind": "Some", "value": 7 } },
+            "ranks": [{ "kind": "Some", "value": 1 }, { "kind": "None" }],
+        }),
+        "the first frame is written by the codec\n{}",
+        frames[0]
+    );
+    assert_eq!(
+        parsed[1],
+        serde_json::json!({
+            "id": 2,
+            "note": { "kind": "None" },
+            "price": "12.50",
+            "at": 0,
+            "shape": { "kind": "Dot" },
+            "inner": { "label": "b", "rank": { "kind": "None" } },
+            "ranks": [],
+        }),
+        "the second frame is written by the codec\n{}",
+        frames[1]
+    );
+}
+
 /// #3202: an agent instance runs the handlers that reach it one at a time. `bump`
 /// loads its state, awaits a call to another agent (a Durable Object subrequest,
 /// which does not close the input gate), then commits `n + 1`. Before the fix, five

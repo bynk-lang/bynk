@@ -2643,6 +2643,9 @@ pub enum HttpMethod {
     Put,
     Patch,
     Delete,
+    /// #3752 (D7): `on ANY("…")`, a pass-through route that answers every method
+    /// the platform delivers and returns `Effect[PassThrough]`.
+    Any,
 }
 
 impl HttpMethod {
@@ -2653,6 +2656,7 @@ impl HttpMethod {
             HttpMethod::Put => "PUT",
             HttpMethod::Patch => "PATCH",
             HttpMethod::Delete => "DELETE",
+            HttpMethod::Any => "ANY",
         }
     }
 
@@ -2663,6 +2667,7 @@ impl HttpMethod {
             "PUT" => Some(HttpMethod::Put),
             "PATCH" => Some(HttpMethod::Patch),
             "DELETE" => Some(HttpMethod::Delete),
+            "ANY" => Some(HttpMethod::Any),
             _ => None,
         }
     }
