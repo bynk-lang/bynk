@@ -1967,6 +1967,16 @@ In `p as name`:
   name. What a nested pattern binds deeper is match-only, as everywhere after
   `is`.
 
+**Each name once** (#4550). A pattern MUST NOT bind one name twice, at any
+depth: a bare name, a record field's shorthand or sub-pattern, a list element or
+`..rest`, and an `as` name all count, and a second binding of a name is
+`bynk.types.duplicate_pattern_binding` at the second. Each alternative of an
+or-pattern is counted on its own, against the names bound outside the
+or-pattern, so a name the or-pattern rules require in every alternative is not
+a duplicate; the or-pattern as a whole binds what any one alternative binds. A
+field a record pattern lists twice is `bynk.types.duplicate_pattern_field`
+alone. The rule applies to every pattern position, suite case bodies included.
+
 A pattern MUST name a real variant (`bynk.types.unknown_variant_in_pattern`) and
 real payload fields (`bynk.types.unknown_pattern_field`), bind the right number
 of fields (`bynk.types.pattern_arity`), and MUST NOT mix named and positional

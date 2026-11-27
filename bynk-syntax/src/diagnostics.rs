@@ -6044,6 +6044,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "fn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        1 => \"uno\"    // ✗ `1` is already matched above\n        _ => \"other\"\n    }\n}\n\nfn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        2 => \"two\"    // ✓\n        _ => \"other\"\n    }\n}",
     },
     Explain {
+        code: "bynk.types.duplicate_pattern_binding",
+        blurb: "A pattern binds each name once. With `Both(a, a)`, or `Some(a as a)`, the arm's body would read a name that stands for two values, and which one it saw would be an accident of how the match is compiled. The rule holds wherever a pattern binds: variant payloads, record fields, list elements and their `..rest`, `as` names, nested patterns, `let … else`, a lambda's parameter pattern and the `is` operator. Rename one of the bindings, or write `_` where the value is not needed. An or-pattern is different: its alternatives must bind the same names (`bynk.types.or_pattern_binding_mismatch`), so `Walk(n) | Run(n)` is required, not a duplicate; a name repeated within one alternative is still refused. A field named twice in a record pattern is `bynk.types.duplicate_pattern_field`.",
+        example: "type Pair =\n    | Both(l: Int, r: Int)\n\nfn sum(p: Pair) -> Int {\n    match p {\n        Both(a, a) => a + a,    // ✗ `a` is bound twice\n    }\n}\n\nfn sum(p: Pair) -> Int {\n    match p {\n        Both(a, b) => a + b,    // ✓\n    }\n}",
+    },
+    Explain {
         code: "bynk.types.duplicate_pattern_field",
         blurb: "A record pattern lists the fields it reads, and each may be named once. Naming a field twice would bind or test the same value twice, which is almost always a slip for a different field. Keep one mention, and give it the name you want to use, as in `total: t`. The `..` at the end covers every field you leave out.",
         example: "type Order = { id: String, total: Int }\n\nfn amount(o: Order) -> Int {\n    match o {\n        Order { total, total: t, .. } => t    // ✗ `total` is named twice\n    }\n}\n\nfn amount(o: Order) -> Int {\n    match o {\n        Order { total: t, .. } => t           // ✓\n    }\n}",
@@ -8189,6 +8194,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.account_name_conflict",
         "Two instances in the build would take the same name on the Cloudflare account, so `bynk deploy` stopped before planning. The message names the instances and the name they share; rename one.",
     ),
+    warn(d(
+        "bynk.deploy.account_note",
+        "Checking the plan against the Cloudflare account found something worth saying, such as a resource it could not check. The message says what; the plan is still made (warning).",
+    )),
+    warn(d(
+        "bynk.deploy.adoption_partial",
+        "`[deploy.vectorize.<Capability>]` or `[deploy.containers.<Capability>]` in `bynk.toml` adopts an index or image only for some environments, and this environment is not one of them, so the deploy creates (or builds) one (warning).",
+    )),
+    d(
+        "bynk.deploy.adoption_unmatched",
+        "An entry under `[deploy.vectorize]` or `[deploy.containers]` in `bynk.toml` names no capability of this project, so `bynk deploy` stopped before planning: an entry that matches nothing would have the deploy create a new, empty index or build an image instead of adopting yours. The message names the entry and the nearest capability.",
+    ),
+    d(
+        "bynk.deploy.adoption_unreadable",
+        "`[deploy.vectorize]` or `[deploy.containers]` in `bynk.toml` did not read, so `bynk deploy` stopped before planning. The message names the problem.",
+    ),
     d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
@@ -8237,6 +8258,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.email_claim_refused",
         "`bynk deploy` could not decide which inbound email addresses the Worker claims in a named environment from `[deploy.email]` in `bynk.toml`, so it stopped before planning. With `--format json` the plan's `refusals` carries it with the `environment`.",
     ),
+    warn(d(
+        "bynk.deploy.email_forward_destination",
+        "A handler's `Forward` goes to an address Cloudflare may refuse, or one that cannot be checked at deploy: it is computed at run time, is not a verified destination address, or the lookup did not answer. The plan is still made, and the sender's mail would bounce if Cloudflare refuses the forward (warning).",
+    )),
     d(
         "bynk.deploy.empty_group",
         "A `[deploy.workers.<key>]` group lists no context.",
@@ -11297,6 +11322,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.duplicate_literal_arm",
         "A `match` has two arms for the same literal value.",
         &["match_arm"],
+    ),
+    dg(
+        "bynk.types.duplicate_pattern_binding",
+        "A pattern binds the same name more than once.",
+        &["match_arm", "is_expr"],
     ),
     dg(
         "bynk.types.duplicate_pattern_field",

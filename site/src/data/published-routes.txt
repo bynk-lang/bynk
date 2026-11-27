@@ -352,6 +352,10 @@
 /book/reference/diagnostics/bynk.dependency.path_outside_root/
 /book/reference/diagnostics/bynk.deploy.accept_fresh_agent_unused/
 /book/reference/diagnostics/bynk.deploy.account_name_conflict/
+/book/reference/diagnostics/bynk.deploy.account_note/
+/book/reference/diagnostics/bynk.deploy.adoption_partial/
+/book/reference/diagnostics/bynk.deploy.adoption_unmatched/
+/book/reference/diagnostics/bynk.deploy.adoption_unreadable/
 /book/reference/diagnostics/bynk.deploy.agent_move_refused/
 /book/reference/diagnostics/bynk.deploy.agent_starts_fresh/
 /book/reference/diagnostics/bynk.deploy.asset_path_conflict/
@@ -364,6 +368,7 @@
 /book/reference/diagnostics/bynk.deploy.dependency_not_deployed/
 /book/reference/diagnostics/bynk.deploy.duplicate_hostname/
 /book/reference/diagnostics/bynk.deploy.email_claim_refused/
+/book/reference/diagnostics/bynk.deploy.email_forward_destination/
 /book/reference/diagnostics/bynk.deploy.empty_group/
 /book/reference/diagnostics/bynk.deploy.env_passthrough_conflict/
 /book/reference/diagnostics/bynk.deploy.foreign_contract_skew/
@@ -1546,6 +1551,10 @@
 /reference/diagnostics/bynk.dependency.path_outside_root/
 /reference/diagnostics/bynk.deploy.accept_fresh_agent_unused/
 /reference/diagnostics/bynk.deploy.account_name_conflict/
+/reference/diagnostics/bynk.deploy.account_note/
+/reference/diagnostics/bynk.deploy.adoption_partial/
+/reference/diagnostics/bynk.deploy.adoption_unmatched/
+/reference/diagnostics/bynk.deploy.adoption_unreadable/
 /reference/diagnostics/bynk.deploy.agent_move_refused/
 /reference/diagnostics/bynk.deploy.agent_starts_fresh/
 /reference/diagnostics/bynk.deploy.asset_path_conflict/
@@ -1558,6 +1567,7 @@
 /reference/diagnostics/bynk.deploy.dependency_not_deployed/
 /reference/diagnostics/bynk.deploy.duplicate_hostname/
 /reference/diagnostics/bynk.deploy.email_claim_refused/
+/reference/diagnostics/bynk.deploy.email_forward_destination/
 /reference/diagnostics/bynk.deploy.empty_group/
 /reference/diagnostics/bynk.deploy.env_passthrough_conflict/
 /reference/diagnostics/bynk.deploy.foreign_contract_skew/
@@ -2244,6 +2254,7 @@
 /reference/diagnostics/bynk.types.discriminator_not_sum/
 /reference/diagnostics/bynk.types.duplicate_example/
 /reference/diagnostics/bynk.types.duplicate_literal_arm/
+/reference/diagnostics/bynk.types.duplicate_pattern_binding/
 /reference/diagnostics/bynk.types.duplicate_pattern_field/
 /reference/diagnostics/bynk.types.duplicate_variant_arm/
 /reference/diagnostics/bynk.types.embeds_ambiguous/

@@ -59,6 +59,7 @@ pub mod contract_compat;
 pub mod cors_origin;
 pub mod d1_migrations;
 pub mod d1_sql;
+pub(crate) mod duplicate_bindings;
 pub mod email;
 pub mod email_fallback;
 pub mod email_route;
