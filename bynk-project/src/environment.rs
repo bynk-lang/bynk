@@ -295,6 +295,56 @@ mod tests {
     }
 
     #[test]
+    fn a_very_long_service_under_the_longest_environment_still_fits() {
+        // An identifier has no length limit, so the slug's truncation is what keeps the name
+        // within Cloudflare's 63 characters.
+        let longest = "e".repeat(EVENT_QUEUE_ENVIRONMENT_MAX);
+        let context = format!("{}.{}", "a".repeat(120), "b".repeat(120));
+        let service = "s".repeat(255);
+        for name in [
+            event_queue_name(&longest, &context, &service).unwrap(),
+            event_dead_letter_queue_name(&longest, &context, &service).unwrap(),
+            event_queue_name("default", &context, &service).unwrap(),
+        ] {
+            assert!(name.len() <= 63, "{name} is {} characters", name.len());
+        }
+    }
+
+    #[test]
+    fn services_whose_slugs_truncate_alike_get_distinct_names_through_the_hash() {
+        // Both slugs agree on their first 60 characters, past any environment's budget, so
+        // every truncation agrees; only the hash tells the two queues apart.
+        let context = format!("shop.{}", "x".repeat(60));
+        for environment in [
+            "default",
+            "staging",
+            &"e".repeat(EVENT_QUEUE_ENVIRONMENT_MAX),
+        ] {
+            let a = event_queue_name(environment, &context, "notify").unwrap();
+            let b = event_queue_name(environment, &context, "refund").unwrap();
+            assert_ne!(a, b, "in {environment}");
+            let cut = |n: &str| n.len() - EVENT_QUEUE_HASH_DIGITS - environment_suffix(environment);
+            assert_eq!(
+                a[..cut(&a)],
+                b[..cut(&b)],
+                "the slugs truncate alike in {environment}"
+            );
+        }
+        assert_eq!(
+            event_queue_collisions(&[(&context, "notify"), (&context, "refund")]),
+            Vec::new()
+        );
+    }
+
+    fn environment_suffix(environment: &str) -> usize {
+        if environment == "default" {
+            0
+        } else {
+            environment.len() + 1
+        }
+    }
+
+    #[test]
     fn only_the_two_event_prefixes_are_reserved() {
         assert_eq!(reserved_queue_prefix("bynk-ev-orders"), Some("bynk-ev-"));
         assert_eq!(reserved_queue_prefix("bynk-dl-orders"), Some("bynk-dl-"));
