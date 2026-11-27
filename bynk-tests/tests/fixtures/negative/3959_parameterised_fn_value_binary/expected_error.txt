@@ -1,0 +1,3 @@
+bynk.given.parameterised_fn_value `flush` takes capability parameters, so it cannot be named as a value
+bynk.given.parameterised_fn_value `put` takes capability parameters, so it cannot be named as a value
+# exact

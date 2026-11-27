@@ -1,0 +1,9 @@
+context demo
+
+// #4112: the key type is written `by: Type`.
+
+consumes bynk.cloudflare { Container }
+
+type TenantId = String where NonEmpty
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @instances(TenantId)

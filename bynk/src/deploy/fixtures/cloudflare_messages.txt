@@ -1,92 +1,3 @@
-== queues create · wrangler missing
-   -> error wrangler not found
-== queues create · wrangler does not start
-   -> error No such file or directory (os error 2)
-== queues create · exits 1, stderr only
-   call: queues create jobs
-   -> error it went wrong on stderr
-== queues create · exits 1, stdout only
-   call: queues create jobs
-   -> error it went wrong on stdout
-== queues create · exits 1, both streams
-   call: queues create jobs
-   -> error wrong on stderr
-      and on stdout
-== queues create · exits 3, silent
-   call: queues create jobs
-   -> error wrangler exited 3
-== queues create · killed by SIGTERM, silent
-   call: queues create jobs
-   -> error wrangler exited 143
-== queues create · exits 0, unreadable output
-   call: queues create jobs
-   -> ok true
-== queues create · created
-   call: queues create jobs
-   -> ok true
-== queues create · already exists, on stderr
-   call: queues create jobs
-   -> ok false
-== queues create · already exists, on stdout
-   call: queues create jobs
-   -> ok false
-
-== queues info · wrangler missing
-   -> false
-== queues info · wrangler does not start
-   -> false
-== queues info · exits 1, stderr only
-   call: queues info jobs
-   -> false
-== queues info · exits 1, stdout only
-   call: queues info jobs
-   -> false
-== queues info · exits 1, both streams
-   call: queues info jobs
-   -> false
-== queues info · exits 3, silent
-   call: queues info jobs
-   -> false
-== queues info · killed by SIGTERM, silent
-   call: queues info jobs
-   -> false
-== queues info · exits 0, unreadable output
-   call: queues info jobs
-   -> true
-== queues info · found
-   call: queues info jobs
-   -> true
-
-== queues delete · wrangler missing
-   -> error wrangler not found
-== queues delete · wrangler does not start
-   -> error No such file or directory (os error 2)
-== queues delete · exits 1, stderr only
-   call: queues delete jobs
-   -> error it went wrong on stderr
-== queues delete · exits 1, stdout only
-   call: queues delete jobs
-   -> error it went wrong on stdout
-== queues delete · exits 1, both streams
-   call: queues delete jobs
-   -> error wrong on stderr
-      and on stdout
-== queues delete · exits 3, silent
-   call: queues delete jobs
-   -> error wrangler exited 3
-== queues delete · killed by SIGTERM, silent
-   call: queues delete jobs
-   -> error wrangler exited 143
-== queues delete · exits 0, unreadable output
-   call: queues delete jobs
-   -> ok ()
-== queues delete · deleted
-   call: queues delete jobs
-   -> ok ()
-== queues delete · does not exist
-   call: queues delete jobs
-   -> ok ()
-
 == d1 migrations apply (default) · wrangler missing
    -> error wrangler not found
 == d1 migrations apply (default) · wrangler does not start
@@ -805,4 +716,95 @@
    request: DELETE /accounts/acct/vectorize/v2/indexes/docs
    -> error DELETE /vectorize/v2/indexes/docs: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
         hint: the API token needs the Account > Vectorize > Edit permission
+
+== Queues create (REST) · unreachable
+   -> error POST /queues: io: Connection refused (os error N)
+== Queues create (REST) · 200, success
+   request: POST /accounts/acct/queues {"queue_name":"jobs"}
+   -> ok true
+== Queues create (REST) · 200, success false
+   request: POST /accounts/acct/queues {"queue_name":"jobs"}
+   -> error POST /queues: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== Queues create (REST) · 404 with errors
+   request: POST /accounts/acct/queues {"queue_name":"jobs"}
+   -> error POST /queues: Cloudflare answered 404 [{"code":10007,"message":"not found"}] (looking the queue up by name also failed: GET /queues?per_page=100&page=1: io: Connection refused (os error N))
+== Queues create (REST) · 403 with errors
+   request: POST /accounts/acct/queues {"queue_name":"jobs"}
+   -> error POST /queues: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== Queues create (REST) · 500 without errors
+   request: POST /accounts/acct/queues {"queue_name":"jobs"}
+   -> error POST /queues: Cloudflare answered 500 
+== Queues create (REST) · 200, unreadable
+   request: POST /accounts/acct/queues {"queue_name":"jobs"}
+   -> error POST /queues: unreadable answer (expected value at line 1 column 1)
+== Queues create (REST) · created
+   request: POST /accounts/acct/queues {"queue_name":"jobs"}
+   -> ok true
+== Queues create (REST) · refused, the queue is listed: a race lost
+   request: POST /accounts/acct/queues
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> ok false
+== Queues create (REST) · refused, no queue of exactly that name
+   request: POST /accounts/acct/queues
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> error POST /queues: Cloudflare answered 400 [{"code":11009,"message":"A queue with this name already exists"}]
+
+== Queues find (REST) · unreachable
+   -> false
+== Queues find (REST) · 200, success
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> false
+== Queues find (REST) · 200, success false
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> false
+== Queues find (REST) · 404 with errors
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> false
+== Queues find (REST) · 403 with errors
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> false
+== Queues find (REST) · 500 without errors
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> false
+== Queues find (REST) · 200, unreadable
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> false
+== Queues find (REST) · listed
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> true
+== Queues find (REST) · not listed
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> false
+
+== Queues delete (REST) · unreachable
+   -> error GET /queues?per_page=100&page=1: io: Connection refused (os error N)
+== Queues delete (REST) · 200, success
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> error GET /queues?per_page=100&page=1: Cloudflare's answer has no `result` list
+== Queues delete (REST) · 200, success false
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> error GET /queues?per_page=100&page=1: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== Queues delete (REST) · 404 with errors
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> error GET /queues?per_page=100&page=1: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== Queues delete (REST) · 403 with errors
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> error GET /queues?per_page=100&page=1: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== Queues delete (REST) · 500 without errors
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> error GET /queues?per_page=100&page=1: Cloudflare answered 500 
+== Queues delete (REST) · 200, unreadable
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> error GET /queues?per_page=100&page=1: unreadable answer (expected value at line 1 column 1)
+== Queues delete (REST) · deleted
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: DELETE /accounts/acct/queues/4e5f6a7b
+   -> ok ()
+== Queues delete (REST) · already gone
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   -> ok ()
+== Queues delete (REST) · not found, code 10104
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: DELETE /accounts/acct/queues/4e5f6a7b
+   -> ok ()
 

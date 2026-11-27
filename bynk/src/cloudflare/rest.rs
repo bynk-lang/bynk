@@ -19,6 +19,7 @@ use super::retry::{Idempotent, Policy};
 
 pub(crate) mod d1;
 pub(crate) mod kv;
+pub(crate) mod queues;
 pub(crate) mod r2;
 pub(crate) mod vectorize;
 
@@ -54,19 +55,36 @@ pub(crate) struct MissingCredentials {
 }
 
 impl MissingCredentials {
-    /// `set X [and Y] to {doing}: {needs} and the account it belongs to`: what each purpose has
-    /// always said.
-    pub(crate) fn message(self, doing: &str, needs: &str) -> String {
-        let missing: Vec<&str> = [
+    /// The unset variables, in the order the message names them.
+    pub(crate) fn names(self) -> Vec<&'static str> {
+        [
             self.token.then_some("CLOUDFLARE_API_TOKEN"),
             self.account.then_some("CLOUDFLARE_ACCOUNT_ID"),
         ]
         .into_iter()
         .flatten()
-        .collect();
+        .collect()
+    }
+
+    /// #3797: the structured error a `--format json` run writes to stdout when it stops for these:
+    /// `{"error": {"code", "missing", "message"}}`, `missing` the unset variables.
+    pub(crate) fn error_document(self, message: &str) -> String {
+        serde_json::to_string_pretty(&serde_json::json!({
+            "error": {
+                "code": "bynk.cloudflare.credentials_missing",
+                "missing": self.names(),
+                "message": message,
+            }
+        }))
+        .expect("a JSON value serialises")
+    }
+
+    /// `set X [and Y] to {doing}: {needs} and the account it belongs to`: what each purpose has
+    /// always said.
+    pub(crate) fn message(self, doing: &str, needs: &str) -> String {
         format!(
             "set {} to {doing}: {needs} and the account it belongs to",
-            missing.join(" and ")
+            self.names().join(" and ")
         )
     }
 }
@@ -140,6 +158,11 @@ fn walk(
     }
 }
 
+/// The credentials the run is missing, if it is missing any.
+pub(crate) fn missing_credentials() -> Option<MissingCredentials> {
+    shared().credentials.clone().err()
+}
+
 /// The run's REST client, for a purpose that says what it is `doing` and what token it `needs`
 /// (both in the message when a credential is missing). The credentials are read and the agent
 /// built the first time any purpose asks; a purpose asking later reuses them.
@@ -170,6 +193,7 @@ pub(crate) enum Purpose {
     R2,
     D1,
     Vectorize,
+    Queues,
 }
 
 impl Purpose {
@@ -180,6 +204,7 @@ impl Purpose {
             Purpose::R2 => "create the account's R2 buckets",
             Purpose::D1 => "create the account's D1 databases",
             Purpose::Vectorize => "check, create or delete the account's Vectorize indexes",
+            Purpose::Queues => "check, create or delete the account's queues",
         }
     }
 
@@ -190,6 +215,7 @@ impl Purpose {
             Purpose::R2 => "Workers R2 Storage: Edit",
             Purpose::D1 => "D1: Edit",
             Purpose::Vectorize => "Vectorize: Edit",
+            Purpose::Queues => "Queues: Edit",
         }
     }
 

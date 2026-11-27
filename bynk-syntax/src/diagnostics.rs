@@ -1428,9 +1428,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 function, which is where a set is bounded and is not followed. Serve the route `by` \
                 an authenticated actor, or choose the name from a fixed set. A refined type limits \
                 the shape of a name, not how many there are, so pair a keyed instance with an \
-                authenticated actor or a `RateLimit`. A later release is expected to let an \
-                instance declare a typed key that bounds its names, and a name from such a key \
-                will then not warn; that is not available yet.",
+                authenticated actor or a `RateLimit`. An instance can also declare \
+                `@instances(by: K)`: `send` then takes a `K`, whose construction is where the \
+                names are bounded, and a name from it does not warn.",
         example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\n\
                   service api from http {\n    on GET(\"/render/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {\n        let res <- Renderer.send(\"tenant-\\(tenant)\", req)   // ⚠ any caller picks the instance\n        …\n    }\n}\n\n\
                   service api from http {\n    on GET(\"/render\") () -> Effect[HttpResult[String]] by m: Member given Renderer {\n        let res <- Renderer.send(m.identity, req)       // ✓ the authenticated identity chooses\n        …\n    }\n}",
@@ -2483,6 +2483,11 @@ agent Cart {
         code: "bynk.given.parameter_outside_commons",
         blurb: "A capability parameter (`given Store: Kv`) belongs to a free function in a commons, the one place capability-polymorphic code lives. A context function, a method, a handler, a provider and a suite helper name the capabilities they use directly, with concrete instances only, so a reader of a context sees exactly which resource each body touches. Write `given Sessions` there; a helper over two instances moves to a commons, which the context `uses`.",
         example: "context shop\n\nfn forget(id: String) -> Effect[()] given Store: Kv { … }   // ✗ a context function\n\nfn forget(id: String) -> Effect[()] given Sessions {         // ✓ the instance, by name\n\tSessions.delete(id)\n}",
+    },
+    Explain {
+        code: "bynk.given.parameterised_fn_value",
+        blurb: "A function with capability parameters (`given Store: Kv`) has its parameters bound at every call, inside the argument list. Named as a value, as in `keys.forEach(evict)`, it would leave them unchosen, and a binding is never inferred. Write a lambda that binds them instead, `(k) => evict(k, given Inner = Store)`: it says which instance each call uses, where review sees it. A function with only shared capabilities, or none, may still be named as a value.",
+        example: "fn evict(key: String) -> Effect[()] given Inner: Kv { … }\n\nfn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {\n\tkeys.forEach(evict)                              // ✗ `Inner` is unbound\n}\n\nfn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {\n\tkeys.forEach((k) => evict(k, given Inner = Store))   // ✓ a lambda that binds\n}",
     },
     Explain {
         code: "bynk.given.shared_as_parameter",
@@ -8148,6 +8153,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`.",
     ),
     d(
+        "bynk.cloudflare.credentials_missing",
+        "A command that reads the Cloudflare account needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and one or both are not set, so it stopped before reading anything. With `--format json`, `bynk revert` writes `{\"error\": {\"code\", \"missing\", \"message\"}}` to stdout, `missing` naming each variable that is unset; the message says what the token needs.",
+    ),
+    d(
         "bynk.cloudflare.edge_cache_duplicate",
         "A context declares a second `EdgeCache` instance; the edge cache is one setting for the whole Worker.",
     ),
@@ -9144,6 +9153,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.given.parameter_outside_commons",
         "`given Name: Kind` on a context function, a method, a handler, a provider or a suite helper; only a commons function takes capability parameters.",
         &["given_clause"],
+    ),
+    dg(
+        "bynk.given.parameterised_fn_value",
+        "A function with capability parameters is named as a value; a lambda that binds them takes its place.",
+        &["call"],
     ),
     dg(
         "bynk.given.shared_as_parameter",

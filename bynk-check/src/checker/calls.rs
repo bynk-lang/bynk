@@ -881,9 +881,16 @@ pub(crate) fn require_callee_given(
     if given_fn_refusal(callee, true).is_some() {
         return;
     }
-    // #3959: a commons function's capability parameters are bound at the call.
-    if let Some(site) = site {
-        super::cap_bindings::check_call_bindings(name, callee, site, ctx);
+    // #3959: a commons function's capability parameters are bound at the call,
+    // so one cannot be named as a value (track Q8).
+    match site {
+        Some(site) => super::cap_bindings::check_call_bindings(name, callee, site, ctx),
+        None if callee.given.iter().any(|g| g.is_parameter()) => {
+            ctx.errors
+                .push(super::cap_bindings::parameterised_fn_value(name, callee));
+            return;
+        }
+        None => {}
     }
     let mut missing: Vec<String> = Vec::new();
     for c in callee.given.iter().filter(|c| !c.is_parameter()) {

@@ -766,6 +766,18 @@ mod tests {
         assert!(select.contains("AnalyticsReadError"), "{select}");
     }
 
+    /// #4100: `Ai.generateStream` is a declared operation, so signature help reads it as any other.
+    #[test]
+    fn ai_generate_stream_has_a_signature() {
+        const DOC: &str = "context a\n\nconsumes bynk.cloudflare { Ai }\n";
+        assert_eq!(
+            resolve_label("Ai.generateStream", DOC, None).as_deref(),
+            Some(
+                "generateStream(model: String, request: GenerateRequest) -> Effect[Result[Stream[String], AiError]]"
+            )
+        );
+    }
+
     /// #4099: `Ai.generateValue[T]` has a signature for its type argument and its two parameters.
     #[test]
     fn ai_generate_value_has_a_signature() {
