@@ -93,7 +93,8 @@ pub(super) fn request_init(method: &str, headers: Entries, body: Entries) -> TsE
 }
 
 /// The request URL `https://test<path><query>`: each `:name` segment of `path` is that
-/// parameter's value, and `query` (a query string expression, or none) follows the path.
+/// parameter's value, a final `*name` rest its value as written, and `query` (a query
+/// string expression, or none) follows the path.
 pub(super) fn request_url(path: &str, query: Option<TsExpr>) -> TsExpr {
     request_url_with(path, query, |name| ident(crate::emitter::ts_ident(name)))
 }
@@ -109,8 +110,19 @@ pub(super) fn request_url_with(
     let mut exprs: Vec<TsExpr> = Vec::new();
     let mut current = String::from("https://test");
     let mut any = false;
-    for seg in path.split('/').filter(|x| !x.is_empty()) {
+    let rest = bynk_check::http_rest::rest_name(path);
+    let segs: Vec<&str> = path.split('/').filter(|x| !x.is_empty()).collect();
+    for (i, seg) in segs.iter().enumerate() {
         any = true;
+        // #3752 (D6): a final `*name` rest is the case's value as written, which starts
+        // with `/` unless empty (`files.GET("/files/*key", "/a/b.png")`).
+        if i + 1 == segs.len()
+            && let Some(name) = rest
+        {
+            parts.push(std::mem::take(&mut current));
+            exprs.push(param(name));
+            continue;
+        }
         current.push('/');
         if let Some(name) = seg.strip_prefix(':') {
             parts.push(std::mem::take(&mut current));
