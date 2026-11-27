@@ -146,6 +146,64 @@ pub fn wait_until_all_ready(
     wait_until_ready(entry.0, entry.1, probe)
 }
 
+/// Who has `port` bound right now, for the message of an `Address already in use` (Linux only;
+/// empty elsewhere): each listening or connected socket on the port, with the process that holds it
+/// and its command line. A port from the shared allocator that wrangler then cannot bind is held by
+/// something that did not go through the allocator, and this names it while it is still held.
+#[allow(dead_code)]
+pub fn port_holders(port: u16) -> String {
+    use std::fmt::Write;
+    let mut sockets = Vec::new();
+    for table in ["/proc/net/tcp", "/proc/net/tcp6"] {
+        let Ok(text) = std::fs::read_to_string(table) else {
+            continue;
+        };
+        for line in text.lines().skip(1) {
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            let local_port = cols
+                .get(1)
+                .and_then(|a| a.rsplit(':').next())
+                .and_then(|p| u16::from_str_radix(p, 16).ok());
+            let remote_port = cols
+                .get(2)
+                .and_then(|a| a.rsplit(':').next())
+                .and_then(|p| u16::from_str_radix(p, 16).ok());
+            if local_port == Some(port) || remote_port == Some(port) {
+                sockets.push(format!(
+                    "{table} local {} remote {} state {} inode {}",
+                    cols[1], cols[2], cols[3], cols[9]
+                ));
+            }
+        }
+    }
+    let mut out = String::new();
+    for socket in &sockets {
+        let inode = socket.rsplit(' ').next().unwrap_or_default();
+        let target = format!("socket:[{inode}]");
+        let mut owners = Vec::new();
+        for proc in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
+            let name = proc.file_name().to_string_lossy().to_string();
+            if !name.bytes().all(|b| b.is_ascii_digit()) {
+                continue;
+            }
+            let held = std::fs::read_dir(proc.path().join("fd"))
+                .into_iter()
+                .flatten()
+                .flatten()
+                .any(|fd| {
+                    std::fs::read_link(fd.path()).is_ok_and(|l| l.to_string_lossy() == target)
+                });
+            if held {
+                let cmd = std::fs::read(proc.path().join("cmdline")).unwrap_or_default();
+                let cmd = String::from_utf8_lossy(&cmd).replace('\0', " ");
+                owners.push(format!("pid {name}: {}", cmd.trim()));
+            }
+        }
+        let _ = writeln!(out, "{socket} held by {owners:?}");
+    }
+    out
+}
+
 /// I2 (#1971): the `--var`s a workerd smoke passes `wrangler dev` so its
 /// Worker holds the local key `bynk dev` gives it for each `(caller, callee)`
 /// edge in `edges`, on both ends. A Worker holding a key for an edge it is not

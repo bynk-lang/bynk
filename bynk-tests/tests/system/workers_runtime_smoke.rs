@@ -91,7 +91,8 @@ fn boot_answer(
         let logs = fs::read_to_string(log_path).unwrap_or_default();
         assert!(
             !logs.contains("Address already in use"),
-            "wrangler dev could not bind its ports ({why}): {logs}"
+            "wrangler dev could not bind its ports ({why}): {logs}\n--- who has {port} now ---\n{}",
+            wrangler::port_holders(port)
         );
         format!("{why}; last probe: {}\n{logs}", last_err.borrow())
     })
