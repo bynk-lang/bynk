@@ -1545,6 +1545,19 @@ removes routes, custom domains, and cron triggers, a larger blast radius than
 a namespace or a queue. Clean one up by hand with `wrangler delete` if you're
 sure it's unused.
 
+A queue still consumed by a Worker can't be deleted: Cloudflare refuses with
+`11005`. So before `--prune` deletes a queue, it removes the queue's consumers,
+including an orphaned Worker that still consumes it. The Worker itself stays; it
+just stops consuming that queue. If a consumer can't be removed, the queue is left
+and the prune says which Worker held it.
+
+Tearing a project down by hand works the same way, in that order. Cloudflare
+refuses to delete a Worker that still consumes a queue (`10064`) and refuses to
+delete the queue while the Worker consumes it (`11005`). Remove the consumer first
+(`wrangler queues consumer remove <queue> <worker>`, or
+`DELETE /accounts/{account}/queues/{queue_id}/consumers/{consumer_id}`), then
+delete the Worker and the queue.
+
 Orphans are project-wide, not scoped to `--context`: `bynk deploy --context
 orders --prune` can delete a queue orphaned by a *different*, unrelated
 context — the report (and the confirmation naming exactly what will be

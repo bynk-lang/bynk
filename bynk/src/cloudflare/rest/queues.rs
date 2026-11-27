@@ -85,6 +85,58 @@ pub(crate) fn create(name: &str) -> Request {
     }
 }
 
+/// `GET /queues/{queue_id}/consumers`: the queue's consumers, for an id that [`is_queue_id`].
+///
+/// #4601: a queue a Worker consumes cannot be deleted (400 `11005`), and the Worker cannot be
+/// deleted while it consumes the queue (403 `10064`), as the 1D.4 sandbox teardown found
+/// (#4056). Removing the consumer first breaks the cycle, so a queue is deleted after its
+/// consumers.
+pub(crate) fn list_consumers(queue_id: &str) -> Request {
+    Request {
+        method: Method::Get,
+        path: format!("{QUEUES}/{queue_id}/consumers"),
+        body: None,
+        header: None,
+        idempotent: Idempotent::Yes,
+    }
+}
+
+/// One of a queue's consumers: its id, and the Worker it runs when it names one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Consumer {
+    pub(crate) id: String,
+    pub(crate) script: Option<String>,
+}
+
+/// The consumers in a [`list_consumers`] answer; `None` when it has no `result` list or an entry
+/// has no `consumer_id`.
+pub(crate) fn consumers(body: &serde_json::Value) -> Option<Vec<Consumer>> {
+    body["result"]
+        .as_array()?
+        .iter()
+        .map(|c| {
+            Some(Consumer {
+                id: c["consumer_id"].as_str()?.to_string(),
+                script: c["script"]
+                    .as_str()
+                    .or_else(|| c["script_name"].as_str())
+                    .map(str::to_string),
+            })
+        })
+        .collect()
+}
+
+/// `DELETE /queues/{queue_id}/consumers/{consumer_id}`, for ids that [`is_queue_id`].
+pub(crate) fn delete_consumer(queue_id: &str, consumer_id: &str) -> Request {
+    Request {
+        method: Method::Delete,
+        path: format!("{QUEUES}/{queue_id}/consumers/{consumer_id}"),
+        body: None,
+        header: None,
+        idempotent: Idempotent::Yes,
+    }
+}
+
 /// `DELETE /queues/{queue_id}`, for an id that [`is_queue_id`].
 pub(crate) fn delete(id: &str) -> Request {
     Request {
@@ -113,6 +165,48 @@ mod tests {
         assert_eq!(
             (delete.method, delete.path.as_str()),
             (Method::Delete, "/queues/0a1b2c")
+        );
+        let listed = list_consumers("0a1b2c");
+        assert_eq!(
+            (listed.method, listed.path.as_str()),
+            (Method::Get, "/queues/0a1b2c/consumers")
+        );
+        let removed = delete_consumer("0a1b2c", "9f8e7d");
+        assert_eq!(
+            (removed.method, removed.path.as_str()),
+            (Method::Delete, "/queues/0a1b2c/consumers/9f8e7d")
+        );
+    }
+
+    #[test]
+    fn a_queues_consumers_are_read_with_the_worker_they_run() {
+        let body = serde_json::json!({"result": [
+            {"consumer_id": "9f8e7d", "script": "shop-jobs", "type": "worker"},
+            {"consumer_id": "1a2b3c", "script_name": "older-shape"},
+            {"consumer_id": "4d5e6f", "type": "http_pull"},
+        ]});
+        assert_eq!(
+            consumers(&body).unwrap(),
+            [
+                Consumer {
+                    id: "9f8e7d".into(),
+                    script: Some("shop-jobs".into())
+                },
+                Consumer {
+                    id: "1a2b3c".into(),
+                    script: Some("older-shape".into())
+                },
+                Consumer {
+                    id: "4d5e6f".into(),
+                    script: None
+                },
+            ]
+        );
+        assert_eq!(consumers(&serde_json::json!({"result": []})).unwrap(), []);
+        assert_eq!(consumers(&serde_json::json!({})), None);
+        assert_eq!(
+            consumers(&serde_json::json!({"result": [{"script": "x"}]})),
+            None
         );
     }
 

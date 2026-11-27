@@ -72,6 +72,43 @@ impl<'a> Account<'a> {
     ) -> Result<serde_json::Value, CloudflareError> {
         Ok(self.rest(purpose)?.request(request)?)
     }
+
+    /// #4601: remove each of queue `name`'s consumers (id `queue_id`), so the queue can then be
+    /// deleted. Cloudflare refuses to delete a queue a Worker consumes (400 `11005`) and to delete
+    /// that Worker while it consumes the queue (403 `10064`); removing the consumer first breaks
+    /// the cycle. A consumer that cannot be removed stops the prune with the order named, so the
+    /// queue is never left half-torn-down without saying why.
+    fn remove_queue_consumers(&self, name: &str, queue_id: &str) -> Result<(), CloudflareError> {
+        let request = rest::queues::list_consumers(queue_id);
+        let body = self.send(Purpose::Queues, &request)?;
+        let consumers = rest::queues::consumers(&body)
+            .ok_or_else(|| unreadable(&request, "`result` list of consumers"))?;
+        for consumer in consumers {
+            let who = consumer.script.as_deref().map_or_else(
+                || format!("`{}`", consumer.id),
+                |s| format!("the Worker `{s}`"),
+            );
+            if !rest::queues::is_queue_id(&consumer.id) {
+                return Err(CloudflareError::Other(format!(
+                    "the queue `{name}` has a consumer with the id `{}`, which is not a consumer \
+                     id, so neither it nor the queue was deleted",
+                    consumer.id
+                )));
+            }
+            self.send(
+                Purpose::Queues,
+                &rest::queues::delete_consumer(queue_id, &consumer.id),
+            )
+            .map_err(|e| {
+                CloudflareError::Other(format!(
+                    "could not remove {who} as a consumer of the queue `{name}`, so the queue was \
+                     not deleted (a consumed queue is deleted only after its consumers are \
+                     removed): {e}"
+                ))
+            })?;
+        }
+        Ok(())
+    }
 }
 
 /// `name`, refused unless it can be a bucket name, before it reaches a request path.
@@ -175,6 +212,7 @@ impl CloudflareApi for Account<'_> {
                 "the queue `{name}` has the id `{id}`, which is not a queue id, so nothing was deleted"
             )));
         }
+        self.remove_queue_consumers(name, &id)?;
         self.send(Purpose::Queues, &rest::queues::delete(&id))
             .map(|_| true)
     }
@@ -524,6 +562,125 @@ mod tests {
                 "DELETE /accounts/acct/storage/kv/namespaces/0123abcd",
                 "DELETE /accounts/acct/storage/kv/namespaces/0123abcd",
             ]
+        );
+    }
+
+    /// #4601: a stub of the account the 1D.4 sandbox teardown met (#4056). Queue `jobs`
+    /// (`4e5f6a7b`) has one consumer, the Worker `shop-jobs` (`9f8e7d`), and Cloudflare refuses to
+    /// delete the queue while it does: 400 `11005`. `consumer_delete` is the status a consumer's
+    /// removal answers. Every request is logged, in order.
+    fn consumed_queue_stub(
+        consumer_delete: u16,
+    ) -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen = log.clone();
+        std::thread::spawn(move || {
+            let mut consumed = true;
+            for stream in listener.incoming().flatten() {
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                let request: Vec<&str> = line.split_whitespace().take(2).collect();
+                let (method, path) = (request[0].to_string(), request[1].to_string());
+                let mut length = 0usize;
+                loop {
+                    let mut header = String::new();
+                    if reader.read_line(&mut header).unwrap_or(0) == 0 || header == "\r\n" {
+                        break;
+                    }
+                    if let Some(n) = header.to_ascii_lowercase().strip_prefix("content-length:") {
+                        length = n.trim().parse().unwrap_or(0);
+                    }
+                }
+                let _ = reader.read_exact(&mut vec![0u8; length]);
+                seen.lock().unwrap().push(format!("{method} {path}"));
+                let (status, body) = match (method.as_str(), path.as_str()) {
+                    ("GET", p) if p.starts_with("/accounts/acct/queues?") => (
+                        200,
+                        r#"{"success":true,"result":[{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#.to_string(),
+                    ),
+                    ("GET", "/accounts/acct/queues/4e5f6a7b/consumers") => (
+                        200,
+                        if consumed {
+                            r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"}]}"#
+                        } else {
+                            r#"{"success":true,"result":[]}"#
+                        }
+                        .to_string(),
+                    ),
+                    ("DELETE", "/accounts/acct/queues/4e5f6a7b/consumers/9f8e7d") => {
+                        if consumer_delete == 200 {
+                            consumed = false;
+                            (200, r#"{"success":true,"result":null}"#.to_string())
+                        } else {
+                            (
+                                consumer_delete,
+                                r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#.to_string(),
+                            )
+                        }
+                    }
+                    ("DELETE", "/accounts/acct/queues/4e5f6a7b") if consumed => (
+                        400,
+                        r#"{"success":false,"errors":[{"code":11005,"message":"Cannot delete a queue with a consumer"}]}"#.to_string(),
+                    ),
+                    ("DELETE", "/accounts/acct/queues/4e5f6a7b") => {
+                        (200, r#"{"success":true,"result":null}"#.to_string())
+                    }
+                    _ => (404, r#"{"success":false,"errors":[{"code":7003}]}"#.to_string()),
+                };
+                let mut stream = stream;
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+            }
+        });
+        (base, log)
+    }
+
+    /// #4601: a queue a Worker consumes is deleted by removing the consumer first, then the queue.
+    /// Deleting the queue first is refused with 400 `11005` (the stub, as Cloudflare answered in
+    /// #4056's teardown), which is what `--prune` met before the consumers were removed.
+    #[test]
+    fn a_consumed_queue_is_deleted_after_its_consumer_is_removed() {
+        let (base, seen) = consumed_queue_stub(200);
+        let root = std::env::temp_dir();
+        assert_eq!(account(base, &root).queue_delete("jobs"), Ok(true));
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [
+                "GET /accounts/acct/queues?per_page=100&page=1",
+                "GET /accounts/acct/queues/4e5f6a7b/consumers",
+                "DELETE /accounts/acct/queues/4e5f6a7b/consumers/9f8e7d",
+                "DELETE /accounts/acct/queues/4e5f6a7b",
+            ]
+        );
+    }
+
+    /// #4601: a consumer that cannot be removed stops the delete before the queue is touched, and
+    /// the error names the Worker and the order.
+    #[test]
+    fn a_consumer_that_cannot_be_removed_leaves_the_queue_and_says_why() {
+        let (base, seen) = consumed_queue_stub(403);
+        let root = std::env::temp_dir();
+        let e = account(base, &root)
+            .queue_delete("jobs")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.starts_with("could not remove the Worker `shop-jobs` as a consumer of the queue `jobs`, so the queue was not deleted (a consumed queue is deleted only after its consumers are removed): DELETE /queues/4e5f6a7b/consumers/9f8e7d: Cloudflare answered 403"),
+            "{e}"
+        );
+        assert!(
+            !seen
+                .lock()
+                .unwrap()
+                .contains(&"DELETE /accounts/acct/queues/4e5f6a7b".to_string()),
+            "the queue was not touched"
         );
     }
 

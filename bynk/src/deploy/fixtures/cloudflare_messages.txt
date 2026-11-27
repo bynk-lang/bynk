@@ -798,17 +798,31 @@
    -> error GET /queues?per_page=100&page=1: unreadable answer (expected value at line 1 column 1)
 == Queues delete (REST) · deleted
    request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
    request: DELETE /accounts/acct/queues/4e5f6a7b
    -> ok ()
+== Queues delete (REST) · consumed: the consumer is removed first
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
+   request: DELETE /accounts/acct/queues/4e5f6a7b/consumers/9f8e7d
+   request: DELETE /accounts/acct/queues/4e5f6a7b
+   -> ok ()
+== Queues delete (REST) · consumer cannot be removed
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
+   request: DELETE /accounts/acct/queues/4e5f6a7b/consumers/9f8e7d
+   -> error could not remove the Worker `shop-jobs` as a consumer of the queue `jobs`, so the queue was not deleted (a consumed queue is deleted only after its consumers are removed): DELETE /queues/4e5f6a7b/consumers/9f8e7d: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
 == Queues delete (REST) · already gone
    request: GET /accounts/acct/queues?per_page=100&page=1
    -> ok ()
 == Queues delete (REST) · not found, code 11000
    request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
    request: DELETE /accounts/acct/queues/4e5f6a7b
    -> ok ()
 == Queues delete (REST) · not found, code 10104
    request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
    request: DELETE /accounts/acct/queues/4e5f6a7b
    -> ok ()
 

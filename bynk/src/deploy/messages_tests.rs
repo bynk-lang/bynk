@@ -542,6 +542,8 @@ type Seen = Box<dyn FnOnce() -> Vec<String>>;
 /// 1D.4 sandbox check (#4056's results, #4600): an R2 bucket this account owns 409 `10004`, a
 /// taken D1 name 400 `7502`, a duplicate Vectorize metadata index 400 `40004`, a taken queue name
 /// 409 `11009`, and a queue already gone 404 `11000` (the reference's `10104` is kept too).
+/// A consumed queue's consumer is removed before the queue (#4601): Cloudflare refuses to delete
+/// a queue a Worker consumes with 400 `11005`.
 const REST_SPECIAL: &[(&str, &str, Answers)] = &[
     (
         "KV create (REST)",
@@ -786,7 +788,42 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
                 200,
                 r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
             ),
+            (200, r#"{"success":true,"result":[]}"#),
             (200, r#"{"success":true,"errors":[],"result":null}"#),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "consumed: the consumer is removed first",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"}]}"#,
+            ),
+            (200, r#"{"success":true,"result":null}"#),
+            (200, r#"{"success":true,"errors":[],"result":null}"#),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "consumer cannot be removed",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"}]}"#,
+            ),
+            (
+                403,
+                r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#,
+            ),
         ],
     ),
     (
@@ -805,6 +842,7 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
                 200,
                 r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
             ),
+            (200, r#"{"success":true,"result":[]}"#),
             (
                 404,
                 r#"{"success":false,"errors":[{"code":11000,"message":"Queue 'jobs' not found"}]}"#,
@@ -819,6 +857,7 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
                 200,
                 r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
             ),
+            (200, r#"{"success":true,"result":[]}"#),
             (
                 404,
                 r#"{"success":false,"errors":[{"code":10104,"message":"Queue does not exist"}]}"#,
