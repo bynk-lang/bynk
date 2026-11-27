@@ -3464,7 +3464,6 @@ fn check_method_call_inner(
         && ctx.lookup(id.name.as_str()).is_none()
         && ctx.input.types.contains_key(&id.name)
     {
-        // #3752 (D20): `Forwarded.of(…)` is a suite's static, not the opaque constructor.
         return static_or_seam(id, method, type_args, args, span, expected, expr_id, ctx);
     }
     // v0.20b: qualified statics on the built-in collection types —
