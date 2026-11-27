@@ -302,6 +302,17 @@ pub(crate) struct PlannedSet {
     pub(crate) rebind: Vec<String>,
     pub(crate) commit: Vec<String>,
     pub(crate) go_live: Vec<String>,
+    /// The move under way that this set resumes (D8), when it is one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) resumes: Option<Resumes>,
+}
+
+/// #3565 (D8): the move under way a planned set resumes, and the step its record holds.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub(crate) struct Resumes {
+    #[serde(rename = "move")]
+    pub(crate) move_id: String,
+    pub(crate) step: String,
 }
 
 /// One move of a [`PlannedSet`].
@@ -330,6 +341,7 @@ impl PlannedSet {
             rebind: callers.iter().map(|w| script(w)).collect(),
             commit: set.source_scripts(),
             go_live: set.receiver_scripts(),
+            resumes: None,
         }
     }
 
@@ -362,6 +374,9 @@ impl PlannedSet {
             ]
             .concat(),
         ];
+        if let Some(r) = &self.resumes {
+            lines.push(["  resumes move `", &r.move_id, "`, at step `", &r.step, "`"].concat());
+        }
         let list = |scripts: &[String]| scripts.join(", ");
         lines.push(
             [

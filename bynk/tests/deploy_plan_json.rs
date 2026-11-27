@@ -832,3 +832,111 @@ fn a_group_member_carrying_class_tombstones_is_refused() {
     assert_eq!(r["to"], "core", "{r}");
     assert_eq!(r["tombstones"], serde_json::json!(["Tally"]), "{r}");
 }
+
+/// #3565 (D8): a ledger with move `m1` under way at `step`, moving `shop.orders`'s `Cart` from
+/// its own Worker into group `core`, written over `dir`'s ledger.
+fn with_open_move(dir: &Path, step: &str, workers: &str) {
+    write(
+        &dir.join("bynk.deploy.lock"),
+        &format!(
+            "version = 2\n{workers}\n[[environments.default.agent_moves]]\nmove = \"m1\"\nstep = \"{step}\"\nstarted = \"2026-11-27T10:15:02Z\"\nbynk = \"0.0.0\"\n\n[[environments.default.agent_moves.moves]]\ncontext = \"shop.orders\"\nclasses = [\"Cart\"]\nfrom_worker = \"shop-orders\"\nfrom_script = \"shop-orders\"\nto_worker = \"core\"\nto_script = \"core\"\n\n[environments.default.agent_moves.deployments]\ncore = \"none\"\nshop-orders = \"d1\"\n\n[environments.default.agent_moves.namespaces]\nCart = \"ns-cart\"\n"
+        ),
+    );
+}
+
+fn joining_core(name: &str, manifest: &str) -> PathBuf {
+    let dir = moving_project(
+        name,
+        &[("shop.orders", "Cart"), ("shop.pay", "Wallet")],
+        manifest,
+        "",
+    );
+    with_open_move(
+        &dir,
+        "committing",
+        &(record("shop-orders", &["shop.orders"]) + &record("shop-pay", &["shop.pay"])),
+    );
+    dir
+}
+
+/// D8: a move under way resumes on a plain run, without `--move-agent`: the record is the
+/// consent already given. The plan says which move it resumes and from which step.
+#[test]
+fn a_move_under_way_resumes_without_the_flag_and_the_plan_says_so() {
+    let dir = joining_core(
+        "move_resumes",
+        "\n[deploy.workers.core]\ncontexts = [\"shop.orders\"]\n",
+    );
+    let (doc, moves) = planned_moves(&deploy(&dir, &["--format", "json"]));
+    assert_eq!(moves.as_array().unwrap().len(), 1, "{doc}");
+    assert_eq!(
+        moves[0]["resumes"],
+        serde_json::json!({"move": "m1", "step": "committing"})
+    );
+    assert_eq!(moves[0]["receive"], serde_json::json!(["core"]));
+    assert_eq!(moves[0]["commit"], serde_json::json!(["shop-orders"]));
+
+    let out = deploy(&dir, &[]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.contains("  resumes move `m1`, at step `committing`"),
+        "{text}"
+    );
+
+    // Naming it again is not a name that matches nothing.
+    let (doc, moves) = planned_moves(&deploy(
+        &dir,
+        &["--format", "json", "--move-agent", "shop.orders"],
+    ));
+    assert_eq!(moves[0]["resumes"]["move"], "m1", "{doc}");
+}
+
+/// Outside `--dry-run`, a resumed move is still refused in this release (slice 4b applies it).
+#[test]
+fn a_move_under_way_outside_a_dry_run_is_refused_as_not_applied_yet() {
+    let dir = joining_core(
+        "move_resume_not_applied",
+        "\n[deploy.workers.core]\ncontexts = [\"shop.orders\"]\n",
+    );
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk"))
+        .args(["deploy", "--format", "json"])
+        .arg(&dir)
+        .env("BYNK_NO_INSTALL", "1")
+        .output()
+        .expect("runs bynk");
+    let r = only_refusal(&out);
+    assert_eq!(r["reason"], "apply_not_yet", "{r}");
+}
+
+/// D8: a manifest that no longer puts a moving context on its receiver cannot finish the move.
+#[test]
+fn a_manifest_that_no_longer_asks_for_the_move_under_way_is_refused() {
+    let dir = joining_core("move_open_gone", "");
+    let r = only_refusal(&deploy(&dir, &["--format", "json"]));
+    assert_eq!(r["code"], "bynk.deploy.move_open", "{r}");
+    assert_eq!(r["move"], "m1");
+    assert_eq!(r["step"], "committing");
+    assert_eq!(r["context"], "shop.orders");
+    assert_eq!(r["to"], "core");
+}
+
+/// D8: a new move that shares a script with the move under way waits for it.
+#[test]
+fn a_new_move_sharing_a_script_with_the_move_under_way_is_refused() {
+    let dir = joining_core(
+        "move_open_overlap",
+        "\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.pay\"]\n",
+    );
+    let r = only_refusal(&deploy(
+        &dir,
+        &["--format", "json", "--move-agent", "shop.pay"],
+    ));
+    assert_eq!(r["code"], "bynk.deploy.move_open", "{r}");
+    assert_eq!(r["context"], "shop.pay");
+    assert_eq!(r["move"], "m1");
+}
