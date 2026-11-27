@@ -4,6 +4,7 @@
 #
 #   parse   — lexer + both parser entry paths; span invariants asserted.
 #   compile — the whole single-file pipeline; must never panic or abort.
+#   template — the typed-HTML tokeniser; never panics, and agrees with html5ever (#3927).
 #
 # Nightly toolchain (libFuzzer instrumentation); seeded from the fixture
 # corpus so runs start deep in the grammar. Crashing inputs are uploaded as
@@ -28,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [parse, compile]
+        target: [parse, compile, template]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # rev only; toolchain from `with` (nightly)

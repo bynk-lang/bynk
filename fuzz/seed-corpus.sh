@@ -18,4 +18,12 @@ find ../bynk-tests/tests/fixtures ../examples -name '*.bynk' -type f | while rea
   done
 done
 
-echo "seeded: $(ls corpus/parse | wc -l) inputs per target"
+# #3927: the template target starts from the template files in the fixtures.
+mkdir -p corpus/template
+j=0
+find ../bynk-tests/tests/fixtures -path '*/embeds/*.html' -type f | while read -r f; do
+  j=$((j + 1))
+  cp "$f" "corpus/template/seed-$j.html"
+done
+
+echo "seeded: $(ls corpus/parse | wc -l) inputs per target, $(ls corpus/template | wc -l) templates"
