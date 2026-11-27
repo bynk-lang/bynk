@@ -783,7 +783,9 @@ pub(super) fn emit_http_route_dispatch(
         }
         // #3752 (D11): a pass-through route's `request`.
         if super::pass_through::is_any(route) && pname == "request" {
-            call_args.push(super::pass_through::inbound_request_arg(request_headers_arg(route)));
+            call_args.push(super::pass_through::inbound_request_arg(
+                request_headers_arg(route),
+            ));
             continue;
         }
         if bind_request_record_param(

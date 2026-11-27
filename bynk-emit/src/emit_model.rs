@@ -562,7 +562,10 @@ fn upstream_provider_args(inst: &bynk_check::symbols::DerivedInstance) -> Vec<by
     let timeout = inst.number("timeout").unwrap_or(30);
     vec![
         bynk_ts::TsExpr::object(vec![
-            ("origin".to_string(), bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(origin))),
+            (
+                "origin".to_string(),
+                bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(origin)),
+            ),
             (
                 "timeoutSecs".to_string(),
                 bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(timeout.to_string())),

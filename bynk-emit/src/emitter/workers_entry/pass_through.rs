@@ -55,7 +55,12 @@ pub(super) fn guard_preflight(preflight: TsStmt, routes: &[HttpRoute]) -> TsStmt
     let owners: Vec<TsExpr> = routes
         .iter()
         .filter(|r| is_any(r))
-        .map(|r| TsExpr::array(vec![str_lit(r.path.clone()), patterns(&r.pass_through_yields)]))
+        .map(|r| {
+            TsExpr::array(vec![
+                str_lit(r.path.clone()),
+                patterns(&r.pass_through_yields),
+            ])
+        })
         .collect();
     if owners.is_empty() {
         return preflight;
