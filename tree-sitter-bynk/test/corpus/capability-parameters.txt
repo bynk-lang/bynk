@@ -1,0 +1,214 @@
+================================================================================
+A commons function declares a capability parameter and a shared capability
+================================================================================
+
+commons shop.cache
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+fn copyAll(prefix: Option[String]) -> Effect[Int] given From: Kv, To: Kv, Logger {
+  let keys <- From.list(prefix)
+  let _ <- keys.forEach((k) => copyOne(k, given Src = From, Dst = To))
+  Effect.pure(keys.length())
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (consumes_decl
+      (qualified_name
+        (identifier))
+      (consumes_item
+        (identifier)))
+    (consumes_decl
+      (qualified_name
+        (identifier)
+        (identifier))
+      (consumes_item
+        (identifier)))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (base_type)))
+      (generic_type_ref
+        (builtin_type)
+        (base_type))
+      (given_clause
+        (capability_parameter
+          (identifier)
+          (identifier))
+        (capability_parameter
+          (identifier)
+          (identifier))
+        (qualified_name
+          (identifier)))
+      (block
+        (effect_let_stmt
+          (identifier)
+          (method_call
+            (identifier)
+            (identifier)
+            (identifier)))
+        (effect_let_stmt
+          (wildcard)
+          (method_call
+            (identifier)
+            (identifier)
+            (lambda_expr
+              (lambda_param
+                (identifier))
+              (call
+                (identifier)
+                (identifier)
+                (capability_bindings
+                  (capability_binding
+                    (identifier)
+                    (qualified_name
+                      (identifier)))
+                  (capability_binding
+                    (identifier)
+                    (qualified_name
+                      (identifier))))))))
+        (effect_pure_expr
+          (method_call
+            (identifier)
+            (identifier)))))))
+
+================================================================================
+A call binds capability parameters in every expression position
+================================================================================
+
+context shop
+
+fn session(id: String) -> Effect[Session] given Sessions, PriceCache, Logger {
+  let s <- cached[Session](id, load, given Store = Sessions)
+  do warmUp(given Store = Sessions)
+  par {
+    let a <- cached[Session](id, load, given Store = Sessions)
+    let b <- cached[Price](sku, quote, given Store = PriceCache)
+  }
+  let _ <- ids.parTraverse((id) => evict(id, given Store = Sessions))
+  let r <- cached[Session](id, load, given Store = Sessions).within(2.seconds)
+  copyAll(None, given From = Sessions, To = Archive)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (base_type))
+      (generic_type_ref
+        (builtin_type)
+        (identifier))
+      (given_clause
+        (qualified_name
+          (identifier))
+        (qualified_name
+          (identifier))
+        (qualified_name
+          (identifier)))
+      (block
+        (effect_let_stmt
+          (identifier)
+          (call
+            (identifier)
+            (identifier)
+            (identifier)
+            (identifier)
+            (capability_bindings
+              (capability_binding
+                (identifier)
+                (qualified_name
+                  (identifier))))))
+        (do_stmt
+          (call
+            (identifier)
+            (capability_bindings
+              (capability_binding
+                (identifier)
+                (qualified_name
+                  (identifier))))))
+        (par_stmt
+          (effect_let_stmt
+            (identifier)
+            (call
+              (identifier)
+              (identifier)
+              (identifier)
+              (identifier)
+              (capability_bindings
+                (capability_binding
+                  (identifier)
+                  (qualified_name
+                    (identifier))))))
+          (effect_let_stmt
+            (identifier)
+            (call
+              (identifier)
+              (identifier)
+              (identifier)
+              (identifier)
+              (capability_bindings
+                (capability_binding
+                  (identifier)
+                  (qualified_name
+                    (identifier)))))))
+        (effect_let_stmt
+          (wildcard)
+          (method_call
+            (identifier)
+            (identifier)
+            (lambda_expr
+              (lambda_param
+                (identifier))
+              (call
+                (identifier)
+                (identifier)
+                (capability_bindings
+                  (capability_binding
+                    (identifier)
+                    (qualified_name
+                      (identifier))))))))
+        (effect_let_stmt
+          (identifier)
+          (method_call
+            (call
+              (identifier)
+              (identifier)
+              (identifier)
+              (identifier)
+              (capability_bindings
+                (capability_binding
+                  (identifier)
+                  (qualified_name
+                    (identifier)))))
+            (identifier)
+            (field_access
+              (number_literal)
+              (identifier))))
+        (call
+          (identifier)
+          (none_expr)
+          (capability_bindings
+            (capability_binding
+              (identifier)
+              (qualified_name
+                (identifier)))
+            (capability_binding
+              (identifier)
+              (qualified_name
+                (identifier)))))))))

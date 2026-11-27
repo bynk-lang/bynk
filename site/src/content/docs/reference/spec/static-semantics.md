@@ -1647,7 +1647,8 @@ warned (`bynk.given.unknown_capability`, `bynk.given.undeclared_capability`,
 context** MAY declare `given` (#2868), and then uses those capabilities as a handler
 does; a `given` on a method, on a function that does not return `Effect[T]`, or
 naming `Events` is rejected (`bynk.given.fn_unsupported`), as is any `given` on a
-function in a commons or a suite (`bynk.given.fn_outside_context`). A call to, or a
+function in an adapter. A free function in a commons MAY declare `given` (#3959,
+experimental), under the **capability parameter** rules below. A call to, or a
 reference to, a function that declares `given` MUST occur in a body whose own
 `given` includes every one of the callee's (`bynk.given.missing_for_call`); the
 rule is checked at each call, so it holds along every path of calls, and the
@@ -1658,6 +1659,39 @@ transitively, every capability `given` to the agent handlers it calls
 (`bynk.provider.agent_call_undeclared_capability`). A service or agent handler
 is exempt: its deps are widened to cover the agent handlers it calls. Providers MUST NOT form a dependency cycle
 through `given` (`bynk.provider.dependency_cycle`).
+
+**Capability parameters** (#3959, experimental: `[unstable] allow =
+["bynk.given.parameters"]`, else `bynk.stability.experimental`). A commons MAY
+list capabilities of a **first-party** unit in its braced `consumes`, beside types;
+the selection imports the contract only (no provider, no binding), and a capability
+of any other unit is `bynk.commons.consumes_not_types`. A selected capability no
+function's `given` names is warned (`bynk.commons.capability_unused`). An entry of a
+commons free function's `given` is one of:
+- a **capability parameter** `Name: K`, where `K` MUST be an instantiable kind the
+  commons selects (`bynk.given.unknown_capability` if not selected;
+  `bynk.given.shared_as_parameter` if `K` has no instances). `Name` is in scope in the
+  body as a capability with `K`'s operations, and MUST NOT equal a capability or kind
+  the commons selects, a type parameter of the function, or another parameter
+  (`bynk.given.parameter_name_conflict`). It is never a value.
+- a **shared capability** `C`, a selected first-party capability with no instances.
+  An instantiable kind named bare is rejected (`bynk.given.kind_needs_parameter`),
+  a test-only commons included.
+
+`given Name: K` anywhere else (a context function, a method, a handler, a provider, a
+suite helper) is `bynk.given.parameter_outside_commons`. A call's argument list MAY end
+with bindings, `"(" ( args | (args ",")? "given" binding ("," binding)* )? ")"`,
+`binding = Name "=" CapRef`. A call to a function with capability parameters MUST
+bind each exactly once (`bynk.given.binding_missing`,
+`bynk.given.binding_duplicate`); a binding MUST name a parameter of the callee
+(`bynk.given.binding_unknown`, also for a callee with none) and not a shared
+capability (`bynk.given.binding_shared`). Its right-hand side MUST be a capability in
+the caller's own `given` (`bynk.given.missing_for_call`) whose kind is exactly `K`
+(`bynk.given.binding_kind_mismatch`): a derived instance of `K`, the bare `K` where
+`K` allows a bare use, or the caller's own parameter bounded by `K`. It counts as used
+by the caller. A binding is never inferred or defaulted. The callee's shared
+capabilities follow the inclusion rule above. The machine-applicable fix of
+`bynk.given.binding_missing` is offered only when the caller holds exactly one
+candidate.
 
 **Derived capabilities** (standard-library S4a, #1966). `capability X = K`
 declares a capability `X` whose operations are those of `K`, as a **distinct
@@ -1966,6 +2000,16 @@ In `p as name`:
   whole pattern, or in place of a variant payload, record field or list element
   name. What a nested pattern binds deeper is match-only, as everywhere after
   `is`.
+
+**Each name once** (#4550). A pattern MUST NOT bind one name twice, at any
+depth: a bare name, a record field's shorthand or sub-pattern, a list element or
+`..rest`, and an `as` name all count, and a second binding of a name is
+`bynk.types.duplicate_pattern_binding` at the second. Each alternative of an
+or-pattern is counted on its own, against the names bound outside the
+or-pattern, so a name the or-pattern rules require in every alternative is not
+a duplicate; the or-pattern as a whole binds what any one alternative binds. A
+field a record pattern lists twice is `bynk.types.duplicate_pattern_field`
+alone. The rule applies to every pattern position, suite case bodies included.
 
 A pattern MUST name a real variant (`bynk.types.unknown_variant_in_pattern`) and
 real payload fields (`bynk.types.unknown_pattern_field`), bind the right number
@@ -2814,7 +2858,15 @@ schema registry, `bynk.schema.lock`. A new event starts at version 1, or at its
 `@schema(N)`. An unchanged shape keeps its version; an additive change, in which
 every added field has a default and no field is removed, retyped, or loses a
 default, increments it by one; any other change is
-`bynk.event.non_additive_schema_change`. A field declared `replaces old` is the
+`bynk.event.non_additive_schema_change`. A field whose type reaches a record or a sum
+is judged by the positions inside it, as a stored value is (§5.4.3), rooted at the
+field's wire name: a nested field removed or retyped, added without a default, or that
+lost a default, is a non-additive change, a nested field added with a default or a new
+variant is additive, and a nested wire key (`@name`) or field that changed is accepted
+only when the field says `replaces <the old key>`. A record type's own name is no part (renaming it, fields unchanged, leaves the schema number as it was)
+of the shape, since the wire carries its fields and not its name. A lock written before
+this records no positions for such a field: an unchanged build keeps its version and
+fills them in, and a field whose type changed is a retype as before. A field declared `replaces old` is the
 recorded field `old` renamed: the reconcile renames the recorded field first, so a
 rename on its own is additive (it increments the version and records `renamed_from`
 on the field), and one beside another change is judged by that change. `old` MUST be

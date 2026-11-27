@@ -1573,8 +1573,18 @@ pub fn covers(prefix: &str, path: &str) -> bool {
 /// experimental item, is experimental. `None` when no first-party unit holds
 /// the path.
 pub fn stability_of(path: &str) -> Option<Stability> {
+    if BUILTIN_EXPERIMENTAL.iter().any(|item| covers(item, path)) {
+        return Some(Stability::Experimental);
+    }
     stability_of_in(UNITS, path)
 }
+
+/// #3752: experimental items the language itself provides, with no unit to
+/// export them (a method on a built-in type such as `RequestHeaders`). Each is
+/// spelt under `bynk`, as `[unstable] allow` names it, and counts as a
+/// first-party item ([`names_first_party_item`]) and an experimental one
+/// ([`experimental_items`]).
+pub const BUILTIN_EXPERIMENTAL: &[&str] = &["bynk.RequestHeaders.entries", "bynk.given.parameters"];
 
 /// [`stability_of`] over a given table.
 pub fn stability_of_in(units: &[Unit], path: &str) -> Option<Stability> {
@@ -1591,7 +1601,9 @@ pub fn stability_of_in(units: &[Unit], path: &str) -> Option<Stability> {
 /// Every experimental item, as a full path: each experimental unit, and each
 /// listed item of a stable one.
 pub fn experimental_items() -> Vec<String> {
-    experimental_items_in(UNITS)
+    let mut out = experimental_items_in(UNITS);
+    out.extend(BUILTIN_EXPERIMENTAL.iter().map(|item| item.to_string()));
+    out
 }
 
 /// [`experimental_items`] over a given table.
@@ -1703,7 +1715,12 @@ pub fn exported_names(unit: &Unit) -> Vec<&'static str> {
 /// Whether `path` names a first-party unit or an item it exports. Operation
 /// paths (`bynk.cloudflare.Kv.list`) are accepted when their item exists.
 pub fn names_first_party_item(path: &str) -> bool {
-    names_first_party_item_in(UNITS, path)
+    // An entry names a built-in item, or lies on the way to one
+    // (`bynk.RequestHeaders`).
+    BUILTIN_EXPERIMENTAL
+        .iter()
+        .any(|item| covers(item, path) || covers(path, item))
+        || names_first_party_item_in(UNITS, path)
 }
 
 /// [`names_first_party_item`] over a given table.
@@ -2202,7 +2219,11 @@ mod tests {
                 "bynk.cloudflare.Kv.listPage",
                 "bynk.cloudflare.Kv.getValue",
                 "bynk.cloudflare.Kv.putValue",
-                "bynk.crypto"
+                "bynk.crypto",
+                // #3752 (D12): a method of a built-in type.
+                "bynk.RequestHeaders.entries",
+                // #3959: capability parameters, a language form with no unit.
+                "bynk.given.parameters"
             ]
         );
         let extensible: Vec<(&str, &str)> = UNITS

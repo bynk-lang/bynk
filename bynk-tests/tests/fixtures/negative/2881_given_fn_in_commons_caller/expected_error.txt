@@ -1,2 +1,0 @@
-# exact
-bynk.given.fn_outside_context function `warn` cannot declare `given`

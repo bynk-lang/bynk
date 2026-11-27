@@ -336,6 +336,7 @@ type Response = {
   status: Int,
   headers: Map[String, String],
   body: String,
+  setCookies: List[String] = [],
 }
 
 type EventEnvelope = {
@@ -391,11 +392,32 @@ sent: HTTP gives those methods no body. Retrying cannot fix that either.
 `Response.headers` carries the response's headers with lowercased keys, so
 `res.headers.get("etag")` or `res.headers.get("retry-after")` reads one
 whatever case the server sent; a header the server repeated arrives as one
-value, joined with `", "`. That includes `set-cookie`, and there the join is
-lossy: a cookie's `Expires` attribute contains a comma
-(`Expires=Wed, 09 Jun 2027 10:18:14 GMT`), so a joined `set-cookie` cannot be
-split back into its cookies reliably. A `stub Fetch.send(_) returns Ok(Response { … })` in a test
-gives it `headers: Map.empty()` (or the headers the case needs; a `Response`, unlike a `Request`, has no defaults), and an
+value, joined with `", "`.
+
+`set-cookie` is the one header that cannot be joined. A cookie's `Expires`
+attribute contains a comma (`Expires=Wed, 09 Jun 2027 10:18:14 GMT`), so a
+joined `set-cookie` cannot be split back into its cookies. So every response
+type also carries `setCookies: List[String]`: each `set-cookie` value separately,
+exactly as received and in the order received, with `[]` when there was none.
+`headers.get("set-cookie")` keeps the joined value, for compatibility. A value
+is the header text, not parsed:
+
+```bynk,fragment
+let res <- Fetch.sendWith(login, FetchOptions { redirect: Manual })
+match res {
+	Ok(r) => r.setCookies.find((c) => c.startsWith("session=")),
+	Err(_) => None,
+}
+```
+
+A runtime too old to have `Headers.getSetCookie()` is read one value at a time
+where it yields them that way; one that already joined them cannot be split
+back, and `setCookies` then holds the joined text as its one element.
+
+A `stub Fetch.send(_) returns Ok(Response { … })` in a test
+gives it `headers: Map.empty()` (a `Response` has no default for `headers`, but
+`setCookies` defaults to `[]`, so a stub names it only when the case needs a
+cookie), and an
 `expect Fetch.send called once with req.headers.get("user-agent") == Some("…")`
 matches on what was sent.
 
@@ -440,9 +462,10 @@ byte the server sent:
 
 ```bynk
 type BytesResponse = {
-  status:  Int,
-  headers: Map[String, String],
-  body:    Bytes,
+  status:     Int,
+  headers:    Map[String, String],
+  body:       Bytes,
+  setCookies: List[String] = [],
 }
 ```
 
@@ -479,9 +502,10 @@ arrives, and its body arrives as it is read:
 
 ```bynk
 type StreamResponse = {
-  status:  Int,
-  headers: Map[String, String],
-  body:    Stream[Bytes],
+  status:     Int,
+  headers:    Map[String, String],
+  body:       Stream[Bytes],
+  setCookies: List[String] = [],
 }
 ```
 

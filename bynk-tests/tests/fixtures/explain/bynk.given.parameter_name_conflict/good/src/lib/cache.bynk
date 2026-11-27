@@ -1,0 +1,11 @@
+commons lib.cache
+
+consumes bynk.cloudflare { Kv }
+
+fn copy(key: String) -> Effect[()] given From: Kv, To: Kv {
+	let v <- From.get(key)
+	match v {
+		Some(text) => To.put(key, text),
+		None => Effect.pure(()),
+	}
+}

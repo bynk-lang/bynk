@@ -1,0 +1,9 @@
+commons lib.cache
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+fn remember(key: String) -> Effect[()] given Store: Kv, Logger {
+	let _ <- Store.put(key, "v")
+	Logger.info(key)
+}

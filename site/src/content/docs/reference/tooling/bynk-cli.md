@@ -684,7 +684,7 @@ derived and prints `environment`, `refusals`, `warnings` and the upload `order`;
 gets as far as the plan prints the whole plan (`orphans`, `order`, `contexts`, …) with the
 arrays beside it. The human `bynk: …` line is still written to stderr.
 
-**A refusal that is not in the table yet leaves no entry** (the account checks and confirmations still fall here): the run exits non-zero and writes
+**A refusal that is not in the table yet leaves no entry** (the account checks and confirmations of a run that applies, which `--plan` never reaches, still fall here): the run exits non-zero and writes
 its reason to stderr alone, and stdout can be empty, or hold a plan whose `refusals` is `[]`
 (a refusal made after the plan is printed). A client treats a non-zero exit with no entry in
 `refusals` as a refusal it cannot explain, and reads stderr.
@@ -722,6 +722,11 @@ refusal or warning, never as a pass.
 | `bynk.deploy.strict_environments_unchecked` | `refusals` | `environment`: `default` could not be built, so nothing was compared. |
 | `bynk.deploy.hyperdrive_settings_unreadable` | `refusals` | none: `[deploy.hyperdrive]` did not read. |
 | `bynk.deploy.hyperdrive_unresolved` | `refusals` | none: a Hyperdrive binding did not resolve. |
+| `bynk.deploy.adoption_unreadable` | `refusals` | `table` (`vectorize` or `containers`): its `bynk.toml` entries did not read. |
+| `bynk.deploy.adoption_unmatched` | `refusals` | `table`, `capability`: an adoption entry that names no capability of the project. |
+| `bynk.deploy.adoption_partial` | `warnings` | `table`, `capability`, `environment`: the entry adopts nothing for this environment, so the deploy creates or builds one. |
+| `bynk.deploy.account_note` | `warnings` | none: what checking the plan against the account found, as the message says it. |
+| `bynk.deploy.email_forward_destination` | `warnings` | none: a `Forward` destination Cloudflare may refuse or that could not be checked. |
 | `bynk.deploy.recreate_needs_yes` | `refusals` | none: a changed `@jurisdiction` would make a new R2 bucket, which `--yes` accepts. |
 
 **Secrets** — `deploy` sets three kinds, and the plan marks which is which:
@@ -776,13 +781,16 @@ access to the kinds listed. Without the variables, the plan stays the ledger's
 and a note says so. A listing that fails is a warning, never a failure.
 
 **Credentials for account resources.** The push runs through wrangler, so
-`wrangler login` is enough for it. Creating or deleting a KV namespace goes
-through Cloudflare's API, as Hyperdrive and the linked kinds already do. That
-needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with "Workers
-KV Storage: Edit". When a step needs them, `deploy` checks for both after the plan
-and before the confirmation, and refuses, with nothing created, naming the
-missing variable and the permission. A run that needs nothing asks nothing:
-a redeploy whose namespaces are all recorded works with `wrangler login` alone.
+`wrangler login` is enough for it. Creating or deleting a KV namespace, and
+creating an R2 bucket or a D1 database, goes through Cloudflare's API, as
+Hyperdrive and the linked kinds already do. That needs `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`, the token with "Workers KV Storage: Edit", "Workers R2
+Storage: Edit" or "D1: Edit" for the kinds it touches. When a step needs them,
+`deploy` checks for both after the plan and before the confirmation, and
+refuses, with nothing created, naming the missing variable and the permission.
+A run that needs nothing asks nothing: a redeploy whose namespaces, buckets and
+databases are all recorded works with `wrangler login` alone. D1 migrations
+still run through wrangler.
 In that case the check that a recorded namespace still exists on the account is
 skipped, and the plan notes it.
 
@@ -834,7 +842,7 @@ bynk check [INPUT] [--format rich|short|json|ndjson] [--fix[=CODE,…]] [--emit]
 
 | Argument | Default | Meaning |
 |---|---|---|
-| `INPUT` | `.` | A `.bynk` file, or a project root directory (a `bynk.toml` or `src/` subdir selects project mode; otherwise the directory is itself the source tree). |
+| `INPUT` | `.` | A `.bynk` file, or a project root directory (a `bynk.toml` or `src/` subdir selects project mode; otherwise the directory is itself the source tree). A directory with no `bynk.toml` or `src/` of its own, inside a project's `[paths] include` trees, is checked as that project, so `bynk check src` reads the project's manifest, as `bynk check` does; a `rich` run notes which project it checked. A directory outside those trees is checked as itself. `--fix` edits only the directory named. |
 | `--format` | `rich` | `rich` is the source-context rendering; `short` emits one terse `path:line:col: severity[category]: message` line per diagnostic, for the VS Code problem-matcher, CI, and scripts. `json` and `ndjson` write the diagnostics as data on stdout: see [Machine-readable diagnostics](#machine-readable-diagnostics). In `rich` and `short`, `path` is the file as you'd type it from the working directory (the input you passed, joined with the file's place in it), the same path `fmt` reports. `rich` is coloured as [`--color`](#colour) says: by default only when stderr is a terminal and `NO_COLOR` is unset or empty; `FORCE_COLOR` or `CLICOLOR_FORCE` set to anything but empty or `0` colours it without a terminal (for `less -R` or a CI log); `0` doesn't turn colour off on a terminal, `NO_COLOR` does, and it wins over both. `rich` cuts a source line longer than 400 bytes to a window around its labels, marked `…`. |
 
 | `--fix[=CODE,…]` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. With `=CODE` (comma-separated, or repeated), only those diagnostic codes' fixes. See [Applying fixes](#applying-fixes). |

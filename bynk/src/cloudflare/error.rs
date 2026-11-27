@@ -58,9 +58,6 @@ pub(crate) enum OpKind {
     QueueInfo,
     QueueDelete,
     D1MigrationsApply,
-    D1Create,
-    D1List,
-    R2Create,
     VectorizeList,
     VectorizeGet,
     VectorizeCreate,
@@ -99,8 +96,6 @@ pub(crate) enum Failure {
         stdout: String,
         stderr: String,
     },
-    /// Wrangler succeeded, but what it printed could not be read; the text says what was missing.
-    Unreadable(String),
 }
 
 /// A wrangler call that failed.
@@ -216,7 +211,6 @@ impl WranglerError {
             Failure::Missing => "wrangler not found".to_string(),
             Failure::Start(e) | Failure::Wait(e) | Failure::Io(e) => e.to_string(),
             Failure::Pipe(what) => what.to_string(),
-            Failure::Unreadable(what) => what.clone(),
             Failure::Exit {
                 exit,
                 stdout,
@@ -253,10 +247,6 @@ impl WranglerError {
     /// - A queue: "already exists" on either stream, wrangler being inconsistent about which. The
     ///   race-loser's path (ADR 0194 D2): a queue that was simply there was found by `queues
     ///   info` first.
-    /// - An R2 bucket: "already exists" and "you own it" (code 10004). A bucket another account
-    ///   owns says it is "not available" and stays a failure.
-    /// - A D1 database: "database with that name already exists", which the kind follows with a
-    ///   `d1 list` to adopt it (P4a, #2602).
     /// - A metadata index: "metadata index already exists", as written: listed between the
     ///   listing and the create, since Cloudflare builds them asynchronously.
     pub(crate) fn already_exists(&self) -> bool {
@@ -266,10 +256,6 @@ impl WranglerError {
         let lower = said.to_ascii_lowercase();
         match self.op {
             Some(OpKind::QueueCreate) => lower.contains("already exists"),
-            Some(OpKind::R2Create) => {
-                lower.contains("already exists") && lower.contains("you own it")
-            }
-            Some(OpKind::D1Create) => lower.contains("database with that name already exists"),
             Some(OpKind::VectorizeCreateMetadataIndex) => {
                 said.contains("metadata index already exists")
             }
@@ -324,7 +310,7 @@ mod tests {
 
     #[test]
     fn a_failure_says_both_streams_trimmed_or_its_exit() {
-        let op = Op::D1List;
+        let op = Op::Whoami;
         assert_eq!(exit(&op, 1, " out \n", "\n err ").said(), "err\nout");
         assert_eq!(exit(&op, 1, "", "err").said(), "err");
         assert_eq!(exit(&op, 3, "", "").said(), "wrangler exited 3");
@@ -354,18 +340,6 @@ mod tests {
     fn already_exists_is_read_per_operation() {
         let queue = Op::QueueCreate { name: "q" };
         assert!(exit(&queue, 1, "Queue Already Exists", "").already_exists());
-        let r2 = Op::R2Create {
-            name: "b",
-            jurisdiction: None,
-        };
-        assert!(exit(&r2, 1, "", "already exists, and you own it").already_exists());
-        assert!(!exit(&r2, 1, "", "already exists and is not available").already_exists());
-        let d1 = Op::D1Create {
-            name: "d",
-            jurisdiction: None,
-        };
-        assert!(exit(&d1, 1, "", "A database with that name already exists").already_exists());
-        assert!(!exit(&d1, 1, "", "already exists").already_exists());
         let meta = Op::Vectorize(VectorizeOp::CreateMetadataIndex {
             name: "i",
             property: "p",
@@ -375,7 +349,26 @@ mod tests {
         assert!(!exit(&meta, 1, "", "Metadata Index Already Exists").already_exists());
         // Only a failed exit is ever benign, and only for a create.
         assert!(!WranglerError::missing(&queue).already_exists());
-        assert!(!exit(&Op::D1List, 1, "already exists", "").already_exists());
+        assert!(!exit(&Op::Whoami, 1, "already exists", "").already_exists());
+    }
+
+    #[test]
+    fn a_refusal_is_a_4xx_that_is_neither_denied_nor_rate_limited() {
+        use super::super::rest::RestError;
+        let answered = |status, errors: &str| -> CloudflareError {
+            RestError::answered("POST", "/r2/buckets", status, errors).into()
+        };
+        assert!(answered(409, r#"[{"code":10073}]"#).is_refusal());
+        assert!(answered(400, r#"[{"code":7999}]"#).is_refusal());
+        assert!(!answered(403, r#"[{"code":10000}]"#).is_refusal());
+        assert!(
+            !answered(400, r#"[{"code":10000}]"#).is_refusal(),
+            "an auth code is denied"
+        );
+        assert!(!answered(429, "[]").is_refusal());
+        assert!(!answered(500, "[]").is_refusal());
+        assert!(!CloudflareError::Other("x".into()).is_refusal());
+        assert!(!CloudflareError::from(WranglerError::missing(&Op::Whoami)).is_refusal());
     }
 
     #[test]
@@ -385,7 +378,7 @@ mod tests {
         assert!(!exit(&queue, 1, "", "Authentication error [code: 10000]").already_gone());
         assert!(!WranglerError::missing(&queue).already_gone());
         // Only a delete is ever already gone.
-        assert!(!exit(&Op::D1List, 1, "", "does not exist").already_gone());
+        assert!(!exit(&Op::Whoami, 1, "", "does not exist").already_gone());
     }
 
     use super::super::api::VectorizeOp;
@@ -431,6 +424,17 @@ impl CloudflareError {
     /// Whether the token lacks the permission ([`super::rest::RestError::is_denied`]).
     pub(crate) fn is_denied(&self) -> bool {
         self.rest().is_some_and(super::rest::RestError::is_denied)
+    }
+
+    /// Whether Cloudflare answered and refused the request itself: a 4xx that is not a denied
+    /// token (401, 403 or an authentication code) or a rate limit (429). A create refused this way
+    /// may have found what it creates already there, which only reading the account can tell
+    /// (1D.4b, #4056): the reference documents no "already exists" code for D1, and none for R2
+    /// that tells this account's bucket from another's.
+    pub(crate) fn is_refusal(&self) -> bool {
+        self.status()
+            .is_some_and(|status| (400..500).contains(&status) && status != 429)
+            && !self.is_denied()
     }
 }
 

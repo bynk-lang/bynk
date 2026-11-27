@@ -406,6 +406,7 @@ kernel_ops! {
         Get = "get", "get(name: String) -> Option[String]";
         Bearer = "bearer", "bearer() -> Option[String]";
         ClientIp = "clientIp", "clientIp() -> Option[String]";
+        Entries = "entries", "entries() -> Map[String, String]";
     }
 /// `HttpResult[T]` (#3277): attach a cookie to a response, clear one, or read the
 /// cookies a result carries (a test's view of what the router will send).

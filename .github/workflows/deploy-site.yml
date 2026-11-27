@@ -377,7 +377,7 @@ jobs:
       # rust-cache / rust-toolchain are JS actions, so they run at the repo root
       # regardless of the job's `working-directory: site` default; the shell step
       # overrides it back to the repo root.
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
       - name: Generate + stage the crate API docs
         working-directory: ${{ github.workspace }}

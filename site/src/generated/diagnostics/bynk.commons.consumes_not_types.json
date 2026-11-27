@@ -1,12 +1,12 @@
 {
-  "blurb": "A commons is shared, pure code, so it may `consumes` types of an adapter and nothing else: write the braced list, `consumes bynk { TimedOut }` or `consumes bynk.cloudflare { SqlError }`. A whole-unit or aliased `consumes` brings services and capabilities, a name that is a capability is not a type, a name the unit does not export has nothing to import, and a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable. A context uses a capability with `consumes` and `given`. Renaming a listed type with `as` is allowed.",
+  "blurb": "A commons is shared code, so it may `consumes` only a braced list: types of an adapter, `consumes bynk { TimedOut }` or `consumes bynk.cloudflare { SqlError }`, and capabilities of a first-party unit, `consumes bynk.cloudflare { Kv }`, whose contracts its functions name in `given` (experimental). A whole-unit or aliased `consumes` brings services, a capability of a project's own adapter is reached only from a context, a name the unit does not export has nothing to import, and a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable. Renaming a listed type with `as` is allowed.",
   "category": "Other",
   "categoryAnchor": "other",
   "code": "bynk.commons.consumes_not_types",
   "constructs": [
     "consumes_decl"
   ],
-  "example": "commons app.errors\n\nconsumes bynk { Clock }      // ✗ `Clock` is a capability, not a type\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
+  "example": "commons app.errors\n\nconsumes bynk                // ✗ a whole-unit `consumes`\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
   "severity": "error",
-  "summary": "A commons `consumes` something other than a braced list of types an adapter exports: a whole-unit or aliased form, a capability, an unknown name, or a context."
+  "summary": "A commons `consumes` something other than a braced list of types an adapter exports and capabilities a first-party unit exports: a whole-unit or aliased form, a project adapter's capability, an unknown name, or a context."
 }

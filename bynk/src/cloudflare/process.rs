@@ -277,36 +277,6 @@ impl Wrangler<'_> {
         self.run(&op, worker_dir, true).map(drop)
     }
 
-    pub(crate) fn d1_create(
-        &self,
-        name: &str,
-        jurisdiction: Option<&str>,
-    ) -> Result<String, WranglerError> {
-        let op = Op::D1Create { name, jurisdiction };
-        let stdout = self.run(&op, self.project_root, false)?;
-        parse_d1_id(&stdout).ok_or_else(|| {
-            WranglerError::new(
-                &op,
-                Failure::Unreadable(format!(
-                    "`wrangler d1 create` succeeded but printed no `database_id`:\n{stdout}"
-                )),
-            )
-        })
-    }
-
-    pub(crate) fn d1_list(&self) -> Result<String, WranglerError> {
-        self.run_from_root(Op::D1List)
-    }
-
-    pub(crate) fn r2_create(
-        &self,
-        name: &str,
-        jurisdiction: Option<&str>,
-    ) -> Result<(), WranglerError> {
-        self.run_from_root(Op::R2Create { name, jurisdiction })
-            .map(drop)
-    }
-
     pub(crate) fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {
         self.run_from_root(Op::Vectorize(op))
     }
@@ -447,36 +417,9 @@ impl Wrangler<'_> {
     }
 }
 
-/// The `database_id` in `wrangler d1 create`'s output: the config snippet it prints, as TOML
-/// (`database_id = "…"`) or JSON (`"database_id": "…"`).
-pub(crate) fn parse_d1_id(output: &str) -> Option<String> {
-    let at = output.find("database_id")?;
-    let rest = &output[at + "database_id".len()..];
-    let rest = rest.trim_start_matches('"').trim_start();
-    let rest = rest.strip_prefix(['=', ':'])?.trim_start();
-    let id = rest.strip_prefix('"')?.split('"').next()?;
-    (!id.is_empty() && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
-        .then(|| id.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_d1_id_is_read_from_either_snippet_format() {
-        let toml = "✅ Successfully created DB 'shop-orders' in region WEUR\nCreated your new D1 database.\n\n[[d1_databases]]\nbinding = \"shop_orders\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n";
-        assert_eq!(
-            parse_d1_id(toml).as_deref(),
-            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
-        );
-        let json = "{\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-orders\",\n      \"database_id\": \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n    }\n  ]\n}";
-        assert_eq!(
-            parse_d1_id(json).as_deref(),
-            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
-        );
-        assert_eq!(parse_d1_id("Created your new D1 database."), None);
-    }
 
     /// The tee copies stderr through and keeps it, through a line that is not UTF-8, with the
     /// kept text readable afterwards. Unix: it runs `sh`.
@@ -619,9 +562,7 @@ mod tests {
     #[test]
     fn a_wrangler_that_cannot_start_says_why() {
         let absent = Provenance::Path(std::env::temp_dir().join("bynk-no-such-wrangler"));
-        let e = Wrangler::new(&absent, Path::new("."))
-            .d1_list()
-            .unwrap_err();
+        let e = Wrangler::new(&absent, Path::new(".")).whoami().unwrap_err();
         assert!(matches!(e.failure(), Failure::Start(_)), "{e:?}");
         assert!(!e.to_string().is_empty());
     }
@@ -630,7 +571,7 @@ mod tests {
     fn a_missing_wrangler_is_an_error_before_anything_runs() {
         let missing = Provenance::Missing;
         let api = Wrangler::new(&missing, Path::new("."));
-        assert_eq!(api.d1_list().unwrap_err().to_string(), "wrangler not found");
+        assert_eq!(api.whoami().unwrap_err().to_string(), "wrangler not found");
         assert_eq!(
             api.queue_info("q").unwrap_err().to_string(),
             "wrangler not found"

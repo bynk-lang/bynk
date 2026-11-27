@@ -319,14 +319,18 @@ export const LogLevel = {
 /**
  * An HTTP response: a status code, its headers, and a body. `headers` keys
  * are lowercased (`res.headers.get("etag")`); a header the server repeated
- * arrives as one value, joined with ", ". That includes `set-cookie`, and
- * there the join is lossy: a cookie's `Expires` attribute holds a comma, so
- * a joined `set-cookie` cannot be split back into its cookies reliably.
+ * arrives as one value, joined with ", ". `set-cookie` is the one header
+ * that cannot be joined: a cookie's `Expires` attribute holds a comma, so a
+ * joined `set-cookie` cannot be split back into its cookies. `setCookies`
+ * holds every `set-cookie` value separately, as received and in the order
+ * received (`[]` when there was none); `headers` keeps the joined value, for
+ * compatibility. A value is not parsed: it is the header text.
  */
 export interface Response {
   readonly status: number;
   readonly headers: ReadonlyMap<string, string>;
   readonly body: string;
+  readonly setCookies: readonly string[];
 }
 
 export const Response = {
@@ -335,13 +339,14 @@ export const Response = {
 /**
  * An HTTP response whose body is raw bytes, as `Fetch.receiveBytes` and
  * `Fetch.sendBytes` return it: every byte as the server sent it, where
- * `Response.body` would have decoded it as UTF-8. `headers` are as
- * `Response`'s. `b.decodeUtf8()` reads a body that is really text.
+ * `Response.body` would have decoded it as UTF-8. `headers` and `setCookies`
+ * are as `Response`'s. `b.decodeUtf8()` reads a body that is really text.
  */
 export interface BytesResponse {
   readonly status: number;
   readonly headers: ReadonlyMap<string, string>;
   readonly body: globalThis.Uint8Array;
+  readonly setCookies: readonly string[];
 }
 
 export const BytesResponse = {
@@ -465,15 +470,16 @@ export const ContentRange = {
 
 /**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
- * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
- * single-pass: a second read faults. A network failure partway through the
- * body faults the read, since the result is already `Ok`. An unread body
- * holds its connection until the request ends.
+ * and `Fetch.sendStream` return it. `headers` and `setCookies` are as
+ * `Response`'s. `body` is single-pass: a second read faults. A network
+ * failure partway through the body faults the read, since the result is
+ * already `Ok`. An unread body holds its connection until the request ends.
  */
 export interface StreamResponse {
   readonly status: number;
   readonly headers: ReadonlyMap<string, string>;
   readonly body: AsyncIterable<globalThis.Uint8Array>;
+  readonly setCookies: readonly string[];
 }
 
 export const StreamResponse = {
