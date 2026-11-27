@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __callService, type __JsonValue, type __BoundaryError, type __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __makeIntegrationKv, __makeIntegrationDoNamespace } from "../__bynk_runtime/testing/bindings.js";
+import { __makeIntegrationD1, __makeIntegrationKv, __makeIntegrationDoNamespace, __makeIntegrationQueue } from "../__bynk_runtime/testing/bindings.js";
 import * as __ns_shop_order from "../workers/shop-order/handlers.js";
 import worker___ns_shop_order from "../workers/shop-order/index.js";
 import * as fanout___ns_shop_order from "../workers/shop-order/events_fanout.js";
@@ -34,6 +34,9 @@ function __buildHarness() {
   env___ns_shop_audit.BYNK_CALL_FROM_SHOP__ORDER = "bynk-local-call-key";
   env___ns_shop_audit.BYNK_CALL_TO_SHOP__LEDGER = "bynk-local-call-key";
   env___ns_shop_audit.SHOP_LEDGER = { fetch: (req: globalThis.Request) => worker___ns_shop_ledger.fetch(req, env___ns_shop_ledger) } as __ServiceBinding;
+  env___ns_shop_audit.__BYNK_DLQ_BYNK_EV_SHOP_AUDIT_ONPLACED_C9FCFE00 = __makeIntegrationQueue();
+  env___ns_shop_audit.__BYNK_DLQ_BYNK_EV_SHOP_AUDIT_ONTALLIED_E20D56F3 = __makeIntegrationQueue();
+  env___ns_shop_audit.D1_IDEMPOTENCY = __makeIntegrationD1([["0001_idempotency_claims.sql", "CREATE TABLE idempotency_claims (\n  key TEXT PRIMARY KEY NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_claims_expires_at ON idempotency_claims (expires_at);\n"], ["0002_idempotency_values.sql", "CREATE TABLE idempotency_values (\n  key TEXT PRIMARY KEY NOT NULL,\n  value TEXT NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_values_expires_at ON idempotency_values (expires_at);\n"]]);
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_SHOP__ORDER = "bynk-local-call-key";
   rootEnv.BYNK_CALL_TO_SHOP__LEDGER = "bynk-local-call-key";

@@ -18,16 +18,25 @@ use bynk_ts::{TsExpr, TsObjectEntry, TsParam, TsStmt, TsSwitchCase, TsType, TsTy
 /// `Ok` / retries on `Err` (a deserialisation failure also retries); `email`
 /// hands the message to the runtime with one route per `from email` service.
 pub(super) fn push_message_entries(
-    (table, layout): (&UnitTable, &bynk_project::worker_layout::WorkerLayout),
+    (table, layout, context, event_owners): (
+        &UnitTable,
+        &bynk_project::worker_layout::WorkerLayout,
+        &str,
+        &std::collections::BTreeMap<String, String>,
+    ),
     queue_routes: &[QueueRoute],
     exec_params: &[TsParam],
     compose_args: &[TsExpr],
     runtime_use: &RuntimeUse,
     entries: &mut Vec<TsObjectEntry>,
 ) {
-    if !queue_routes.is_empty() {
+    // #3898 (3b): a subscriber's event queues are consumed by the same `queue` entry.
+    let event_routes =
+        super::event_queue::collect_event_queue_routes(context, table, event_owners);
+    if !queue_routes.is_empty() || !event_routes.is_empty() {
         entries.push(emit_queue_handler(
             queue_routes,
+            &event_routes,
             exec_params,
             compose_args,
             runtime_use,
@@ -50,6 +59,7 @@ pub(super) fn push_message_entries(
 /// typed structurally to avoid a `@cloudflare/workers-types` dependency.
 fn emit_queue_handler(
     queue_routes: &[QueueRoute],
+    event_routes: &[super::event_queue::EventQueueRoute],
     exec_params: &[TsParam],
     compose_args: &[TsExpr],
     ru: &RuntimeUse,
@@ -80,6 +90,7 @@ fn emit_queue_handler(
         "surface",
         call(ident("compose"), compose_args.to_vec()),
     )];
+    body.extend(super::event_queue::event_queue_dispatch(event_routes, ru));
     let mut cases: Vec<TsSwitchCase> = Vec::new();
     for route in queue_routes {
         let method_key = crate::emitter::queue_handler_method_name(&route.service, route.index);
@@ -223,7 +234,9 @@ fn emit_queue_handler(
         cases.push(case_(str_lit(route.name.clone()), case_body));
     }
     cases.push(default_case(vec![return_(None)]));
-    body.push(switch_stmt(member(ident("batch"), "queue"), cases));
+    if !queue_routes.is_empty() {
+        body.push(switch_stmt(member(ident("batch"), "queue"), cases));
+    }
 
     TsObjectEntry::Method {
         name: "queue".to_string(),

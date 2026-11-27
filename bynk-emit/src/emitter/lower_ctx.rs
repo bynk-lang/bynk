@@ -1156,6 +1156,13 @@ impl<'a> LowerCtx<'a> {
         matches!(&self.mode, BodyMode::IntegrationCase { system_jobs, .. } if system_jobs.signed_queue.contains(service))
     }
 
+    /// #3898 (3b): the `__sysdrive_event_<svc>` driver for an event address `svc.event(e)` in a
+    /// `system` case, when `svc` is a `from Events` service of the target.
+    pub(crate) fn system_event_driver(&self, service: &str) -> Option<String> {
+        matches!(&self.mode, BodyMode::IntegrationCase { system_jobs, .. } if system_jobs.event.contains(service))
+            .then(|| format!("__sysdrive_event_{service}"))
+    }
+
     /// #2136: the `__sysdrive_message_<q>` driver for a queue address
     /// `q.message(m)` in a `system` case, when `q` is a queue service of the
     /// target.

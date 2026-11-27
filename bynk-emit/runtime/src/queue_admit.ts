@@ -8,8 +8,10 @@
 // redelivery of a message that failed is admitted again and nothing is lost. A claim whose instance
 // dies lapses with its lease, for the same reason.
 
-import { edgeVerifyKeysOf } from "./boundary.ts";
+import { deserialiseEventEnvelope, edgeVerifyKeysOf, type JsonValue } from "./boundary.ts";
 import { QUEUE_DEDUP_WINDOW_SECONDS, queueReplayKey, verifyQueueMessage, type QueueRefusal } from "./queue_signing.ts";
+import type { Option, Result } from "./result.ts";
+import { runInTrace } from "./traceparent.ts";
 
 /** How long a claim is held while the handler runs, in seconds: a Worker's longest run is 15 minutes. */
 export const QUEUE_CLAIM_LEASE_SECONDS = 15 * 60;
@@ -222,4 +224,236 @@ export async function admitQueueBody(
     first ??= admitted;
   }
   return first as QueueAdmission;
+}
+
+// ---- Durable event delivery (#3898, slice 3b): a subscriber's event queue ----
+//
+// A `from Events(E)` service's Worker consumes its compiler-owned event queue (D2). Each message is a
+// #3899 signed queue message whose body is `{ type, payload, envelope }`, signed by the context that
+// declares `E` under its edge key to the subscriber. The entry verifies before it decodes, claims the
+// `eventId` for the subscriber (D11), checks the body against the signer, decodes, runs the guard and
+// the handler, and acknowledges or retries (D5). Nothing sends to these queues before the cut-over
+// (slice 4): the legacy `/_bynk/event/` route still delivers.
+
+/** D5: the retries of an event queue's consumer, Cloudflare's default (3b has no `delivery { }` on events). */
+export const EVENT_QUEUE_RETRIES = 3;
+
+/** D5: the delay a faulted delivery is retried after, per attempt, in seconds (Bynk's default). */
+export const EVENT_QUEUE_RETRY_DELAY_SECONDS = 10;
+
+/** Cloudflare's longest retry delay, in seconds (24 hours). */
+const MAX_RETRY_DELAY_SECONDS = 86_400;
+
+/**
+ * D2 step 1: admit `received` to the subscribing service `subscriber` (`<context>.<service>`, the D11
+ * key's consumer) from the event queue `queue` (the deployed name, which the signature covers). Exactly
+ * one sender is admitted: `owner`, the context that declares the event, signing under its edge key.
+ * The id claim is the Worker's `D1_IDEMPOTENCY`, as `admitQueueBody`'s is; an event queue has no
+ * dead-letter sources to try, so `queueAdmit` is called once, directly.
+ */
+export function admitEventMessage(
+  received: unknown,
+  subscriber: string,
+  queue: string,
+  owner: string,
+  env: unknown,
+  now?: () => number,
+): Promise<QueueAdmission> {
+  const ports: QueueAdmitPorts = {
+    now,
+    keysFor: queueForeignKeys(env, {}, (context) => context === owner, now),
+    claim: (key, ttl) => claimQueueMessage(env, key, ttl),
+    confirm: (key, ttl) => confirmQueueMessage(env, key, ttl),
+    release: (key) => releaseQueueMessage(env, key),
+  };
+  return queueAdmit(received, subscriber, queue, ports);
+}
+
+/** D9: whether `e` is D1's documented daily-limit error (Workers Free's row read or write cap). */
+export function isD1DailyLimit(e: unknown): boolean {
+  const text = e instanceof Error ? e.message : String(e);
+  return /exceeded D1's free tier daily row (read|write) limit/i.test(text);
+}
+
+/** D9: the seconds from `nowMs` to the next 00:00 UTC, when D1's daily limit resets, capped at 24 hours. */
+export function secondsUntilUtcMidnight(nowMs: number): number {
+  const day = 86_400_000;
+  const next = Math.floor(nowMs / day) * day + day;
+  return Math.min(MAX_RETRY_DELAY_SECONDS, Math.max(1, Math.ceil((next - nowMs) / 1000)));
+}
+
+/** D5: `retryDelay × attempts`, clamped to Cloudflare's range of 0 to 24 hours. */
+export function eventRetryDelaySeconds(retryDelaySeconds: number, attempts: number): number {
+  const wanted = retryDelaySeconds * Math.max(1, attempts);
+  return Number.isFinite(wanted) ? Math.min(MAX_RETRY_DELAY_SECONDS, Math.max(0, Math.ceil(wanted))) : MAX_RETRY_DELAY_SECONDS;
+}
+
+let d1LimitLogged = false;
+
+/** One message of an event queue's batch, typed structurally as the entry's `batch` is. */
+export interface EventQueueMessage {
+  readonly body: unknown;
+  readonly attempts: number;
+  ack(): void;
+  retry(options?: { delaySeconds: number }): void;
+}
+
+/** What the generated entry knows about one subscribing service at compile time. */
+export interface EventQueueRoute {
+  /** The subscribing service, qualified: `<context>.<service>`. */
+  readonly subscriber: string;
+  /** The event the service subscribes to, as the body's `type` names it. */
+  readonly event: string;
+  /** The context that declares the event, the only sender admitted (ADR 0289). */
+  readonly owner: string;
+  /** The `__BYNK_DLQ_<QUEUE>` producer binding of the service's dead-letter queue. */
+  readonly deadLetter: string;
+  readonly retries?: number;
+  readonly retryDelaySeconds?: number;
+}
+
+/** The verified body decoded: the envelope, and the payload in the subscriber's own type. */
+export function decodeEventBody(
+  body: unknown,
+  decodePayload: (payload: JsonValue) => Result<unknown, unknown>,
+): Result<{ readonly payload: unknown; readonly envelope: { readonly eventId: string; readonly trace: Option<string> } }, unknown> {
+  const { payload, envelope } = body as { payload: JsonValue; envelope: JsonValue };
+  const env = deserialiseEventEnvelope(envelope ?? null, "$.envelope");
+  if (env.tag === "Err") return env;
+  const decoded = decodePayload(payload ?? null);
+  if (decoded.tag === "Err") return decoded;
+  return { tag: "Ok", value: { payload: decoded.value, envelope: env.value } };
+}
+
+function faultText(e: unknown): unknown {
+  return e instanceof Error ? (e.stack || String(e)) : e;
+}
+
+/**
+ * Settle one message of a subscriber's event queue. `queue` is `batch.queue`, the deployed name.
+ * `report` reports a fault to the platform (the entry's `__bynkReportFault`). `decodePayload` is the
+ * subscriber's own deserialiser of the event's payload (the envelope's is the runtime's); `run` runs the generated subscriber handler,
+ * whose prologue is the pattern and `via schema` guard, so an excluded event completes as handled.
+ *
+ * - A refusal (unsigned, malformed, another version, a sender that is not the owner, a bad signature,
+ *   or `stale`): acknowledged, logged and reported as a fault; never handled, retried or dead-lettered (D2).
+ * - `replayed`: acknowledged without running anything (D11). `in_flight`: retried after the lease.
+ * - Verified, but its `publisherId` or `type` disagrees with the signer, or it does not decode
+ *   (deploy skew): sent unchanged to the dead-letter queue, acknowledged, and its claim released,
+ *   so a redrive after the fix is admitted once (D2, D5).
+ * - Handled (or excluded by the guard): the claim is confirmed, then the message acknowledged.
+ * - A fault: the claim is released and the message retried after `retryDelay × attempts`; the last
+ *   attempt logs `EventDelivery dead-lettered`, since the platform then moves it to the dead-letter queue.
+ * - A claim that fails on D1's daily limit is retried at the next 00:00 UTC (D9): never run unchecked.
+ */
+export async function deliverEventMessage(
+  msg: EventQueueMessage,
+  queue: string,
+  route: EventQueueRoute,
+  env: unknown,
+  report: (e: unknown) => void,
+  decodePayload: (payload: JsonValue) => Result<unknown, unknown>,
+  run: (payload: unknown, envelope: unknown) => Promise<unknown>,
+  now: () => number = Date.now,
+): Promise<void> {
+  const retries = route.retries ?? EVENT_QUEUE_RETRIES;
+  const delay = route.retryDelaySeconds ?? EVENT_QUEUE_RETRY_DELAY_SECONDS;
+  const fields = { event: route.event, subscriber: route.subscriber };
+  const faulted = (e: unknown, eventId: string | undefined): void => {
+    console.error("EventDelivery faulted", { ...fields, eventId, attempts: msg.attempts }, faultText(e));
+    report(e);
+    if (msg.attempts >= retries + 1) {
+      console.error("EventDelivery dead-lettered", { ...fields, eventId, attempts: msg.attempts });
+    }
+    msg.retry({ delaySeconds: eventRetryDelaySeconds(delay, msg.attempts) });
+  };
+  let admission: QueueAdmission;
+  try {
+    admission = await admitEventMessage(msg.body, route.subscriber, queue, route.owner, env, now);
+  } catch (e) {
+    // D9: deduplication fails closed. A claim refused by D1's daily limit waits out the reset
+    // rather than spending its retries in a burst; any other failure is a fault.
+    if (isD1DailyLimit(e)) {
+      if (!d1LimitLogged) {
+        d1LimitLogged = true;
+        console.error("EventDelivery deferred: D1 daily limit", fields);
+      }
+      msg.retry({ delaySeconds: secondsUntilUtcMidnight(now()) });
+      return;
+    }
+    faulted(e, undefined);
+    return;
+  }
+  if (!admission.ok) {
+    if (admission.reason === "in_flight") {
+      console.error("EventDelivery deferred", { ...fields, reason: "in_flight" });
+      msg.retry({ delaySeconds: Math.min(MAX_RETRY_DELAY_SECONDS, admission.retryAfterSeconds ?? 1) });
+      return;
+    }
+    if (admission.reason === "replayed") {
+      console.log("EventDelivery replayed", fields);
+      msg.ack();
+      return;
+    }
+    console.error("EventDelivery refused", { ...fields, reason: admission.reason });
+    report(new Error(queueRefusalDetail(route.subscriber, admission.reason)));
+    msg.ack();
+    return;
+  }
+  const settle = admission.settle;
+  const deadLetter = async (why: string, detail: Record<string, unknown>): Promise<void> => {
+    const dlq = env !== null && typeof env === "object"
+      ? ((env as Record<string, unknown>)[route.deadLetter] as { send(body: unknown, options?: { contentType?: string }): Promise<void> } | undefined)
+      : undefined;
+    try {
+      // Released before anything else, so a redrive (or this message's retry) is admitted again.
+      await settle(false);
+      if (dlq === undefined) throw new Error(`the producer binding ${route.deadLetter} is missing from env`);
+      await dlq.send(msg.body, { contentType: "json" });
+    } catch (e) {
+      console.error("EventDelivery dead-letter failed", { ...fields, eventId: admission.id }, faultText(e));
+      msg.retry({ delaySeconds: eventRetryDelaySeconds(delay, msg.attempts) });
+      return;
+    }
+    console.error(`EventDelivery ${why}`, { ...fields, eventId: admission.id, ...detail, outcome: "dead-lettered" });
+    report(new Error(`event ${route.event} to ${route.subscriber} was dead-lettered: ${why}`));
+    msg.ack();
+  };
+  // D2 step 2: the body must agree with its verified signer. A disagreement is a compiler or deploy
+  // bug, not an attack (the signature held), so it is dead-lettered for a redrive, not dropped.
+  const body = admission.body as { type?: unknown; envelope?: { publisherId?: unknown } } | null;
+  const type = typeof body === "object" && body !== null ? body.type : undefined;
+  const publisherId = typeof body === "object" && body !== null && typeof body.envelope === "object" && body.envelope !== null ? body.envelope.publisherId : undefined;
+  if (type !== route.event || publisherId !== admission.from) {
+    await deadLetter("mismatched", { type: typeof type === "string" ? type : null, publisherId: typeof publisherId === "string" ? publisherId : null, from: admission.from });
+    return;
+  }
+  const decoded = decodeEventBody(admission.body, decodePayload);
+  if (decoded.tag === "Err") {
+    const cause = decoded.error as { readonly kind?: unknown; readonly path?: unknown } | null;
+    await deadLetter("undecodable", {
+      path: typeof cause === "object" && cause !== null && typeof cause.path === "string" ? cause.path : "$",
+      kind: typeof cause === "object" && cause !== null && typeof cause.kind === "string" ? cause.kind : "",
+    });
+    return;
+  }
+  const { payload, envelope } = decoded.value;
+  // #3895: the handler runs in the emission's trace, which the signed envelope carries.
+  const handle = async (): Promise<void> => {
+    await run(payload, envelope);
+    await settle(true);
+  };
+  try {
+    await (envelope.trace.tag === "Some" ? runInTrace(envelope.trace.value, handle) : handle());
+  } catch (e) {
+    try {
+      await settle(false);
+    } catch (released) {
+      // A claim that cannot be released lapses with its lease; the retry waits it out as `in_flight`.
+      console.error("EventDelivery release failed", { ...fields, eventId: admission.id }, faultText(released));
+    }
+    faulted(e, admission.id);
+    return;
+  }
+  msg.ack();
 }

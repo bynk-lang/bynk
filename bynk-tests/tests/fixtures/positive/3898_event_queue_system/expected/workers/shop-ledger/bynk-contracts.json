@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {},
+  "expects": {
+    "shop.books": {
+      "bump": "308142bf7f7e6f2e"
+    }
+  },
+  "expects_shapes": {
+    "shop.books": {
+      "bump": "Svc(\"bump\",P(\"key\",B(\"String\")),Ret(B(\"Int\")))"
+    }
+  }
+}

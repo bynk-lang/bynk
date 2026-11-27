@@ -3,6 +3,7 @@
 
 import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
 import { type __JsonValue, __verifyCall, __faultResponse, __deserialiseEventEnvelope, __wireRefusal } from "../../__bynk_runtime/boundary.js";
+import { __bynkEventQueueDeliver } from "../../__bynk_runtime/queue_admit.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -63,6 +64,17 @@ export default {
         globalThis.console.error(__withTrace(`rec.listener ${__route} faulted`), e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
         __bynkReportFault(ctx, e);
         return __faultResponse("rec.listener", __route);
+      }
+    });
+  },
+  async queue(batch: { readonly queue: string; readonly messages: ReadonlyArray<{ readonly body: unknown; readonly attempts: number; readonly timestamp: globalThis.Date; ack(): void; retry(): void }> }, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
+    return __enterTrace(async () => {
+      const surface = compose(env);
+      if (batch.queue === "bynk-ev-rec-listener-onplanted-3d866774" || batch.queue.startsWith("bynk-ev-rec-listener-onplanted-3d866774-")) {
+        for (const msg of batch.messages) {
+          await __bynkEventQueueDeliver(msg, batch.queue, { subscriber: "rec.listener.OnPlanted", event: "Planted", owner: "rec.provider", deadLetter: "__BYNK_DLQ_BYNK_EV_REC_LISTENER_ONPLANTED_3D866774" }, env as unknown, (e: unknown) => __bynkReportFault(ctx, e), (p: __JsonValue) => handlers.__deserialise_Planted(p, "$.payload"), (payload: unknown, envelope: unknown) => surface.OnPlanted(payload, envelope));
+        }
+        return;
       }
     });
   },

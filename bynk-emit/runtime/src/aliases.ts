@@ -15,7 +15,7 @@ import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocket
 import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
-import { admitQueueBody } from "./queue_admit.ts";
+import { admitQueueBody, deliverEventMessage } from "./queue_admit.ts";
 import { measureEvent } from "./queue_signing.ts";
 import { dmarcVerdictOf, handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
 import { checkUnique, commitStored, committedSize, eraseStored, markErased, newErasure, moveRenamedEntries, noteClock, readStored, readsLazily, storeKey, then } from "./entries.ts";
@@ -54,6 +54,7 @@ export {
   dmarcVerdictOf as __dmarcVerdictOf,
   handleEmail as __handleEmail,
   admitQueueBody as __bynkQueueAdmit,
+  deliverEventMessage as __bynkEventQueueDeliver,
   mysqlExecute as __mysqlExecute,
   makeIntegrationPgliteBinding as __makeIntegrationPgliteBinding,
   makeIntegrationPostgres as __makeIntegrationPostgres,

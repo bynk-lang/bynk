@@ -1,0 +1,50 @@
+// #3898 (3b), D10: at `system`, `svc.event(e)` sends the event as its owner would, signed under
+// the owner's edge key, to the subscriber's event queue, and drives the Worker's `queue` entry.
+suite shop.ledger as system {
+  consumes bynk { EventEnvelope }
+
+  case "an event is delivered through the subscriber's event queue" {
+    let _ <- OnPlaced.event(Placed { id: "o1", n: 1, rush: false })
+    let n <- shop.books.count("o1")
+    expect n == 1
+  }
+
+  // D10, D11: the second delivery of the same envelope (the same `eventId`) is a replay, and runs
+  // no handler code.
+  case "the same envelope delivered twice runs the handler once" {
+    let e = Placed { id: "o2", n: 1, rush: false }
+    let at = Instant.fromEpochMillis(0)
+    let env = EventEnvelope { eventId: "evt-2", publisherId: "shop.order", emittedAt: at, schemaVersion: 1 }
+    let _ <- OnPlaced.event(e, env)
+    let _ <- OnPlaced.event(e, env)
+    let n <- shop.books.count("o2")
+    expect n == 1
+  }
+
+  case "a default envelope is a fresh emission each time" {
+    let e = Placed { id: "o3", n: 1, rush: false }
+    let _ <- OnPlaced.event(e)
+    let _ <- OnPlaced.event(e)
+    let n <- shop.books.count("o3")
+    expect n == 2
+  }
+
+  // The guard runs behind the queue entry too: an excluded event is acknowledged, and runs nothing.
+  case "the pattern guard excludes an event without running the handler" {
+    let at = Instant.fromEpochMillis(0)
+    let env = EventEnvelope { eventId: "evt-4", publisherId: "shop.order", emittedAt: at, schemaVersion: 1 }
+    let _ <- OnRush.event(Placed { id: "o4", n: 1, rush: false }, env)
+    let _ <- OnRush.event(Placed { id: "o5", n: 1, rush: true })
+    let excluded <- shop.books.count("rush:o4")
+    let handled <- shop.books.count("rush:o5")
+    expect excluded == 0
+    expect handled == 1
+  }
+
+  // D5: a handler that faults is not acknowledged: its claim is released and the message is
+  // retried after `retryDelay × attempts`. The case fails naming the retry, as a faulting handler
+  // fails a `unit` case (expected_run.txt lists it).
+  case "a faulting handler is retried" {
+    let _ <- OnPlaced.event(Placed { id: "o6", n: -1, rush: false })
+  }
+}

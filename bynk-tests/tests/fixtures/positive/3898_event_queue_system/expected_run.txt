@@ -1,0 +1,6 @@
+# #1660: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+passed=4 failed=1
+# #3898 (D5): the faulting handler's delivery is retried, which fails the case, as a faulting
+# handler fails a `unit` case; the retry's delay and the last attempt's dead-letter log are pinned
+# by bynk-emit/runtime/test/event_queue.test.ts.
+fail a faulting handler is retried

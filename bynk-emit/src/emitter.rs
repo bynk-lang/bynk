@@ -76,6 +76,7 @@ pub mod commons_barrel;
 pub(crate) mod compose;
 pub mod containers;
 pub mod contracts;
+pub(crate) mod event_queues;
 pub(crate) mod events_fanout;
 pub(crate) mod harness_names;
 pub mod http_client;

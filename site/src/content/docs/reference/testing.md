@@ -118,10 +118,30 @@ another protocol is `bynk.test.service_bad_address`. When two consumed contexts
 both declare `E`, a default envelope has no single publisher, so the case must
 pass its own (`bynk.test.event_publisher_ambiguous`).
 
-The address works at `unit` and `integration`. A `system` case can't use it
-(`bynk.test.event_needs_in_process`). There, an event reaches a subscriber only
-through its publisher's fan-out, so a `system` case calls the handler that
-emits it.
+At `unit` and `integration` the address calls the generated handler directly. No
+queue is involved and no deduplication runs: the case is a test of the handler.
+
+At `system` the event travels the way its publisher will send it once delivery
+is durable ([#3898](https://github.com/bynk-lang/bynk/issues/3898)). The case builds
+the signed queue message the event's owner would send: the
+[signed queue message](/reference/wire-format/#signed-queue-messages) format, signed under the owner's
+edge key, for the subscriber's own event queue, with the envelope's `eventId` as
+its id. It then drives the subscriber Worker's real `queue` entry with a
+one-message batch, as `q.message(m)` does for a queue consumer. The entry
+verifies the message, claims its `eventId`, decodes it, and runs the guard and the
+handler. So, at `system`:
+
+- the same `env` delivered twice runs the handler once. The second delivery is a
+  replay of an `eventId` the subscriber already handled, and it is acknowledged
+  without running any handler code;
+- with no `env`, each call is a fresh emission, with a new `eventId`;
+- an event the guard excludes is acknowledged, and runs no handler code;
+- a handler that faults is not acknowledged. Its delivery is retried after the
+  retry delay (10 seconds times the attempt), so the case fails with an error that
+  names the retry, as a faulting handler fails a `unit` case.
+
+The address yields `()` at every tier. A run against a deployment (`--against`)
+can't deliver to a queue, so it refuses the case (`bynk.test.remote_unsupported_queue`).
 
 ### Driving a WebSocket service — `svc.open(tc, …)` {#websocket-address}
 
@@ -569,7 +589,7 @@ The same `system` cases can run against Workers that are already deployed:
 from a target named under `[test.targets]` in `bynk.toml`, signing with
 secrets read from the environment. Only the public `http` routes are
 reachable there, so a case that moves the clock, addresses an `on call`
-service, delivers a queue message, runs a cron handler, or fetches an asset is refused (`bynk.test.remote_unsupported_*`), or skipped under
+service, delivers a queue message or an event, runs a cron handler, or fetches an asset is refused (`bynk.test.remote_unsupported_*`), or skipped under
 `--skip-unsupported`. A case that reads a participant's database with
 [`D1.peek`](#peek-a-database) is refused the same way
 (`bynk.test.remote_unsupported_peek`), and skipped, naming why, under

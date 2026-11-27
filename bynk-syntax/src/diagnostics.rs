@@ -5554,30 +5554,13 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 it has no public route, and a `system` case can only send requests \
                 through the Worker's front door. So `svc.call(…)` is refused in \
                 one. Call it at `unit` or `integration`, or drive an http route \
-                that reaches it. For the event equivalent, see \
-                `bynk.test.event_needs_in_process`.",
+                that reaches it.",
         example: "// demo/api.bynk\n\
                   service save { … }\n\n\
                   // tests/api.test.bynk\n\
                   case \"a key is measured\" as system {   // ✗ `save` has no public route\n\
                   case \"a key is measured\" {             // ✓\n\
                   \x20\x20\x20\x20let n <- save.call(\"abc\")\n\
-                  }",
-    },
-    Explain {
-        code: "bynk.test.event_needs_in_process",
-        blurb: "`svc.event(e)` hands an event straight to a subscriber. At \
-                `system`, an event reaches a subscriber only through its \
-                publisher's fan-out across the deployed Workers, so there is no \
-                direct delivery to make. Drive the handler that publishes the \
-                event, or deliver the event at `unit` or `integration`. For the \
-                `on call` equivalent, see `bynk.test.call_needs_in_process`.",
-        example: "// shop/ledger.bynk\n\
-                  service OnPlaced from Events(Placed) { … }\n\n\
-                  // tests/ledger.test.bynk\n\
-                  case \"a placed order is booked\" as system {   // ✗ no direct delivery at `system`\n\
-                  case \"a placed order is booked\" {             // ✓\n\
-                  \x20\x20\x20\x20let _ <- OnPlaced.event(Placed { id: \"o1\" })\n\
                   }",
     },
     Explain {
@@ -7575,6 +7558,14 @@ pub const RETIRED: &[Retired] = &[
         why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
         replacement: Some(
             "the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`",
+        ),
+    },
+    Retired {
+        code: "bynk.test.event_needs_in_process",
+        last_release: "0.661.1",
+        why: "A `system` case may now deliver an event with `svc.event(e)` (#3898): it is sent, signed as the event's owner, through the subscriber Worker's event queue entry.",
+        replacement: Some(
+            "`svc.event(e)` in a `system` case, which drives the subscriber's `queue` entry",
         ),
     },
     Retired {
@@ -11333,11 +11324,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
-        "bynk.test.event_needs_in_process",
-        "A `system`-tier case delivers an event with `svc.event(e)`; at `system` an event reaches a subscriber only through its publisher's fan-out, so the case drives the emitting handler instead, or delivers the event at `unit` or `integration`.",
-        &["case"],
-    ),
-    dg(
         "bynk.test.event_not_subscribed",
         "A test body's `svc.event(e)` delivers an event the `from Events(E)` service does not subscribe to.",
         &["case"],
@@ -11472,7 +11458,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.remote_unsupported_queue",
-        "A `system` case delivers a queue message with `q.message(m)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a queue consumer.",
+        "A `system` case delivers a queue message with `q.message(m)`, or an event with `svc.event(e)` (which travels through the subscriber's event queue), which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a queue consumer.",
         &["case"],
     ),
     dg(

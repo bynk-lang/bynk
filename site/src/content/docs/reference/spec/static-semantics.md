@@ -3245,9 +3245,11 @@ An event address `svc.event(e)` or `svc.event(e, env)` (#2052) MUST name a
 arguments (`bynk.test.service_call_arity`). `e` MUST have type `E`: another
 event the target declares or consumes is `bynk.test.event_not_subscribed`, any
 other type `bynk.types.argument_mismatch`. `env` MUST have type `EventEnvelope`
-(`bynk.types.argument_mismatch`). The address MUST NOT occur in a `system`-tier
-`case` (`bynk.test.event_needs_in_process`). Delivery evaluates the service's
-pattern filter and `via schema(N)` guard as a fan-out delivery does. An omitted
+(`bynk.types.argument_mismatch`). Delivery evaluates the service's
+pattern filter and `via schema(N)` guard as a fan-out delivery does. In a
+`system`-tier `case` the event is delivered as a signed message to the
+subscriber's event queue, through its Worker's `queue` entry (#3898); a run
+`--against` a deployment refuses it (`bynk.test.remote_unsupported_queue`). An omitted
 `env` is a fresh envelope: a new `eventId` per call, `E`'s publisher as
 `publisherId`, `Instant.fromEpochMillis(0)` as `emittedAt`, and `E`'s current
 schema version. The publisher is the target if it declares `E`, else the one

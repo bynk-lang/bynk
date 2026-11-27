@@ -515,6 +515,9 @@ pub struct SystemJobServices {
     /// #3328: the email services, driven as raw MIME through the Worker's
     /// `email()` entry (`__sysdrive_message_<svc>(mail)`).
     pub email: HashSet<String>,
+    /// #3898 (3b): the `from Events` services, driven through the Worker's `queue` entry on their
+    /// event queue (`__sysdrive_event_<svc>(payload, envelope?)`).
+    pub event: HashSet<String>,
 }
 
 /// #2019: what a `system`-tier call needs to sign the claims a refinement

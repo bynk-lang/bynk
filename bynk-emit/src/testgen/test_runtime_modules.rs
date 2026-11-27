@@ -16,7 +16,7 @@ pub(crate) const TEST_RUNTIME_MODULES: &[(&str, &[&str], &[&str], &str)] = &[
     ("observation", &[], &[], include_str!("test_runtime/observation.ts")),
     ("oidc_issuer", &["jwt_signer"], &[], include_str!("test_runtime/oidc_issuer.ts")),
     ("property", &["expectation"], &[], include_str!("test_runtime/property.ts")),
-    ("queue_signer", &[], &["EDGE_FROM_PREFIX", "canonicalJson", "edgeKeyOf", "signQueueMessage"], include_str!("test_runtime/queue_signer.ts")),
+    ("queue_signer", &["jobs"], &["EDGE_FROM_PREFIX", "canonicalJson", "edgeKeyOf", "signQueueMessage"], include_str!("test_runtime/queue_signer.ts")),
     ("remote", &[], &["__ServiceBinding"], include_str!("test_runtime/remote.ts")),
     ("run_id", &[], &[], include_str!("test_runtime/run_id.ts")),
     ("send", &[], &[], include_str!("test_runtime/send.ts")),

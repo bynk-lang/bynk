@@ -4,6 +4,32 @@ main = "index.ts"
 compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
+[[queues.producers]]
+binding = "__BYNK_DLQ_BYNK_EV_COMMERCE_NOTIFICATIONS_ONV1_1196D9BB"
+queue = "bynk-dl-commerce-notifications-onv1-1196d9bb"
+
+[[queues.producers]]
+binding = "__BYNK_DLQ_BYNK_EV_COMMERCE_NOTIFICATIONS_ONV2_56ED1507"
+queue = "bynk-dl-commerce-notifications-onv2-56ed1507"
+
+[[d1_databases]]
+binding = "D1_IDEMPOTENCY"
+database_name = "commerce-notifications-idempotency"
+database_id = "<D1_IDEMPOTENCY_ID>" # set at deploy time
+migrations_dir = "migrations/commerce-notifications-idempotency"
+
+[[queues.consumers]]
+queue = "bynk-ev-commerce-notifications-onv1-1196d9bb"
+max_batch_size = 10
+max_retries = 3
+dead_letter_queue = "bynk-dl-commerce-notifications-onv1-1196d9bb"
+
+[[queues.consumers]]
+queue = "bynk-ev-commerce-notifications-onv2-56ed1507"
+max_batch_size = 10
+max_retries = 3
+dead_letter_queue = "bynk-dl-commerce-notifications-onv2-56ed1507"
+
 [observability]
 enabled = true
 head_sampling_rate = 1.0

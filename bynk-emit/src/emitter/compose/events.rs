@@ -52,6 +52,19 @@ impl EventPlan {
             .filter(move |((p, _), _)| p == publisher)
             .map(|((_, event), subs)| (event.as_str(), subs.as_slice()))
     }
+
+    /// #3898 (3b): the publisher of the event each of `subscriber`'s services subscribes to, by
+    /// service: the one context a subscriber's event queue admits (ADR 0289).
+    pub fn owners_of(&self, subscriber: &str) -> BTreeMap<String, String> {
+        self.subscriptions
+            .iter()
+            .flat_map(|((publisher, _), subs)| {
+                subs.iter()
+                    .filter(|s| s.context == subscriber)
+                    .map(move |s| (s.service.clone(), publisher.clone()))
+            })
+            .collect()
+    }
 }
 
 /// `try { await <delivery>; } catch (e) { globalThis.console.error("EventsFanout

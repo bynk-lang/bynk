@@ -1628,8 +1628,8 @@ harness, and each response is decoded exactly as in process.
   process.
 - **What a real runtime can't honour is refused.** A deployment answers only on
   its public `http` routes, so a `system` case that moves the clock
-  (`advance Clock`), addresses an `on call` service, delivers a queue message,
-  runs a cron handler, or fetches an asset is refused with a
+  (`advance Clock`), addresses an `on call` service, delivers a queue message
+  or an event, runs a cron handler, or fetches an asset is refused with a
   `bynk.test.remote_unsupported_*` diagnostic. `--skip-unsupported` skips such
   cases instead, naming each one and why; under `--format json` each is an
   `outcome: "skipped"` case, counted in `skipped`. Without it, a suite can't

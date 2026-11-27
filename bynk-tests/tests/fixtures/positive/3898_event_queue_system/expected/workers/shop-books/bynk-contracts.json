@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "bump": "308142bf7f7e6f2e",
+    "count": "311fb50891c4411f"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "bump": "Svc(\"bump\",P(\"key\",B(\"String\")),Ret(B(\"Int\")))",
+    "count": "Svc(\"count\",P(\"key\",B(\"String\")),Ret(B(\"Int\")))"
+  }
+}

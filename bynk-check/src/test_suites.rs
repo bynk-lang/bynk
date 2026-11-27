@@ -948,7 +948,7 @@ pub fn phase_integration_bodies(
         // context that exposes an `http` service has a real edge (the public
         // boundary: deserialise → handler → serialise), so it qualifies.
         //
-        // `http`, `queue` and `email` qualify; see [`has_serialisation_edge`].
+        // `http`, `queue`, `email` and (#3898) `from Events` qualify; see [`has_serialisation_edge`].
         let has_serialisation_edge = unit_tables
             .get(&suite_target)
             .is_some_and(has_serialisation_edge);
@@ -1238,12 +1238,6 @@ pub fn phase_integration_bodies(
                 };
                 check_faults_tier(case, case_effective_tier(case, d), &mut body_errs);
                 check_snapshot_placement(case, true, &mut body_errs);
-                check_event_address_tier(
-                    case,
-                    case_effective_tier(case, d),
-                    &case_callees,
-                    &mut body_errs,
-                );
                 check_ws_address_tier(
                     case,
                     case_effective_tier(case, d),
@@ -1454,6 +1448,8 @@ fn has_serialisation_edge(target: &UnitTable) -> bool {
             bynk_syntax::ast::ServiceProtocol::Http
                 | bynk_syntax::ast::ServiceProtocol::Queue { .. }
                 | bynk_syntax::ast::ServiceProtocol::Email { .. }
+                // #3898 (3b): a subscriber, driven through its event queue.
+                | bynk_syntax::ast::ServiceProtocol::Events { .. }
         )
     })
 }
@@ -3329,51 +3325,6 @@ fn faults_claims(block: &Block) -> Vec<&bynk_syntax::ast::FaultsExpr> {
     out
 }
 
-/// #2052: report a `system`-tier case that delivers an event with
-/// `svc.event(e)`. At `system` an event reaches a subscriber only through its
-/// publisher's fan-out, which emits to every subscriber of the event rather
-/// than addressing one service, over a per-edge signed request. A case-built
-/// delivery to one subscriber has no counterpart there, so the address is an
-/// in-process one: the case drives the emitting handler instead.
-fn check_event_address_tier(
-    case: &Case,
-    tier: bynk_syntax::ast::TestTier,
-    callees: &HashMap<ExprId, checker::Callee>,
-    errors: &mut Vec<CompileError>,
-) {
-    if tier != bynk_syntax::ast::TestTier::System {
-        return;
-    }
-    let mut services: Vec<&str> = callees
-        .values()
-        .filter_map(|c| match c {
-            checker::Callee::TestService {
-                service,
-                address: checker::HandlerAddress::Event,
-                ..
-            } => Some(service.as_str()),
-            _ => None,
-        })
-        .collect();
-    services.sort_unstable();
-    services.dedup();
-    for service in services {
-        errors.push(
-            CompileError::new(
-                "bynk.test.event_needs_in_process",
-                case.name_span,
-                format!(
-                    "case `\"{}\"` delivers an event with `{service}.event(…)`, but is a `system`-tier case",
-                    case.name
-                ),
-            )
-            .with_note(
-                "at `system` an event reaches a subscriber only through its publisher's fan-out; drive the handler that emits it, or deliver the event at `unit` or `integration`",
-            ),
-        );
-    }
-}
-
 /// #3051: a `system`-tier case cannot drive a WebSocket lifecycle address: a
 /// deployed WebSocket is a real upgrade through the Worker and a Durable Object,
 /// which the system harness does not drive. The address is an in-process one.
@@ -3559,10 +3510,12 @@ fn check_call_address_tier(
 /// - an asset fetch (`svc.GET(asset)`) — answered in process from the files
 ///   the target ships, not by the deployment.
 ///
-/// The track's other two refusals, a direct agent read and `svc.event(…)`,
-/// are already refused at the `system` tier itself (an agent isn't in a
-/// `system` case's scope; `bynk.test.event_needs_in_process`), so a remote
-/// build never sees them.
+/// - `svc.event(…)` — #3898 (3b): at `system` it is a queue delivery to the
+///   subscriber's event queue, refused as `q.message(…)` is.
+///
+/// The track's other refusal, a direct agent read, is already refused at the
+/// `system` tier itself (an agent isn't in a `system` case's scope), so a
+/// remote build never sees it.
 pub fn remote_unsupported(
     case: &Case,
     callees: &HashMap<ExprId, checker::Callee>,
@@ -3624,6 +3577,13 @@ pub fn remote_unsupported(
             "bynk.test.remote_unsupported_queue",
             "delivers a queue message",
         ),
+        // #3898 (3b): at `system` an event is delivered through the subscriber's event queue, a
+        // queue delivery a deployment exposes no public wire for.
+        (
+            "event",
+            "bynk.test.remote_unsupported_queue",
+            "delivers an event",
+        ),
     ] {
         if let Some(svc) = named(&|c| match c {
             Callee::TestService {
@@ -3636,6 +3596,11 @@ pub fn remote_unsupported(
                 address: checker::HandlerAddress::Message { .. },
                 ..
             } if address == "message" => Some(service.clone()),
+            Callee::TestService {
+                service,
+                address: checker::HandlerAddress::Event,
+                ..
+            } if address == "event" => Some(service.clone()),
             _ => None,
         }) {
             return refusal(

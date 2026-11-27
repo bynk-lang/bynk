@@ -283,11 +283,61 @@ context's closure, so the config always matches what the code actually reaches:
   is no `[[migrations]]` block: Cloudflare reconciles the declared `exports` against
   the Worker's namespaces on every deploy, so an agent added later is registered too.
 - **`[triggers] crons`** — every `on cron` schedule in the context, aggregated.
-- **`[[queues.consumers]]`** — one consumer per `on queue` service.
+- **`[[queues.consumers]]`** — one consumer per `on queue` service, and one per
+  `from Events(E)` service for its compiler-owned [event queue](#the-event-queue-consumer).
 
 Because the config is generated from the closure, an integrator can read
 `wrangler.toml` as a manifest of everything the Worker touches — every downstream
 service, every agent, every trigger.
+
+### The event queue consumer
+
+Each `from Events(E)` service has a compiler-owned event queue,
+`bynk-ev-<slug>-<hash>`, and a dead-letter queue, `bynk-dl-<slug>-<hash>`
+([#3898](https://github.com/bynk-lang/bynk/issues/3898)). Both names are
+environment-qualified like any queue's. The subscriber's Worker consumes the event
+queue. Its `wrangler.toml` gains:
+
+- a `[[queues.consumers]]` for the event queue, with `max_retries = 3` and
+  `dead_letter_queue` set to the service's dead-letter queue;
+- a `[[queues.producers]]` binding, `__BYNK_DLQ_<QUEUE>`, to that dead-letter
+  queue;
+- the implicit `D1_IDEMPOTENCY` database, with its migrations.
+
+The `queue` entry hands each message on the event queue to the runtime's
+`deliverEventMessage`. It handles the message like this:
+
+1. **Verify before decoding.** The message must be a
+   [signed queue message](/reference/wire-format/#signed-queue-messages) signed by
+   the context that declares `E`, under its edge key, for this queue. No other
+   sender is admitted. A message that is unsigned, malformed, of another version,
+   from another sender or wrongly signed is acknowledged, logged
+   (`EventDelivery refused`) and reported as a fault. It is never handled, retried
+   or dead-lettered. So is one signed more than 15 days ago (`stale`).
+2. **Claim the `eventId`** for the subscribing service in `D1_IDEMPOTENCY`. A
+   delivery of an `eventId` already handled is acknowledged without running
+   anything (`EventDelivery replayed`). One whose claim is still held by a running
+   delivery is retried after that lease.
+3. **Check the body against the signer.** Its `envelope.publisherId` must be the
+   signer and its `type` must be `E`. If either disagrees, the message is sent
+   unchanged to the dead-letter queue and acknowledged, and its claim is released.
+4. **Decode** the envelope and payload with the subscriber's own codecs. A message
+   that does not decode is dead-lettered the same way (`EventDelivery undecodable`),
+   and is never retried.
+5. **Run** the guard and the handler, in the emission's trace. When the handler
+   completes, or the guard excludes the event, the claim is kept for the 15-day
+   window and the message is acknowledged. When the handler faults, the claim is
+   released and the message is retried after `10 × attempts` seconds. On the last
+   attempt, the fourth, the entry logs `EventDelivery dead-lettered` with the
+   event, the subscriber, the `eventId` and the attempts. The platform then moves
+   the message to the dead-letter queue.
+
+If D1's Free-plan daily limit refuses the claim, the message is retried at the
+next 00:00 UTC, and `EventDelivery deferred: D1 daily limit` is logged once per
+isolate. It is never handled without a claim.
+
+Nothing sends to the event queues yet. Events are still delivered through the
+`/_bynk/event/` route, which every subscriber keeps.
 
 ## The cross-Worker boundary
 

@@ -8,6 +8,32 @@ compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 binding = "SHOP_LEDGER"
 service = "shop-ledger"
 
+[[queues.producers]]
+binding = "__BYNK_DLQ_BYNK_EV_SHOP_AUDIT_ONPLACED_C9FCFE00"
+queue = "bynk-dl-shop-audit-onplaced-c9fcfe00"
+
+[[queues.producers]]
+binding = "__BYNK_DLQ_BYNK_EV_SHOP_AUDIT_ONTALLIED_E20D56F3"
+queue = "bynk-dl-shop-audit-ontallied-e20d56f3"
+
+[[d1_databases]]
+binding = "D1_IDEMPOTENCY"
+database_name = "shop-audit-idempotency"
+database_id = "<D1_IDEMPOTENCY_ID>" # set at deploy time
+migrations_dir = "migrations/shop-audit-idempotency"
+
+[[queues.consumers]]
+queue = "bynk-ev-shop-audit-onplaced-c9fcfe00"
+max_batch_size = 10
+max_retries = 3
+dead_letter_queue = "bynk-dl-shop-audit-onplaced-c9fcfe00"
+
+[[queues.consumers]]
+queue = "bynk-ev-shop-audit-ontallied-e20d56f3"
+max_batch_size = 10
+max_retries = 3
+dead_letter_queue = "bynk-dl-shop-audit-ontallied-e20d56f3"
+
 [observability]
 enabled = true
 head_sampling_rate = 1.0

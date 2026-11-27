@@ -142,7 +142,11 @@ fn context_bindings(
     instances.sort_by(|a, b| a.0.cmp(b.0));
     let mut instances: Vec<WorkerBinding> = instances.into_iter().map(|(_, b)| b).collect();
     instances.extend(dead_letter_bindings(table));
-    if unit.idempotency {
+    // #3898 (3b): a subscriber's event queue dead-letters undecodable messages, and claims each
+    // delivery's `eventId` in `D1_IDEMPOTENCY` (D5, D11).
+    let event_queues = super::event_queues::event_queues(name, table);
+    instances.extend(super::event_queues::event_dead_letter_bindings(&event_queues));
+    if unit.idempotency || super::event_queues::subscribes(table) {
         instances.push(bynk_check::worker_bindings::idempotency_binding());
     }
     let singletons: Vec<WorkerBinding> = unit

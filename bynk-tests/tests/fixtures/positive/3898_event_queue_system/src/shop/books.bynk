@@ -1,0 +1,28 @@
+// Counts how many times a subscriber's handler ran for each key, so a `system` case can read it back.
+context shop.books
+
+agent Counter {
+  key id: String
+  store count: Cell[Int] = 0
+
+  on call bump() -> Effect[Int] {
+    let _ <- count.update((c) => c + 1)
+    count
+  }
+
+  on call total() -> Effect[Int] {
+    count
+  }
+}
+
+service bump {
+  on call(key: String) -> Effect[Int] by Caller {
+    Counter(key).bump()
+  }
+}
+
+service count {
+  on call(key: String) -> Effect[Int] by Caller {
+    Counter(key).total()
+  }
+}

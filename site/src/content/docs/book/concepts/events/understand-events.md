@@ -576,6 +576,18 @@ envelope, and idempotent handling", above), which is the habit that carries over
 once delivery is durable; on Cloudflare the claim is durable and shared, so a
 duplicate delivered to another isolate, or after a restart, is still skipped.
 
+Each subscriber's Worker already accepts the durable path. On Workers, every
+`from Events(E)` service has its own compiler-owned event queue, and its Worker
+consumes it. It verifies that each message was signed by the context that
+declares `E`, skips an `eventId` it has already handled, and retries a handler
+that faults, then dead-letters it. Nothing sends to those queues yet, so nothing
+changes for a running project: publishers still deliver through the fan-out
+above. The cut-over to the queues comes in a later release. Two things show the
+new path now. A subscriber Worker declares the `D1_IDEMPOTENCY` database it claims
+`eventId`s in. And a `system` test case delivers `svc.event(e)` through the queue
+([Delivering an event](/reference/testing/#event-address)). The queue consumer is
+described in [Emission](/reference/tooling/emission/#the-event-queue-consumer).
+
 **See also:**
 [First-party `bynk` capabilities](/reference/bynk-capabilities/),
 [Understand the capability model](/book/concepts/effects-and-capabilities/understand-the-capability-model/),

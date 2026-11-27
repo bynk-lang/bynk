@@ -4,6 +4,22 @@ main = "index.ts"
 compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
+[[queues.producers]]
+binding = "__BYNK_DLQ_BYNK_EV_REC_LISTENER_ONPLANTED_3D866774"
+queue = "bynk-dl-rec-listener-onplanted-3d866774"
+
+[[d1_databases]]
+binding = "D1_IDEMPOTENCY"
+database_name = "rec-listener-idempotency"
+database_id = "<D1_IDEMPOTENCY_ID>" # set at deploy time
+migrations_dir = "migrations/rec-listener-idempotency"
+
+[[queues.consumers]]
+queue = "bynk-ev-rec-listener-onplanted-3d866774"
+max_batch_size = 10
+max_retries = 3
+dead_letter_queue = "bynk-dl-rec-listener-onplanted-3d866774"
+
 [observability]
 enabled = true
 head_sampling_rate = 1.0

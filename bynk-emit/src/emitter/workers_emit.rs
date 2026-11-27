@@ -260,7 +260,7 @@ impl WorkersEmit<'_> {
                 unit_uses,
                 (unit_consumes, consumed_types),
             ),
-            trace_requests,
+            (trace_requests, &compose_plan.events.owners_of(ctx_name)),
             (&inspect_classes, inspect_lists),
         );
         // P6.x cutover slice 2 (#1191): collected here, not inside
@@ -270,8 +270,14 @@ impl WorkersEmit<'_> {
         // — a pure function of `table`, `project.rs`'s own remaining
         // AST contact here was incidental to where the loop happened
         // to be written, not structural.
-        let (crons, queues) = bynk_check::symbols::cron_and_queue_triggers(table);
-        let queue_deliveries = bynk_check::symbols::queue_deliveries(table);
+        let (crons, mut queues) = bynk_check::symbols::cron_and_queue_triggers(table);
+        let mut queue_deliveries = bynk_check::symbols::queue_deliveries(table);
+        // #3898 (3b): each subscribing service consumes its event queue, dead-lettering to its own.
+        let event_queues = emitter::event_queues::event_queues(ctx_name, table);
+        queues.extend(event_queues.iter().map(|q| q.queue.clone()));
+        queues.sort();
+        queue_deliveries.extend(emitter::event_queues::event_queue_deliveries(&event_queues));
+        queue_deliveries.sort_by(|a, b| a.queue.cmp(&b.queue));
         // Arc C slice 4 (#1323): `emit_worker_entry` returns a real
         // `TsProgram` directly — the construction site's own
         // `Verbatim`/`NotYetConverted` wrap is gone, matching the

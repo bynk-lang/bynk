@@ -25,6 +25,7 @@ use bynk_ts::{
 mod admin;
 mod call;
 mod email;
+mod event_queue;
 mod events;
 mod field_specs;
 mod http;
@@ -272,8 +273,8 @@ pub fn emit_worker_entry(
     // query field typed by an imported refined type or enum resolves to its real
     // wire kind rather than falling through to `string`.
     visible_types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
-    // #3580: wrap `fetch` in the request recorder (`bynk dev --trace-events` only).
-    trace: bool,
+    // #3580: wrap `fetch` in the request recorder (`bynk dev --trace-events` only); #3898: each subscriber's event owner.
+    (trace, event_owners): (bool, &std::collections::BTreeMap<String, String>),
     // #3581: the dev inspect route's agent classes (else empty), and if this member lists them.
     inspect: (&[String], bool),
 ) -> TsProgram {
@@ -680,7 +681,7 @@ pub fn emit_worker_entry(
 
     // v0.10b: the queue (consumer) entry point; #3328: the email entry point.
     push_message_entries(
-        (table, layout),
+        (table, layout, context, event_owners),
         &queue_routes,
         &fault_exec_params,
         &other_compose_args,

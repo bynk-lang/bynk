@@ -1,0 +1,20 @@
+// #3898 (3b): subscribers whose Workers consume their compiler-owned event queues. A negative
+// `n` faults the handler (`Int.and` refuses a negative operand), so a case can drive the retry.
+context shop.ledger
+
+consumes shop.order
+consumes shop.books
+
+service OnPlaced from Events(Placed) {
+  on event(e: Placed) -> Effect[()] {
+    let _ <- Effect.pure(e.n.and(1))
+    let _ <- shop.books.bump(e.id)
+  }
+}
+
+// A pattern guard: an excluded event completes as handled, and runs no handler code.
+service OnRush from Events(Placed { rush: true, .. }) {
+  on event(e: Placed) -> Effect[()] {
+    let _ <- shop.books.bump("rush:\(e.id)")
+  }
+}

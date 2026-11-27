@@ -1,7 +1,0 @@
-context shop.order
-
-exports transparent { Placed, Cancelled }
-
-event Placed = { id: String }
-
-event Cancelled = { id: String }

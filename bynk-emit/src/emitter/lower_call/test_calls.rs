@@ -326,6 +326,8 @@ pub(in crate::emitter) fn lower_system_schedule_call(
                 expr: Some(expr), ..
             }) => cx.system_schedule_driver(&id.name, expr),
             Some(HandlerAddress::Message { .. }) => cx.system_message_driver(&id.name),
+            // #3898 (3b): an event is delivered through the subscriber's event queue.
+            Some(HandlerAddress::Event) => cx.system_event_driver(&id.name),
             _ => None,
         };
         if let Some(driver) = driver {

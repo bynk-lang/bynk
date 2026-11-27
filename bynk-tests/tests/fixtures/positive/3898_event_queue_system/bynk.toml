@@ -1,5 +1,5 @@
 [project]
-name = "2052-test-event-at-system"
+name = "event-queue-system"
 version = "0.1.0"
 
 [paths]

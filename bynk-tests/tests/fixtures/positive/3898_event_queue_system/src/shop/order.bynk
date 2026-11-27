@@ -1,0 +1,7 @@
+// #3898 (3b): the publisher. Nothing here sends to the subscriber's event queue yet (slice 4);
+// a `system` case sends as this context would.
+context shop.order
+
+exports transparent { Placed }
+
+event Placed = { id: String, n: Int, rush: Bool }

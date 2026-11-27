@@ -243,10 +243,15 @@ pub(super) fn emit_system_job_support(
                 ));
                 services.email.insert(sname.clone());
             }
-            ServiceProtocol::Call
-            | ServiceProtocol::Http
-            | ServiceProtocol::WebSocket { .. }
-            | ServiceProtocol::Events { .. } => {}
+            // #3898 (3b): a subscriber is driven through its event queue, as its owner would send
+            // to it (`__bynkDeliverEvent`).
+            ServiceProtocol::Events { .. } => {
+                if let Some(driver) = event_driver(target, sname, table, unit_tables, runtime_use, target_sends) {
+                    drivers.push(driver);
+                    services.event.insert(sname.clone());
+                }
+            }
+            ServiceProtocol::Call | ServiceProtocol::Http | ServiceProtocol::WebSocket { .. } => {}
         }
     }
     let mut code = Vec::new();
@@ -256,8 +261,9 @@ pub(super) fn emit_system_job_support(
         if !services.email.is_empty() {
             code.push(TestRuntimeModule::JobsEmail.splice());
         }
-        // #3899: only a target with a signed queue consumer carries the test producer's signer.
-        if !services.signed_queue.is_empty() {
+        // #3899: only a target with a signed queue consumer, or (#3898) a subscriber, carries the
+        // test producer's signer.
+        if !services.signed_queue.is_empty() || !services.event.is_empty() {
             code.push(TestRuntimeModule::QueueSigner.splice());
         }
         code.extend(drivers);
@@ -296,4 +302,76 @@ fn awaited_return(ns: &str, sname: &str, method: &str) -> TsType {
             vec![TsType::type_of(handler)],
         )],
     )
+}
+
+/// #3898 (3b): `__sysdrive_event_<svc>(payload, envelope?)`: the event serialised as its owner sends
+/// it, signed for the subscriber's event queue, and handed to the Worker's `queue` entry in a
+/// one-message batch (`__bynkDeliverEvent`). `None` when the event has no single owner among the
+/// project's contexts, which the checker refuses for a default envelope.
+fn event_driver(
+    target: &str,
+    sname: &str,
+    table: &UnitTable,
+    unit_tables: &HashMap<String, UnitTable>,
+    runtime_use: &RuntimeUse,
+    target_sends: bool,
+) -> Option<TsStmt> {
+    use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
+    let decl = table.services.get(sname)?;
+    let bynk_syntax::ast::ServiceProtocol::Events { event_type, .. } = &decl.protocol else {
+        return None;
+    };
+    let bynk_syntax::ast::TypeRef::Named(event) = event_type else {
+        return None;
+    };
+    let handler = decl
+        .handlers
+        .iter()
+        .find(|h| matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Event))?;
+    let param = handler.params.first()?;
+    let others: Vec<String> = unit_tables.keys().cloned().collect();
+    let owner =
+        bynk_check::test_suites::event_publisher(target, &event.name, unit_tables, &others).ok()?;
+    let version = unit_tables
+        .get(&owner)
+        .and_then(|t| t.events.get(&event.name))
+        .map_or(1, |d| d.schema_version());
+    let queue = bynk_project::environment::event_queue_name("default", target, sname)?;
+    let ns = test_ns(target);
+    let worker = worker_binding_name(&ns);
+    let env = member(ident("__h"), env_binding(&ns));
+    let payload = crate::emitter::serialisation::serialise_expr_via(
+        &param.type_ref,
+        &ident("payload"),
+        &ns_qualifier(&ns),
+        runtime_use,
+    );
+    let mut forward_args = vec![ident("batch"), env.clone()];
+    if target_sends {
+        forward_args.push(ident("exec"));
+    }
+    let delivered = call(
+        ident("__bynkDeliverEvent"),
+        vec![
+            env,
+            str_lit(owner),
+            str_lit(queue),
+            str_lit(event.name.clone()),
+            num_lit(version.to_string()),
+            payload,
+            ident("envelope"),
+            arrow(
+                vec![TsParam::new("batch", None), TsParam::new("exec", None)],
+                method_call(ident(worker), "queue", forward_args),
+            ),
+        ],
+    );
+    Some(async_driver(
+        format!("__sysdrive_event_{sname}"),
+        vec![
+            TsParam::new("payload", Some(driver_param_type(&param.type_ref))),
+            TsParam::optional("envelope", Some(any_type())),
+        ],
+        vec![harness_const(), ret(delivered)],
+    ))
 }

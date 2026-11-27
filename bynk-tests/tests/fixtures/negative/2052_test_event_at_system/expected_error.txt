@@ -1,2 +1,0 @@
-bynk.test.event_needs_in_process case `"a direct delivery across the wire"` delivers an event with `OnPlaced.event(…)`, but is a `system`-tier case
-# exact

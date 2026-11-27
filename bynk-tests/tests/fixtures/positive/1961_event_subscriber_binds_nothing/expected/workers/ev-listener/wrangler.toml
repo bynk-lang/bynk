@@ -4,6 +4,16 @@ main = "index.ts"
 compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
+[[queues.producers]]
+binding = "__BYNK_DLQ_BYNK_EV_EV_LISTENER_ONPING_320D11DE"
+queue = "bynk-dl-ev-listener-onping-320d11de"
+
+[[d1_databases]]
+binding = "D1_IDEMPOTENCY"
+database_name = "ev-listener-idempotency"
+database_id = "<D1_IDEMPOTENCY_ID>" # set at deploy time
+migrations_dir = "migrations/ev-listener-idempotency"
+
 [[durable_objects.bindings]]
 name = "TALLY"
 class_name = "Tally"
@@ -11,6 +21,12 @@ class_name = "Tally"
 [exports.Tally]
 type = "durable-object"
 storage = "sqlite"
+
+[[queues.consumers]]
+queue = "bynk-ev-ev-listener-onping-320d11de"
+max_batch_size = 10
+max_retries = 3
+dead_letter_queue = "bynk-dl-ev-listener-onping-320d11de"
 
 [observability]
 enabled = true
