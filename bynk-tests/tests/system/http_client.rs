@@ -1970,7 +1970,7 @@ fn a_browser_connects_a_bearer_service_and_the_response_selects_only_the_marker(
         "CHAT_SECRET=ws-test-secret\n",
     )
     .unwrap();
-    let Some((mut wranglers, port)) = boot_workerd(&dir, "chat", "/health", 4) else {
+    let Some((mut wranglers, port)) = boot_workerd(&dir, "chat", "/health") else {
         return;
     };
     // The tokens are minted here, with Node's own HMAC: the page only offers them.
