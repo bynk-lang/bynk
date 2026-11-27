@@ -1,0 +1,17 @@
+commons shop.mixed
+
+uses bynk.locale
+uses bynk.locale.types
+uses shop.cart
+
+// A unit that uses both `bynk.locale` and a unit that declares a bundle gets `bynk.locale`'s
+// `render`: it reads no bundle, so it returns the code. The bundle's `render` is not imported,
+// which is why this is not `bynk.uses.ambiguous_name`. To render shop.cart's messages, call what
+// shop.cart exports (`greeting`).
+fn echo(tag: LocaleTag) -> String {
+  render(tag, message("greeting"))
+}
+
+fn viaCart(tag: LocaleTag, name: String) -> String {
+  greeting(tag, name)
+}

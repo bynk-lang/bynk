@@ -952,6 +952,89 @@ pub(crate) fn require_callee_given(
     ctx.errors.push(err);
 }
 
+/// #911: `bynk.locale.render_shadows_bundle`. A bundle's `render` is not importable, so a unit that
+/// `uses bynk.locale` and also `uses` a unit that declares a bundle gets `bynk.locale`'s `render`
+/// for a bare `render`, which reads no bundle and returns the code. That is rarely what the author
+/// meant, so it warns, naming the unit(s). A qualified `Locale.render` is deliberate.
+fn warn_render_shadows_bundle(name: &Ident, callee: &FnDecl, ctx: &mut Ctx) {
+    let scope = &ctx.input.message_scope;
+    if name.name != "render" || scope.locale_render != Some(callee.span) {
+        return;
+    }
+    let (message, note) = match scope.bundle_units.as_slice() {
+        [] => return,
+        [unit] => (
+            format!(
+                "`render` here is `bynk.locale`'s, which reads no message bundle and returns the code; `{unit}` declares one"
+            ),
+            format!(
+                "to render `{unit}`'s messages, call a function it exports: its own `render` is not importable (`bynk.messages.cross_unit_render`)"
+            ),
+        ),
+        units => (
+            format!(
+                "`render` here is `bynk.locale`'s, which reads no message bundle and returns the code; {} declare bundles",
+                units
+                    .iter()
+                    .map(|u| format!("`{u}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            "to render a unit's messages, call a function it exports: a bundle's own `render` is not importable (`bynk.messages.cross_unit_render`)".to_string(),
+        ),
+    };
+    let err =
+        CompileError::new("bynk.locale.render_shadows_bundle", name.span, message).with_note(note);
+    ctx.errors.push(err);
+}
+
+/// #911: `bynk.messages.unknown_code`. In a unit that declares a message bundle (and in its
+/// suites), a literal `message("code")` names a code of the unit's own `@reference` block: a
+/// code resolves only against the bundles of the unit where `message(code)` is called. A code
+/// the program computes (`message(code)` with `code` a parameter) is not checked, and a unit
+/// with no bundle has nothing to check against: its `render` is `bynk.locale`'s code-echo.
+/// The callee is `bynk.locale`'s `message` by where it is declared, so `Locale.message` and
+/// `message as msg` are checked and a unit's own `message` function is not.
+fn check_message_literal(callee: &FnDecl, args: &[Expr], ctx: &mut Ctx) {
+    let Some(codes) = ctx.input.message_scope.codes.clone() else {
+        return;
+    };
+    if ctx.input.message_scope.locale_message != Some(callee.span) {
+        return;
+    }
+    let [arg] = args else {
+        return; // an arity error is reported by the call check itself
+    };
+    let ExprKind::StrLit(code) = &arg.kind else {
+        return;
+    };
+    if codes.contains(code) {
+        return;
+    }
+    let nearest = codes
+        .iter()
+        .map(|c| (crate::exports::strsim(code, c), c))
+        .filter(|(d, _)| *d <= 2)
+        .min_by_key(|(d, _)| *d)
+        .map(|(_, c)| c.clone());
+    let mut err = CompileError::new(
+        "bynk.messages.unknown_code",
+        arg.span,
+        format!("`{code}` is not a code of this unit's reference message bundle"),
+    )
+    .with_note(
+        "a message code resolves only against the bundles of the unit where `message(code)` is called; declare the code in this unit's `@reference` block, or call a function the unit that declares it exports",
+    );
+    if let Some(near) = nearest {
+        err = err.with_suggestion(
+            format!("use `{near}`"),
+            vec![(arg.span, format!("\"{near}\""))],
+            Applicability::MaybeIncorrect,
+        );
+    }
+    ctx.errors.push(err);
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_call(
     name: &Ident,
@@ -982,6 +1065,8 @@ pub(crate) fn check_call(
             .insert(expr_id, Callee::Fn(Arc::clone(&fn_decl), Vec::new()));
         warn_bynk_list_deprecation(name, args, span, ctx);
         refuse_experimental_import(name, ctx);
+        check_message_literal(&fn_decl, args, ctx);
+        warn_render_shadows_bundle(name, &fn_decl, ctx);
         let site = super::cap_bindings::CallSite {
             args,
             bindings,

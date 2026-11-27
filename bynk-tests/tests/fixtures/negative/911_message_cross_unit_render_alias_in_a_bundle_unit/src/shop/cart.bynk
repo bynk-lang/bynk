@@ -1,0 +1,13 @@
+commons shop.cart
+
+uses bynk.locale
+uses bynk.locale.types
+uses shop.messages as Messages
+
+messages "en" @reference {
+  "cart.empty" => "Your basket is empty."
+}
+
+fn banner(tag: LocaleTag, m: Message) -> String {
+  Messages.render(tag, m)
+}

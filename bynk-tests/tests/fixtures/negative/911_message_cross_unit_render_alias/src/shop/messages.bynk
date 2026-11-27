@@ -1,0 +1,12 @@
+commons shop.messages
+
+uses bynk.locale
+uses bynk.locale.types
+
+messages "en" @reference {
+  "cart.greeting" => "Hello, {name}!"
+}
+
+fn greet(tag: LocaleTag, name: String) -> String {
+  render(tag, withText(message("cart.greeting"), "name", name))
+}

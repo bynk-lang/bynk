@@ -644,6 +644,8 @@
 /book/reference/diagnostics/bynk.lex.unterminated_string/
 /book/reference/diagnostics/bynk.list.deprecated_function/
 /book/reference/diagnostics/bynk.locale.multiple_message_bundles/
+/book/reference/diagnostics/bynk.locale.render_shadows_bundle/
+/book/reference/diagnostics/bynk.messages.cross_unit_render/
 /book/reference/diagnostics/bynk.messages.format_mismatch/
 /book/reference/diagnostics/bynk.messages.incomplete/
 /book/reference/diagnostics/bynk.messages.invalid_locale_tag/
@@ -653,6 +655,7 @@
 /book/reference/diagnostics/bynk.messages.multiple_reference/
 /book/reference/diagnostics/bynk.messages.outside_commons/
 /book/reference/diagnostics/bynk.messages.placeholder_mismatch/
+/book/reference/diagnostics/bynk.messages.unknown_code/
 /book/reference/diagnostics/bynk.mysql.sql_invalid/
 /book/reference/diagnostics/bynk.mysql.sql_param_count/
 /book/reference/diagnostics/bynk.namespace.reserved/
@@ -1903,9 +1906,11 @@
 /reference/diagnostics/bynk.list.par_limit_range/
 /reference/diagnostics/bynk.list.par_traverse_unit/
 /reference/diagnostics/bynk.locale.multiple_message_bundles/
+/reference/diagnostics/bynk.locale.render_shadows_bundle/
 /reference/diagnostics/bynk.map.deprecated_function/
 /reference/diagnostics/bynk.match.as_on_wildcard/
 /reference/diagnostics/bynk.match.refined_pattern_is_range/
+/reference/diagnostics/bynk.messages.cross_unit_render/
 /reference/diagnostics/bynk.messages.format_mismatch/
 /reference/diagnostics/bynk.messages.incomplete/
 /reference/diagnostics/bynk.messages.invalid_locale_tag/
@@ -1915,6 +1920,7 @@
 /reference/diagnostics/bynk.messages.multiple_reference/
 /reference/diagnostics/bynk.messages.outside_commons/
 /reference/diagnostics/bynk.messages.placeholder_mismatch/
+/reference/diagnostics/bynk.messages.unknown_code/
 /reference/diagnostics/bynk.mysql.sql_invalid/
 /reference/diagnostics/bynk.mysql.sql_param_count/
 /reference/diagnostics/bynk.namespace.reserved/
