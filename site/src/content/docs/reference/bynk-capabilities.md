@@ -599,7 +599,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
-| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]` · `generateValue[T](model, request) -> Effect[Result[T, AiError]]`, typed output (compiler-lowered). One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
+| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]` · `generateStream(model, request: GenerateRequest) -> Effect[Result[Stream[String], AiError]]` · `generateValue[T](model, request) -> Effect[Result[T, AiError]]`, typed output (compiler-lowered). One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
 | **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]` · `transformStream(image: Stream[Bytes], options, output) -> Effect[Result[ImageStream, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
 | **`AnalyticsSql`** *(experimental)* | `query(dataset: Analytics instance, sql: String, params: List[SqlValue]) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]`. One per Worker, used bare; reads Analytics Engine datasets. The SQL is a literal or constant, with `{dataset}` for the named instance's table. See [Reading events](#reading-events-analyticssql). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[Secret]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
@@ -1371,9 +1371,7 @@ service chat from http {
 
 Each element is one event of the model's own stream, as the JSON text of that
 event, so the client sees what Workers AI sends (the shape is the model's: a
-handler that wants text deltas maps the stream and decodes each event; for a
-chat model the events observed on a real account carry a `response` text delta,
-which Cloudflare does not document). The
+handler that wants text deltas uses `generateStream` below, which reads them). The
 binding asks the model to stream; the terminal `[DONE]` marker is consumed, not
 yielded. A refusal before the stream starts (an unknown model, a usage limit) is
 the `Err`, so the handler can answer with an ordinary response; a failure after
@@ -1383,6 +1381,38 @@ the model's stream, once the Worker next writes to it. A stream a handler never
 reads or serves is never cancelled, as with any `Stream`: read it or serve it. Like every `Stream`, the
 result is read once and cannot cross a service boundary: the handler that calls
 `runStream` is the one that serves it.
+
+`generateStream(model, request)` is `generate` streamed, and what a chat UI wants:
+the same `GenerateRequest`, and a `Stream[String]` of the **text** each event added,
+ready for `Streaming(…)`:
+
+```bynk,fragment
+service chat from http {
+	on POST("/chat") (body: String) -> Effect[HttpResult[String]] by Visitor given Ai {
+		let request = GenerateRequest {
+			messages: [ChatMessage { role: ChatRole.User, content: body }],
+		}
+		let started <- Ai.generateStream("@cf/meta/llama-3.2-1b-instruct", request)
+		match started {
+			Ok(deltas) => Streaming(deltas),
+			Err(Overloaded) => ServiceUnavailable("try again shortly"),
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+}
+```
+
+An event's text is its `response`, or `choices[0].delta.content` for a model that
+answers in that shape, as `generate` reads both. A known event that adds no text
+is skipped: a `usage` report (alone, or with the padding field `p`), a role-only
+or finishing `choices` delta, and an empty or `null` `response`. Any other event
+faults the stream, naming the event's top-level keys and never its values (they
+may echo what a user wrote), so a shape Cloudflare adds shows as a fault and not
+as silent empty text. A refusal before the first event is the `Err`, as for
+`runStream`, and a model that does not stream is `AiFailed`. Token usage is not in
+the stream. The stream is read once, like every `Stream`. In a test, stub it with
+the deltas: `stub Ai.generateStream(_, _) returns Ok(Stream.of(["Hel", "lo"]))`.
+`generateStream` is experimental, like `Ai`.
 
 An `AiError` is `ModelNotFound` (an id the platform does not know, or has
 retired), `InvalidInput(message)` (a request refused as malformed or too large),

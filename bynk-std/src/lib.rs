@@ -147,11 +147,13 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
     },
     // Hyperdrive H1 (#3318): `postgres.ts` is the driver seam of `Postgres`,
     // handed to the binding by a Worker's compose, so only a Worker with a
-    // `Postgres` instance carries the package. 4.0.0, the newest 4.x that was
-    // 14 days old when #3529 moved it from 3.4.5 (the version ADR 0799 A measured).
+    // `Postgres` instance carries the package. 4.1.1, published 2026-11-11 and
+    // 14 days old on 2026-11-25 (#3549): the newest 4.x that was, and the release
+    // that fixes the Hyperdrive hang 4.1.0 introduced. #3529 moved it from 3.4.5
+    // (the version ADR 0799 A measured) to 4.0.0.
     FirstPartyNpm {
         package: "postgres",
-        version: "4.0.0",
+        version: "4.1.1",
         runtime_module: "postgres",
         reached_by: Reach::CapabilityInstance("Postgres"),
     },

@@ -2035,6 +2035,18 @@ export const __VersionToken: symbol = globalThis.Symbol("Version");
  * handler that calls `runStream` is the one that serves it, as in
  * `Streaming(events)`.
  *
+ * `generateStream(model, request)` is `generate` streamed, and what a chat UI
+ * wants: the same `GenerateRequest`, and a `Stream[String]` of the text each
+ * event added, ready for `Streaming(…)`. An event's text is its `response`, or
+ * `choices[0].delta.content` for a model that answers in that shape; an event
+ * that carries none and is a known non-text one (a `usage` report, a role-only
+ * or finishing `choices` delta, an empty or `null` `response`) is skipped. Any
+ * other event faults the stream, naming the event's top-level keys and never
+ * its values, so a shape Cloudflare adds shows up as a fault and not as silent
+ * empty text. A refusal before the first event is the `Err`, as for
+ * `runStream`; token usage is not in the stream. It is read once, like every
+ * `Stream`.
+ *
  * Workers AI is a remote service on your Cloudflare account, so a call
  * may be billed, and a model's reply is untrusted input like any other
  * user text. See Cloudflare's Workers AI pricing page for what applies,
@@ -2048,6 +2060,7 @@ export interface Ai {
   generate(model: string, request: GenerateRequest): globalThis.Promise<Result<Generation, AiError>>;
   embed(model: string, texts: readonly string[]): globalThis.Promise<Result<readonly (readonly number[])[], AiError>>;
   runStream(model: string, input: string): globalThis.Promise<Result<AsyncIterable<string>, AiError>>;
+  generateStream(model: string, request: GenerateRequest): globalThis.Promise<Result<AsyncIterable<string>, AiError>>;
 }
 
 export const __AiToken: symbol = globalThis.Symbol("Ai");

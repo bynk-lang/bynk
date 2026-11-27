@@ -2252,6 +2252,70 @@ t("WorkersAi.runStream: abandoning the stream, or reaching [DONE], cancels the m
   assert.equal(cancels, 2);
 });
 
+// #4100: `generate`, streamed: the text each event added.
+const generateStream = (chunks, req = request()) => new WorkersAi({ AI: fakeAi(sseBody(chunks)) }).generateStream("@cf/meta/llama-3.2-1b-instruct", req);
+
+t("WorkersAi.generateStream: sends the messages and settings as `generate` does, asks to stream, and yields each event's text", async () => {
+  const ai = fakeAi(sseBody(['data: {"response":"he"}\n\n', 'data: {"response":"llo"}\n\n', "data: [DONE]\n\n"]));
+  const r = await new WorkersAi({ AI: ai }).generateStream("@cf/x/y", request({ maxTokens: Some(16) }));
+  assert.deepEqual(await collect(r.value), ["he", "llo"]);
+  assert.deepEqual(ai.calls[0].input, { messages: [{ role: "user", content: "hi" }], max_tokens: 16, stream: true });
+});
+
+t("WorkersAi.generateStream: reads `choices[0].delta.content` too, and skips events that add no text", async () => {
+  const r = await generateStream([
+    'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
+    'data: {"choices":[{"delta":{"content":"a"}}]}\n\n',
+    'data: {"response":""}\n\n',
+    'data: {"response":null}\n\n',
+    'data: {"choices":[{"delta":{"content":""}}]}\n\n',
+    'data: {"response":"b"}\n\n',
+    'data: {"response":"","choices":[{"delta":{"content":"c"}}]}\n\n',
+    'data: {"response":null,"choices":[{"delta":{"content":"d"}}]}\n\n',
+    'data: {"id":"x","object":"chat.completion.chunk","created":1,"model":"m","choices":[],"usage":{"prompt_tokens":3}}\n\n',
+    'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+    'data: {"usage":{"prompt_tokens":3,"completion_tokens":2}}\n\n',
+    'data: {"usage":{"prompt_tokens":3,"completion_tokens":2},"p":"abcdef"}\n\n',
+    "data: [DONE]\n\n",
+  ]);
+  assert.deepEqual(await collect(r.value), ["a", "b", "c", "d"]);
+});
+
+t("WorkersAi.generateStream: an event with no text that is not a known one faults the stream naming its keys and never its values", async () => {
+  const r = await generateStream(['data: {"response":"ok"}\n\n', 'data: {"zeta":"secret user text","alpha":1}\n\n', 'data: {"response":"late"}\n\n']);
+  const seen = [];
+  let failure;
+  try { for await (const d of r.value) seen.push(d); } catch (e) { failure = e; }
+  assert.deepEqual(seen, ["ok"]);
+  assert.match(failure.message, /keys: alpha, zeta/);
+  assert.doesNotMatch(failure.message, /secret user text/);
+  for (const bad of ["data: not json\n\n", "data: [1]\n\n", "data: 5\n\n"]) {
+    const r2 = await generateStream([bad]);
+    await assert.rejects(async () => { for await (const _ of r2.value) { /* drain */ } }, /an event is not (JSON|a JSON object)/);
+  }
+});
+
+t("WorkersAi.generateStream: a refusal before the first event is an Err, a model that does not stream is AiFailed, and empty messages or a bad model fault", async () => {
+  const run = (reply, req = request()) => new WorkersAi({ AI: fakeAi(reply) }).generateStream("@cf/x/y", req);
+  assert.deepEqual((await run(new Error("5007: No such model"))).error, { tag: "ModelNotFound" });
+  assert.deepEqual((await run(new Error("3040: busy"))).error, { tag: "Overloaded" });
+  assert.equal((await run({ response: "not a stream" })).error.tag, "AiFailed");
+  await assert.rejects(run({}, request({ messages: [] })), /at least one message/);
+  await assert.rejects(new WorkersAi({ AI: fakeAi({}) }).generateStream("", request()), /not a model id/);
+});
+
+t("WorkersAi.generateStream: return() cancels the model's stream at once, even while the next event is awaited", async () => {
+  let cancels = 0;
+  const body = sseBody([": keep-alive\n"], { hold: true, onCancel: () => { cancels += 1; } });
+  const r = await new WorkersAi({ AI: fakeAi(body) }).generateStream("@cf/x/y", request());
+  const iterator = r.value[Symbol.asyncIterator]();
+  const pending = iterator.next();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(await iterator.return(), { done: true, value: undefined });
+  assert.equal(cancels, 1);
+  assert.deepEqual(await pending, { done: true, value: undefined });
+});
+
 // #3478: the one-time warning of a remote-only binding under `bynk dev`.
 t("WorkersAi.run: warns once under bynk dev unless the project acknowledged it, and never in a deployment", async () => {
   const warnings = [];
