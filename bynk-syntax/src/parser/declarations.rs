@@ -2528,7 +2528,7 @@ impl<'a> Parser<'a> {
     /// name (`Cap`) is a local capability; a dotted name (`B.Cap` /
     /// `platform.time.Clock`) refers to a capability provided by a consumed
     /// context — every segment but the last forms the context prefix.
-    fn parse_cap_ref(&mut self) -> Result<CapRef, CompileError> {
+    pub(crate) fn parse_cap_ref(&mut self) -> Result<CapRef, CompileError> {
         let role = "as a capability name in the `given` clause";
         let mut parts = vec![self.expect_ident(role)?];
         while self.peek_kind() == Some(TokenKind::Dot) {
@@ -2553,8 +2553,25 @@ impl<'a> Parser<'a> {
         Ok(CapRef {
             context,
             name,
+            bound: None,
             span,
         })
+    }
+
+    /// #3959: one entry of a function's or handler's `given` clause: a
+    /// capability reference, or a capability parameter `Name: Kind`. The
+    /// clause is followed by `where`, a contract clause or `{`, so a `:` after a
+    /// bare name is unambiguous. Where a parameter may appear is the checker's
+    /// to say (`bynk.given.parameter_outside_commons`).
+    fn parse_given_entry(&mut self) -> Result<CapRef, CompileError> {
+        let mut cap = self.parse_cap_ref()?;
+        if cap.context.is_none() && self.peek_kind() == Some(TokenKind::Colon) {
+            self.bump();
+            let bound = self.expect_ident("as the kind that bounds a capability parameter")?;
+            cap.span = cap.span.merge(bound.span);
+            cap.bound = Some(bound);
+        }
+        Ok(cap)
     }
 
     fn parse_provider_decl(&mut self) -> Result<ProviderDecl, CompileError> {
@@ -4907,9 +4924,9 @@ impl<'a> Parser<'a> {
         let mut given = Vec::new();
         if self.peek_kind() == Some(TokenKind::Given) {
             self.bump();
-            given.push(self.parse_cap_ref()?);
+            given.push(self.parse_given_entry()?);
             while self.eat(TokenKind::Comma).is_some() {
-                given.push(self.parse_cap_ref()?);
+                given.push(self.parse_given_entry()?);
             }
         }
         Ok(given)

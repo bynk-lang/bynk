@@ -962,7 +962,7 @@ fn analyse_project_inner(
                 let mut schema_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
                 let (mut updated, _) = crate::schema_registry::reconcile(
                     &existing_reg,
-                    &unit_tables,
+                    (&unit_tables, &unit_uses),
                     &mut schema_errors,
                 );
                 errors.extend_for(None, schema_errors);

@@ -1811,6 +1811,7 @@ capability Store {
                 name: "Clock".to_string(),
                 span: Span::default(),
             },
+            bound: None,
             span: Span::default(),
         };
         let ir = lower_cap_ref_ir(&cap_ref);
@@ -1838,6 +1839,7 @@ capability Store {
                 name: "Ledger".to_string(),
                 span: Span::default(),
             },
+            bound: None,
             span: Span::default(),
         };
         let ir = lower_cap_ref_ir(&cap_ref);
@@ -2662,6 +2664,7 @@ provides Store = MemStore given Random, Clock {
                     name: "Clock".to_string(),
                     span: Span::default(),
                 },
+                bound: None,
                 span: Span::default(),
             }],
             ops: Vec::new(),

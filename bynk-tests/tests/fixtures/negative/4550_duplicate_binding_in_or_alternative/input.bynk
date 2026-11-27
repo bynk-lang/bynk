@@ -1,0 +1,13 @@
+// #4550: alternatives of an or-pattern must share `x`, which is fine, but
+// the second alternative binds `x` twice.
+commons app.dup
+
+type Shape =
+	| Dot(x: Int)
+	| Line(a: Int, b: Int)
+
+fn pick(s: Shape) -> Int {
+	match s {
+		Dot(x) | Line(x, x) => x,
+	}
+}

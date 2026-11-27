@@ -1,0 +1,10 @@
+commons demo
+
+type Pair =
+	| Both(l: Int, r: Int)
+
+fn sum(p: Pair) -> Int {
+	match p {
+		Both(a, b) => a + b,
+	}
+}

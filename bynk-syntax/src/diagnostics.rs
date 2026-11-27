@@ -1264,9 +1264,14 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }   // ✗ one member's response, shared with all\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }",
     },
     Explain {
+        code: "bynk.commons.capability_unused",
+        blurb: "A commons may select a first-party capability in its braced `consumes`, so that its functions can name it in `given`: as a shared capability (`given Logger`) or as the bound of a capability parameter (`given Store: Kv`). The selection brings in the capability's contract and nothing else, so one that no function in the file names only misleads a reader about what the library reaches. Remove it from the list, or use it. Capabilities in a commons are experimental: `[unstable] allow = [\"bynk.given.parameters\"]`.",
+        example: "commons shop.cache\n\nconsumes bynk.cloudflare { Kv }   // ✗ nothing here names `Kv`\n\nfn key(id: String) -> String { \"session:\\(id)\" }\n\nconsumes bynk.cloudflare { Kv }   // ✓ a function's `given` names it\n\nfn forget(id: String) -> Effect[()] given Store: Kv {\n\tStore.delete(key(id))\n}",
+    },
+    Explain {
         code: "bynk.commons.consumes_not_types",
-        blurb: "A commons is shared, pure code, so it may `consumes` types of an adapter and nothing else: write the braced list, `consumes bynk { TimedOut }` or `consumes bynk.cloudflare { SqlError }`. A whole-unit or aliased `consumes` brings services and capabilities, a name that is a capability is not a type, a name the unit does not export has nothing to import, and a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable. A context uses a capability with `consumes` and `given`. Renaming a listed type with `as` is allowed.",
-        example: "commons app.errors\n\nconsumes bynk { Clock }      // ✗ `Clock` is a capability, not a type\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
+        blurb: "A commons is shared code, so it may `consumes` only a braced list: types of an adapter, `consumes bynk { TimedOut }` or `consumes bynk.cloudflare { SqlError }`, and capabilities of a first-party unit, `consumes bynk.cloudflare { Kv }`, whose contracts its functions name in `given` (experimental). A whole-unit or aliased `consumes` brings services, a capability of a project's own adapter is reached only from a context, a name the unit does not export has nothing to import, and a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable. Renaming a listed type with `as` is allowed.",
+        example: "commons app.errors\n\nconsumes bynk                // ✗ a whole-unit `consumes`\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
     },
     Explain {
         code: "bynk.consumes.alias_conflict",
@@ -2388,20 +2393,45 @@ agent Cart {
         example: "fn same[T](a: T) -> T where U: Eq { a }   // ✗ `U` is not a parameter here\n\nfn same[T](a: T) -> T where T: Eq { a }   // ✓ bound a parameter that is declared",
     },
     Explain {
+        code: "bynk.given.binding_duplicate",
+        blurb: "A call binds each of its callee's capability parameters exactly once, inside the argument list after `given`. Binding one twice leaves the call with two meanings for the parameter. Remove the repeat. Binding one instance to two different parameters is allowed, because the aliasing is written where a reader sees it.",
+        example: "copy(key, given From = Sessions, To = Archive, From = Archive)   // ✗ `From` is bound twice\n\ncopy(key, given From = Sessions, To = Archive)                   // ✓ each parameter once",
+    },
+    Explain {
+        code: "bynk.given.binding_kind_mismatch",
+        blurb: "A capability parameter is bounded by a kind (`given Store: Kv`), and a call binds it to a capability the caller holds of exactly that kind: a derived instance of it (`capability Sessions = Kv`), the bare kind where the kind allows a bare use (only `Kv` today), or, in a commons, the caller's own parameter of that kind. A capability of another kind is refused however alike their operations are, because reading the wrong resource is well-typed and nothing else would catch it.",
+        example: "capability Orders = D1\ncapability Sessions = Kv\n\nfn touch(id: String) -> Effect[()] given Orders {\n\tforget(id, given Store = Orders)     // ✗ `Orders` is a `D1`, and `Store` takes a `Kv`\n}\n\nfn touch(id: String) -> Effect[()] given Sessions {\n\tforget(id, given Store = Sessions)   // ✓ an instance of `Kv`\n}",
+    },
+    Explain {
+        code: "bynk.given.binding_missing",
+        blurb: "A commons function's capability parameter (`given Store: Kv`) stands for whichever instance its caller chooses, and every call says which one, inside the argument list after the ordinary arguments: `forget(id, given Store = Sessions)`. Nothing is inferred or defaulted, even when the caller holds only one capability of the kind, because binding the wrong instance reads or writes the wrong data and is well-typed. The fix offers one binding per capability of the kind the caller holds; it is applied by `bynk check --fix` only when there is exactly one, so the tools never choose between instances.",
+        example: "fn touch(id: String) -> Effect[()] given Sessions {\n\tforget(id)                           // ✗ `Store` is unbound\n}\n\nfn touch(id: String) -> Effect[()] given Sessions {\n\tforget(id, given Store = Sessions)   // ✓ the instance is written at the call\n}",
+    },
+    Explain {
+        code: "bynk.given.binding_shared",
+        blurb: "A commons function names a capability with no instances bare, as a shared capability: `given Logger` means the caller's one `Logger`, which the caller's own `given` supplies, exactly as between context functions. There is nothing to choose, so a shared capability is never bound at a call. Remove the binding; only capability parameters (`given Store: Kv`) are bound.",
+        example: "fn remember(key: String) -> Effect[()] given Store: Kv, Logger { … }\n\nremember(key, given Store = Sessions, Logger = Logger)   // ✗ `Logger` is shared\n\nremember(key, given Store = Sessions)                    // ✓ the caller's `given Logger` supplies it",
+    },
+    Explain {
+        code: "bynk.given.binding_unknown",
+        blurb: "The bindings after `given` in a call's arguments name the callee's capability parameters (`given Store: Kv`). A name the callee does not declare, or a binding on a call to a function, method or constructor with no capability parameters at all, has nothing to bind. Check the parameter's name in the callee's signature, or remove the bindings.",
+        example: "fn forget(id: String) -> Effect[()] given Store: Kv { … }\n\nforget(id, given Store = Sessions, Cache = Sessions)   // ✗ `forget` has no parameter `Cache`\n\nforget(id, given Store = Sessions)                    // ✓",
+    },
+    Explain {
         code: "bynk.given.cross_context_unknown_capability",
         blurb: "A context may only depend on a capability that the context providing it exports. `exports capability { … }` is the provider's decision about what it offers other contexts, and a capability it leaves out stays its own. So `consumes clock { Clock }`, or a qualified `given clock.Clock`, is refused when `clock` does not list `Clock`. Add the name to the provider's `exports capability` clause (it must declare and provide the capability), or correct the spelling here. A context that is not consumed at all is `bynk.resolve.unconsumed_context`.",
         example: "// shop.bynk\ncontext shop\n\nconsumes clock { Clock }   // ✗ `clock` exports no `Clock`\n\n\
                   // clock.bynk\ncontext clock\n\nexports capability { Clock }   // ✓ the provider offers it",
     },
     Explain {
-        code: "bynk.given.fn_outside_context",
-        blurb: "`given` lets a function use capabilities, and only a context declares which capabilities it consumes. A commons is shared by every context that uses it, and those may consume different capabilities, so a function in a commons or a suite cannot declare `given`. Take the operation as a parameter instead, and pass `(m) => Logger.error(m)` from the handler, or move the function into the context that consumes the capability. A method cannot declare `given` anywhere: that is `bynk.given.fn_unsupported`.",
-        example: "fn warn(what: String) -> Effect[()] given Logger { … }   // ✗ a commons function has no `given`\n\nfn warn(log: (String) -> Effect[()], what: String) -> Effect[()] { … }   // ✓ the caller passes the operation in",
+        code: "bynk.given.fn_unsupported",
+        blurb: "Only a free function in a context or a commons that returns `Effect[T]` may declare `given`. A capability operation is an effect, so a function that reaches one has to say so in its return type, and a method has no place to carry the capabilities. `Events` is refused too: `Events.emit` buffers until its handler commits, so emit in the handler, or pass the event back to the caller. An adapter's helpers are pure, so one that declares `given` is refused with this code too. Return `Effect[T]` and make it a free function, or take the operation as a function-value parameter. A capability parameter outside a commons function is `bynk.given.parameter_outside_commons`.",
+        example: "fn size(sku: String) -> Int given Logger {   // ✗ it must return an `Effect`\n    3\n}\n\nfn size(sku: String) -> Effect[Int] given Logger {   // ✓\n    Effect.pure(3)\n}",
     },
     Explain {
-        code: "bynk.given.fn_unsupported",
-        blurb: "Only a free function in a context that returns `Effect[T]` may declare `given`. A capability operation is an effect, so a function that reaches one has to say so in its return type, and a method has no place to carry the capabilities. `Events` is refused too: `Events.emit` buffers until its handler commits, so emit in the handler, or pass the event back to the caller. Return `Effect[T]` and make it a free function, or take the operation as a function-value parameter. A `given` in a commons is `bynk.given.fn_outside_context`.",
-        example: "fn size(sku: String) -> Int given Logger {   // ✗ it must return an `Effect`\n    3\n}\n\nfn size(sku: String) -> Effect[Int] given Logger {   // ✓\n    Effect.pure(3)\n}",
+        code: "bynk.given.kind_needs_parameter",
+        blurb: "A commons is shared by contexts that may hold several instances of a kind, so it never names an instantiable kind (`Kv`, `D1`, `R2`, `Queue`, `Service`, …) bare: that would quietly mean \"the caller's default instance\". Declare a capability parameter bounded by the kind instead, `given Store: Kv`, and each caller binds it to one of its own instances with `given Store = Sessions` (or to its bare `Kv`, which it then writes explicitly). This holds in a test-only commons too. A kind with no instances, such as `Logger`, is named bare as a shared capability.",
+        example: "consumes bynk.cloudflare { Kv }\n\nfn forget(id: String) -> Effect[()] given Kv {          // ✗ which `Kv`?\n\tKv.delete(id)\n}\n\nfn forget(id: String) -> Effect[()] given Store: Kv {   // ✓ the caller binds it\n\tStore.delete(id)\n}",
     },
     Explain {
         code: "bynk.given.missing_for_call",
@@ -2419,6 +2449,21 @@ agent Cart {
                     warn(sku)                           // ✗ `warn` needs `given Logger`\n}\n\n\
                   on call(sku: String) -> Effect[()] by Caller given Logger {   // ✓ declared on the caller\n    \
                     warn(sku)\n}",
+    },
+    Explain {
+        code: "bynk.given.parameter_name_conflict",
+        blurb: "Inside a commons function's body a capability parameter is called like a capability (`Store.get(key)`), so its name must mean one thing there. A parameter may not take the name of a capability or kind the commons can see (`given Kv: Kv`, or `given Clock: Kv` beside a selected `Clock`), of one of the function's type parameters, or of another of its capability parameters. Rename it.",
+        example: "fn copy(key: String) -> Effect[()] given Kv: Kv, To: Kv { … }     // ✗ `Kv` is the kind's own name\n\nfn copy(key: String) -> Effect[()] given From: Kv, To: Kv { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.given.parameter_outside_commons",
+        blurb: "A capability parameter (`given Store: Kv`) belongs to a free function in a commons, the one place capability-polymorphic code lives. A context function, a method, a handler, a provider and a suite helper name the capabilities they use directly, with concrete instances only, so a reader of a context sees exactly which resource each body touches. Write `given Sessions` there; a helper over two instances moves to a commons, which the context `uses`.",
+        example: "context shop\n\nfn forget(id: String) -> Effect[()] given Store: Kv { … }   // ✗ a context function\n\nfn forget(id: String) -> Effect[()] given Sessions {         // ✓ the instance, by name\n\tSessions.delete(id)\n}",
+    },
+    Explain {
+        code: "bynk.given.shared_as_parameter",
+        blurb: "A capability parameter exists to choose between instances, so its bound must be a kind with instances (`Kv`, `D1`, `R2`, …). A capability with none (`Clock`, `Random`, `Logger`, `Fetch`, `Secrets`, `Locale`, `Idempotency`, the Cloudflare singletons, `Crypto`) has exactly one per caller, so a binding would add a name and no choice. Name it bare, as a shared capability: `given Logger`.",
+        example: "fn note(text: String) -> Effect[()] given L: Logger {   // ✗ there is only one `Logger`\n\tL.info(text)\n}\n\nfn note(text: String) -> Effect[()] given Logger {      // ✓ a shared capability\n\tLogger.info(text)\n}",
     },
     Explain {
         code: "bynk.given.undeclared_capability",
@@ -6094,6 +6139,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "fn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        1 => \"uno\"    // ✗ `1` is already matched above\n        _ => \"other\"\n    }\n}\n\nfn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        2 => \"two\"    // ✓\n        _ => \"other\"\n    }\n}",
     },
     Explain {
+        code: "bynk.types.duplicate_pattern_binding",
+        blurb: "A pattern binds each name once. With `Both(a, a)`, or `Some(a as a)`, the arm's body would read a name that stands for two values, and which one it saw would be an accident of how the match is compiled. The rule holds wherever a pattern binds: variant payloads, record fields, list elements and their `..rest`, `as` names, nested patterns, `let … else`, a lambda's parameter pattern and the `is` operator. Rename one of the bindings, or write `_` where the value is not needed. An or-pattern is different: its alternatives must bind the same names (`bynk.types.or_pattern_binding_mismatch`), so `Walk(n) | Run(n)` is required, not a duplicate; a name repeated within one alternative is still refused. A field named twice in a record pattern is `bynk.types.duplicate_pattern_field`.",
+        example: "type Pair =\n    | Both(l: Int, r: Int)\n\nfn sum(p: Pair) -> Int {\n    match p {\n        Both(a, a) => a + a,    // ✗ `a` is bound twice\n    }\n}\n\nfn sum(p: Pair) -> Int {\n    match p {\n        Both(a, b) => a + b,    // ✓\n    }\n}",
+    },
+    Explain {
         code: "bynk.types.duplicate_pattern_field",
         blurb: "A record pattern lists the fields it reads, and each may be named once. Naming a field twice would bind or test the same value twice, which is almost always a slip for a different field. Keep one mention, and give it the name you want to use, as in `total: t`. The `..` at the end covers every field you leave out.",
         example: "type Order = { id: String, total: Int }\n\nfn amount(o: Order) -> Int {\n    match o {\n        Order { total, total: t, .. } => t    // ✗ `total` is named twice\n    }\n}\n\nfn amount(o: Order) -> Int {\n    match o {\n        Order { total: t, .. } => t           // ✓\n    }\n}",
@@ -7361,6 +7411,14 @@ pub const RETIRED: &[Retired] = &[
         ),
     },
     Retired {
+        code: "bynk.given.fn_outside_context",
+        last_release: "0.661.1",
+        why: "A commons free function may now declare `given` (#3959): capability parameters, which every call binds, and shared capabilities; an adapter's helper that declares `given` is `bynk.given.fn_unsupported`.",
+        replacement: Some(
+            "`given Store: Kv, Logger` on a commons function, bound at each call with `given Store = Sessions`",
+        ),
+    },
+    Retired {
         code: "bynk.http.multipart_body_unbounded",
         last_release: "0.661.1",
         why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
@@ -8059,9 +8117,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.codegen.tsc_failed",
         "`tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068).",
     ),
+    warn(dg(
+        "bynk.commons.capability_unused",
+        "A commons selects a first-party capability in its `consumes` that no function's `given` names (warning).",
+        &["consumes_decl"],
+    )),
     dg(
         "bynk.commons.consumes_not_types",
-        "A commons `consumes` something other than a braced list of types an adapter exports: a whole-unit or aliased form, a capability, an unknown name, or a context.",
+        "A commons `consumes` something other than a braced list of types an adapter exports and capabilities a first-party unit exports: a whole-unit or aliased form, a project adapter's capability, an unknown name, or a context.",
         &["consumes_decl"],
     ),
     dg(
@@ -8279,6 +8342,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.account_name_conflict",
         "Two instances in the build would take the same name on the Cloudflare account, so `bynk deploy` stopped before planning. The message names the instances and the name they share; rename one.",
     ),
+    warn(d(
+        "bynk.deploy.account_note",
+        "Checking the plan against the Cloudflare account found something worth saying, such as a resource it could not check. The message says what; the plan is still made (warning).",
+    )),
+    warn(d(
+        "bynk.deploy.adoption_partial",
+        "`[deploy.vectorize.<Capability>]` or `[deploy.containers.<Capability>]` in `bynk.toml` adopts an index or image only for some environments, and this environment is not one of them, so the deploy creates (or builds) one (warning).",
+    )),
+    d(
+        "bynk.deploy.adoption_unmatched",
+        "An entry under `[deploy.vectorize]` or `[deploy.containers]` in `bynk.toml` names no capability of this project, so `bynk deploy` stopped before planning: an entry that matches nothing would have the deploy create a new, empty index or build an image instead of adopting yours. The message names the entry and the nearest capability.",
+    ),
+    d(
+        "bynk.deploy.adoption_unreadable",
+        "`[deploy.vectorize]` or `[deploy.containers]` in `bynk.toml` did not read, so `bynk deploy` stopped before planning. The message names the problem.",
+    ),
     d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
@@ -8327,6 +8406,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.email_claim_refused",
         "`bynk deploy` could not decide which inbound email addresses the Worker claims in a named environment from `[deploy.email]` in `bynk.toml`, so it stopped before planning. With `--format json` the plan's `refusals` carries it with the `environment`.",
     ),
+    warn(d(
+        "bynk.deploy.email_forward_destination",
+        "A handler's `Forward` goes to an address Cloudflare may refuse, or one that cannot be checked at deploy: it is computed at run time, is not a verified destination address, or the lookup did not answer. The plan is still made, and the sender's mail would bounce if Cloudflare refuses the forward (warning).",
+    )),
     d(
         "bynk.deploy.empty_group",
         "A `[deploy.workers.<key>]` group lists no context.",
@@ -8946,23 +9029,63 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["where_clause"],
     ),
     dg(
+        "bynk.given.binding_duplicate",
+        "A call binds one of its callee's capability parameters more than once.",
+        &["call"],
+    ),
+    dg(
+        "bynk.given.binding_kind_mismatch",
+        "A call binds a capability parameter to a capability that is not of the parameter's kind (a `D1` instance for a `Kv` parameter).",
+        &["call"],
+    ),
+    dg(
+        "bynk.given.binding_missing",
+        "A call leaves one of its callee's capability parameters unbound; the fix is machine-applicable only when the caller holds exactly one candidate.",
+        &["call"],
+    ),
+    dg(
+        "bynk.given.binding_shared",
+        "A call binds a shared capability of its callee (`given Logger = Logger`); only capability parameters are bound.",
+        &["call"],
+    ),
+    dg(
+        "bynk.given.binding_unknown",
+        "A call binds a name that is not one of its callee's capability parameters, or binds on a callee that has none.",
+        &["call"],
+    ),
+    dg(
         "bynk.given.cross_context_unknown_capability",
         "`given B.Cap` or `consumes B { Cap }` names a capability the consumed context does not export.",
         &["given_clause"],
     ),
     dg(
-        "bynk.given.fn_outside_context",
-        "A function in a commons (or a suite) declares `given`; only a context function can.",
+        "bynk.given.fn_unsupported",
+        "A `given` clause on a method, on a function that does not return `Effect[T]`, on an adapter's function, or naming `Events`.",
         &["given_clause"],
     ),
     dg(
-        "bynk.given.fn_unsupported",
-        "A `given` clause on a method, on a function that does not return `Effect[T]`, or naming `Events`.",
+        "bynk.given.kind_needs_parameter",
+        "A commons function names an instantiable kind bare (`given Kv`); it must be a capability parameter (`given Store: Kv`).",
         &["given_clause"],
     ),
     dg(
         "bynk.given.missing_for_call",
         "A call to a function that declares `given` from a body that does not declare those capabilities.",
+        &["given_clause"],
+    ),
+    dg(
+        "bynk.given.parameter_name_conflict",
+        "A capability parameter shadows a visible capability or kind, a type parameter, or another capability parameter.",
+        &["given_clause"],
+    ),
+    dg(
+        "bynk.given.parameter_outside_commons",
+        "`given Name: Kind` on a context function, a method, a handler, a provider or a suite helper; only a commons function takes capability parameters.",
+        &["given_clause"],
+    ),
+    dg(
+        "bynk.given.shared_as_parameter",
+        "A capability with no instances bounds a capability parameter (`given L: Logger`); it is named bare, as a shared capability.",
         &["given_clause"],
     ),
     dg(
@@ -11387,6 +11510,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.duplicate_literal_arm",
         "A `match` has two arms for the same literal value.",
         &["match_arm"],
+    ),
+    dg(
+        "bynk.types.duplicate_pattern_binding",
+        "A pattern binds the same name more than once.",
+        &["match_arm", "is_expr"],
     ),
     dg(
         "bynk.types.duplicate_pattern_field",

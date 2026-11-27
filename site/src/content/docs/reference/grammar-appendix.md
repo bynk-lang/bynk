@@ -115,7 +115,10 @@ cron_handler ::= "on" "schedule" "(" (string_literal | identifier) ")" "(" (para
 queue_handler ::= "on" "message" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 ws_open_handler ::= "on" "open" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 ws_close_handler ::= "on" "close" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
-given_clause ::= "given" qualified_name ("," qualified_name)*
+given_clause ::= "given" (qualified_name | capability_parameter) ("," (qualified_name | capability_parameter))*
+capability_parameter ::= identifier ":" identifier
+capability_bindings ::= "given" capability_binding ("," capability_binding)*
+capability_binding ::= identifier "=" qualified_name
 actor_decl ::= "actor" identifier ("{" "auth" "=" scheme scheme_config? ("," "identity" "=" type_ref)? "}" | "=" identifier "where" expression)
 scheme ::= "None" | "Internal" | "Bearer" | "Signature" | "Oidc" | "Foreign" | "SignedCookie" | "ApiKey"
 scheme_config ::= "(" scheme_arg ("," scheme_arg)* ")"
@@ -189,7 +192,8 @@ lambda_record_field ::= identifier ":" (identifier | wildcard_pattern | lambda_r
 paren_expr ::= "(" expression ")"
 method_call ::= primary "." identifier (type_app_open type_ref ("," type_ref)* "]")? "(" (expression ("," expression)*)? ","? ")"
 field_access ::= primary "." identifier
-call ::= (identifier | contextual_identifier) "(" (expression ("," expression)*)? ","? ")" | (identifier | contextual_identifier) type_app_open type_ref ("," type_ref)* "]" "(" (expression ("," expression)*)? ","? ")"
+call ::= (identifier | contextual_identifier) "(" call_arguments? ")" | (identifier | contextual_identifier) type_app_open type_ref ("," type_ref)* "]" "(" call_arguments? ")"
+call_arguments ::= expression ("," expression)* ("," | "," capability_bindings)? | capability_bindings
 list_literal ::= "[" (expression ("," expression)* ","?)? "]"
 record_construction ::= (identifier | qualified_type_ref) "{" (field_init ("," field_init)*)? ","? "}"
 field_init ::= identifier ":" expression | identifier

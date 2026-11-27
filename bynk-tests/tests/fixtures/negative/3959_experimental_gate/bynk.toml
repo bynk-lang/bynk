@@ -1,0 +1,7 @@
+[project]
+name = "3959-experimental-gate"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+

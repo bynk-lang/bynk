@@ -293,7 +293,7 @@ fn self_call_args<'e>(
         | Callee::Const(..)
         | Callee::Principal(_) => return None,
     };
-    if !same_fn(decl, f) {
+    if !same_fn(decl, f) || !binds_identically(e) {
         return None;
     }
     let slots = usize::from(f.has_self) + f.params.len();
@@ -362,6 +362,21 @@ fn self_call_args<'e>(
         }
     }
     Some(all)
+}
+
+/// #3959: whether a self call binds each capability parameter to itself
+/// (`given Store = Store`). The loop keeps the function's own `deps`, so a call
+/// that rebinds one (`given A = B, B = A`) must stay a real call, which builds
+/// the `deps` it names.
+fn binds_identically(e: &Expr) -> bool {
+    let ExprKind::Call {
+        bindings: Some(b), ..
+    } = &e.kind
+    else {
+        return true;
+    };
+    b.iter()
+        .all(|b| !b.value.is_cross_context() && b.value.key() == b.param.name)
 }
 
 fn is_self_call(e: &Expr, f: &FnDecl, commons: &TypedCommons, tys: TyRender<'_>) -> bool {

@@ -452,9 +452,13 @@ mod tests {
                 "bynk.cloudflare.Kv.putValue",
                 "bynk.crypto",
                 "bynk.RequestHeaders.entries",
-                "bynk.actor.ApiKey"
+                "bynk.actor.ApiKey",
+                "bynk.given.parameters"
             ]
         );
+        // #3959: capability parameters are one built-in experimental entry.
+        assert!(p.blocks("bynk.given.parameters"));
+        assert!(firstparty::names_first_party_item("bynk.given.parameters"));
         assert!(!p.blocks("bynk.cloudflare.Kv.list"));
         // #3939 (track §17): the `ApiKey` scheme, its types and its members, behind one name.
         assert!(p.blocks("bynk.actor.ApiKey"));

@@ -1584,7 +1584,11 @@ pub fn stability_of(path: &str) -> Option<Stability> {
 /// spelt under `bynk`, as `[unstable] allow` names it, and counts as a
 /// first-party item ([`names_first_party_item`]) and an experimental one
 /// ([`experimental_items`]).
-pub const BUILTIN_EXPERIMENTAL: &[&str] = &["bynk.RequestHeaders.entries", "bynk.actor.ApiKey"];
+pub const BUILTIN_EXPERIMENTAL: &[&str] = &[
+    "bynk.RequestHeaders.entries",
+    "bynk.actor.ApiKey",
+    "bynk.given.parameters",
+];
 
 /// #3939 (the API keys track, §17): first-party items admitted by another item's gate, as
 /// `(item, gate)`. The `ApiKey` scheme's types are reachable only through an `ApiKey` actor, so
@@ -2264,7 +2268,9 @@ mod tests {
                 // #3752 (D12): a method of a built-in type.
                 "bynk.RequestHeaders.entries",
                 // #3939: the `ApiKey` scheme, with its types and members behind it.
-                "bynk.actor.ApiKey"
+                "bynk.actor.ApiKey",
+                // #3959: capability parameters, a language form with no unit.
+                "bynk.given.parameters"
             ]
         );
         let extensible: Vec<(&str, &str)> = UNITS
