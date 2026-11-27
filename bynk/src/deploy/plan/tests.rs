@@ -1424,6 +1424,66 @@ fn a_session_key_is_a_managed_secret_in_the_plan() {
     );
 }
 
+/// K1 (track §18, #3939): the plan's line for an `ApiKey` actor's pepper. `deploy` never replaces a
+/// set pepper, `--force` included, so on a redeploy (the first deploy minted it) the line is `keep`,
+/// never `set` or `overwrite`; a pepper supplied with `--secrets-file` is listed once, `supplied`.
+fn pepper_plan_text(lock: &DeployLock, source: &SecretSource, force: bool) -> String {
+    let resources = project(vec![(
+        "acme-api",
+        Resources::default().api_key_peppers(&[("Client", "CLIENT_KEY_PEPPER")]),
+    )]);
+    let order = names(&["acme-api"]);
+    let plan = derive_plan(&order, &resources, lock, source, force, "default");
+    plan_report(&plan, DeployFormat::Short)
+        .lines()
+        .filter(|l| l.starts_with("secret "))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn deployed_acme_api() -> DeployLock {
+    let mut lock = DeployLock::default();
+    lock.record_deployed("default", "acme-api", None);
+    lock
+}
+
+/// K1 step 2: a plain redeploy keeps the pepper the first deploy minted.
+#[test]
+fn k1_a_redeploy_plans_to_keep_the_pepper() {
+    assert_eq!(
+        pepper_plan_text(&deployed_acme_api(), &SecretSource::default(), false),
+        "secret keep CLIENT_KEY_PEPPER (managed, already set)"
+    );
+}
+
+/// K1 step 4: `--force` keeps it too, so the plan never says `overwrite` beside the kept-pepper note.
+#[test]
+fn k1_a_forced_redeploy_plans_to_keep_the_pepper() {
+    assert_eq!(
+        pepper_plan_text(&deployed_acme_api(), &SecretSource::default(), true),
+        "secret keep CLIENT_KEY_PEPPER (managed, already set)"
+    );
+}
+
+/// K1 step 5: a pepper supplied with `--secrets-file` is set, and listed once, as `supplied`.
+#[test]
+fn k1_a_supplied_pepper_is_listed_once_as_supplied() {
+    let source = SecretSource::of_values(&[("CLIENT_KEY_PEPPER", "a-new-pepper")]);
+    assert_eq!(
+        pepper_plan_text(&deployed_acme_api(), &source, false),
+        "secret set CLIENT_KEY_PEPPER (supplied)"
+    );
+}
+
+/// K1 step 1: on a first deploy the pepper is minted, so the line is `set`.
+#[test]
+fn k1_a_first_deploy_plans_to_set_the_pepper() {
+    assert_eq!(
+        pepper_plan_text(&DeployLock::default(), &SecretSource::default(), true),
+        "secret set CLIENT_KEY_PEPPER (managed)"
+    );
+}
+
 /// Track §11 Q8: warn, never refuse. Each Worker is asked once however
 /// many contexts bind it; a present one says nothing, a missing one says
 /// Cloudflare will reject the upload, and an unreadable answer is a

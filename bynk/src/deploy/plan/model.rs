@@ -267,8 +267,58 @@ struct PlanSecret {
     /// context needs none (ADR 0195 D2).
     origin: Origin,
     /// `set`, or `overwrite` under `--force`. A `set` line may still report a
-    /// skip at wire time — see the type's note.
+    /// skip at wire time — see the type's note. #3939: `keep` for an `ApiKey`
+    /// actor's pepper on a redeploy, which nothing sets.
     action: &'static str,
+    /// #3939: why a `keep` line keeps its secret (`already set`), shown beside
+    /// the origin; absent on every other line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    state: Option<&'static str>,
+}
+
+/// One context's secret lines: the wanted secrets as the run will attempt them (presence is not
+/// knowable here, since the plan runs before auth so `--dry-run` stays offline), then each
+/// `SignedCookie` actor's signing key and each `ApiKey` actor's pepper (#3386, #3939), which
+/// `deploy` mints when unset. A key the operator supplied is listed once, as `supplied`.
+///
+/// A pepper is never overwritten by `deploy`, `--force` included (the maintainer's ruling on
+/// #4595), so on a Worker the lock records as deployed (its first deploy minted the pepper) its
+/// line is `keep … (managed, already set)`, with or without `--force`. On a first deploy it is
+/// `set`. The lock is no proof of presence: if the pepper turns out to be gone, the run mints it,
+/// as `decide_pepper` does for any absent pepper.
+fn plan_secrets(
+    wanted: Vec<WantedSecret>,
+    session_keys: &[crate::deploy::config::SessionKey],
+    (force, deployed): (bool, bool),
+) -> Vec<PlanSecret> {
+    let attempt = if force { "overwrite" } else { "set" };
+    let mut out: Vec<PlanSecret> = wanted
+        .into_iter()
+        .map(|want| PlanSecret {
+            name: want.name,
+            origin: want.origin,
+            action: attempt,
+            state: None,
+        })
+        .collect();
+    for key in session_keys {
+        if out.iter().any(|s| s.name == key.binding) {
+            continue;
+        }
+        let pepper = key.kind == crate::deploy::config::SessionKeyKind::Pepper;
+        let (action, state) = match (pepper, deployed) {
+            (true, true) => ("keep", Some("already set")),
+            (true, false) => ("set", None),
+            (false, _) => (attempt, None),
+        };
+        out.push(PlanSecret {
+            name: key.binding.clone(),
+            origin: Origin::Managed,
+            action,
+            state,
+        });
+    }
+    out
 }
 
 /// One Durable Object class the push declares (#1796). It replaces the
@@ -748,10 +798,11 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                 // required, `read` is advisory, `supplied` is the user's word.
                 for secret in &context.secrets {
                     out.push_str(&format!(
-                        "secret {} {} ({})\n",
+                        "secret {} {} ({}{})\n",
                         secret.action,
                         secret.name,
-                        secret.origin.label()
+                        secret.origin.label(),
+                        secret.state.map(|s| format!(", {s}")).unwrap_or_default()
                     ));
                 }
                 out.push_str(&format!("{} {}\n", context.action, context.worker));
@@ -1064,44 +1115,28 @@ pub(crate) fn derive_plan<'a>(
                             already_applied: lock.has_deleted_class(environment, worker, class),
                         })
                         .collect(),
-                    secrets: wanted_secrets(
-                        &declared.declared_secrets,
-                        &declared.read_secrets,
-                        secrets,
-                    )
-                    .into_iter()
-                    // I3 (#1971): a foreign caller's secret is never spread.
-                    .filter(|w| !foreign_secrets.contains(&w.name))
-                    // I2 (#1971): the key for each edge this Worker is on.
-                    .chain(
-                        edge_keys_of(worker, &edges)
+                    secrets: plan_secrets(
+                        wanted_secrets(&declared.declared_secrets, &declared.read_secrets, secrets)
                             .into_iter()
-                            .map(|name| WantedSecret {
-                                name,
+                            // I3 (#1971): a foreign caller's secret is never spread.
+                            .filter(|w| !foreign_secrets.contains(&w.name))
+                            // I2 (#1971): the key for each edge this Worker is on.
+                            .chain(edge_keys_of(worker, &edges).into_iter().map(|name| {
+                                WantedSecret {
+                                    name,
+                                    origin: Origin::Managed,
+                                }
+                            }))
+                            // I3 (#1971): and the secret of each foreign caller it
+                            // admits, which `deploy` mints and hands off.
+                            .chain(declared.foreign_callers.iter().map(|f| WantedSecret {
+                                name: f.binding.clone(),
                                 origin: Origin::Managed,
-                            }),
-                    )
-                    // I3 (#1971): and the secret of each foreign caller it
-                    // admits, which `deploy` mints and hands off.
-                    .chain(declared.foreign_callers.iter().map(|f| WantedSecret {
-                        name: f.binding.clone(),
-                        origin: Origin::Managed,
-                    }))
-                    // #3386: and each `SignedCookie` actor's signing key, which `deploy`
-                    // mints when it is unset.
-                    .chain(declared.session_keys.iter().map(|k| WantedSecret {
-                        name: k.binding.clone(),
-                        origin: Origin::Managed,
-                    }))
-                    .map(|want| PlanSecret {
-                        name: want.name,
-                        origin: want.origin,
-                        // Presence is not knowable here — the plan runs
-                        // before auth so `--dry-run` stays offline — so the
-                        // action is what the run will attempt.
-                        action: if force { "overwrite" } else { "set" },
-                    })
-                    .collect(),
+                            }))
+                            .collect(),
+                        &declared.session_keys,
+                        (force, lock.is_deployed(environment, worker)),
+                    ),
                     secrets_complete: declared.reads_complete,
                     action: if lock.is_deployed(environment, worker) {
                         "redeploy"
