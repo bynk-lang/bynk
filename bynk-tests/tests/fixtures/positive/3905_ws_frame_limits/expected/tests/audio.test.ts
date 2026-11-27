@@ -20,7 +20,7 @@ async function test_a_binary_frame_is_echoed_as_it_is() {
     type UserId = __ns_audio.UserId;
     const tc = new TestConnection<globalThis.Uint8Array>();
     const room = RoomId.unsafe("r1");
-    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Audio.open> = [__c, room, { ...deps, identity: (UserId.unsafe("ada") as any) }]; __c.remember([room], __a[__a.length - 1], Audio.maxFrame); return Audio.open(...__a); })();
+    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Audio.open> = [__c, room, { ...deps, identity: (UserId.unsafe("ada") as any) }]; __c.remember([room], __a[__a.length - 1], Audio.maxFrame, Audio.encodeOut); return Audio.open(...__a); })();
     const __r1 = await (async () => { const __c = tc; const __o = __c.opened(); const __a: Parameters<typeof Audio.message> = [__c, __o.route[0] as Parameters<typeof Audio.message>[1], new globalThis.TextEncoder().encode("abcdefgh"), __o.deps as Parameters<typeof Audio.message>[3]]; return Audio.message(...__a); })();
     if (!(__bynkEq([...tc.sent], [new globalThis.TextEncoder().encode("hello"), new globalThis.TextEncoder().encode("abcdefgh")]))) { throw __bynkExpectFailure("tests/audio.bynk:9:12", 415, 481, "expect tc.sent() == [Bytes.fromUtf8(\"hello\"), Bytes.fromUtf8(\"abcdefgh\")]\n  expected: tc.sent() == [Bytes.fromUtf8(\"hello\"), Bytes.fromUtf8(\"abcdefgh\")]\n  actual:   " + __bynkShow(([...tc.sent])) + " == " + __bynkShow(([new globalThis.TextEncoder().encode("hello"), new globalThis.TextEncoder().encode("abcdefgh")]))); }
     return { pass: true };
@@ -42,7 +42,7 @@ async function test_a_frame_over_maxFrame_faults_the_send() {
     type UserId = __ns_audio.UserId;
     const tc = new TestConnection<globalThis.Uint8Array>();
     const room = RoomId.unsafe("r2");
-    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Audio.open> = [__c, room, { ...deps, identity: (UserId.unsafe("ada") as any) }]; __c.remember([room], __a[__a.length - 1], Audio.maxFrame); return Audio.open(...__a); })();
+    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Audio.open> = [__c, room, { ...deps, identity: (UserId.unsafe("ada") as any) }]; __c.remember([room], __a[__a.length - 1], Audio.maxFrame, Audio.encodeOut); return Audio.open(...__a); })();
     if (!((await (async () => {
       try {
         await ((async () => { const __c = tc; const __o = __c.opened(); const __a: Parameters<typeof Audio.message> = [__c, __o.route[0] as Parameters<typeof Audio.message>[1], new globalThis.TextEncoder().encode("abcdefghi"), __o.deps as Parameters<typeof Audio.message>[3]]; return Audio.message(...__a); })());

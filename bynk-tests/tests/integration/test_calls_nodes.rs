@@ -299,7 +299,7 @@ fn the_websocket_lifecycle_addresses_stay_text() {
     let text = emit("3051_test_websocket_address", &[]);
     assert_contains(
         &text,
-        r#"(async () => { const __c = alice; const __a: Parameters<typeof ChatGateway.open> = [__c, room, { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([room], __a[__a.length - 1], ChatGateway.maxFrame); return ChatGateway.open(...__a); })()"#,
+        r#"(async () => { const __c = alice; const __a: Parameters<typeof ChatGateway.open> = [__c, room, { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([room], __a[__a.length - 1], ChatGateway.maxFrame, ChatGateway.encodeOut); return ChatGateway.open(...__a); })()"#,
     );
     assert_contains(&text, "const __o = __c.opened();");
 }

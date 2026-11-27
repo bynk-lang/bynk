@@ -196,6 +196,30 @@ service Audio from websocket(in: Bytes, out: Bytes) {
 - A service whose clients send frames of 1 MiB to 32 MiB now sets `maxFrame` explicitly; they were
   accepted before and are closed with `1009` after this change.
 
+## The wire form of a frame
+
+A JSON frame, in either direction, is written and read by the **serialisation codec of its type**: the same
+one that carries values across a context boundary and through the HTTP client and `bynk openapi`. So
+a frame survives a round trip through the codec for every type that may be a frame, and a client that decodes
+with the codec (a generated client does) reads what the server
+sends. The forms to know:
+
+| In the frame | On the wire |
+|---|---|
+| `String`, `Int`, `Bool`, a list, a record | plain JSON, as written |
+| `Option[T]` | `{ "kind": "Some", "value": … }` or `{ "kind": "None" }`; an inbound frame may also carry `null` for `None` |
+| `Decimal` | its text, `"12.50"` |
+| `Instant` | its epoch milliseconds |
+| a sum | `{ "kind": "<Variant>", … }` with the variant's fields beside it |
+| a nested record, or a type refined over one of these | the same, recursively |
+
+An outbound frame is encoded where it is **sent**: the service's `out` codec is registered under its name and
+the socket's attachment records that name, so `connection.send` writes a frame by its codec after any wake and
+for a connection an agent holds by id. A plain `Bytes` frame is a binary message and has no codec. In a test,
+`svc.open(tc, …)` hands the `TestConnection` the codec, which `send` runs (a frame it cannot write faults, and the
+frame-size check sees the wire form), while `tc.sent` keeps the frame as the handler wrote it. A socket accepted
+before this change records no service name and is sent as the runtime's own JSON until it reconnects.
+
 ## Sending and broadcasting
 
 The agent that owns the connection sends with `connection.send(frame)`
