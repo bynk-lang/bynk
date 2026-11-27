@@ -100,8 +100,9 @@ pub fn logged_ready(log: &str, port: u16) -> bool {
 }
 
 /// Wait until `wrangler dev`, logging to `log_path`, is serving its Worker on `port`:
-/// it has logged [`ready_line`] for that port **and** `probe` (a request the Worker answers,
-/// with whatever status its boot route gives) succeeds, within [`BOOT_DEADLINE`]. The log line
+/// it has logged its `Ready on` line for that port (any of wrangler's host forms,
+/// [`logged_ready`]) **and** `probe` (a request the Worker answers, with whatever status its
+/// boot route gives) succeeds, within [`BOOT_DEADLINE`]. The log line
 /// is the gate, and it names the port, because the port answering is not the Worker answering:
 /// under load a probe that accepts any HTTP reply took another server's `403 Forbidden` for the
 /// Worker (#4479). The error says which of the two waits expired.
@@ -130,8 +131,8 @@ pub fn wait_until_ready(
                 )
             } else {
                 format!(
-                    "wrangler had not logged `{ready}` (or its `127.0.0.1` form) within the \
-                     {BOOT_DEADLINE:?} boot deadline"
+                    "wrangler had not logged `{ready}` (or its `127.0.0.1` or `[::1]` form) \
+                     within the {BOOT_DEADLINE:?} boot deadline"
                 )
             });
         }

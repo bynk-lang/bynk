@@ -934,13 +934,16 @@ jobs:
       # The spec must stay in step with the tests' own; a drift guard
       # (bynk-tests/tests/wrangler/mod.rs) fails if it doesn't.
       #
-      # Not fatal here: this step runs only off Linux (the Linux system tier is
-      # the `test-system` job, which pre-warms too and makes wrangler mandatory),
-      # and off Linux the smokes are allowed to skip anyway.
+      # This step runs only off Linux (the Linux system tier is the
+      # `test-system` job, which pre-warms too and makes wrangler mandatory).
+      # Fatal on Windows, where the smokes are required (#4579): a failed
+      # pre-warm there would otherwise surface later as required smokes racing
+      # on a cold cache, the symptom this step exists to prevent. Not fatal on
+      # macOS, where the smokes may still skip.
       - name: Pre-warm the npx cache for wrangler
         if: matrix.os != 'ubuntu-latest'
         run: npx -y wrangler@4 --version
-        continue-on-error: true
+        continue-on-error: ${{ matrix.os != 'windows-latest' }}
       # `cargo nextest run --workspace` runs every crate's suite. nextest cannot
       # run rustdoc doctests; the only ones in the tree are the crate READMEs'
       # examples, which `test-system`'s `README examples` step runs. The corpus's includes:
