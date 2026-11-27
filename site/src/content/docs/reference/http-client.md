@@ -122,8 +122,8 @@ switch (res.kind) {
 ### Credentials over cleartext
 
 **A credential is never sent over cleartext.** A call that carries an `Authorization` header (a
-bearer or OIDC token) or an explicitly set `Cookie` header (from `headers`, the call's `init`, a typed
-`headers` record or typed `cookies`) to an `http:` or
+bearer or OIDC token) or an explicitly set `Cookie` header, from `headers`, the call's `init`, a typed
+`headers` record or (for the `Cookie`) typed `cookies`, to an `http:` or
 `ws:` URL throws a `CleartextCredential` before anything is sent, unless the host is loopback:
 `localhost`, a `*.localhost` name, `127.0.0.0/8` or `[::1]`, as `bynk dev` and the test tiers use.
 Use an `https://` base URL for anything else. A relative `baseUrl` is checked against
