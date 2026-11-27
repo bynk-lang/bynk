@@ -33,7 +33,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const REQUIRE_WORKERD: &str = "BYNK_REQUIRE_WORKERD";
 const REQUIRE_DOCKER: &str = "BYNK_REQUIRE_DOCKER";
@@ -204,20 +204,16 @@ fn run(
         skip(REQUIRE_WORKERD, "could not launch npx");
         return None;
     };
-    let deadline = Instant::now() + Duration::from_secs(180);
-    while get(port, "/boot", Duration::from_secs(20)).is_err() {
-        if Instant::now() > deadline {
-            let log = read_log(&log_path);
-            drop(server);
-            skip(
-                REQUIRE_WORKERD,
-                &format!(
-                    "wrangler dev did not serve within the boot window\n--- wrangler log ---\n{log}"
-                ),
-            );
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+    if let Err(why) = wrangler::wait_until_ready(&log_path, port, &|| {
+        get(port, "/boot", Duration::from_secs(20)).is_ok()
+    }) {
+        let log = read_log(&log_path);
+        drop(server);
+        skip(
+            REQUIRE_WORKERD,
+            &format!("{why}\n--- wrangler log ---\n{log}"),
+        );
+        return None;
     }
     let failures = drive(port);
     // The fault's detail is logged by the Worker, after the response is sent.

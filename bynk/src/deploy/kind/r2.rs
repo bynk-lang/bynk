@@ -245,16 +245,22 @@ impl ResourceKind for R2 {
             return Ok(Applied::nothing());
         }
         let physical = r2_bucket_name(environment, &bucket.name);
-        create_r2_bucket(cx.tools.api, &physical, bucket.jurisdiction.as_deref()).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not create the R2 bucket `{physical}` for `{worker}`'s `{}`: {e}",
-                bucket.binding
-            ))
-        })?;
+        let adopted = create_r2_bucket(cx.tools.api, &physical, bucket.jurisdiction.as_deref())
+            .map_err(|e| {
+                DeployFailure::driver(format!(
+                    "could not create the R2 bucket `{physical}` for `{worker}`'s `{}`: {e}",
+                    bucket.binding
+                ))
+            })?;
+        let done = if adopted {
+            format!("adopted the R2 bucket `{physical}` already on the account")
+        } else {
+            format!("created the R2 bucket `{physical}`")
+        };
         Ok(Applied::nothing().with(cx.recording(
             &bucket.binding,
             R2Bucket::of(&physical, bucket.jurisdiction.as_deref()),
-            &format!("created the R2 bucket `{physical}`"),
+            &done,
         )))
     }
 }
@@ -345,6 +351,22 @@ fn r2_step<'r>(cx: &PlanCx<'_>, bucket: &'r R2Decl) -> R2Step<'r> {
     }
 }
 
+/// Whether this run's R2 steps call the account (#4056 Decision E): a bucket in `cx.order` the
+/// ledger does not record as it is declared, which is created. A recorded bucket is reused with
+/// no call, so a redeploy with every bucket recorded needs no API token.
+pub(crate) fn r2_calls_the_account(cx: &ProjectCx<'_>) -> bool {
+    cx.order.iter().any(|worker| {
+        let plan = PlanCx {
+            ledger: cx.ledger,
+            worker,
+        };
+        cx.resources[worker]
+            .r2_buckets
+            .iter()
+            .any(|bucket| r2_step(&plan, bucket).decision != R2Decision::Reuse)
+    })
+}
+
 /// P5 (#2323): why the buckets the build declares cannot all be made in
 /// `environment`, or `None`. A derived name that breaks R2's rules is an error
 /// at plan time, naming the instance, never a failed push; and two instances
@@ -399,17 +421,29 @@ pub(crate) fn r2_bucket_problem(
 /// Create the R2 bucket `name`, in `jurisdiction` when given, or accept that it
 /// is already there (P5, #2323): as for a queue, Cloudflare addresses a bucket
 /// by the name the config binds, so a created bucket and an existing one are
-/// the same end state. Run from the project root, as KV and queues are, so
-/// wrangler cannot load and reject an incomplete config.
+/// the same end state. Whether it was already there (`true`) or created.
+///
+/// Since 1D.4b (#4056) "already there" is read from the account, not from an error code: the
+/// reference documents no code that tells this account's bucket from another account's. A create
+/// that Cloudflare refused ([`CloudflareError::is_refusal`]) is accepted only when the account
+/// answers for the bucket by name; a bucket another account owns stays a failure.
 pub(crate) fn create_r2_bucket(
     api: &dyn CloudflareApi,
     name: &str,
     jurisdiction: Option<&str>,
-) -> Result<(), CloudflareError> {
+) -> Result<bool, CloudflareError> {
     match api.r2_create(name, jurisdiction) {
-        Ok(()) => Ok(()),
-        Err(e) if e.already_exists() => Ok(()),
-        Err(e) => Err(e.into()),
+        Ok(()) => Ok(false),
+        Err(e) if e.is_refusal() => match api.r2_owned(name, jurisdiction) {
+            Ok(true) => Ok(true),
+            Ok(false) => Err(e),
+            // "We could not check" must not read as "another account owns it".
+            Err(lookup) => Err(format!(
+                "{e} (asking the account for the bucket by name also failed: {lookup})"
+            )
+            .into()),
+        },
+        Err(e) => Err(e),
     }
 }
 
@@ -417,26 +451,69 @@ pub(crate) fn create_r2_bucket(
 mod tests {
     use super::*;
 
+    /// 1D.4b (#4056): a refused create is accepted only when the account answers for the bucket,
+    /// whatever code the refusal carried; another account's bucket, and a denied create, fail.
     #[test]
-    fn an_existing_bucket_you_own_is_success_and_anothers_is_not() {
-        let r2_bucket_already_exists = |stderr: &str| {
-            crate::cloudflare::fake::failed(
-                &crate::cloudflare::Op::R2Create {
-                    name: "b",
-                    jurisdiction: None,
-                },
-                "",
-                stderr,
+    fn a_refused_create_is_accepted_only_for_this_accounts_bucket() {
+        use crate::cloudflare::fake::Recording;
+        use crate::cloudflare::{CloudflareError, Op, RestError};
+        let run = |create: (u16, &'static str), owned: &'static str| {
+            let api = Recording::new(move |op| -> Result<String, CloudflareError> {
+                match op {
+                    Op::R2Create { .. } => {
+                        Err(RestError::answered("POST", "/r2/buckets", create.0, create.1).into())
+                    }
+                    Op::R2Owned { .. } => Ok(owned.to_string()),
+                    _ => Ok(String::new()),
+                }
+            });
+            (
+                create_r2_bucket(&api, "shop-files", Some("eu")),
+                api.calls(),
             )
-            .already_exists()
         };
-        assert!(r2_bucket_already_exists(
-            "The bucket you tried to create already exists, and you own it. [code: 10004]"
-        ));
-        assert!(!r2_bucket_already_exists(
-            "The requested bucket name is not available. [code: 10006]"
-        ));
-        assert!(!r2_bucket_already_exists("authentication error"));
+        for refusal in [
+            (
+                409,
+                r#"[{"code":10073,"message":"Bucket name already exists."}]"#,
+            ),
+            (400, r#"[{"code":10004}]"#),
+            (400, r#"[{"code":10006}]"#),
+        ] {
+            let (got, calls) = run(refusal, "owned");
+            assert!(got.unwrap(), "{refusal:?}");
+            assert_eq!(
+                calls,
+                [
+                    "r2 bucket create shop-files --jurisdiction eu",
+                    "r2 bucket info shop-files --jurisdiction eu"
+                ]
+            );
+            let (got, _) = run(refusal, "");
+            assert!(got.is_err(), "another account's bucket stays a failure");
+        }
+        let (got, calls) = run((403, r#"[{"code":10000}]"#), "owned");
+        assert!(got.is_err());
+        assert_eq!(calls, ["r2 bucket create shop-files --jurisdiction eu"]);
+        // An ownership check that fails says so, after the create's own error, rather than
+        // reading as another account's bucket.
+        let api = Recording::new(|op| -> Result<String, CloudflareError> {
+            match op {
+                Op::R2Create { .. } => {
+                    Err(
+                        RestError::answered("POST", "/r2/buckets", 409, r#"[{"code":10073}]"#)
+                            .into(),
+                    )
+                }
+                _ => Err(RestError::answered("GET", "/r2/buckets/shop-files", 500, "[]").into()),
+            }
+        });
+        assert_eq!(
+            create_r2_bucket(&api, "shop-files", None)
+                .unwrap_err()
+                .to_string(),
+            r#"POST /r2/buckets: Cloudflare answered 409 [{"code":10073}] (asking the account for the bucket by name also failed: GET /r2/buckets/shop-files: Cloudflare answered 500 [])"#
+        );
     }
 
     // ---- 1D.1b (#3929): the `R2` impl ----
