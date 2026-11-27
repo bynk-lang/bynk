@@ -5182,6 +5182,34 @@ fn wire_outcome(outcome: TyId, ctx: &Ctx) -> TyId {
 /// never answers `401`.
 pub(super) const OPEN_SUM_NOTE: &str = "this actor sum admits an open member (`Visitor`): a request with a missing or bad credential resolves as it, so the seam never answers `401`";
 
+/// #3939: `by Malformed` and `by Unknown` are an `ApiKey` seam's own refusals, refused on any
+/// other route; and an `ApiKey` key does not expire until `ttl` (slice 3), so `by Expired` is
+/// refused on an `ApiKey` route. Whether `bad` is one of these (each reported here).
+fn check_api_key_principal(
+    bad: BadCredential,
+    by: Option<&bynk_syntax::ast::ByClause>,
+    name: &str,
+    span: Span,
+    handler: &TestHandler,
+    ctx: &mut Ctx,
+) -> bool {
+    let api_key = by.is_some_and(|by| crate::api_key::by_clause_is_api_key(by, &ctx.test_actors));
+    match bad {
+        BadCredential::Malformed | BadCredential::Unknown => {
+            if !api_key {
+                let err = crate::api_key::key_principal_needs_api_key_route(name, span);
+                ctx.errors.push(with_open_sum_note(err, handler, ctx));
+            }
+            true
+        }
+        BadCredential::Expired if api_key => {
+            ctx.errors.push(crate::api_key::expired_needs_ttl(span));
+            true
+        }
+        _ => false,
+    }
+}
+
 fn with_open_sum_note(err: CompileError, handler: &TestHandler, ctx: &Ctx) -> CompileError {
     let open = handler
         .by_clause
@@ -5263,7 +5291,9 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
         BadCredential::Forged
         | BadCredential::Stale
         | BadCredential::Expired
-        | BadCredential::Revoked => return None,
+        | BadCredential::Revoked
+        | BadCredential::Malformed
+        | BadCredential::Unknown => return None,
     };
     Some(OidcOnlyPrincipal {
         code,
@@ -5566,6 +5596,13 @@ fn resolve_test_address<'a>(
     None
 }
 
+/// A principal whose address resolves to no test handler is still checked on its own.
+fn report_unresolved_principal(principal: Option<&bynk_syntax::ast::CallSiteActor>, ctx: &mut Ctx) {
+    if let Some(p) = principal {
+        report_principal_actor(p, ctx);
+    }
+}
+
 /// v0.182 (#664): validate the call-site principal of a test `effect_let`
 /// against the ADDRESSED HANDLER. This is where per-case identity isolation is
 /// enforced: an identity-carrying handler driven with a unit principal (`by
@@ -5590,21 +5627,15 @@ pub(crate) fn check_effect_let_principal(
         ..
     } = &value.kind
     else {
-        if let Some(p) = principal {
-            report_principal_actor(p, ctx);
-        }
+        report_unresolved_principal(principal, ctx);
         return;
     };
     let ExprKind::Ident(id) = &receiver.kind else {
-        if let Some(p) = principal {
-            report_principal_actor(p, ctx);
-        }
+        report_unresolved_principal(principal, ctx);
         return;
     };
     let Some(sig) = ctx.test_services.get(&id.name).cloned() else {
-        if let Some(p) = principal {
-            report_principal_actor(p, ctx);
-        }
+        report_unresolved_principal(principal, ctx);
         return;
     };
     // #3051: a connection's principal is established once, at `open`
@@ -5748,7 +5779,9 @@ pub(crate) fn check_effect_let_principal(
             by.is_some_and(|by| crate::actors::route_refuses_bad_token(by, &ctx.test_actors));
         // #3052: an `Oidc` route's seam refuses a bad token too.
         let oidc = by.is_some_and(|by| crate::actors::by_clause_is_oidc(by, &ctx.test_actors));
+        let key = check_api_key_principal(bad, by, name, p.span, &handler, ctx);
         match (bad, sig_seam) {
+            _ if key => {}
             (BadCredential::Expired, _) if !bearer && !oidc => {
                 let err = CompileError::new(
                     "bynk.test.expired_needs_bearer_route",
@@ -6122,7 +6155,9 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
             let CallSitePrincipal::BadCredential(bad) = kind else {
                 unreachable!("matched above")
             };
-            let err = if bad == BadCredential::Revoked {
+            let err = if matches!(bad, BadCredential::Malformed | BadCredential::Unknown) {
+                crate::api_key::key_principal_needs_api_key_route(name, p.span)
+            } else if bad == BadCredential::Revoked {
                 CompileError::new(
                     "bynk.test.revoked_needs_sessions_route",
                     p.span,

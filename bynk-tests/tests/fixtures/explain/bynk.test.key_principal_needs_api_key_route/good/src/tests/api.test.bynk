@@ -1,0 +1,6 @@
+suite acme.api as system {
+	case "a malformed key is refused" {
+		let r <- keys.GET("/key") by Malformed
+		expect r is Rejected(Unauthorized)
+	}
+}

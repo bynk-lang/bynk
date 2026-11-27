@@ -356,3 +356,72 @@ fn drive(fixture_name: &str, driver: &str) {
 fn the_api_key_seam_refuses_alike_and_faults_closed() {
     drive("3939_api_key", DRIVER_TS);
 }
+
+/// Copy `from` into `to`, recursively.
+fn copy_tree(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+/// #3939 (track §10, Decision C): `bynk test --against` refuses, before any request, every case
+/// that needs the in-process key store: acting as the `ApiKey` actor, `by Malformed`, `by Unknown`,
+/// and `by Forged` at an `ApiKey` route (its key is built from one minted in process, and its
+/// compare count is taken in process). `--skip-unsupported` skips them with that reason.
+#[test]
+fn a_remote_run_refuses_every_case_that_needs_the_in_process_key_store() {
+    let root: PathBuf =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive/3939_api_key");
+    let dir = std::env::temp_dir().join(format!("bynk-api-key-remote-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let proj = dir.join("proj");
+    copy_tree(&root, &proj);
+    let _ = fs::remove_dir_all(proj.join("expected"));
+    let manifest = fs::read_to_string(proj.join("bynk.toml")).unwrap();
+    // A target nothing listens on: the refusal is a compile error, before any request.
+    fs::write(
+        proj.join("bynk.toml"),
+        format!("{manifest}\n[test.targets.local]\nurl.acme-api = \"http://127.0.0.1:9\"\n"),
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .arg("test")
+        .arg(&proj)
+        .arg("--output")
+        .arg(dir.join("out"))
+        .args(["--format", "json", "--against", "local"])
+        .output()
+        .expect("run bynk test");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!out.status.success(), "the run is refused:\n{stdout}");
+    let doc: serde_json::Value = serde_json::from_str(&stdout).unwrap_or_else(|e| {
+        panic!(
+            "not JSON ({e}):\n{stdout}\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    assert_eq!(doc["error"]["kind"], "compile", "{doc:#}");
+    let diagnostics = doc["error"]["diagnostics"].to_string();
+    for want in [
+        "acts as the `ApiKey` actor `Client`",
+        "drives `by Malformed`",
+        "drives `by Unknown`",
+        "drives `by Forged` at a route an `ApiKey` actor guards",
+    ] {
+        assert!(
+            diagnostics.contains("bynk.test.remote_unsupported_api_key")
+                && diagnostics.contains(want),
+            "`{want}` is refused: {doc:#}"
+        );
+    }
+    // `by Nobody` sends no key, so the deployed seam can refuse it: it is not refused.
+    assert!(!diagnostics.contains("no key is refused"), "{doc:#}");
+    let _ = fs::remove_dir_all(&dir);
+}

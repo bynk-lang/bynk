@@ -61,6 +61,86 @@ fn decide_sessions(
     .decide(&lock, &opts, source)
 }
 
+/// K1 (track §18, #3939; the maintainer's ruling on #4595): under `--force`, a held `ApiKey` pepper
+/// is kept and the run says so, while a held signing key is still replaced; a supplied pepper is set.
+#[test]
+fn k1_force_keeps_a_held_pepper_says_so_and_still_replaces_a_signing_key() {
+    let resources = BTreeMap::from([
+        (
+            "api".to_string(),
+            Resources::default().api_key_peppers(&[("Client", "SESSION_KEY")]),
+        ),
+        (
+            "login".to_string(),
+            Resources::default().session_keys(&[("User", "OTHER_KEY")]),
+        ),
+    ]);
+    let order = names(&["api", "login"]);
+    let held = |b: &str| Some(BTreeSet::from([b.to_string()]));
+    let listed = BTreeMap::from([
+        ("api".to_string(), held("SESSION_KEY")),
+        ("login".to_string(), held("OTHER_KEY")),
+    ]);
+    let lock = lock_with_deployed(&["api", "login"]);
+    let opts = DeployOptions {
+        environment: "default".to_string(),
+        force: true,
+        ..DeployOptions::default()
+    };
+    let managed = ManagedKeys {
+        order: &order,
+        resources: &resources,
+        listed: &listed,
+    };
+    let none = SecretSource::of_values(&[]);
+    let keys = managed.decide(&lock, &opts, &none).expect("decides");
+    let at = |w: &str, b: &str| keys[&(w.to_string(), b.to_string())].clone();
+    assert_eq!(
+        at("api", "SESSION_KEY"),
+        ForeignKey::Keep,
+        "a held pepper is kept"
+    );
+    assert!(
+        matches!(
+            at("login", "OTHER_KEY"),
+            ForeignKey::Set { minted: true, .. }
+        ),
+        "a held signing key is still replaced under --force"
+    );
+    let notes = managed.pepper_kept_under_force(&lock, &opts, &none);
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(
+        notes[0].contains("SESSION_KEY")
+            && notes[0].contains("Client")
+            && notes[0].contains("--force"),
+        "{}",
+        notes[0]
+    );
+    // Without `--force` there is nothing to say.
+    let calm = DeployOptions {
+        force: false,
+        ..opts.clone()
+    };
+    assert!(
+        managed
+            .pepper_kept_under_force(&lock, &calm, &none)
+            .is_empty()
+    );
+    // A supplied pepper is set, even over a held one, and has no note.
+    let supplied =
+        SecretSource::of_values(&[("SESSION_KEY", "q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s")]);
+    let keys = managed.decide(&lock, &opts, &supplied).expect("decides");
+    assert!(matches!(
+        &keys[&("api".to_string(), "SESSION_KEY".to_string())],
+        ForeignKey::Set { minted: false, .. }
+    ));
+    assert!(
+        managed
+            .pepper_kept_under_force(&lock, &opts, &supplied)
+            .is_empty()
+    );
+}
+
 #[test]
 fn contexts_sharing_a_session_key_are_set_to_one_minted_value() {
     let keys = decide_sessions(
