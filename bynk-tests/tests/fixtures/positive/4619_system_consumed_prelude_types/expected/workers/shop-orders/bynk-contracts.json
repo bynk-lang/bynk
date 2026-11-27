@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "items": "f0e73e758b1a9983",
+    "timeouts": "804e25f64b44a0d0"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "items": "Svc(\"items\",Ret(L(Rec(\"Item\",F(\"qty\",B(\"Int\")),F(\"sku\",B(\"String\"))))))",
+    "timeouts": "Svc(\"timeouts\",Ret(L(Rec(\"TimedOut\",F(\"after\",B(\"Duration\"))))))"
+  }
+}

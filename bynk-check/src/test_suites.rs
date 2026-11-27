@@ -6103,20 +6103,41 @@ impl SuiteView {
                 crate::project_model::type_ref_names(&h.return_type, &no_vars, &mut queue);
             }
         }
-        // `bynk` is read before `bynk.cloudflare`; the two declare no name in
-        // common, so which unit a participant consumed a name from is not
-        // ambiguous.
-        let first_party = [
+        // #4619: a type a participant takes by name (`consumes bynk { CloseInfo }`) is in scope
+        // for a case that names it, whether or not any service signature does. Without it a
+        // case building a `CloseInfo` had the record left unchecked, and a method on a list
+        // of them recorded no callee. A braced list leaves the types it does not name out.
+        for table in participants.iter().filter_map(|p| unit_tables.get(p)) {
+            for unit in &table.first_party_consumes {
+                if let Some(t) = unit_tables.get(unit) {
+                    queue.extend(
+                        t.types
+                            .keys()
+                            .filter(|n| !table.unselected_consumed_types.contains(*n))
+                            .cloned(),
+                    );
+                }
+            }
+        }
+        // The first-party units a participant consumes, and `bynk` and `bynk.cloudflare`, whose
+        // types a handler's signature may name through a commons. Read in name order: a name two
+        // of them declare is taken from the first, which `consumes` would have refused unrenamed.
+        let mut first_party: Vec<&str> = vec![
             crate::firstparty::BYNK_UNIT,
             crate::firstparty::CLOUDFLARE_UNIT,
         ];
+        for table in participants.iter().filter_map(|p| unit_tables.get(p)) {
+            first_party.extend(table.first_party_consumes.iter().map(String::as_str));
+        }
+        first_party.sort_unstable();
+        first_party.dedup();
         while let Some(name) = queue.pop() {
             if self.types.contains_key(&name) {
                 continue;
             }
             let found = first_party
-                .into_iter()
-                .find_map(|u| unit_tables.get(u).and_then(|t| t.types.get(&name)));
+                .iter()
+                .find_map(|u| unit_tables.get(*u).and_then(|t| t.types.get(&name)));
             if let Some(decl) = found {
                 queue.extend(crate::project_model::type_decl_ref_names(decl));
                 self.types.insert(name, decl.clone());
@@ -7283,6 +7304,41 @@ service check {
             "{:?}",
             a.categories()
         );
+    }
+
+    /// #4619: a prelude type the target consumes is in scope for a `system` case when no service
+    /// signature names it. The record is checked like any other (a wrong field is refused), where
+    /// it was left unchecked and a method on a list of them recorded no callee.
+    #[test]
+    fn a_consumed_prelude_type_no_signature_names_is_checked_in_a_system_case() {
+        let orders = ORDERS.replace(
+            "consumes bynk { CloseInfo, Cookie }",
+            "consumes bynk { CloseInfo }",
+        );
+        let orders = orders
+            .split("service one {")
+            .next()
+            .expect("the part before `one`")
+            .to_string();
+        let suite = |body: &str| {
+            format!("suite shop.orders as system {{\n  case \"c\" {{\n{body}\n  }}\n}}\n")
+        };
+        let good = suite(
+            "    let cs = [CloseInfo { code: 1000, reason: \"d\", clean: true }]\n    expect cs.length() == 1",
+        );
+        crate::testkit::analyse(&[
+            ("shop/orders.bynk", &orders),
+            ("shop/tests/orders.test.bynk", &good),
+        ])
+        .assert_clean();
+        let bad = suite(
+            "    let cs = [CloseInfo { code: 1000, reason: \"d\", clean: true, nope: 1 }]\n    expect cs.length() == 1",
+        );
+        crate::testkit::analyse(&[
+            ("shop/orders.bynk", &orders),
+            ("shop/tests/orders.test.bynk", &bad),
+        ])
+        .assert_reports("bynk.resolve.unknown_field");
     }
 
     /// The same holds for a consuming context: a call is typed by the callee's signature

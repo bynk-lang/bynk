@@ -1,0 +1,6 @@
+[project]
+name = "4619-system-consumed-prelude-types"
+version = "0.1.0"
+
+[paths]
+include = ["src"]

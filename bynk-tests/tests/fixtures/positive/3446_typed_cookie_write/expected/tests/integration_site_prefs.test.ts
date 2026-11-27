@@ -8,6 +8,7 @@ import { __responseToHttpResult, __responseToHttpOutcome, __cookieString, __requ
 import type { Cookie } from "../bynk.js";
 import * as __ns_site_prefs from "../workers/site-prefs/handlers.js";
 import worker___ns_site_prefs from "../workers/site-prefs/index.js";
+import * as __ns_bynk from "./../bynk.js";
 
 <<bynk-shared: testing/expectation>>
 
@@ -69,14 +70,16 @@ async function test_the_router_sends_a_typed_cookie_with_the_safe_defaults() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Cookie } = __ns_bynk;
+    type Cookie = __ns_bynk.Cookie;
     const r = await __sysdrive_site_http_POST_theme_dark(undefined, "");
     void (((__d) => {
       switch (__d.tag) {
         case "Some": {
           const c = __d.value;
-          if (!(__bynkEq(c.name, "theme"))) { throw __bynkExpectFailure("tests/prefs.bynk:64:12", 1573, 1590, "expect c.name == \"theme\"\n  expected: c.name == \"theme\"\n  actual:   " + __bynkShow((c.name)) + " == " + __bynkShow(("theme"))); }
-          if (!(__bynkEq(c.value, "Dark"))) { throw __bynkExpectFailure("tests/prefs.bynk:65:12", 1602, 1619, "expect c.value == \"Dark\"\n  expected: c.value == \"Dark\"\n  actual:   " + __bynkShow((c.value)) + " == " + __bynkShow(("Dark"))); }
-          if (!(__bynkEq(c.path, "/"))) { throw __bynkExpectFailure("tests/prefs.bynk:66:12", 1631, 1644, "expect c.path == \"/\"\n  expected: c.path == \"/\"\n  actual:   " + __bynkShow((c.path)) + " == " + __bynkShow(("/"))); }
+          if (!(c.name === "theme")) { throw __bynkExpectFailure("tests/prefs.bynk:64:12", 1573, 1590, "expect c.name == \"theme\"\n  expected: c.name == \"theme\"\n  actual:   " + __bynkShow((c.name)) + " == " + __bynkShow(("theme"))); }
+          if (!(c.value === "Dark")) { throw __bynkExpectFailure("tests/prefs.bynk:65:12", 1602, 1619, "expect c.value == \"Dark\"\n  expected: c.value == \"Dark\"\n  actual:   " + __bynkShow((c.value)) + " == " + __bynkShow(("Dark"))); }
+          if (!(c.path === "/")) { throw __bynkExpectFailure("tests/prefs.bynk:66:12", 1631, 1644, "expect c.path == \"/\"\n  expected: c.path == \"/\"\n  actual:   " + __bynkShow((c.path)) + " == " + __bynkShow(("/"))); }
           if (!(c.secure)) { throw __bynkExpectFailure("tests/prefs.bynk:67:12", 1656, 1664, "expect c.secure"); }
           if (!(c.httpOnly)) { throw __bynkExpectFailure("tests/prefs.bynk:68:12", 1676, 1686, "expect c.httpOnly"); }
           if (!(__bynkEq(c.maxAge, Some(31536000000)))) { throw __bynkExpectFailure("tests/prefs.bynk:69:12", 1698, 1724, "expect c.maxAge == Some(365.days)\n  expected: c.maxAge == Some(365.days)\n  actual:   " + __bynkShow((c.maxAge)) + " == " + __bynkShow((Some(31536000000)))); }
@@ -103,15 +106,17 @@ async function test_a___Host__field_is_sent_Secure_with_Path___and_no_Domain() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Cookie } = __ns_bynk;
+    type Cookie = __ns_bynk.Cookie;
     const r = await __sysdrive_site_http_POST_leaves(undefined, "");
-    if (!(__bynkEq((((r as any).cookies ?? [])).map((__x: Cookie) => ((c) => c.name)(__x)), ["price", "dark", "__Host-visits", "qty", "note"]))) { throw __bynkExpectFailure("tests/prefs.bynk:79:10", 1881, 1964, "expect r.cookies().map((c) => c.name) == [\"price\", \"dark\", \"__Host-visits\", \"qty\", \"note\"]\n  expected: r.cookies().map((c) => c.name) == [\"price\", \"dark\", \"__Host-visits\", \"qty\", \"note\"]\n  actual:   " + __bynkShow(((((r as any).cookies ?? [])).map((__x: Cookie) => ((c) => c.name)(__x)))) + " == " + __bynkShow((["price", "dark", "__Host-visits", "qty", "note"]))); }
+    if (!(__bynkEq((((r as any).cookies ?? [])).map((__x: Cookie) => ((c: Cookie) => c.name)(__x)), ["price", "dark", "__Host-visits", "qty", "note"]))) { throw __bynkExpectFailure("tests/prefs.bynk:79:10", 1881, 1964, "expect r.cookies().map((c) => c.name) == [\"price\", \"dark\", \"__Host-visits\", \"qty\", \"note\"]\n  expected: r.cookies().map((c) => c.name) == [\"price\", \"dark\", \"__Host-visits\", \"qty\", \"note\"]\n  actual:   " + __bynkShow(((((r as any).cookies ?? [])).map((__x: Cookie) => ((c: Cookie) => c.name)(__x)))) + " == " + __bynkShow((["price", "dark", "__Host-visits", "qty", "note"]))); }
     void (((__d) => {
       switch (__d.tag) {
         case "Some": {
           const c = __d.value;
-          if (!(__bynkEq(c.value, "42"))) { throw __bynkExpectFailure("tests/prefs.bynk:82:12", 2063, 2078, "expect c.value == \"42\"\n  expected: c.value == \"42\"\n  actual:   " + __bynkShow((c.value)) + " == " + __bynkShow(("42"))); }
+          if (!(c.value === "42")) { throw __bynkExpectFailure("tests/prefs.bynk:82:12", 2063, 2078, "expect c.value == \"42\"\n  expected: c.value == \"42\"\n  actual:   " + __bynkShow((c.value)) + " == " + __bynkShow(("42"))); }
           if (!(c.secure)) { throw __bynkExpectFailure("tests/prefs.bynk:83:12", 2090, 2098, "expect c.secure"); }
-          if (!(__bynkEq(c.path, "/"))) { throw __bynkExpectFailure("tests/prefs.bynk:84:12", 2110, 2123, "expect c.path == \"/\"\n  expected: c.path == \"/\"\n  actual:   " + __bynkShow((c.path)) + " == " + __bynkShow(("/"))); }
+          if (!(c.path === "/")) { throw __bynkExpectFailure("tests/prefs.bynk:84:12", 2110, 2123, "expect c.path == \"/\"\n  expected: c.path == \"/\"\n  actual:   " + __bynkShow((c.path)) + " == " + __bynkShow(("/"))); }
           switch (c.domain.tag) {
             case "Some": {
               if (!(false)) { throw __bynkExpectFailure("tests/prefs.bynk:87:14", 2176, 2181, "expect false"); }
@@ -130,7 +135,7 @@ async function test_a___Host__field_is_sent_Secure_with_Path___and_no_Domain() {
         }
       }
       throw new globalThis.Error("non-exhaustive match");
-    })(((__xs: readonly Cookie[]) => __xs.length > 0 ? Some(__xs[0]) : None)((((r as any).cookies ?? [])).filter((__x: Cookie) => ((c: Cookie) => __bynkEq(c.name, "__Host-visits"))(__x)))));
+    })(((__xs: readonly Cookie[]) => __xs.length > 0 ? Some(__xs[0]) : None)((((r as any).cookies ?? [])).filter((__x: Cookie) => ((c: Cookie) => c.name === "__Host-visits")(__x)))));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -145,13 +150,15 @@ async function test_expire_is_sent_empty_and_already_expired() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Cookie } = __ns_bynk;
+    type Cookie = __ns_bynk.Cookie;
     const r = await __sysdrive_site_http_POST_theme_reset(undefined, "");
     void (((__d) => {
       switch (__d.tag) {
         case "Some": {
           const c = __d.value;
-          if (!(__bynkEq(c.name, "theme"))) { throw __bynkExpectFailure("tests/prefs.bynk:104:12", 2428, 2445, "expect c.name == \"theme\"\n  expected: c.name == \"theme\"\n  actual:   " + __bynkShow((c.name)) + " == " + __bynkShow(("theme"))); }
-          if (!(__bynkEq(c.value, ""))) { throw __bynkExpectFailure("tests/prefs.bynk:105:12", 2457, 2470, "expect c.value == \"\"\n  expected: c.value == \"\"\n  actual:   " + __bynkShow((c.value)) + " == " + __bynkShow((""))); }
+          if (!(c.name === "theme")) { throw __bynkExpectFailure("tests/prefs.bynk:104:12", 2428, 2445, "expect c.name == \"theme\"\n  expected: c.name == \"theme\"\n  actual:   " + __bynkShow((c.name)) + " == " + __bynkShow(("theme"))); }
+          if (!(c.value === "")) { throw __bynkExpectFailure("tests/prefs.bynk:105:12", 2457, 2470, "expect c.value == \"\"\n  expected: c.value == \"\"\n  actual:   " + __bynkShow((c.value)) + " == " + __bynkShow((""))); }
           if (!(__bynkEq(c.maxAge, Some(0)))) { throw __bynkExpectFailure("tests/prefs.bynk:106:12", 2482, 2509, "expect c.maxAge == Some(0.seconds)\n  expected: c.maxAge == Some(0.seconds)\n  actual:   " + __bynkShow((c.maxAge)) + " == " + __bynkShow((Some(0)))); }
           return undefined;
         }

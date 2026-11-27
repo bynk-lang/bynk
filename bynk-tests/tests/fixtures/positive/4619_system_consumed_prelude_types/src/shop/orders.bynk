@@ -1,0 +1,27 @@
+context shop.orders
+
+consumes bynk { CloseInfo, TimedOut }
+
+type Item = { sku: String, qty: Int }
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+service api from http {
+  on GET("/ping") () -> Effect[HttpResult[String]] by u: User {
+    Ok("pong")
+  }
+}
+
+// No service signature names `CloseInfo`: the target only consumes it.
+service items {
+  on call() -> Effect[List[Item]] by Caller {
+    Effect.pure([Item { sku: "a", qty: 1 }, Item { sku: "b", qty: 2 }])
+  }
+}
+
+service timeouts {
+  on call() -> Effect[List[TimedOut]] by Caller {
+    Effect.pure([TimedOut { after: 5.seconds }])
+  }
+}

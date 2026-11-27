@@ -116,8 +116,8 @@ async function test_an_unknown_total_is_written___and_reads_back_as_None() {
       switch (__d.tag) {
         case "PartialContent": {
           const range = __d.range;
-          if (!(__bynkEq(range.start, 0))) { throw __bynkExpectFailure("tests/ranges.bynk:52:16", 1501, 1517, "expect range.start == 0\n  expected: range.start == 0\n  actual:   " + __bynkShow((range.start)) + " == " + __bynkShow((0))); }
-          if (!(__bynkEq(range.end, 4))) { throw __bynkExpectFailure("tests/ranges.bynk:53:16", 1533, 1547, "expect range.end == 4\n  expected: range.end == 4\n  actual:   " + __bynkShow((range.end)) + " == " + __bynkShow((4))); }
+          if (!(range.start === 0)) { throw __bynkExpectFailure("tests/ranges.bynk:52:16", 1501, 1517, "expect range.start == 0\n  expected: range.start == 0\n  actual:   " + __bynkShow((range.start)) + " == " + __bynkShow((0))); }
+          if (!(range.end === 4)) { throw __bynkExpectFailure("tests/ranges.bynk:53:16", 1533, 1547, "expect range.end == 4\n  expected: range.end == 4\n  actual:   " + __bynkShow((range.end)) + " == " + __bynkShow((4))); }
           if (!(__bynkEq(range, { start: 0, end: 4, total: None }))) { throw __bynkExpectFailure("tests/ranges.bynk:54:16", 1563, 1618, "expect range == ContentRange { start: 0, end: 4, total: None }\n  expected: range == ContentRange { start: 0, end: 4, total: None }\n  actual:   " + __bynkShow((range)) + " == " + __bynkShow(({ start: 0, end: 4, total: None }))); }
           return undefined;
         }
