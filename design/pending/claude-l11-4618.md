@@ -1,6 +1,7 @@
 ---
 level: patch
 changelog: A call to a service whose signature names a `bynk` prelude type (`CloseInfo`, `List[CloseInfo]`, `Cookie`) has the type the service declares, in a `system` case and in a consuming context, instead of `()`
+breaking: A service whose signature names a type of a first-party adapter (`consumes bynk { CloseInfo, Cookie }`, an R2 or D1 type) now has that type's shape in its contract, so its contract hash changes. A caller built before this and a callee built after it (or the reverse) refuse each other's calls on that service with a contract mismatch until both are rebuilt and redeployed: redeploy both sides of a call whose signature names an adapter type. A call to a service whose signature names only your own, commons' or consumed contexts' types is not affected.
 ---
 
 ## ADR: contract-table-holds-the-adapter-types-a-signature-names
