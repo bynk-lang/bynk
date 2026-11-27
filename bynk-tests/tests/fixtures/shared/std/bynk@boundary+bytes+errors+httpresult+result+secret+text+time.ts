@@ -968,7 +968,7 @@ export function __deserialise_ApiKeyInfo(json: __JsonValue, path: string = "$"):
     return Err({ kind: "StructuralMismatch", path: `${path}.pepperAsOf`, expected: "number", actual: typeof __pepperAsOf$ms });
   }
   if (!globalThis.Number.isSafeInteger(__pepperAsOf$ms)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.pepperAsOf`, expected: "safe integer", actual: String(__pepperAsOf$ms) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.pepperAsOf`, expected: "safe integer", actual: globalThis.Number.isInteger(__pepperAsOf$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __pepperAsOf = __pepperAsOf$ms;
   return Ok({ id: __id, label: __label, created: __created, expires: __expires, lastUsed: __lastUsed, pepper: __pepper, pepperAsOf: __pepperAsOf } as ApiKeyInfo);
@@ -1012,7 +1012,7 @@ export function __deserialise_ApiKeyPepper(json: __JsonValue, path: string = "$"
       case "Retired":
         return Ok({ tag: "Retired" } as ApiKeyPepper);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -1028,7 +1028,7 @@ export function __deserialise_ApiKeyPepper(json: __JsonValue, path: string = "$"
     case "Retired":
       return Ok({ tag: "Retired" } as ApiKeyPepper);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -1087,21 +1087,21 @@ export function __deserialise_ApiKeySweep(json: __JsonValue, path: string = "$")
     return Err({ kind: "StructuralMismatch", path: `${path}.expired`, expected: "number", actual: typeof obj["expired"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["expired"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.expired`, expected: "safe integer", actual: String(obj["expired"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.expired`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["expired"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __expired = obj["expired"];
   if (typeof obj["retired"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.retired`, expected: "number", actual: typeof obj["retired"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["retired"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.retired`, expected: "safe integer", actual: String(obj["retired"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.retired`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["retired"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __retired = obj["retired"];
   if (typeof obj["previous"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.previous`, expected: "number", actual: typeof obj["previous"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["previous"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.previous`, expected: "safe integer", actual: String(obj["previous"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.previous`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["previous"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __previous = obj["previous"];
   return Ok({ expired: __expired, retired: __retired, previous: __previous } as ApiKeySweep);
