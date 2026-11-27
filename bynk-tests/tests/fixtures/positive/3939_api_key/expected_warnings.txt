@@ -1,0 +1,4 @@
+# #3939 (slice 2, track §12): `GET /usage` is limited by `key: identity`, which counts a verified key
+# holder after the seam, so nothing bounds a guessing attacker's unverified requests and the route
+# still warns. A route takes one `@rateLimit`; a `clientIp` limit beside it waits on #4614.
+bynk.actor.api_key_unlimited
