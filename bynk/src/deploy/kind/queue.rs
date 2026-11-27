@@ -418,8 +418,7 @@ enum QueueAttempt {
     Created,
     /// The account already listed it, so nothing was asked of it.
     AlreadyThere,
-    /// #4602: the create was refused because another deploy made the queue in between, and the
-    /// account lists it now: this run adopted it.
+    /// #4602: the create was refused, and the account lists the queue now: this run adopted it.
     AdoptedAfterRefusal,
 }
 
@@ -453,11 +452,12 @@ fn record(cx: &StepCx<'_, '_, Queue>, queue: &str, created: bool) -> Commit<Queu
     )
 }
 
-/// #4602: what the apply says of a queue whose create was refused because the name was taken in
-/// the meantime, and which the account lists now.
+/// #4602: what the apply says of a queue whose create was refused and which the account lists now.
+/// That is all the run knows: a concurrent deploy, another tool or a hand-made queue behind a lookup
+/// that failed first all look the same, so the note does not name the cause.
 fn queue_adopted_note(physical: &str) -> String {
     format!(
-        "bynk: note: adopted the queue `{physical}` already on the account (the create was refused: another deploy made it first)"
+        "bynk: note: adopted the queue `{physical}` already on the account (the create was refused and the queue was then listed: it was made outside this run)"
     )
 }
 
@@ -602,19 +602,80 @@ mod tests {
         let (notes, calls) = run(true, false);
         assert_eq!(
             notes,
-            [Notice::Plain(queue_adopted_note("jobs"))],
+            [Notice::Plain(
+                "bynk: note: adopted the queue `jobs` already on the account (the create was refused and the queue was then listed: it was made outside this run)"
+                    .to_string()
+            )],
             "{calls:?}"
         );
         assert_eq!(
             calls,
             ["queues info jobs", "queues create jobs", "queues info jobs"]
         );
-        assert!(
-            queue_adopted_note("jobs").contains("adopted the queue `jobs` already on the account")
-        );
         // Made cleanly: nothing to add to the plan line. Already listed: nothing was asked.
         assert!(run(false, false).0.is_empty());
         assert!(run(false, true).0.is_empty());
+    }
+
+    /// #4602: the deploy says a note once its step's commits are written, never before: a ledger
+    /// write that fails ends the step with that failure and says nothing.
+    #[test]
+    fn a_note_is_said_after_the_commits_are_written_and_not_when_the_write_fails() {
+        use crate::cloudflare::Op;
+        use crate::cloudflare::fake::Recording;
+        use crate::deploy::kind::PRINTED;
+        let declared = Resources::default().consumes(&["jobs"]);
+        let run = |lock_path: &Path| {
+            let lookups = std::cell::Cell::new(0);
+            let api = Recording::new(move |op: &Op<'_>| match op {
+                Op::QueueInfo { .. } => {
+                    lookups.set(lookups.get() + 1);
+                    Ok::<_, CloudflareError>(if lookups.get() > 1 { "" } else { "absent" }.into())
+                }
+                Op::QueueCreate { .. } => Err(crate::cloudflare::RestError::answered(
+                    "POST",
+                    "/queues",
+                    409,
+                    r#"[{"code":11009,"message":"stand-in"}]"#,
+                )
+                .into()),
+                _ => Ok(String::new()),
+            });
+            let project = BTreeMap::new();
+            let site = Site {
+                tools: Tools {
+                    api: &api,
+                    project_root: Path::new("/nonexistent"),
+                },
+                environment: "default",
+                worker: "shop",
+                project: &project,
+            };
+            let mut lock = DeployLock::default();
+            PRINTED.with(|printed| printed.borrow_mut().clear());
+            let outcome = provision_kind::<Queue>(
+                site,
+                &declared,
+                &mut LedgerWriter::new(&mut lock, lock_path),
+                Lives::default(),
+            );
+            (
+                outcome.is_ok(),
+                PRINTED.with(|printed| printed.borrow().clone()),
+            )
+        };
+        let dir = std::env::temp_dir().join(format!("bynk-queue-note-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (ok, said) = run(&dir.join(LOCK_FILE));
+        assert!(ok);
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert!(said[0].contains("adopted the queue `jobs`"), "{said:?}");
+        // The ledger cannot be written (its directory is gone): the step fails, and no note.
+        let (ok, said) = run(&dir.join("missing").join(LOCK_FILE));
+        assert!(!ok);
+        assert!(said.is_empty(), "{said:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

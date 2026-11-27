@@ -766,13 +766,10 @@ mod tests {
         assert_eq!(again.bound, [("KV".to_string(), "kv-new".to_string())]);
         assert_eq!(
             again.notes,
-            [Notice::Plain(kv_recreated_note(&kv_namespace_noun(
-                "shop", "KV"
-            )))]
-        );
-        assert!(
-            kv_recreated_note(&kv_namespace_noun("shop", "KV"))
-                .contains("the recorded id was gone"),
+            [Notice::Plain(
+                "bynk: note: re-created KV namespace for `shop` (the recorded id was gone from the account)"
+                    .to_string()
+            )]
         );
         // A first creation has nothing recorded to have lost.
         assert!(apply(KvDecision::Create).notes.is_empty());

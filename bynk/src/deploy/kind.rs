@@ -505,8 +505,19 @@ pub(crate) enum Notice {
     Plain(String),
 }
 
+#[cfg(test)]
+thread_local! {
+    /// What [`Notice::print`] has said on this thread, for a test of when a note is said (#4602).
+    pub(crate) static PRINTED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
 impl Notice {
     pub(crate) fn print(&self) {
+        #[cfg(test)]
+        PRINTED.with(|printed| {
+            let (Notice::Styled(text) | Notice::Plain(text)) = self;
+            printed.borrow_mut().push(text.clone());
+        });
         match self {
             Notice::Styled(text) => emsg!("{text}"),
             Notice::Plain(text) => eprintln!("{text}"),
