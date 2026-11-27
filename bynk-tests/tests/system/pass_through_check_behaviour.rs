@@ -187,7 +187,10 @@ service proxy from http {
 }
 "#,
     );
-    assert!(ok, "a bare variant must resolve by its expected type:\n{out}");
+    assert!(
+        ok,
+        "a bare variant must resolve by its expected type:\n{out}"
+    );
 }
 
 /// §12: `bynk.cloudflare`'s `EmailVerdict` also has a `Forward`, so an email

@@ -6334,6 +6334,8 @@ fn Box.size(self) -> Int { 1 }
         assert_eq!(
             bases,
             [
+                // #3752 (D13): the portable `bynk` surface's one, first.
+                "Upstream",
                 "Kv",
                 "Service",
                 "R2",

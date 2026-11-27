@@ -1,7 +1,7 @@
 ---
 level: minor
 probes: emit_diagnostics
-changelog: An `on ANY(…)` pass-through route returning `Effect[PassThrough]`, with `bynk`'s `InboundRequest`, `Forwarded`, `PassThrough`, `UpstreamError` and an `Upstream` capability whose `@origin` is declared, now type-checks; its router and the upstream exchange arrive in the next increment, so a build with one is refused (`bynk.http.pass_through_not_emitted`); experimental, behind `bynk.http.ANY` and the `bynk` items in `[unstable] allow`
+changelog: An `on ANY(…)` pass-through route returning `Effect[PassThrough]`, with `bynk`'s `InboundRequest`, `Forwarded`, `PassThrough`, `UpstreamError` and an `Upstream` capability whose `@origin` is declared, now type-checks; its router and the upstream exchange arrive in the next increment, so a build with one is refused (`bynk.http.pass_through_not_emitted`); experimental, behind `bynk.http.ANY` and the `bynk` items in `[unstable] allow`. A bare variant that several sums share is now picked by a body's `Effect[T]` as by a plain `T`, so an email handler's `Forward` stays `EmailVerdict.Forward` beside `PassThrough.Forward`
 ---
 
 ## ADR: pass-through-route-form
@@ -67,7 +67,16 @@ ruled for the unit types in review (L19 slice 3a). Variant names still resolve a
 any consumed sum. A program written before this keeps compiling with its own `Forward`
 or `Respond`, or with bare `Timeout` and `Unreachable` (which `FetchError` and
 `CallOutcome` already declare), even consuming the whole of `bynk`. A program that
-imports `PassThrough` beside its own `Forward` qualifies the one it means.
+imports `PassThrough` beside its own `Forward` qualifies the one it means, unless an
+expected type picks it.
+
+`bynk.cloudflare`'s `EmailVerdict` also declares `Forward`, so an email handler that
+consumes the whole of `bynk` would have seen two. The expected type already settles a
+shared variant name (#3344), but a handler body returning `Effect[EmailVerdict]` was
+checked against the `Effect`, which names no sum. A variant is never itself an
+`Effect`, so the expected type's `T` now decides, as a plain `T` does: the handler's
+bare `Forward` is the verdict's, as before, and a pass-through route's bare `Forward`
+is `PassThrough`'s.
 
 Rejected:
 - A `Forward` variant on `HttpResult`, which would break every exhaustive `match` (§12).
