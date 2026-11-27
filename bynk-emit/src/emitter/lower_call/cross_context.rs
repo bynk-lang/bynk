@@ -712,7 +712,8 @@ pub(crate) struct CallerView<'a> {
 }
 
 /// #2828: whether any of `names`, or a type their caller-bound declarations
-/// name in a field or payload, is a refined or opaque type the caller binds.
+/// name in a field or payload, is a refined or opaque type the caller binds,
+/// or (#3807) a `uses`d commons type the caller rebrands.
 /// A consumed context's own type (`consumed_type_ns`) is never the caller's
 /// declaration, so it neither counts nor is searched.
 fn reaches_brand(
