@@ -45,6 +45,7 @@ pub(super) type RouteBodyMap =
 /// carried as one [`bynk_ts::TsStmtKind::Raw`] statement, the same carrier
 /// this track's earlier still-`String`-typed-sibling conversions already
 /// used.
+#[derive(Default)]
 pub(super) struct SystemHttpSupport {
     pub(super) code: Vec<TsStmt>,
     pub(super) http_services: std::collections::HashSet<String>,
@@ -169,15 +170,7 @@ pub(super) fn emit_system_http_support(
     let mut declared: DeclaredRoutes = std::collections::HashSet::new();
     let mut route_body: RouteBodyMap = HashMap::new();
     let Some(table) = unit_tables.get(target) else {
-        return SystemHttpSupport {
-            code: Vec::new(),
-            http_services,
-            declared_routes: declared,
-            route_body,
-            type_ns: String::new(),
-            claims: emitter::ctx::SystemHttpClaims::default(),
-            ws: HashMap::new(),
-        };
+        return SystemHttpSupport::default();
     };
     let ns = test_ns(target);
     let binding = crate::emitter::bindings::service_binding(target).name;
@@ -214,20 +207,17 @@ pub(super) fn emit_system_http_support(
     // How a driver reads an actor's secret: the case's `env` entry (#2134),
     // else the fixed test secret in `process.env`.
     let secret_read_of = |secret: &str| secret_read(secret, with_env, remote);
-    let mut ws: HashMap<String, emitter::ctx::SystemWsService> = HashMap::new();
+    // #3901: the WebSocket services are driven through a real upgrade, by the drivers of `system_ws`.
+    let ws = emit_ws_drivers(
+        (target, table),
+        runtime_use,
+        &secret_read_of,
+        (&mut secrets, &mut routes),
+    );
     let mut svc_names: Vec<&String> = table.services.keys().collect();
     svc_names.sort();
     for sname in svc_names {
         let decl = &table.services[sname];
-        // #3901: a WebSocket service is driven through a real upgrade, by the drivers of `system_ws`.
-        if let Some(drivers) =
-            ws_service_drivers(sname, decl, target, table, runtime_use, &secret_read_of)
-        {
-            secrets.extend(drivers.secret);
-            routes.extend(drivers.code);
-            ws.insert(sname.clone(), drivers.service);
-            continue;
-        }
         // M-1's domain clause (ADR 0735; crate-hygiene B4, #3012): this
         // function holds the target's symbol table, not its `TypedCommons`, so it
         // doesn't hold `bynk_model::lower_protocol_ir`'s input.
@@ -1081,15 +1071,7 @@ pub(super) fn emit_system_http_support(
     }
 
     if http_services.is_empty() && ws.is_empty() {
-        return SystemHttpSupport {
-            code: Vec::new(),
-            http_services,
-            declared_routes: declared,
-            route_body,
-            type_ns: String::new(),
-            claims: emitter::ctx::SystemHttpClaims::default(),
-            ws: HashMap::new(),
-        };
+        return SystemHttpSupport::default();
     }
 
     // #1485: the HS256 signer block — a monotonic clock the signer's `exp`
@@ -1099,12 +1081,7 @@ pub(super) fn emit_system_http_support(
     // treatment `expectation_runtime_helpers`/`stub_runtime_helpers` already
     // get, rather than an unexplained raw string literal with `\`-continuations.
     let mut code = vec![TestRuntimeModule::JwtSigner.splice()];
-    // #3901: the client half of a WebSocket address, for a target with a service to drive.
-    if !ws.is_empty() {
-        let mut client = TestRuntimeModule::WsClient.splice();
-        client.no_blank_before = true;
-        code.push(client);
-    }
+    code.extend(ws_client_splice(&ws));
     // #3052: the test issuer an `Oidc` route's drivers mint tokens with.
     if has_oidc {
         // The remote flag is the first line of the issuer's text, so the two print as one block.

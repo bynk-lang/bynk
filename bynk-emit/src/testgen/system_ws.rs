@@ -275,3 +275,42 @@ fn is_public(
         .and_then(|a| a.auth.as_ref())
         .is_some_and(|auth| auth.name == "None")
 }
+
+/// The drivers of every WebSocket service of the target, appended to `routes`, and the secrets their actors
+/// sign with added to `secrets`; the services driven are returned, for the lowering of a case's address.
+pub(super) fn emit_ws_drivers(
+    (target, table): (&str, &UnitTable),
+    runtime_use: &crate::emitter::RuntimeUse,
+    secret_read_of: &dyn Fn(&str) -> TsExpr,
+    (secrets, routes): (&mut std::collections::BTreeSet<String>, &mut Vec<TsStmt>),
+) -> HashMap<String, SystemWsService> {
+    let mut driven = HashMap::new();
+    let mut names: Vec<&String> = table.services.keys().collect();
+    names.sort();
+    for sname in names {
+        let Some(drivers) = ws_service_drivers(
+            sname,
+            &table.services[sname],
+            target,
+            table,
+            runtime_use,
+            secret_read_of,
+        ) else {
+            continue;
+        };
+        secrets.extend(drivers.secret);
+        routes.extend(drivers.code);
+        driven.insert(sname.clone(), drivers.service);
+    }
+    driven
+}
+
+/// The client half of a WebSocket address (`ws_client.ts`), for a target with a service to drive.
+pub(super) fn ws_client_splice(driven: &HashMap<String, SystemWsService>) -> Option<TsStmt> {
+    if driven.is_empty() {
+        return None;
+    }
+    let mut client = TestRuntimeModule::WsClient.splice();
+    client.no_blank_before = true;
+    Some(client)
+}

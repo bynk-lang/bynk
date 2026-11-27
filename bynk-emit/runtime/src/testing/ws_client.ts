@@ -27,9 +27,9 @@ export type __WsUpgrade = {
 
 function __wsHandleOf(tc: object, what: string): __WsHandle {
   const handle = __wsHandles.get(tc);
-  if (handle === undefined) throw new globalThis.Error(`TestConnection: \`${what}\` before \`open\` — call the service's \`open\` first`);
+  if (handle === undefined) throw new globalThis.Error(`TestConnection: ${what} before open — call open of the service first`);
   if (handle.refused !== undefined) {
-    throw new globalThis.Error(`TestConnection: \`${what}\` on a connection whose upgrade the Worker refused with ${handle.refused}; read \`refusedWith()\` instead`);
+    throw new globalThis.Error(`TestConnection: ${what} on a connection whose upgrade the Worker refused with ${handle.refused}; read refusedWith() instead`);
   }
   return handle;
 }
@@ -48,7 +48,7 @@ export async function __bynkWsOpen<F>(
   tc: TestConnection<F>,
   fetchUpgrade: (request: globalThis.Request) => Promise<globalThis.Response>,
   upgrade: __WsUpgrade,
-  // The `out` type's deserialiser takes the wire JSON (`JsonValue`); `never` lets any such function in.
+  // The out type's deserialiser takes the wire JSON; never lets any such function in.
   decode: (wire: never) => { readonly tag: "Ok"; readonly value: F } | { readonly tag: "Err"; readonly error: unknown },
 ): Promise<void> {
   // One socket has one owner, as at `unit`: a connection that was opened or handed to an agent is not opened again.
@@ -73,7 +73,7 @@ export async function __bynkWsOpen<F>(
     const data = (event as { data: string | ArrayBuffer }).data;
     const wire = typeof data === "string" ? (globalThis.JSON.parse(data) as unknown) : new globalThis.Uint8Array(data);
     const decoded = decode(wire as never);
-    if (decoded.tag === "Err") throw new globalThis.Error(`${upgrade.service} sent a frame its own \`out\` type refuses`);
+    if (decoded.tag === "Err") throw new globalThis.Error(`${upgrade.service} sent a frame its own out type refuses`);
     tc.sent.push(decoded.value);
   });
   socket.addEventListener("close", (event) => {
