@@ -3,7 +3,7 @@
 
 import type { __RateLimiter } from "../../__bynk_runtime/storage.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __apiKeyCredentialOf, __apiKeyDigests, __apiKeyDummyDigest, __apiKeyFirstDigest, __apiKeyPresented, __loadApiKeyPeppers, __parseApiKey } from "../../__bynk_runtime/apikey.js";
+import { __apiKeyCredentialOf, __apiKeyCurrentKid, __apiKeyDigests, __apiKeyDummyDigest, __apiKeyFirstDigest, __apiKeyLiveKids, __apiKeyNow, __apiKeyPresented, __loadApiKeyPeppers, __parseApiKey } from "../../__bynk_runtime/apikey.js";
 import * as handlers from "./handlers.js";
 import * as bynk__binding from "../../bynk-cloudflare.js";
 import * as bynk_cloudflare__binding from "../../bynk/cloudflare.binding.js";
@@ -22,17 +22,19 @@ export function compose(env: Env) {
   const Clock = (env as unknown as { __bynkClock?: bynk__binding.ClockProvider }).__bynkClock ?? new bynk__binding.ClockProvider();
   const PerClient = new bynk_cloudflare__binding.WorkersRateLimit(env, "RATELIMIT_PER_CLIENT");
   const PerIp = new bynk_cloudflare__binding.WorkersRateLimit(env, "RATELIMIT_PER_IP");
-  const deps = { Clock, PerClient, PerIp, env, __apiKey: { Client: { secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"] } } };
+  const deps = { Clock, PerClient, PerIp, env, __apiKey: { Client: { secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"], previous: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER_PREV"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER_PREV"] } } };
   return {
     async http_GET_me(request: globalThis.Request) {
       const __rawKey = __apiKeyCredentialOf(request, null);
       if (__rawKey === null) return HttpResult.Unauthorized;
       const __key = __parseApiKey(__rawKey, "acme");
       if (__key === null) return HttpResult.Unauthorized;
-      const __digests = await __apiKeyDigests(await __loadApiKeyPeppers({ secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"] }, { secret: "CLIENT_KEY_PEPPER" }), __key.secret);
-      const __owner = await handlers.__makeClientKeys(__key.handle, env).verify(__key.keyNo, __apiKeyPresented(__digests), __apiKeyFirstDigest(__digests), __apiKeyDummyDigest(), deps);
-      if (__owner.tag !== "Some") return HttpResult.Unauthorized;
-      const __id = handlers.AccountId.of(String(__owner.value));
+      const __digests = await __apiKeyDigests(await __loadApiKeyPeppers({ secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"], previous: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER_PREV"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER_PREV"] }, { secret: "CLIENT_KEY_PEPPER", previous: "CLIENT_KEY_PEPPER_PREV" }), __key.secret);
+      const __now = await __apiKeyNow(env);
+      const __check = await handlers.__makeClientKeys(__key.handle, env).verify(__key.keyNo, __apiKeyPresented(__digests), __apiKeyFirstDigest(__digests), __apiKeyCurrentKid(__digests), __apiKeyDummyDigest(), __now, deps);
+      if (__check.tag !== "Some") return HttpResult.Unauthorized;
+      if (__check.value.touch) await handlers.__makeClientKeys(__key.handle, env).touch(__key.keyNo, __apiKeyCurrentKid(__digests), __apiKeyFirstDigest(__digests), __apiKeyLiveKids(__digests), __now, deps);
+      const __id = handlers.AccountId.of(String(__check.value.identity));
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_GET_me({ ...deps, identity: __id.value });
     },
@@ -41,10 +43,12 @@ export function compose(env: Env) {
       if (__rawKey === null) return { tag: "Err", error: HttpResult.Unauthorized };
       const __key = __parseApiKey(__rawKey, "acme");
       if (__key === null) return { tag: "Err", error: HttpResult.Unauthorized };
-      const __digests = await __apiKeyDigests(await __loadApiKeyPeppers({ secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"] }, { secret: "CLIENT_KEY_PEPPER" }), __key.secret);
-      const __owner = await handlers.__makeClientKeys(__key.handle, env).verify(__key.keyNo, __apiKeyPresented(__digests), __apiKeyFirstDigest(__digests), __apiKeyDummyDigest(), deps);
-      if (__owner.tag !== "Some") return { tag: "Err", error: HttpResult.Unauthorized };
-      const __id = handlers.AccountId.of(String(__owner.value));
+      const __digests = await __apiKeyDigests(await __loadApiKeyPeppers({ secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"], previous: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER_PREV"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER_PREV"] }, { secret: "CLIENT_KEY_PEPPER", previous: "CLIENT_KEY_PEPPER_PREV" }), __key.secret);
+      const __now = await __apiKeyNow(env);
+      const __check = await handlers.__makeClientKeys(__key.handle, env).verify(__key.keyNo, __apiKeyPresented(__digests), __apiKeyFirstDigest(__digests), __apiKeyCurrentKid(__digests), __apiKeyDummyDigest(), __now, deps);
+      if (__check.tag !== "Some") return { tag: "Err", error: HttpResult.Unauthorized };
+      if (__check.value.touch) await handlers.__makeClientKeys(__key.handle, env).touch(__key.keyNo, __apiKeyCurrentKid(__digests), __apiKeyFirstDigest(__digests), __apiKeyLiveKids(__digests), __now, deps);
+      const __id = handlers.AccountId.of(String(__check.value.identity));
       if (__id.tag === "Err") return { tag: "Err", error: HttpResult.Unauthorized };
       return { tag: "Ok", value: { key: "identity:Client:".concat(globalThis.String(String(__id.value))), principal: { identity: __id.value } } };
     },
@@ -56,10 +60,12 @@ export function compose(env: Env) {
       if (__rawKey === null) return HttpResult.Unauthorized;
       const __key = __parseApiKey(__rawKey, "acme");
       if (__key === null) return HttpResult.Unauthorized;
-      const __digests = await __apiKeyDigests(await __loadApiKeyPeppers({ secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"] }, { secret: "CLIENT_KEY_PEPPER" }), __key.secret);
-      const __owner = await handlers.__makeClientKeys(__key.handle, env).verify(__key.keyNo, __apiKeyPresented(__digests), __apiKeyFirstDigest(__digests), __apiKeyDummyDigest(), deps);
-      if (__owner.tag !== "Some") return HttpResult.Unauthorized;
-      const __id = handlers.AccountId.of(String(__owner.value));
+      const __digests = await __apiKeyDigests(await __loadApiKeyPeppers({ secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"], previous: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER_PREV"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER_PREV"] }, { secret: "CLIENT_KEY_PEPPER", previous: "CLIENT_KEY_PEPPER_PREV" }), __key.secret);
+      const __now = await __apiKeyNow(env);
+      const __check = await handlers.__makeClientKeys(__key.handle, env).verify(__key.keyNo, __apiKeyPresented(__digests), __apiKeyFirstDigest(__digests), __apiKeyCurrentKid(__digests), __apiKeyDummyDigest(), __now, deps);
+      if (__check.tag !== "Some") return HttpResult.Unauthorized;
+      if (__check.value.touch) await handlers.__makeClientKeys(__key.handle, env).touch(__key.keyNo, __apiKeyCurrentKid(__digests), __apiKeyFirstDigest(__digests), __apiKeyLiveKids(__digests), __now, deps);
+      const __id = handlers.AccountId.of(String(__check.value.identity));
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_GET_auth_header(headers, { ...deps, identity: __id.value });
     },
@@ -68,10 +74,12 @@ export function compose(env: Env) {
       if (__rawKey === null) return HttpResult.Unauthorized;
       const __key = __parseApiKey(__rawKey, "acme");
       if (__key === null) return HttpResult.Unauthorized;
-      const __digests = await __apiKeyDigests(await __loadApiKeyPeppers({ secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"] }, { secret: "CLIENT_KEY_PEPPER" }), __key.secret);
-      const __owner = await handlers.__makeClientKeys(__key.handle, env).verify(__key.keyNo, __apiKeyPresented(__digests), __apiKeyFirstDigest(__digests), __apiKeyDummyDigest(), deps);
-      if (__owner.tag !== "Some") return HttpResult.Unauthorized;
-      const __id = handlers.AccountId.of(String(__owner.value));
+      const __digests = await __apiKeyDigests(await __loadApiKeyPeppers({ secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"], previous: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER_PREV"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER_PREV"] }, { secret: "CLIENT_KEY_PEPPER", previous: "CLIENT_KEY_PEPPER_PREV" }), __key.secret);
+      const __now = await __apiKeyNow(env);
+      const __check = await handlers.__makeClientKeys(__key.handle, env).verify(__key.keyNo, __apiKeyPresented(__digests), __apiKeyFirstDigest(__digests), __apiKeyCurrentKid(__digests), __apiKeyDummyDigest(), __now, deps);
+      if (__check.tag !== "Some") return HttpResult.Unauthorized;
+      if (__check.value.touch) await handlers.__makeClientKeys(__key.handle, env).touch(__key.keyNo, __apiKeyCurrentKid(__digests), __apiKeyFirstDigest(__digests), __apiKeyLiveKids(__digests), __now, deps);
+      const __id = handlers.AccountId.of(String(__check.value.identity));
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_DELETE_session(deps);
     },
@@ -83,6 +91,9 @@ export function compose(env: Env) {
     },
     async http_DELETE_accounts_Param_id_keys_Param_key(id: handlers.AccountId, key: handlers.ApiKeyId) {
       return handlers.api.http_DELETE_accounts_Param_id_keys_Param_key(id, key, deps);
+    },
+    async http_POST_accounts_Param_id_sweep(id: handlers.AccountId) {
+      return handlers.api.http_POST_accounts_Param_id_sweep(id, deps);
     },
     async http_POST_accounts_Param_id_close(id: handlers.AccountId) {
       return handlers.api.http_POST_accounts_Param_id_close(id, deps);

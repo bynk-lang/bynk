@@ -45,7 +45,7 @@ export default {
           }
         }
 
-        if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/session", path) !== null || __matchPath("/auth-header", path) !== null || __matchPath("/me", path) !== null || __matchPath("/usage", path) !== null || __matchPath("/accounts/:id/keys", path) !== null || __matchPath("/accounts/:id/close", path) !== null || __matchPath("/accounts/:id/keys/:key", path) !== null)) {
+        if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/session", path) !== null || __matchPath("/auth-header", path) !== null || __matchPath("/me", path) !== null || __matchPath("/usage", path) !== null || __matchPath("/accounts/:id/keys", path) !== null || __matchPath("/accounts/:id/close", path) !== null || __matchPath("/accounts/:id/sweep", path) !== null || __matchPath("/accounts/:id/keys/:key", path) !== null)) {
           return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
         }
         {
@@ -178,6 +178,24 @@ export default {
           }
         }
         {
+          const __m = __matchPath("/accounts/:id/sweep", path);
+          if (method === "POST" && __m) {
+            __route = "POST /accounts/:id/sweep";
+            if (__m.malformed) {
+              return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+            }
+            if (!await __rateLimitAllows(env.RATELIMIT_PER_IP, request)) {
+              return __applySecurityHeaders(__applyCors(__rateLimitedResponse(60), __cors_api, request.headers.get("origin")), __security_api);
+            }
+            const __raw_id = __m.params["id"];
+            const __r_id = handlers.AccountId.of(__raw_id);
+            if (__r_id.tag === "Err") return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "RefinementViolation", path: "path.id", violation: __r_id.error })), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+            const id = __r_id.value;
+            const result = await surface.http_POST_accounts_Param_id_sweep(id);
+            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { notGet: "POST /accounts/:id/sweep" }), request, ["Bynk realm=\"acme.api\""]), __cors_api, request.headers.get("origin")), __security_api);
+          }
+        }
+        {
           const __m = __matchPath("/accounts/:id/keys/:key", path);
           if (method === "DELETE" && __m) {
             __route = "DELETE /accounts/:id/keys/:key";
@@ -212,6 +230,11 @@ export default {
         if (__matchPath("/accounts/:id/keys/:key", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;
           const __res = new globalThis.Response(null, { status: __status, headers: { allow: "DELETE, OPTIONS" } });
+          return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
+        }
+        if (__matchPath("/accounts/:id/sweep", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
           return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
         }
         if (__matchPath("/auth-header", path) !== null) {

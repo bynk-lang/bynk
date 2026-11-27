@@ -1,10 +1,10 @@
 {
-  "blurb": "`Actor.mint(identity, label)` hashes the new key under the pepper, and the pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's. So `mint` is legal only in a service handler. Mint the key there and return it; a provider or agent gets what it needs from the handler.",
+  "blurb": "`Actor.mint(identity, label)` hashes the new key under the pepper, and `Actor.sweep(identity)` tells the keys under the live pepper from the rest, which also takes the pepper. The pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's, so `mint` and `sweep` are legal only in a service handler. Call them there and return what they answer; a provider or agent gets what it needs from the handler.",
   "category": "Actors",
   "categoryAnchor": "actors",
   "code": "bynk.actor.api_key_mint_outside_handler",
   "constructs": [],
   "example": "agent Accounts {\n    key id: AccountId\n}\n\non call open(label: ApiKeyLabel) -> Effect[()] given Clock {\n    let _ <- Client.mint(self.id, label)   // ✗ in an agent\n}\n\non POST(\"/accounts/:id/keys\") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {\n    let r <- Client.mint(id, body.label)   // ✓ in a service handler\n}",
   "severity": "error",
-  "summary": "`Actor.mint` on an `ApiKey` actor is called outside a service handler, where the pepper is not (#3939)."
+  "summary": "`Actor.mint` or `Actor.sweep` on an `ApiKey` actor is called outside a service handler, where the pepper is not (#3939)."
 }

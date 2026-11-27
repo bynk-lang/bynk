@@ -311,7 +311,7 @@
     },
     {
       "code": "bynk.test.expired_needs_bearer_route",
-      "summary": "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum) or an `Oidc` actor; it sends a correctly signed token whose `exp` has passed, so only a `Bearer` or `Oidc` seam can refuse it. An `ApiKey` route's keys do not expire yet (#3939)."
+      "summary": "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum) or an `Oidc` actor; it sends a correctly signed token whose `exp` has passed, so only a `Bearer` or `Oidc` seam, or an `ApiKey` seam whose actor declares a `ttl`, can refuse it (#3939)."
     },
     {
       "code": "bynk.test.extra_headers_authorization",

@@ -2,7 +2,7 @@
 // composition root for `acme.api` Worker.
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __apiKeyCredentialOf, __apiKeyDigests, __apiKeyDummyDigest, __apiKeyFirstDigest, __apiKeyPresented, __loadApiKeyPeppers, __parseApiKey } from "../../__bynk_runtime/apikey.js";
+import { __apiKeyCredentialOf, __apiKeyCurrentKid, __apiKeyDigests, __apiKeyDummyDigest, __apiKeyFirstDigest, __apiKeyLiveKids, __apiKeyNow, __apiKeyPresented, __loadApiKeyPeppers, __parseApiKey } from "../../__bynk_runtime/apikey.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
@@ -21,9 +21,11 @@ export function compose(env: Env) {
       const __key = __parseApiKey(__rawKey, "acme");
       if (__key === null) return HttpResult.Unauthorized;
       const __digests = await __apiKeyDigests(await __loadApiKeyPeppers({ secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"] }, { secret: "CLIENT_KEY_PEPPER" }), __key.secret);
-      const __owner = await handlers.__makeClientKeys(__key.handle, env).verify(__key.keyNo, __apiKeyPresented(__digests), __apiKeyFirstDigest(__digests), __apiKeyDummyDigest(), deps);
-      if (__owner.tag !== "Some") return HttpResult.Unauthorized;
-      const __id = handlers.AccountId.of(String(__owner.value));
+      const __now = await __apiKeyNow(env);
+      const __check = await handlers.__makeClientKeys(__key.handle, env).verify(__key.keyNo, __apiKeyPresented(__digests), __apiKeyFirstDigest(__digests), __apiKeyCurrentKid(__digests), __apiKeyDummyDigest(), __now, deps);
+      if (__check.tag !== "Some") return HttpResult.Unauthorized;
+      if (__check.value.touch) await handlers.__makeClientKeys(__key.handle, env).touch(__key.keyNo, __apiKeyCurrentKid(__digests), __apiKeyFirstDigest(__digests), __apiKeyLiveKids(__digests), __now, deps);
+      const __id = handlers.AccountId.of(String(__check.value.identity));
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_GET_me({ ...deps, identity: __id.value });
     },

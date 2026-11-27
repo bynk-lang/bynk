@@ -104,7 +104,8 @@ export const ApiKeyLabel = {
 /**
  * A key an `ApiKey` actor's `mint` has just made. `key` is the key itself,
  * shown this once: the service stores only a peppered hash of it. `id` names it
- * from now on. `expires` is `None`: keys do not expire yet.
+ * from now on. `expires` is when it stops working (the actor's `ttl` after
+ * `created`), or `None` when the actor has no `ttl`.
  */
 export interface ApiKeySecret {
   readonly id: ApiKeyId;
@@ -119,8 +120,9 @@ export const ApiKeySecret = {
 
 /**
  * One of an identity's keys, as an `ApiKey` actor's `list` answers it: never the
- * key itself or its hash. `id` names it, for `revoke`. `expires` and `lastUsed`
- * are `None`: keys do not expire, and their use is not recorded, yet.
+ * key itself or its hash. `id` names it, for `revoke`. `expires` is `None` when
+ * the actor has no `ttl`. `lastUsed` is when it was last admitted, to the hour,
+ * or `None` if it never was. `pepper` says which pepper it is hashed under.
  */
 export interface ApiKeyInfo {
   readonly id: ApiKeyId;
@@ -128,9 +130,28 @@ export interface ApiKeyInfo {
   readonly created: number;
   readonly expires: Option<number>;
   readonly lastUsed: Option<number>;
+  readonly pepper: ApiKeyPepper;
 }
 
 export const ApiKeyInfo = {
+};
+
+/**
+ * Which pepper a listed key is hashed under. `Current`: the actor's `secret`.
+ * `Previous`: the pepper being rotated out, so the key stops working when
+ * `previous` is dropped, unless it is used before then (a key admitted under
+ * `previous` is re-hashed under `secret`). `Retired`: neither, so the key is
+ * refused, and `mint` or `sweep` removes it.
+ */
+export type ApiKeyPepper =
+    { readonly tag: "Current" }
+  | { readonly tag: "Previous" }
+  | { readonly tag: "Retired" };
+
+export const ApiKeyPepper = {
+  Current: { tag: "Current" } as ApiKeyPepper,
+  Previous: { tag: "Previous" } as ApiKeyPepper,
+  Retired: { tag: "Retired" } as ApiKeyPepper,
 };
 
 /**
@@ -890,6 +911,7 @@ export function __serialise_ApiKeyInfo(value: ApiKeyInfo): __JsonValue {
     created: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.created),
     expires: __serialise_Option_Instant(value.expires),
     lastUsed: __serialise_Option_Instant(value.lastUsed),
+    pepper: __serialise_ApiKeyPepper(value.pepper),
   };
 }
 
@@ -918,7 +940,10 @@ export function __deserialise_ApiKeyInfo(json: __JsonValue, path: string = "$"):
   const __r_lastUsed = __deserialise_Option_Instant(obj["lastUsed"], `${path}.lastUsed`);
   if (__r_lastUsed.tag === "Err") return __r_lastUsed;
   const __lastUsed = __r_lastUsed.value;
-  return Ok({ id: __id, label: __label, created: __created, expires: __expires, lastUsed: __lastUsed } as ApiKeyInfo);
+  const __r_pepper = __deserialise_ApiKeyPepper(obj["pepper"], `${path}.pepper`);
+  if (__r_pepper.tag === "Err") return __r_pepper;
+  const __pepper = __r_pepper.value;
+  return Ok({ id: __id, label: __label, created: __created, expires: __expires, lastUsed: __lastUsed, pepper: __pepper } as ApiKeyInfo);
 }
 
 export function __serialise_ApiKeyLabel(value: ApiKeyLabel): __JsonValue {
@@ -936,6 +961,47 @@ export function __deserialise_ApiKeyLabel(json: __JsonValue, path: string = "$")
     return Err({ kind: "RefinementViolation", path, violation: validated.error });
   }
   return Ok(validated.value as ApiKeyLabel);
+}
+
+export function __serialise_ApiKeyPepper(value: ApiKeyPepper): __JsonValue {
+  switch (value.tag) {
+    case "Current":
+      return { kind: "Current" };
+    case "Previous":
+      return { kind: "Previous" };
+    case "Retired":
+      return { kind: "Retired" };
+  }
+}
+
+export function __deserialise_ApiKeyPepper(json: __JsonValue, path: string = "$"): Result<ApiKeyPepper, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Current":
+        return Ok({ tag: "Current" } as ApiKeyPepper);
+      case "Previous":
+        return Ok({ tag: "Previous" } as ApiKeyPepper);
+      case "Retired":
+        return Ok({ tag: "Retired" } as ApiKeyPepper);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Current":
+      return Ok({ tag: "Current" } as ApiKeyPepper);
+    case "Previous":
+      return Ok({ tag: "Previous" } as ApiKeyPepper);
+    case "Retired":
+      return Ok({ tag: "Retired" } as ApiKeyPepper);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
 }
 
 export function __serialise_ApiKeySecret(value: ApiKeySecret): __JsonValue {
