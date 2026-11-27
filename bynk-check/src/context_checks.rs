@@ -192,6 +192,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
         Some(Callee::AnalyticsSelect { row, .. }) => vec![*row],
         // #4099: `Ai.generateValue[T]` decodes the reply as `T`.
         Some(Callee::AiGenerateValue { value, .. }) => vec![*value],
+        // #4101: a typed Vectorize read decodes each match's metadata.
+        Some(Callee::VectorValueRead { meta, .. }) => vec![*meta],
         Some(
             Callee::Fn(decl, ws)
             | Callee::FnValue(decl, ws)
@@ -3868,6 +3870,7 @@ fn check_service_decls(
 
     // v0.45: actor-contract well-formedness and the handler `by`-clause checks.
     check_actor_contracts(table, resolved, refs, errors);
+    errors.extend(crate::actors::reserved_principal_names(&table.actors));
 
     // #2341 (decision C): the shape of each service's `on rejected`.
     check_rejected_handlers(table, errors);

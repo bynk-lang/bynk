@@ -691,6 +691,51 @@ fn the_emitted_worker_holds_no_test_issuer() {
     );
 }
 
+/// #3901: nothing in a production Worker carries the in-process WebSocket doubles. The `WebSocketPair`
+/// double, the hibernatable state and the `101` `Response` patch live only in the test runtime
+/// (`testing/websocket`), so none of them is in a WebSocket fixture's emitted Workers, which reach the
+/// platform's own `WebSocketPair` and `Response`.
+#[test]
+fn the_emitted_worker_holds_no_websocket_test_doubles() {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).expect("read dir").flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive");
+    for name in ["1818_ws_agent_reads_its_key", "3821_ws_bearer_audience"] {
+        let mut files = Vec::new();
+        walk(&fixtures.join(name).join("expected/workers"), &mut files);
+        assert!(!files.is_empty(), "no emitted Worker files for {name}");
+        let mut hosts_sockets = false;
+        for file in files {
+            let text = fs::read_to_string(&file).unwrap_or_default();
+            hosts_sockets |= text.contains("acceptHibernatableConnection");
+            for needle in [
+                "TestWebSocket",
+                "installTestWebSocketRuntime",
+                "makeHibernatableTestState",
+                "webSocketQuiet",
+            ] {
+                assert!(
+                    !text.contains(needle),
+                    "{} holds WebSocket test double code (`{needle}`)",
+                    file.display()
+                );
+            }
+        }
+        assert!(
+            hosts_sockets,
+            "{name} emits no hibernatable socket host to check"
+        );
+    }
+}
+
 #[cfg(test)]
 mod marker {
     use super::*;
