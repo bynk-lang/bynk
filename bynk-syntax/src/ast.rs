@@ -5823,15 +5823,61 @@ pub enum LiteralValue {
     Int(i64),
     Str(String),
     Bool(bool),
+    /// A `Decimal` literal pattern (#3973), kept in its normal form so that `20d`, `20.0d` and
+    /// `20.00d` are equal: a `Decimal` pattern matches by value, as `==` does. The scale the
+    /// author wrote is kept in the pattern's source text, which only the formatter reads.
+    Decimal {
+        coef: String,
+        scale: u32,
+    },
+    /// A `Float` literal as written. The parser admits it so the checker can say why a `Float`
+    /// cannot be matched against a literal (`bynk.types.float_literal_pattern`); it never
+    /// reaches the emitter.
+    Float(String),
 }
 
 impl LiteralValue {
-    /// A human-readable rendering for diagnostics (`31`, `"english"`, `true`).
+    /// The normal form of a `Decimal` literal: an optional `-`, the digits without leading zeros
+    /// and a scale with no trailing zero in the fraction, so equal values are equal here. Zero
+    /// is `0` at scale 0, with no sign.
+    pub fn decimal(negative: bool, digits: &str, scale: u32) -> LiteralValue {
+        let mut coef = digits.trim_start_matches('0').to_string();
+        let mut scale = scale;
+        while scale > 0 && coef.ends_with('0') {
+            coef.pop();
+            scale -= 1;
+        }
+        if coef.is_empty() {
+            return LiteralValue::Decimal {
+                coef: "0".to_string(),
+                scale: 0,
+            };
+        }
+        if negative {
+            coef.insert(0, '-');
+        }
+        LiteralValue::Decimal { coef, scale }
+    }
+
+    /// A human-readable rendering for diagnostics (`31`, `"english"`, `true`, `1.2d`).
     pub fn describe(&self) -> String {
         match self {
             LiteralValue::Int(n) => n.to_string(),
             LiteralValue::Str(s) => format!("{s:?}"),
             LiteralValue::Bool(b) => b.to_string(),
+            LiteralValue::Decimal { coef, scale } => {
+                let (sign, digits) = coef
+                    .strip_prefix('-')
+                    .map_or(("", coef.as_str()), |d| ("-", d));
+                let scale = *scale as usize;
+                if scale == 0 {
+                    return format!("{sign}{digits}d");
+                }
+                let padded = format!("{digits:0>width$}", width = scale + 1);
+                let (int, frac) = padded.split_at(padded.len() - scale);
+                format!("{sign}{int}.{frac}d")
+            }
+            LiteralValue::Float(text) => text.clone(),
         }
     }
 }

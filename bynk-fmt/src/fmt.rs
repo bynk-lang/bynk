@@ -3628,6 +3628,11 @@ fn event_pattern_value_src(v: &EventPatternValue) -> String {
             LiteralValue::Int(n) => text.clone().unwrap_or_else(|| n.to_string()),
             LiteralValue::Str(s) => format!("\"{}\"", escape_string(s)),
             LiteralValue::Bool(b) => b.to_string(),
+            // An event pattern's value is an `Int`, `String`, `Bool` or variant (#936); the
+            // `Decimal` and `Float` literals are match-pattern forms (#3973).
+            LiteralValue::Decimal { .. } | LiteralValue::Float(_) => {
+                text.clone().unwrap_or_else(|| value.describe())
+            }
         },
         EventPatternValue::Variant {
             type_name, variant, ..
@@ -4837,6 +4842,17 @@ mod tests {
             "A | B as x =>",
             "Some(Order { status: Paid, .. } as paid) =>",
         ] {
+            assert!(out.contains(want), "{want}: {out}");
+        }
+        assert_eq!(out, fmt(&out), "not idempotent: {out}");
+    }
+
+    // #3973: a `Decimal` literal pattern keeps the scale it was written with.
+    #[test]
+    fn decimal_literal_patterns_keep_their_written_scale() {
+        let src = "commons c {\nfn f(d: Decimal) -> Int {\nmatch d {\n20.0d => 1\n-1.50d | 5d => 2\n_ => 3\n}\n}\n}";
+        let out = fmt(src);
+        for want in ["20.0d =>", "-1.50d | 5d =>"] {
             assert!(out.contains(want), "{want}: {out}");
         }
         assert_eq!(out, fmt(&out), "not idempotent: {out}");

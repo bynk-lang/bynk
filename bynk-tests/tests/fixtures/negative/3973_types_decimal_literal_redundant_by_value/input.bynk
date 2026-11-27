@@ -1,0 +1,16 @@
+commons demo
+
+fn band(rate: Decimal) -> String {
+  match rate {
+    20.0d => "standard"
+    20d => "again"
+    20.00d => "and again"
+    _ => "other"
+  }
+}
+
+fn open(rate: Decimal) -> String {
+  match rate {
+    5d => "reduced"
+  }
+}
