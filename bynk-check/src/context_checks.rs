@@ -687,34 +687,13 @@ pub fn check_context_declarations(
     let mut errors = Vec::new();
     let no_vars: HashSet<String> = HashSet::new();
 
-    // Build a resolved-commons snapshot for the per-handler checker.
-    // We synthesise a ResolvedCommons by reusing typed.types / typed.fns /
-    // typed.methods; the resolver wouldn't add anything new. `ResolvedCommons::new`
-    // derives `local_type_names`/`event_type_names` from `table` — the
-    // *pre-merge* local table — rather than `typed.types` (already
-    // local+uses+consumes merged); see its doc comment for why that
-    // distinction matters (owner-only emission, spine #936).
-    let resolved = ResolvedCommons::new(
-        typed.commons.clone(),
-        typed.types.clone(),
-        &table.types,
-        typed.fns.clone(),
-        typed.methods.clone(),
-        table.agents.clone(),
-        &table.events,
-        cross_context.clone(),
-        HashMap::new(),
+    let resolved = declarations_resolved(
+        typed,
+        table,
+        cross_context,
         is_context,
-        uses_commons_type_names.clone(),
-    )
-    .with_local_fns(&table.fns)
-    // #1883, slice 1a: a handler body sees the unit's assets too.
-    .with_assets(typed.assets.clone())
-    .with_embeds(typed.embeds.clone())
-    .with_consts(typed.consts.clone())
-    .with_shadowed_imports(typed.shadowed_imports.clone())
-    .with_scope_facts_of(typed)
-    .with_stability(typed.stability.clone());
+        uses_commons_type_names,
+    );
 
     // v0.25: capability operation signatures reference types.
     check_capability_decls(table, &typed.types, &no_vars, refs);
@@ -750,91 +729,8 @@ pub fn check_context_declarations(
         })
         .collect();
     // v0.17: flattened capabilities (`consumes U { Cap }`) enter the local map
-    // under their bare names, resolved from the consumed unit's exported
-    // capability so bare `given Cap` / `Cap.op(…)` type-check as if local.
-    let mut receiving_cache: Option<checker::Projection> = None;
-    for (cap, unit) in &cross_context.flattened_caps {
-        let Some(xcap) = cross_context
-            .consumed_capabilities
-            .get(unit)
-            .and_then(|m| m.get(cap))
-        else {
-            continue;
-        };
-        // #2634: an operation may name a type the unit declares but does not
-        // export (an adapter's `Token`), or one the consumer also declares.
-        // As the qualified `U.Cap.op` call does, resolve the signature against
-        // the unit's own table; a name the consumer binds to a structurally
-        // different type is refused (`bynk.boundary.structural_mismatch`)
-        // rather than read as the consumer's. The refusal is per op, at its call.
-        let unit_types = cross_context
-            .consumed_types
-            .get(unit)
-            .unwrap_or(&typed.types);
-        let (receiving, _) = receiving_cache.get_or_insert_with(|| {
-            checker::projected_types(&typed.types, &cross_context.consumed_types, tys)
-        });
-        let ops = xcap
-            .ops
-            .iter()
-            .map(|op| {
-                let vars: HashSet<String> = op.type_params.iter().cloned().collect();
-                let mut conflict: Option<(String, String, bool)> = None;
-                let mut resolve = |tr: &TypeRef, in_param: bool| {
-                    // #4111: a type the unit consumes from an adapter (`bynk.crypto`'s `Secret`)
-                    // is not in its contract view, which reads consumed contexts only, so a name
-                    // the view lacks is read as `bynk`'s own type of that name. It is resolved
-                    // against `bynk`'s declarations and never the consumer's table, where a type
-                    // of the consumer's own called `Secret` would answer to it.
-                    let (ty, signature_types) =
-                        match checker::resolve_type_ref_in(tr, unit_types, &vars, tys) {
-                            Some(ty) => (ty, unit_types),
-                            None => {
-                                match checker::resolve_type_ref_in(tr, bynk_types(), &vars, tys) {
-                                    Some(ty) => (ty, bynk_types()),
-                                    None => (tys.intern(Ty::Unit), unit_types),
-                                }
-                            }
-                        };
-                    // The same-name check reads the table the type came from, so a consumer type
-                    // called `Secret` is refused against `bynk`'s, not mistaken for it.
-                    if conflict.is_none()
-                        && let Some(name) = checker::rebrand_conflict(
-                            ty,
-                            signature_types,
-                            &typed.types,
-                            receiving,
-                            tys,
-                        )
-                    {
-                        conflict = Some((unit.clone(), name, in_param));
-                    }
-                    checker::rebrand_return_type(ty, &typed.types, tys)
-                };
-                let params = op.params.iter().map(|(_, tr)| resolve(tr, true)).collect();
-                let return_ty = resolve(&op.return_type, false);
-                CapabilityOpInfo {
-                    name: op.name.clone(),
-                    type_params: op.type_params.clone(),
-                    params,
-                    param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
-                    return_ty,
-                    codable_params: op.codable_params.clone(),
-                    key_params: op.key_params.clone(),
-                    reply_policy: op.reply_policy,
-                    boundary_conflict: conflict,
-                }
-            })
-            .collect();
-        capability_info_map.insert(
-            cap.clone(),
-            CapabilityInfo {
-                name: cap.clone(),
-                ops,
-                derived_from: None,
-            },
-        );
-    }
+    // under their bare names.
+    capability_info_map.extend(flattened_capability_infos(typed, cross_context, tys));
 
     check_provider_decls(
         typed,
@@ -1260,6 +1156,145 @@ fn check_provider_decls(
     // a cycle — the composition root cannot instantiate one in dependency
     // order. Self-provision (`provides X = … given X`) is the trivial cycle.
     detect_provider_dependency_cycles(&table.providers, errors);
+}
+
+/// The resolved-commons snapshot the declaration checks type bodies against:
+/// `typed`'s merged tables with the unit's local ones. Shared by a context's
+/// declarations and (#3959) a commons' `given` functions.
+pub(crate) fn declarations_resolved(
+    typed: &checker::TypedCommons,
+    table: &UnitTable,
+    cross_context: &resolver::CrossContextInfo,
+    is_context: bool,
+    uses_commons_type_names: &HashSet<String>,
+) -> ResolvedCommons {
+    // Build a resolved-commons snapshot for the per-handler checker.
+    // We synthesise a ResolvedCommons by reusing typed.types / typed.fns /
+    // typed.methods; the resolver wouldn't add anything new. `ResolvedCommons::new`
+    // derives `local_type_names`/`event_type_names` from `table` — the
+    // *pre-merge* local table — rather than `typed.types` (already
+    // local+uses+consumes merged); see its doc comment for why that
+    // distinction matters (owner-only emission, spine #936).
+    ResolvedCommons::new(
+        typed.commons.clone(),
+        typed.types.clone(),
+        &table.types,
+        typed.fns.clone(),
+        typed.methods.clone(),
+        table.agents.clone(),
+        &table.events,
+        cross_context.clone(),
+        HashMap::new(),
+        is_context,
+        uses_commons_type_names.clone(),
+    )
+    .with_local_fns(&table.fns)
+    // #1883, slice 1a: a handler body sees the unit's assets too.
+    .with_assets(typed.assets.clone())
+    .with_embeds(typed.embeds.clone())
+    .with_consts(typed.consts.clone())
+    .with_shadowed_imports(typed.shadowed_imports.clone())
+    .with_scope_facts_of(typed)
+    .with_stability(typed.stability.clone())
+}
+
+/// v0.17: the capabilities a unit flattens in with `consumes U { Cap }`, by
+/// bare name, resolved from the consumed unit's exported capability so bare
+/// `given Cap` / `Cap.op(…)` type-check as if local. #3959: a commons' braced
+/// `consumes` of a first-party unit's capabilities reaches them the same way.
+pub(crate) fn flattened_capability_infos(
+    typed: &checker::TypedCommons,
+    cross_context: &resolver::CrossContextInfo,
+    tys: &Arc<Types>,
+) -> HashMap<String, CapabilityInfo> {
+    // v0.17: flattened capabilities (`consumes U { Cap }`) enter the local map
+    // under their bare names, resolved from the consumed unit's exported
+    // capability so bare `given Cap` / `Cap.op(…)` type-check as if local.
+    let mut out: HashMap<String, CapabilityInfo> = HashMap::new();
+    let mut receiving_cache: Option<checker::Projection> = None;
+    for (cap, unit) in &cross_context.flattened_caps {
+        let Some(xcap) = cross_context
+            .consumed_capabilities
+            .get(unit)
+            .and_then(|m| m.get(cap))
+        else {
+            continue;
+        };
+        // #2634: an operation may name a type the unit declares but does not
+        // export (an adapter's `Token`), or one the consumer also declares.
+        // As the qualified `U.Cap.op` call does, resolve the signature against
+        // the unit's own table; a name the consumer binds to a structurally
+        // different type is refused (`bynk.boundary.structural_mismatch`)
+        // rather than read as the consumer's. The refusal is per op, at its call.
+        let unit_types = cross_context
+            .consumed_types
+            .get(unit)
+            .unwrap_or(&typed.types);
+        let (receiving, _) = receiving_cache.get_or_insert_with(|| {
+            checker::projected_types(&typed.types, &cross_context.consumed_types, tys)
+        });
+        let ops = xcap
+            .ops
+            .iter()
+            .map(|op| {
+                let vars: HashSet<String> = op.type_params.iter().cloned().collect();
+                let mut conflict: Option<(String, String, bool)> = None;
+                let mut resolve = |tr: &TypeRef, in_param: bool| {
+                    // #4111: a type the unit consumes from an adapter (`bynk.crypto`'s `Secret`)
+                    // is not in its contract view, which reads consumed contexts only, so a name
+                    // the view lacks is read as `bynk`'s own type of that name. It is resolved
+                    // against `bynk`'s declarations and never the consumer's table, where a type
+                    // of the consumer's own called `Secret` would answer to it.
+                    let (ty, signature_types) =
+                        match checker::resolve_type_ref_in(tr, unit_types, &vars, tys) {
+                            Some(ty) => (ty, unit_types),
+                            None => {
+                                match checker::resolve_type_ref_in(tr, bynk_types(), &vars, tys) {
+                                    Some(ty) => (ty, bynk_types()),
+                                    None => (tys.intern(Ty::Unit), unit_types),
+                                }
+                            }
+                        };
+                    // The same-name check reads the table the type came from, so a consumer type
+                    // called `Secret` is refused against `bynk`'s, not mistaken for it.
+                    if conflict.is_none()
+                        && let Some(name) = checker::rebrand_conflict(
+                            ty,
+                            signature_types,
+                            &typed.types,
+                            receiving,
+                            tys,
+                        )
+                    {
+                        conflict = Some((unit.clone(), name, in_param));
+                    }
+                    checker::rebrand_return_type(ty, &typed.types, tys)
+                };
+                let params = op.params.iter().map(|(_, tr)| resolve(tr, true)).collect();
+                let return_ty = resolve(&op.return_type, false);
+                CapabilityOpInfo {
+                    name: op.name.clone(),
+                    type_params: op.type_params.clone(),
+                    params,
+                    param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
+                    return_ty,
+                    codable_params: op.codable_params.clone(),
+                    key_params: op.key_params.clone(),
+                    reply_policy: op.reply_policy,
+                    boundary_conflict: conflict,
+                }
+            })
+            .collect();
+        out.insert(
+            cap.clone(),
+            CapabilityInfo {
+                name: cap.clone(),
+                ops,
+                derived_from: None,
+            },
+        );
+    }
+    out
 }
 
 /// #2868: type-check this file's context functions that declare `given`. They

@@ -1,0 +1,25 @@
+suite shop {
+	case "a commons function reads and writes the bound instance" {
+		let a <- api.call("k")
+		let b <- api.call("k")
+		expect a == "fresh"
+		expect b == "fresh"
+		expect Sessions.put called once
+	}
+
+	case "the bare Kv is bound explicitly, and is its own namespace" {
+		let _ <- api.call("k")
+		let b <- bare.call("k")
+		expect b == "plain"
+		expect Kv.put called once
+		expect Sessions.put called once
+	}
+
+	case "a Bynk-bodied provider binds its own given capability" {
+		let a <- notes.call("n", "first")
+		let b <- notes.call("n", "second")
+		expect a == "first"
+		expect b == "first"
+		expect Sessions.put called once
+	}
+}

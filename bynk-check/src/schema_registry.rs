@@ -68,21 +68,73 @@ pub fn parse_or_diagnose(
 /// change (new field, has a default) and a breaking one (new field, no
 /// default) perturb it identically. This snapshot exists to tell those two
 /// apart, one field at a time.
-fn snapshot(event: &EventDecl) -> Vec<FieldShape> {
+fn snapshot(
+    event: &EventDecl,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Vec<FieldShape> {
     let mut fields: Vec<FieldShape> = event
         .body
         .fields
         .iter()
-        .map(|f| FieldShape {
+        .map(|f| {
             // #3975: an event field is recorded under its wire name, the key a payload carries.
-            name: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
-            ty: canon_type(&f.type_ref),
-            default: f.init.is_some(),
-            renamed_from: f.replaces.iter().map(|o| o.name.clone()).collect(),
+            let name = f.wire_name().unwrap_or_else(|| f.name.name.clone());
+            // #4523: a field whose type reaches a record or a sum is locked by path, as a stored
+            // value is, so a change inside the record is seen.
+            let paths = reached_paths(&f.type_ref, &name, types);
+            FieldShape {
+                name,
+                ty: canon_type(&f.type_ref),
+                default: f.init.is_some(),
+                renamed_from: f.replaces.iter().map(|o| o.name.clone()).collect(),
+                paths,
+            }
         })
         .collect();
     fields.sort_by(|a, b| a.name.cmp(&b.name));
     fields
+}
+
+/// The path shapes of a value of type `t` rooted at `root`, as a stored value's are (the walk
+/// `storage_paths` does, with its recursion cut-off), when `t` reaches a record or a sum, and none
+/// otherwise: a field of a base type, or of a container of one, is judged by its type alone, so its
+/// lock is unchanged.
+fn reached_paths(
+    t: &TypeRef,
+    root: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Vec<PathShape> {
+    let paths = path_shapes(t, root, types);
+    if paths
+        .iter()
+        .any(|p| p.ty == "{}" || p.ty == "|" || p.ty.starts_with('@'))
+    {
+        paths
+    } else {
+        Vec::new()
+    }
+}
+
+/// [`crate::contract::storage_paths`] as the lock records it.
+fn path_shapes(
+    t: &TypeRef,
+    root: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Vec<PathShape> {
+    crate::contract::storage_paths(t, root, types)
+        .into_iter()
+        .map(|p| PathShape {
+            refinement: if p.full == p.structure {
+                String::new()
+            } else {
+                p.full
+            },
+            path: p.path,
+            ty: p.structure,
+            default: p.default,
+            renamed_from: p.renamed_from,
+        })
+        .collect()
 }
 
 /// A stable surface-form rendering of a `TypeRef`, for the registry's own
@@ -157,13 +209,26 @@ enum Reconciled {
     },
 }
 
+/// #4523, per field: a recorded field written before the lock recorded paths takes them from the
+/// unchanged declaration, matched by name and type, so the next change inside its record is judged
+/// path by path. Nothing is invented (the structure is the same, and defaults were never
+/// recorded), and a field whose paths are already recorded is never touched, so a later change to
+/// the walk cannot rewrite history. A field whose type changed keeps none, and is a retype as before.
+fn backfill_event_paths(stored: &mut [FieldShape], current: &[FieldShape]) {
+    for f in stored.iter_mut().filter(|f| f.paths.is_empty()) {
+        if let Some(c) = current.iter().find(|c| c.name == f.name && c.ty == f.ty) {
+            f.paths = c.paths.clone();
+        }
+    }
+}
+
 fn reconcile_one(current: &[FieldShape], stored: Option<&EventEntry>, renamed: bool) -> Reconciled {
     let Some(stored) = stored else {
         return Reconciled::Baseline {
             fields: current.to_vec(),
         };
     };
-    if current == stored.fields.as_slice() {
+    if same_wire_shape(current, &stored.fields) {
         // #3793: a rename leaves every shape equal once the recorded field is renamed, but it
         // is a change: the new build reads the old key, and the lock records the step.
         if renamed {
@@ -189,12 +254,24 @@ fn reconcile_one(current: &[FieldShape], stored: Option<&EventEntry>, renamed: b
         .filter(|n| !new.contains_key(*n))
         .map(|n| n.to_string())
         .collect();
+    // #4523: a field recorded with paths is judged by them (a removed or retyped nested field, a
+    // nested field added without a default, a lost default, a renamed wire key without `replaces`
+    // are each a problem), and a record type is not part of what a payload carries: the wire holds
+    // its fields, not its name. A field with none is judged by its type, as before.
+    let by_paths = |old_field: &FieldShape, new_field: &FieldShape| {
+        // A field that once reached a record or a sum and no longer does has lost every
+        // recorded position, which `compare_paths` reports as removed.
+        (!old_field.paths.is_empty()).then(|| compare_paths(&old_field.paths, &new_field.paths))
+    };
     let retyped: Vec<String> = old
         .iter()
         .filter_map(|(n, old_field)| {
-            new.get(n)
-                .filter(|new_field| new_field.ty != old_field.ty)
-                .map(|_| n.to_string())
+            let new_field = new.get(n)?;
+            match by_paths(old_field, new_field) {
+                Some(change) if change.problems.is_empty() => None,
+                Some(change) => Some(format!("{n} ({})", change.problems.join(", "))),
+                None => (new_field.ty != old_field.ty).then(|| n.to_string()),
+            }
         })
         .collect();
     let added_without_default: Vec<String> = new
@@ -235,6 +312,46 @@ fn reconcile_one(current: &[FieldShape], stored: Option<&EventEntry>, renamed: b
     }
 }
 
+/// Whether `current` is `stored` as far as the wire is concerned: equal, except that a field
+/// with recorded paths on both sides, and equal ones, may carry another type name (#4523: the wire
+/// holds a record's fields, not its name).
+fn same_wire_shape(current: &[FieldShape], stored: &[FieldShape]) -> bool {
+    current.len() == stored.len()
+        && current.iter().zip(stored).all(|(c, s)| {
+            c == s
+                || (!c.paths.is_empty()
+                    && FieldShape {
+                        ty: s.ty.clone(),
+                        ..c.clone()
+                    } == *s)
+        })
+}
+
+/// #4523: the changes inside the records of fields both shapes have, in the diagnostic's words:
+/// what a nested path added, a sum gained, or a `replaces` renamed. Empty when there are none.
+fn nested_change_parts(stored: &[FieldShape], current: &[FieldShape]) -> Vec<String> {
+    let mut parts = Vec::new();
+    for old in stored.iter().filter(|f| !f.paths.is_empty()) {
+        let Some(new) = current.iter().find(|f| f.name == old.name) else {
+            continue;
+        };
+        let change = compare_paths(&old.paths, &new.paths);
+        for (label, list) in [
+            ("added with a default", &change.added),
+            ("gained a default", &change.gained),
+            ("variant(s) added", &change.variants),
+        ] {
+            if !list.is_empty() {
+                parts.push(format!("`{}`: {label}: {}", old.name, list.join(", ")));
+            }
+        }
+        if !change.renamed.is_empty() {
+            parts.push(format!("`{}`: renamed in place", old.name));
+        }
+    }
+    parts
+}
+
 /// Reconcile every event across every unit against the given registry.
 /// Returns the updated registry document and the effective schema version
 /// for each event, keyed the same way as the document itself
@@ -242,7 +359,10 @@ fn reconcile_one(current: &[FieldShape], stored: Option<&EventEntry>, renamed: b
 /// non-additive change are pushed onto `errors`.
 pub fn reconcile(
     existing: &SchemaRegistry,
-    unit_tables: &std::collections::HashMap<String, UnitTable>,
+    (unit_tables, unit_uses): (
+        &std::collections::HashMap<String, UnitTable>,
+        &std::collections::HashMap<String, Vec<String>>,
+    ),
     errors: &mut Vec<CompileError>,
 ) -> (SchemaRegistry, std::collections::HashMap<String, i64>) {
     let mut updated = SchemaRegistry::new();
@@ -254,15 +374,19 @@ pub fn reconcile(
     for (unit_name, table) in units {
         let mut events: Vec<_> = table.events.iter().collect();
         events.sort_by_key(|(name, _)| *name);
+        // #4523: an event field of a record type is locked by path, and the record may come from a
+        // unit this one uses.
+        let types = crate::symbols::combined_types_for(unit_name, unit_tables, unit_uses);
         for (event_name, event) in events {
             let key = format!("{unit_name}.{event_name}");
-            let mut fields = snapshot(event);
+            let mut fields = snapshot(event, &types);
             // #3793: a `replaces` clause renames the recorded field before the comparison, so a
             // rename on its own is additive and one beside another change is judged by that
             // change.
             let mut renamed = false;
             let stored_view = existing.get(&key).map(|entry| {
-                let (view, plan) = crate::rename_plan::event_view(&mut fields, entry);
+                let (mut view, plan) = crate::rename_plan::event_view(&mut fields, entry);
+                backfill_event_paths(&mut view.fields, &fields);
                 errors.extend(crate::rename_plan::event_errors(&plan, event, &key));
                 renamed = !plan.applied.is_empty();
                 view
@@ -1612,8 +1736,10 @@ pub fn diff_against_lock(
             let Some(stored) = existing.get(&key) else {
                 continue;
             };
-            let mut current = snapshot(event);
-            let (view, plan) = crate::rename_plan::event_view(&mut current, stored);
+            let types = crate::symbols::combined_types_for(unit_name, unit_tables, unit_uses);
+            let mut current = snapshot(event, &types);
+            let (mut view, plan) = crate::rename_plan::event_view(&mut current, stored);
+            backfill_event_paths(&mut view.fields, &current);
             let (class, detail) = match reconcile_one(
                 &current,
                 Some(&view),
@@ -1644,6 +1770,7 @@ pub fn diff_against_lock(
                             added.join(", ")
                         ));
                     }
+                    parts.extend(nested_change_parts(&view.fields, &current));
                     let detail = if parts.is_empty() {
                         "changed additively (a field gained a default, or fields were reordered)"
                             .to_string()
@@ -2218,6 +2345,7 @@ mod tests {
             ty: ty.to_string(),
             default,
             renamed_from: Vec::new(),
+            paths: Vec::new(),
         }
     }
 
@@ -2442,7 +2570,7 @@ mod tests {
         );
         let existing = SchemaRegistry::new();
         let mut errors = Vec::new();
-        let (updated, effective) = reconcile(&existing, &units, &mut errors);
+        let (updated, effective) = reconcile(&existing, (&units, &Default::default()), &mut errors);
         assert!(errors.is_empty(), "a first-ever compile must not error");
         assert_eq!(effective.get("commerce.order.PaymentConfirmed"), Some(&3));
         assert_eq!(
@@ -2475,7 +2603,7 @@ mod tests {
             },
         );
         let mut errors = Vec::new();
-        let (_, effective) = reconcile(&existing, &units, &mut errors);
+        let (_, effective) = reconcile(&existing, (&units, &Default::default()), &mut errors);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].category, "bynk.event.schema_version_mismatch");
         // The registry's computed version wins as the effective one, not the
@@ -2507,7 +2635,7 @@ mod tests {
             },
         );
         let mut errors = Vec::new();
-        let (updated, effective) = reconcile(&existing, &units, &mut errors);
+        let (updated, effective) = reconcile(&existing, (&units, &Default::default()), &mut errors);
         assert!(errors.is_empty());
         assert_eq!(effective.get("commerce.order.OrderCancelled"), Some(&2));
         assert_eq!(
@@ -2540,7 +2668,7 @@ mod tests {
             },
         );
         let mut errors = Vec::new();
-        let (updated, effective) = reconcile(&existing, &units, &mut errors);
+        let (updated, effective) = reconcile(&existing, (&units, &Default::default()), &mut errors);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].category, "bynk.event.non_additive_schema_change");
         assert_eq!(effective.get("commerce.order.OrderCancelled"), Some(&4));
@@ -2575,7 +2703,7 @@ mod tests {
             },
         );
         let mut errors = Vec::new();
-        let (updated, _) = reconcile(&existing, &units, &mut errors);
+        let (updated, _) = reconcile(&existing, (&units, &Default::default()), &mut errors);
         assert!(errors.is_empty());
         assert!(updated.get("commerce.order.PaymentConfirmed").is_none());
         assert!(updated.get("commerce.order.PaymentConfirmedV2").is_some());

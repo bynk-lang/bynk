@@ -1,0 +1,11 @@
+// #4550: a variant payload binds `a` twice.
+commons app.dup
+
+type Pair =
+	| Both(l: Int, r: Int)
+
+fn sum(p: Pair) -> Int {
+	match p {
+		Both(a, a) => a,
+	}
+}

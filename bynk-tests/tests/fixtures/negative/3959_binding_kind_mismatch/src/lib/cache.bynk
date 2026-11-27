@@ -1,0 +1,19 @@
+commons lib.cache
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv, D1 }
+
+fn remember(key: String, value: String) -> Effect[String] given Store: Kv, Logger {
+	let _ <- Store.put(key, value)
+	let _ <- Logger.info(key)
+	Effect.pure(value)
+}
+
+fn note(key: String) -> Effect[()] given Logger {
+	Logger.info(key)
+}
+
+fn purge() -> Effect[Bool] given Db: D1 {
+	let r <- Db.run("DELETE FROM sessions", [])
+	Effect.pure(r.isOk())
+}

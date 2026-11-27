@@ -1,0 +1,18 @@
+---
+#3959, §14.1 `bynk.given.binding_unknown`: a binding names no parameter of the callee,
+or the callee has none.
+---
+context shop
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv, D1 }
+uses lib.cache
+
+capability Sessions = Kv
+capability Archive = Kv
+capability Orders = D1
+
+fn save(key: String) -> Effect[String] given Sessions, Logger {
+	let _ <- note(key, given Store = Sessions)
+	remember(key, "v", given Store = Sessions, Cache = Sessions)
+}

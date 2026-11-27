@@ -1584,7 +1584,11 @@ pub fn stability_of(path: &str) -> Option<Stability> {
 /// spelt under `bynk`, as `[unstable] allow` names it, and counts as a
 /// first-party item ([`names_first_party_item`]) and an experimental one
 /// ([`experimental_items`]).
-pub const BUILTIN_EXPERIMENTAL: &[&str] = &["bynk.RequestHeaders.entries", "bynk.http.rest"];
+pub const BUILTIN_EXPERIMENTAL: &[&str] = &[
+    "bynk.RequestHeaders.entries",
+    "bynk.given.parameters",
+    "bynk.http.rest",
+];
 
 /// [`stability_of`] over a given table.
 pub fn stability_of_in(units: &[Unit], path: &str) -> Option<Stability> {
@@ -2222,6 +2226,8 @@ mod tests {
                 "bynk.crypto",
                 // #3752 (D12): a method of a built-in type.
                 "bynk.RequestHeaders.entries",
+                // #3959: capability parameters, a language form with no unit.
+                "bynk.given.parameters",
                 // #3752 (D2): the rest segment, a route form.
                 "bynk.http.rest"
             ]

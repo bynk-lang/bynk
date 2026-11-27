@@ -152,6 +152,26 @@
       "summary": "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value."
     },
     {
+      "code": "bynk.given.binding_duplicate",
+      "summary": "A call binds one of its callee's capability parameters more than once."
+    },
+    {
+      "code": "bynk.given.binding_kind_mismatch",
+      "summary": "A call binds a capability parameter to a capability that is not of the parameter's kind (a `D1` instance for a `Kv` parameter)."
+    },
+    {
+      "code": "bynk.given.binding_missing",
+      "summary": "A call leaves one of its callee's capability parameters unbound; the fix is machine-applicable only when the caller holds exactly one candidate."
+    },
+    {
+      "code": "bynk.given.binding_shared",
+      "summary": "A call binds a shared capability of its callee (`given Logger = Logger`); only capability parameters are bound."
+    },
+    {
+      "code": "bynk.given.binding_unknown",
+      "summary": "A call binds a name that is not one of its callee's capability parameters, or binds on a callee that has none."
+    },
+    {
       "code": "bynk.resolve.arity_mismatch",
       "summary": "A function was called with the wrong number of arguments."
     },
@@ -502,8 +522,12 @@
       "summary": "An `adapter` used a whole-unit or aliased `consumes`; adapters must select capabilities with `consumes U { Cap, … }`."
     },
     {
+      "code": "bynk.commons.capability_unused",
+      "summary": "A commons selects a first-party capability in its `consumes` that no function's `given` names (warning)."
+    },
+    {
       "code": "bynk.commons.consumes_not_types",
-      "summary": "A commons `consumes` something other than a braced list of types an adapter exports: a whole-unit or aliased form, a capability, an unknown name, or a context."
+      "summary": "A commons `consumes` something other than a braced list of types an adapter exports and capabilities a first-party unit exports: a whole-unit or aliased form, a project adapter's capability, an unknown name, or a context."
     },
     {
       "code": "bynk.consumes.alias_conflict",
@@ -970,16 +994,28 @@
       "summary": "`given B.Cap` or `consumes B { Cap }` names a capability the consumed context does not export."
     },
     {
-      "code": "bynk.given.fn_outside_context",
-      "summary": "A function in a commons (or a suite) declares `given`; only a context function can."
+      "code": "bynk.given.fn_unsupported",
+      "summary": "A `given` clause on a method, on a function that does not return `Effect[T]`, on an adapter's function, or naming `Events`."
     },
     {
-      "code": "bynk.given.fn_unsupported",
-      "summary": "A `given` clause on a method, on a function that does not return `Effect[T]`, or naming `Events`."
+      "code": "bynk.given.kind_needs_parameter",
+      "summary": "A commons function names an instantiable kind bare (`given Kv`); it must be a capability parameter (`given Store: Kv`)."
     },
     {
       "code": "bynk.given.missing_for_call",
       "summary": "A call to a function that declares `given` from a body that does not declare those capabilities."
+    },
+    {
+      "code": "bynk.given.parameter_name_conflict",
+      "summary": "A capability parameter shadows a visible capability or kind, a type parameter, or another capability parameter."
+    },
+    {
+      "code": "bynk.given.parameter_outside_commons",
+      "summary": "`given Name: Kind` on a context function, a method, a handler, a provider or a suite helper; only a commons function takes capability parameters."
+    },
+    {
+      "code": "bynk.given.shared_as_parameter",
+      "summary": "A capability with no instances bounds a capability parameter (`given L: Logger`); it is named bare, as a shared capability."
     },
     {
       "code": "bynk.given.undeclared_capability",
@@ -1206,6 +1242,10 @@
   ],
   "is_expr": [
     {
+      "code": "bynk.types.duplicate_pattern_binding",
+      "summary": "A pattern binds the same name more than once."
+    },
+    {
       "code": "bynk.types.is_base_mismatch",
       "summary": "An `is` refinement check is applied to a value of the wrong base type."
     },
@@ -1318,6 +1358,10 @@
     {
       "code": "bynk.types.duplicate_literal_arm",
       "summary": "A `match` has two arms for the same literal value."
+    },
+    {
+      "code": "bynk.types.duplicate_pattern_binding",
+      "summary": "A pattern binds the same name more than once."
     },
     {
       "code": "bynk.types.duplicate_variant_arm",
