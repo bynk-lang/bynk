@@ -54,6 +54,28 @@ suite acme.api as system {
 		let after <- api.GET("/me") by Client("acct-30")
 		expect after is Unauthorized
 	}
+	// §12: `key: identity` counts each verified key holder on its own.
+	case "a verified key holder over the identity limit is refused with 429" {
+		let a <- api.GET("/usage") by Client("acct-40")
+		let b <- api.GET("/usage") by Client("acct-40")
+		let c <- api.GET("/usage") by Client("acct-40")
+		expect a is Ok("usage for acct-40")
+		expect b is Ok("usage for acct-40")
+		expect c is TooManyRequests(_)
+		let other <- api.GET("/usage") by Client("acct-41")
+		expect other is Ok("usage for acct-41")
+	}
+	// §12 / ADR 1023 D: a key that fails verification is refused at the seam and never consumes the
+	// identity limit.
+	case "a forged key never consumes the identity limit" {
+		let f1 <- api.GET("/usage") by Forged
+		let f2 <- api.GET("/usage") by Forged
+		let f3 <- api.GET("/usage") by Forged
+		expect f3 is Rejected(Unauthorized)
+		let a <- api.GET("/usage") by Client("bynk-test")
+		let b <- api.GET("/usage") by Client("bynk-test")
+		expect b is Ok("usage for bynk-test")
+	}
 	// §8 step 6 / D3 E: the key never reaches the handler.
 	case "the key's header is hidden from the handler" {
 		let r <- api.GET("/auth-header", RequestHeaders.of([])) by Client("acct-7")

@@ -13,6 +13,8 @@ actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"), ide
 
 capability PerIp = RateLimit @limit(1000) @period(60.seconds)
 
+capability PerClient = RateLimit @limit(2) @period(60.seconds)
+
 service api from http {
 	cors { origins: ["https://console.example.com"] }
 
@@ -20,6 +22,14 @@ service api from http {
 	@rateLimit(PerIp, key: clientIp)
 	on GET("/me") () -> Effect[HttpResult[String]] by c: Client {
 		Ok(c.identity)
+	}
+
+	// #3939 (slice 2, track §12): `key: identity` counts a verified key holder, after the seam; a key
+	// that fails verification never reaches this limiter, so this route still warns
+	// `bynk.actor.api_key_unlimited`: nothing bounds the unverified requests a guessing attacker sends.
+	@rateLimit(PerClient, key: identity)
+	on GET("/usage") () -> Effect[HttpResult[String]] by c: Client {
+		Ok("usage for \(c.identity)")
 	}
 
 	// The handler's `headers` view hides the key's header (ADR 0899).

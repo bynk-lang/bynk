@@ -2995,7 +2995,7 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.rate_limit_key_unavailable",
-        blurb: "`key: identity` counts requests by the verified caller: the router verifies the credential first, asks the limiter about the caller's identity (`sub`), and only then reads the body. That needs a route whose `by` is a single actor that carries an identity: a `Bearer`, `Oidc` or `SignedCookie` actor. A `Visitor` has no caller to count, a `Signature` sender is a service, not a person, and an actor sum has no one identity, so `identity` is refused on them. Use `key: clientIp` for the address, or call the limiter's `allow(key)` in the handler for a limit keyed on something only the handler knows.",
+        blurb: "`key: identity` counts requests by the verified caller: the router verifies the credential first, asks the limiter about the caller's identity (`sub`), and only then reads the body. That needs a route whose `by` is a single actor that carries an identity: a `Bearer`, `Oidc`, `SignedCookie` or `ApiKey` actor. A `Visitor` has no caller to count, a `Signature` sender is a service, not a person, and an actor sum has no one identity, so `identity` is refused on them. Use `key: clientIp` for the address, or call the limiter's `allow(key)` in the handler for a limit keyed on something only the handler knows.",
         example: "@rateLimit(SignupLimit, key: identity)   // ✗ a Visitor has no identity\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓ count by address\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
