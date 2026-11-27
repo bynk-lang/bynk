@@ -472,7 +472,8 @@ service console from http {
 `list`, `revoke` and `revokeAll` need no pepper, only calls to the generated key store, so an
 agent's handler can call them too (an account-closure workflow can call `revokeAll`). In an agent's
 handler, `list` reads each key's `pepper` against the peppers the store last saw (at its last mint,
-sweep or admitted key), so during a rotation it can lag until that identity's next request. A provider or
+sweep or admitted key), and says when in `pepperAsOf`, so during a rotation it can lag until that
+identity's next request; call `list` through a service when the current answer matters. A provider or
 a function cannot (`bynk.actor.api_key_member_in_provider`). Revoking deletes the key's record, so
 the seam then refuses it exactly as it refuses a key that was never minted.
 
@@ -487,8 +488,10 @@ the seam then refuses it exactly as it refuses a key that was never minted.
 - **`ApiKeyId`** is public and string-constructible, so it can be a path parameter.
 - **`ApiKeyLabel`** is 1 to 64 characters, none of them a control character.
 - **`ApiKeyInfo`** is `{ id: ApiKeyId, label: ApiKeyLabel, created: Instant, expires:
-  Option[Instant], lastUsed: Option[Instant], pepper: ApiKeyPepper }`. `expires` is `None` without a
-  `ttl`; `lastUsed` is `None` for a key never admitted.
+  Option[Instant], lastUsed: Option[Instant], pepper: ApiKeyPepper, pepperAsOf: Instant }`.
+  `expires` is `None` without a `ttl`; `lastUsed` is `None` for a key never admitted. `pepperAsOf` is
+  when `pepper` was true: now in a service handler, and in an agent's handler when the store last saw
+  the live peppers.
 - **`ApiKeyPepper`** is `Current`, `Previous` or `Retired`: which pepper a key is hashed under
   ([rotating the pepper](#rotating-the-pepper)).
 

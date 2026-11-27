@@ -121,6 +121,7 @@ agent {agent} {{\n\
 \tstore used: Map[String, Int]\n\
 \tstore scopes: Map[String, Set[String]]\n\
 \tstore known: Cell[List[String]] = []\n\
+\tstore knownAt: Cell[Int] = 0\n\
 \n\
 \ton call verify(keyNo: String, presented: Map[String, Bytes], first: Bytes, current: String, dummy: Bytes, now: Int) -> Effect[Option[{check}]] {{\n\
 \t\tlet stored <- digests.get(keyNo)\n\
@@ -198,6 +199,7 @@ agent {agent} {{\n\
 \t\t\t\tEffect.pure(())\n\
 \t\t\t}}\n\
 \t\t\tknown := live\n\
+\t\t\tknownAt := now\n\
 \t\t\tEffect.pure(true)\n\
 \t\t}} else {{\n\
 \t\t\tEffect.pure(false)\n\
@@ -209,6 +211,7 @@ agent {agent} {{\n\
 \t\t\tEffect.pure(2)\n\
 \t\t}} else {{\n\
 \t\t\tknown := live\n\
+\t\t\tknownAt := now\n\
 \t\t\tlet ks <- kids.entries.collect()\n\
 \t\t\tlet es <- expires.entries.collect()\n\
 \t\t\tlet unkeyed = ks.filter((e) => !live.any((l: String) => l == e.value)).map((e) => e.key)\n\
@@ -282,6 +285,10 @@ agent {agent} {{\n\
 \t\tEffect.pure(known)\n\
 \t}}\n\
 \n\
+\ton call knownAtOf() -> Effect[Int] {{\n\
+\t\tEffect.pure(knownAt)\n\
+\t}}\n\
+\n\
 \ton call sweep(now: Int, live: List[String], current: String) -> Effect[Int] {{\n\
 \t\tlet ks <- kids.entries.collect()\n\
 \t\tlet es <- expires.entries.collect()\n\
@@ -296,6 +303,7 @@ agent {agent} {{\n\
 \t\tlet _ <- dead.forEach((k: String) => used.remove(k))\n\
 \t\tlet _ <- dead.forEach((k: String) => scopes.remove(k))\n\
 \t\tknown := live\n\
+\t\tknownAt := now\n\
 \t\tlet left <- kids.values.collect()\n\
 \t\tEffect.pure(left.filter((k: String) => k != current).length())\n\
 \t}}\n\

@@ -122,7 +122,11 @@ export const ApiKeySecret = {
  * One of an identity's keys, as an `ApiKey` actor's `list` answers it: never the
  * key itself or its hash. `id` names it, for `revoke`. `expires` is `None` when
  * the actor has no `ttl`. `lastUsed` is when it was last admitted, to the hour,
- * or `None` if it never was. `pepper` says which pepper it is hashed under.
+ * or `None` if it never was. `pepper` says which pepper it is hashed under, as
+ * of `pepperAsOf`: the time of the call in a service handler, which holds the
+ * pepper, and in an agent's handler, which does not, when the key store last
+ * saw the live peppers (its last mint, sweep or admitted key). During a
+ * rotation an agent's view can lag; a service handler's is current.
  */
 export interface ApiKeyInfo {
   readonly id: ApiKeyId;
@@ -131,6 +135,7 @@ export interface ApiKeyInfo {
   readonly expires: Option<number>;
   readonly lastUsed: Option<number>;
   readonly pepper: ApiKeyPepper;
+  readonly pepperAsOf: number;
 }
 
 export const ApiKeyInfo = {
@@ -912,6 +917,7 @@ export function __serialise_ApiKeyInfo(value: ApiKeyInfo): __JsonValue {
     expires: __serialise_Option_Instant(value.expires),
     lastUsed: __serialise_Option_Instant(value.lastUsed),
     pepper: __serialise_ApiKeyPepper(value.pepper),
+    pepperAsOf: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.pepperAsOf),
   };
 }
 
@@ -943,7 +949,15 @@ export function __deserialise_ApiKeyInfo(json: __JsonValue, path: string = "$"):
   const __r_pepper = __deserialise_ApiKeyPepper(obj["pepper"], `${path}.pepper`);
   if (__r_pepper.tag === "Err") return __r_pepper;
   const __pepper = __r_pepper.value;
-  return Ok({ id: __id, label: __label, created: __created, expires: __expires, lastUsed: __lastUsed, pepper: __pepper } as ApiKeyInfo);
+  const __pepperAsOf$ms = __bynkInstantFromWire(obj["pepperAsOf"]);
+  if (typeof __pepperAsOf$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.pepperAsOf`, expected: "number", actual: typeof __pepperAsOf$ms });
+  }
+  if (!globalThis.Number.isSafeInteger(__pepperAsOf$ms)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.pepperAsOf`, expected: "safe integer", actual: String(__pepperAsOf$ms) });
+  }
+  const __pepperAsOf = __pepperAsOf$ms;
+  return Ok({ id: __id, label: __label, created: __created, expires: __expires, lastUsed: __lastUsed, pepper: __pepper, pepperAsOf: __pepperAsOf } as ApiKeyInfo);
 }
 
 export function __serialise_ApiKeyLabel(value: ApiKeyLabel): __JsonValue {

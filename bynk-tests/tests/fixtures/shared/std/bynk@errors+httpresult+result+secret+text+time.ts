@@ -120,7 +120,11 @@ export const ApiKeySecret = {
  * One of an identity's keys, as an `ApiKey` actor's `list` answers it: never the
  * key itself or its hash. `id` names it, for `revoke`. `expires` is `None` when
  * the actor has no `ttl`. `lastUsed` is when it was last admitted, to the hour,
- * or `None` if it never was. `pepper` says which pepper it is hashed under.
+ * or `None` if it never was. `pepper` says which pepper it is hashed under, as
+ * of `pepperAsOf`: the time of the call in a service handler, which holds the
+ * pepper, and in an agent's handler, which does not, when the key store last
+ * saw the live peppers (its last mint, sweep or admitted key). During a
+ * rotation an agent's view can lag; a service handler's is current.
  */
 export interface ApiKeyInfo {
   readonly id: ApiKeyId;
@@ -129,6 +133,7 @@ export interface ApiKeyInfo {
   readonly expires: Option<number>;
   readonly lastUsed: Option<number>;
   readonly pepper: ApiKeyPepper;
+  readonly pepperAsOf: number;
 }
 
 export const ApiKeyInfo = {

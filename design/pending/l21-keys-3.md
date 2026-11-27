@@ -39,6 +39,8 @@ summary: Slice 3 of the API keys track: key expiry, last-use recording, pepper r
 - **`ApiKeyInfo.pepper`** is `ApiKeyPepper` (`Current | Previous | Retired`), in the `bynk` prelude under the same gate (Q2).
   - In a service handler, `list` reads it against the live peppers.
   - In an agent's handler, which holds no pepper, it reads against the `kid`s the store last saw, at its last mint, sweep or admitted key. During a rotation that view can lag until the identity's next request.
+  - `ApiKeyInfo.pepperAsOf: Instant` says which: the time of the call in a service handler, else when the store last saw the live `kid`s. So a handler can tell a stale classification and ask through a service.
+  - Recording the live `kid`s is a write on the success path only (`touch`), once per rotation per store; the spy test asserts that no refusal writes and that a second admission in one rotation writes nothing.
 
 **Decision F — a minted pepper cannot be rotated.** Cloudflare never returns a secret, so nobody holds the value of a pepper `bynk deploy` minted, and it cannot be moved into `previous`.
 - The reference says to supply your own pepper from the first deploy to keep the option to rotate.

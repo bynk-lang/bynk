@@ -285,7 +285,7 @@ assert((await req("GET", "/me", bearer(secret.key))).status === 200, "revoking o
 // §9 list: ids, labels, created, expires and last use; never a secret or a digest.
 const listed = (await (await req("GET", "/accounts/acct-7/keys", {})).json()) as Record<string, unknown>[];
 assert(listed.length === 1 && listed[0].id === secret.id && listed[0].label === "ci", `the one key left is listed: ${JSON.stringify(listed)}`);
-assert(JSON.stringify(Object.keys(listed[0]).sort()) === JSON.stringify(["created", "expires", "id", "label", "lastUsed", "pepper"]), `a listed key has no other field: ${JSON.stringify(listed[0])}`);
+assert(JSON.stringify(Object.keys(listed[0]).sort()) === JSON.stringify(["created", "expires", "id", "label", "lastUsed", "pepper", "pepperAsOf"]), `a listed key has no other field: ${JSON.stringify(listed[0])}`);
 assert(!JSON.stringify(listed).includes(secret.key.slice(-49)), "the list never carries the secret");
 
 // §6: `revokeAll`'s first commit empties and retires the store; if its second commit (the owner's
@@ -352,6 +352,12 @@ const pepperOf = async (id: string, e: Record<string, unknown>) =>
   ((await (await req("GET", `/accounts/${id}/keys`, {}, undefined, e)).json()) as Info[]).map((k) => k.pepper.kind);
 assert(JSON.stringify(await pepperOf("acct-61", rotating)) === '["Previous"]', "before its next use, a key under the old pepper is listed as Previous");
 assert((await req("GET", "/me", bearer(used.key), undefined, rotating)).status === 200, "a key minted before the rotation is admitted under previous");
+// The re-hash and the new kid set are written once, on that success; the next admission writes nothing.
+{
+  const w = storeWrites;
+  assert((await req("GET", "/me", bearer(used.key), undefined, rotating)).status === 200, "the re-hashed key is admitted again");
+  assert(storeWrites === w, "a second admission in the same rotation writes nothing");
+}
 assert(JSON.stringify(await pepperOf("acct-61", rotating)) === '["Current"]', "the admitted key was re-hashed under the new pepper in the same commit");
 const swept = await req("POST", "/accounts/acct-62/sweep", {}, undefined, rotating);
 assert(swept.status === 200 && (await swept.json()) === 1, "sweep counts the idle key still under previous");

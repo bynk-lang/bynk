@@ -513,6 +513,7 @@ export interface ApiKeyStore {
   usedOf(deps: unknown): Promise<ReadonlyMap<string, number>>;
   kidsOf(deps: unknown): Promise<ReadonlyMap<string, string>>;
   knownOf(deps: unknown): Promise<readonly string[]>;
+  knownAtOf(deps: unknown): Promise<number>;
   sweep(now: number, live: readonly string[], current: string, deps: unknown): Promise<number>;
 }
 
@@ -569,6 +570,7 @@ export async function apiKeyList<R>(
   const used = await keys.usedOf(deps);
   const kids = await keys.kidsOf(deps);
   const against = live ?? (await keys.knownOf(deps));
+  const asOf = live === null ? await keys.knownAtOf(deps) : nowMs;
   const some = (v: number | undefined) => (v === undefined ? { tag: "None" } : { tag: "Some", value: v });
   const out: unknown[] = [];
   for (const [keyNo, label] of labels) {
@@ -581,6 +583,7 @@ export async function apiKeyList<R>(
       expires: some(expires.get(keyNo)),
       lastUsed: some(used.get(keyNo)),
       pepper: pepperOf(kids.get(keyNo), against),
+      pepperAsOf: asOf,
     });
   }
   return out as unknown as R;

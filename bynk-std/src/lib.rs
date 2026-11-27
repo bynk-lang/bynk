@@ -1826,6 +1826,7 @@ mod tests {
                 "expires: Option[Instant],",
                 "lastUsed: Option[Instant],",
                 "pepper: ApiKeyPepper,",
+                "pepperAsOf: Instant,",
             ]
         );
     }

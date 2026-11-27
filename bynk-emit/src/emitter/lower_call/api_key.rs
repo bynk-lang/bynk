@@ -158,6 +158,7 @@ pub(in crate::emitter) fn lower_api_key_member(
                     "usedOf",
                     "kidsOf",
                     "knownOf",
+                    "knownAtOf",
                 ]
             } else {
                 &["sweep"]
