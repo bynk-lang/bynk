@@ -41,6 +41,11 @@ The registry reads the recorded `amount` as `total`, so the change is additive: 
 by one and `bynk.schema.lock` records `renamed_from = ["amount"]`. Events already written under `amount`
 still decode. Commit the updated lock with the source change.
 
+The same holds for a record an event carries: a field inside it renamed with `replaces`, or given a new wire
+name (`@name`) with `replaces` naming the old key, is additive, and the same change without the clause is
+`bynk.event.non_additive_schema_change`, as are a nested field removed or retyped. A record type that is only
+renamed, with the same fields, changes nothing the wire carries.
+
 ## Rename a stored field
 
 ```bynk,fragment
