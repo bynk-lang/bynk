@@ -36,9 +36,9 @@ export default {
             case "build": {
               __route = "call build";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "3e33f1a26d0f7a09") {
-                globalThis.console.error("ContractMismatch shop.shadow call build", { service: "build", expected: "3e33f1a26d0f7a09", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "build", expected: "3e33f1a26d0f7a09", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "bf47226a550d949f") {
+                globalThis.console.error("ContractMismatch shop.shadow call build", { service: "build", expected: "bf47226a550d949f", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "build", expected: "bf47226a550d949f", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {

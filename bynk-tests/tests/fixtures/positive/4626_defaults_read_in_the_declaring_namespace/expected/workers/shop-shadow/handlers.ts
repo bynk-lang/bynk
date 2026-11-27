@@ -153,7 +153,7 @@ export function __deserialise_KvExpiration(json: __JsonValue, path: string = "$"
       case "Later":
         return Ok({ tag: "Later" } as KvExpiration);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -167,7 +167,7 @@ export function __deserialise_KvExpiration(json: __JsonValue, path: string = "$"
     case "Later":
       return Ok({ tag: "Later" } as KvExpiration);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -188,7 +188,7 @@ export function __deserialise_MetadataScope(json: __JsonValue, path: string = "$
       case "Shared":
         return Ok({ tag: "Shared" } as MetadataScope);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -202,7 +202,7 @@ export function __deserialise_MetadataScope(json: __JsonValue, path: string = "$
     case "Shared":
       return Ok({ tag: "Shared" } as MetadataScope);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -223,7 +223,7 @@ export function __deserialise_R2Condition(json: __JsonValue, path: string = "$")
       case "Sure":
         return Ok({ tag: "Sure" } as R2Condition);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -237,7 +237,7 @@ export function __deserialise_R2Condition(json: __JsonValue, path: string = "$")
     case "Sure":
       return Ok({ tag: "Sure" } as R2Condition);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -258,7 +258,7 @@ export function __deserialise_Redirect(json: __JsonValue, path: string = "$"): R
       case "Ours":
         return Ok({ tag: "Ours" } as Redirect);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -272,7 +272,7 @@ export function __deserialise_Redirect(json: __JsonValue, path: string = "$"): R
     case "Ours":
       return Ok({ tag: "Ours" } as Redirect);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -293,7 +293,7 @@ export function __deserialise_SameSite(json: __JsonValue, path: string = "$"): R
       case "Yours":
         return Ok({ tag: "Yours" } as SameSite);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -307,7 +307,7 @@ export function __deserialise_SameSite(json: __JsonValue, path: string = "$"): R
     case "Yours":
       return Ok({ tag: "Yours" } as SameSite);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
