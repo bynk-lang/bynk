@@ -1,0 +1,2 @@
+bynk.template.foreign_unbalanced `<foreignobject>` inside `<svg>` is not supported
+# exact

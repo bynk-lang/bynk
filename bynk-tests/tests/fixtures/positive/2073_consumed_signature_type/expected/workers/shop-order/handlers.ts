@@ -66,7 +66,7 @@ export function __deserialise_Region(json: __JsonValue, path: string = "$"): Res
       case "International":
         return Ok({ tag: "International" } as Region);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -80,7 +80,7 @@ export function __deserialise_Region(json: __JsonValue, path: string = "$"): Res
     case "International":
       return Ok({ tag: "International" } as Region);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

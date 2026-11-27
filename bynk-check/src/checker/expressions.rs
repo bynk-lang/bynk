@@ -221,6 +221,10 @@ pub(crate) fn check_ident(
     // (checked above); like an asset it never shares a name with a function or
     // type in scope (`bynk.resolve.name_conflict` at declaration).
     if ctx.input.embeds.contains_key(&id.name) {
+        // #3927: a template's name is `Html`, or is used through `fill`.
+        if let Some(ty) = super::template_calls::check_template_ident(id, ctx) {
+            return ty;
+        }
         // #2387: a use edge to the declaration, as for an asset.
         ctx.refs.record(id.span, SymbolKind::Embed, &id.name);
         return Some(tys.intern(Ty::Base(BaseType::String)));
@@ -2463,18 +2467,12 @@ pub(crate) fn check_variant_construction(
             continue;
         };
         if !compatible(actual, expected, tys) {
-            ctx.errors.push(CompileError::new(
-                "bynk.types.variant_payload_mismatch",
-                arg.span,
-                format!(
-                    "argument {} to variant `{}` has type `{}`, but field `{}` expects `{}`",
-                    i + 1,
-                    variant_name,
-                    actual.display(tys),
-                    field.name.name,
-                    expected.display(tys)
-                ),
-            ));
+            super::sql_decimal_param::push_payload_mismatch(
+                ctx.errors,
+                (arg, i, variant_name, &field.name.name),
+                (actual, expected),
+                tys,
+            );
             ok = false;
         }
     }

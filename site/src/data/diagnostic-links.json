@@ -2084,8 +2084,8 @@
   "bynk.test.ws_lifecycle_by": [
     "/reference/testing/#websocket-address"
   ],
-  "bynk.test.ws_needs_in_process": [
-    "/reference/testing/#websocket-address"
+  "bynk.test.ws_refusal_needs_system": [
+    "/reference/testing/#websocket-system"
   ],
   "bynk.tier.cross_context_needs_system": [
     "/reference/testing/#tiers-the-as-tier-clause",

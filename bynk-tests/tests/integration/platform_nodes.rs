@@ -165,9 +165,11 @@ fn postgres_and_mysql_selects_are_pinned() {
         ("3322_mysql_typed", "Legacy", "`", "MySqlSql", "MySqlDecode"),
     ] {
         let ts = emit(fixture, &[]);
-        let cols = ["id", "name", "placed", "note", "paid"]
-            .map(|c| format!("{quote}{c}{quote}"))
-            .join(", ");
+        let cols = [
+            "id", "name", "placed", "wait", "total", "status", "note", "paid",
+        ]
+        .map(|c| format!("{quote}{c}{quote}"))
+        .join(", ");
         assert!(
             ts.contains(&format!(
                 "const __r = await deps.{ident}.all(\"SELECT {cols} FROM orders WHERE id >"

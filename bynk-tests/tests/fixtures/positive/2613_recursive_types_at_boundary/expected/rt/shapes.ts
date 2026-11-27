@@ -97,7 +97,7 @@ export function __deserialise_Expr(json: __JsonValue, path: string = "$", depth:
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "Lit", value: __value } as Expr);
@@ -109,7 +109,7 @@ export function __deserialise_Expr(json: __JsonValue, path: string = "$", depth:
       return Ok({ tag: "Block", stmts: __stmts } as Expr);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -160,7 +160,7 @@ export function __deserialise_Stmt(json: __JsonValue, path: string = "$", depth:
       return Ok({ tag: "Eval", expr: __expr } as Stmt);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -195,7 +195,7 @@ export function __deserialise_Tree(json: __JsonValue, path: string = "$", depth:
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       const __r_right = __deserialise_Tree(obj["right"], `${path}.right`, depth + 1);
@@ -204,7 +204,7 @@ export function __deserialise_Tree(json: __JsonValue, path: string = "$", depth:
       return Ok({ tag: "Node", left: __left, value: __value, right: __right } as Tree);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

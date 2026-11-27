@@ -1,0 +1,6 @@
+[project]
+name = "c11-meta-refresh"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.html.typed"]

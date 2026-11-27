@@ -1,0 +1,9 @@
+commons t.page
+
+uses bynk.html
+
+type Greeting = {
+	name: String,
+}
+
+template greeting: Greeting = "embeds/page.html"

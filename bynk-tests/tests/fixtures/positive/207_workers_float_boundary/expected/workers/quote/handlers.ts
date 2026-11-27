@@ -40,14 +40,14 @@ export function __deserialise_Quote(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "number", actual: typeof obj["price"] });
   }
   if (!globalThis.Number.isFinite(obj["price"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "finite number", actual: String(obj["price"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "finite number", actual: "non-finite number" });
   }
   const __price = obj["price"];
   if (typeof obj["qty"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["qty"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["qty"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __qty = obj["qty"];
   return Ok({ sku: __sku, price: __price, qty: __qty } as Quote);
@@ -73,5 +73,5 @@ export function __deserialise_Result_Quote_Unit(json: __JsonValue, path: string 
     const __e = undefined;
     return Ok(Err(__e) as Result<Quote, void>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

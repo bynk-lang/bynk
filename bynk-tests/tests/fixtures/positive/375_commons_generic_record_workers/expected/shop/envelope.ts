@@ -36,7 +36,7 @@ export function __deserialise_User(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "number", actual: typeof obj["id"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["id"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: String(obj["id"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["id"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __id = obj["id"];
   if (typeof obj["name"] !== "string") {

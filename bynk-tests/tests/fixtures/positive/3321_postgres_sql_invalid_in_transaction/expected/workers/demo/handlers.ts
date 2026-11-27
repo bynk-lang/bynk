@@ -42,7 +42,7 @@ export function __deserialise_Result_List_PgRun_PgError(json: __JsonValue, path:
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<readonly PgRun[], PgError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_List_PgRun(value: readonly PgRun[]): __JsonValue {

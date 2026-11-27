@@ -186,7 +186,7 @@ export function __deserialise_List_Int(json: __JsonValue, path: string = "$"): R
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
     }
     if (!globalThis.Number.isSafeInteger(item)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: globalThis.Number.isInteger(item) ? "integer outside the safe range" : "non-integer number" });
     }
     const __el = item;
     out.push(__el as number);

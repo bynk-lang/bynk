@@ -93,7 +93,7 @@ export function __deserialise_Entry(json: __JsonValue, path: string = "$", depth
       return Ok({ tag: "Sub", dir: __dir } as Entry);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

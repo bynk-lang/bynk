@@ -58,7 +58,7 @@ export function __deserialise_Money(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.amount`, expected: "number", actual: typeof obj["amount"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["amount"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.amount`, expected: "safe integer", actual: String(obj["amount"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.amount`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["amount"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __amount = obj["amount"];
   const __r_currency = __deserialise_CurrencyCode(obj["currency"], `${path}.currency`);

@@ -122,7 +122,8 @@ switch (res.kind) {
 ### Credentials over cleartext
 
 **A credential is never sent over cleartext.** A call that carries an `Authorization` header (a
-bearer or OIDC token, from `headers`, the call's `init` or a typed `headers` record) to an `http:` or
+bearer or OIDC token) or an explicitly set `Cookie` header, from `headers`, the call's `init`, a typed
+`headers` record or (for the `Cookie`) typed `cookies`, to an `http:` or
 `ws:` URL throws a `CleartextCredential` before anything is sent, unless the host is loopback:
 `localhost`, a `*.localhost` name, `127.0.0.0/8` or `[::1]`, as `bynk dev` and the test tiers use.
 Use an `https://` base URL for anything else. A relative `baseUrl` is checked against
@@ -130,11 +131,10 @@ Use an `https://` base URL for anything else. A relative `baseUrl` is checked ag
 read by `reconnect.credentials`) to a remote `ws:` or `http:` base URL throws `CleartextCredential`
 before a socket is made.
 
-Not covered: anonymous calls, and a `Cookie`. A browser governs its own cookies with `Secure`; a
-server-side call that forwards a `Cookie` through `headers` (Node, a framework's server, a Worker) is
-not checked, so give it an `https://` base URL too. A [Service Binding](#calling-through-a-service-binding)
-made with `viaBinding` is not checked either: its calls never reach the network, and the host of its
-`baseUrl` is ignored.
+Not covered: anonymous calls, and a browser's own cookie jar. A page that calls with
+`credentials: "include"` sets no `Cookie` header itself (the browser does, and governs it with `Secure`),
+so nothing is checked. A [Service Binding](#calling-through-a-service-binding) made with `viaBinding` is
+not checked either: its calls never reach the network, and the host of its `baseUrl` is ignored.
 
 Each function takes the route's parameters in order (path parameters, then the
 `body`, then the `query`) and an optional last `init`, a standard `RequestInit`

@@ -39,6 +39,7 @@
 // uses is declared below (as `postgres.ts` does for postgres.js).
 // @ts-ignore TS2307 when the package is not installed
 import { createConnection as mysql2CreateConnection } from "mysql2/promise";
+import { __bynkDecimalToString, type __BynkDecimalValue } from "./decimal.ts";
 
 /** A `MySqlValue` as the binding hands it over (the tag and its one field). */
 export type MySqlParam =
@@ -52,7 +53,7 @@ export type MySqlParam =
   | { readonly tag: "MySqlTimestamp"; readonly value: number }
   | { readonly tag: "MySqlDateTime"; readonly value: string }
   | { readonly tag: "MySqlJson"; readonly value: string }
-  | { readonly tag: "MySqlDecimal"; readonly value: string };
+  | { readonly tag: "MySqlDecimal"; readonly value: __BynkDecimalValue };
 
 /** Where a Hyperdrive binding says the database is. `password` is a secret. */
 export interface MySqlEndpoint {
@@ -254,6 +255,8 @@ function driverParam(p: MySqlParam): unknown {
       return p.value ? 1 : 0;
     case "MySqlTimestamp":
       return utcDateTimeText(p.value);
+    case "MySqlDecimal":
+      return __bynkDecimalToString(p.value);
     case "MySqlBytes":
       // A Node `Buffer` is what the driver escapes as a hex literal.
       return (globalThis as { Buffer?: { from(b: Uint8Array): unknown } }).Buffer?.from(p.value) ?? p.value;

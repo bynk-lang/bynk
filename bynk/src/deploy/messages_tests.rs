@@ -541,8 +541,12 @@ type Answers = &'static [(u16, &'static str)];
 /// The calls a stub saw, read once it has served them.
 type Seen = Box<dyn FnOnce() -> Vec<String>>;
 
-/// Each operation's own answers. A consumed queue's consumer is removed before the queue
-/// (#4601): Cloudflare refuses to delete a queue a Worker consumes with 400 `11005`.
+/// Each operation's own answers. The refusals are the statuses and codes Cloudflare gave in the
+/// 1D.4 sandbox check (#4056's results, #4600): an R2 bucket this account owns 409 `10004`, a
+/// taken D1 name 400 `7502`, a duplicate Vectorize metadata index 400 `40004`, a taken queue name
+/// 409 `11009`, and a queue already gone 404 `11000` (the reference's `10104` is kept too). A
+/// consumed queue's consumer is removed before the queue (#4601): Cloudflare refuses to delete a
+/// queue a Worker consumes with 400 `11005`.
 const REST_SPECIAL: &[(&str, &str, Answers)] = &[
     (
         "KV create (REST)",
@@ -631,7 +635,7 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
         &[
             (
                 409,
-                r#"{"success":false,"errors":[{"code":10073,"message":"Bucket name already exists."}]}"#,
+                r#"{"success":false,"errors":[{"code":10004,"message":"Bucket name already exists."}]}"#,
             ),
             (200, r#"{"success":true,"result":{"name":"shop-files"}}"#),
         ],
@@ -642,7 +646,7 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
         &[
             (
                 409,
-                r#"{"success":false,"errors":[{"code":10073,"message":"Bucket name already exists."}]}"#,
+                r#"{"success":false,"errors":[{"code":10004,"message":"Bucket name already exists."}]}"#,
             ),
             (
                 404,
@@ -675,7 +679,7 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
         "Vectorize create (REST)",
         "created",
         &[(
-            200,
+            201,
             r#"{"success":true,"result":{"name":"docs","config":{"dimensions":768,"metric":"cosine"}}}"#,
         )],
     ),
@@ -699,7 +703,7 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
         "Vectorize create metadata index (REST)",
         "refused, left to the listing wait",
         &[(
-            409,
+            400,
             r#"{"success":false,"errors":[{"code":40004,"message":"metadata index already exists"}]}"#,
         )],
     ),
@@ -754,7 +758,7 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
         "refused, no queue of exactly that name",
         &[
             (
-                400,
+                409,
                 r#"{"success":false,"errors":[{"code":11009,"message":"A queue with this name already exists"}]}"#,
             ),
             (
@@ -920,6 +924,35 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
             200,
             r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
         )],
+    ),
+    (
+        "Queues delete (REST)",
+        "not found, code 11000",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (200, r#"{"success":true,"result":[]}"#),
+            (
+                404,
+                r#"{"success":false,"errors":[{"code":11000,"message":"Queue 'jobs' not found"}]}"#,
+            ),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "gone before its consumers are read, code 11000",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                404,
+                r#"{"success":false,"errors":[{"code":11000,"message":"Queue 'jobs' not found"}]}"#,
+            ),
+        ],
     ),
     (
         "Queues delete (REST)",

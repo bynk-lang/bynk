@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result } from "../__bynk_runtime/result.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError, __ServiceBinding } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 import { __responseToHttpResult, __responseToHttpOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import { __makeIntegrationD1 } from "../__bynk_runtime/testing/bindings.js";
 import * as __ns_shop_orders from "../workers/shop-orders/handlers.js";
@@ -66,7 +66,7 @@ async function test_a_handle_reads_what_the_app_wrote() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_Order(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]);
@@ -87,7 +87,7 @@ async function test_a_handle_reads_what_the_app_wrote() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_Order(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]);
@@ -106,7 +106,7 @@ async function test_a_handle_reads_what_the_app_wrote() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Order(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Order);
@@ -126,7 +126,7 @@ async function test_a_handle_reads_what_the_app_wrote() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Order(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Order);
@@ -165,7 +165,7 @@ async function test_each_case_starts_from_an_empty_database() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_Order(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]);
@@ -205,7 +205,7 @@ async function test_a_handle_may_take_any_name__the_harness_s_own_included() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_Order(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]);
@@ -280,7 +280,7 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["qty"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["qty"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __qty = obj["qty"];
   return Ok({ id: __id, owner: __owner, qty: __qty } as __ns_shop_orders.Order);

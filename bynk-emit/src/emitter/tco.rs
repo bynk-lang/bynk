@@ -264,6 +264,7 @@ fn self_call_args<'e>(
         | Callee::Value(_)
         | Callee::Ctor { .. }
         | Callee::Refine(_)
+        | Callee::EnumFromWireName(_)
         | Callee::Unsafe(_)
         | Callee::Kernel { .. }
         | Callee::SignedCookie { .. }
@@ -271,6 +272,7 @@ fn self_call_args<'e>(
         | Callee::ApiKeyMint { .. }
         | Callee::ApiKeyMember { .. }
         | Callee::ApiKeyEqual
+        | Callee::TemplateFill { .. }
         | Callee::CookieField { .. }
         | Callee::Intrinsic { .. }
         | Callee::Fault { .. }

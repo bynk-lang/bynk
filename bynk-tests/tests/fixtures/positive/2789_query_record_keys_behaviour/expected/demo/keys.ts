@@ -333,7 +333,7 @@ export function __deserialise_Region(json: __JsonValue, path: string = "$"): Res
       case "South":
         return Ok({ tag: "South" } as Region);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -347,7 +347,7 @@ export function __deserialise_Region(json: __JsonValue, path: string = "$"): Res
     case "South":
       return Ok({ tag: "South" } as Region);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -370,7 +370,7 @@ export function __deserialise_Site(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "number", actual: typeof obj["code"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["code"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: String(obj["code"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["code"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __code = obj["code"];
   return Ok({ region: __region, code: __code } as Site);
@@ -395,7 +395,7 @@ export function __deserialise_Visit(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["n"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["n"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __n = obj["n"];
   return Ok({ site: __site, n: __n } as Visit);

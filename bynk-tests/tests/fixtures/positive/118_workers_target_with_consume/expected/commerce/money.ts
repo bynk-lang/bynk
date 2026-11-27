@@ -58,7 +58,7 @@ export function __deserialise_Money(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.minorUnits`, expected: "number", actual: typeof obj["minorUnits"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["minorUnits"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.minorUnits`, expected: "safe integer", actual: String(obj["minorUnits"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.minorUnits`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["minorUnits"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __minorUnits = obj["minorUnits"];
   if (!(__minorUnits >= 0)) {

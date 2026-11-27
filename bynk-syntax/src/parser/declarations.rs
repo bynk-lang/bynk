@@ -360,10 +360,10 @@ impl<'a> Parser<'a> {
                 // placement (context or commons, never an adapter) is the
                 // checker's call (`bynk.embed.outside_context_or_commons`),
                 // the same split as `event`/`messages` above.
-                Some(TokenKind::Embed) => {
+                Some(TokenKind::Embed | TokenKind::Ident) if self.at_embed_or_template() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_embed_decl() {
+                    match self.parse_embed_or_template_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
                             if let Some(sp) = private {
@@ -1807,10 +1807,10 @@ impl<'a> Parser<'a> {
                 // placement (context or commons, never an adapter) is the
                 // checker's call (`bynk.embed.outside_context_or_commons`),
                 // the same split as `event`/`messages` above.
-                Some(TokenKind::Embed) => {
+                Some(TokenKind::Embed | TokenKind::Ident) if self.at_embed_or_template() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_embed_decl() {
+                    match self.parse_embed_or_template_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
                             if let Some(sp) = private {
@@ -2190,10 +2190,10 @@ impl<'a> Parser<'a> {
                 // placement (context or commons, never an adapter) is the
                 // checker's call (`bynk.embed.outside_context_or_commons`),
                 // the same split as `event`/`messages` above.
-                Some(TokenKind::Embed) => {
+                Some(TokenKind::Embed | TokenKind::Ident) if self.at_embed_or_template() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_embed_decl() {
+                    match self.parse_embed_or_template_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
                             if let Some(sp) = private {
@@ -4520,6 +4520,59 @@ impl<'a> Parser<'a> {
             name,
             path,
             path_span,
+            template: None,
+            documentation: None,
+            span: kw.span.merge(path_span),
+            trivia: Trivia::default(),
+            private: None,
+        })
+    }
+
+    /// Typed HTML (#3927, slice 1): at `template name …`, the contextual
+    /// `template` followed by a name, so a stray identifier `template` still
+    /// reports as an unknown item and `template` stays a usable name elsewhere.
+    fn at_template_decl(&self) -> bool {
+        self.peek_kind() == Some(TokenKind::Ident)
+            && self.nth_text(0) == "template"
+            && self.nth_kind(1) == Some(TokenKind::Ident)
+    }
+
+    /// At an `embed` or a `template` declaration (#3927: a template is an embed whose text is
+    /// parsed, so the two share an arm in every body).
+    fn at_embed_or_template(&self) -> bool {
+        self.peek_kind() == Some(TokenKind::Embed) || self.at_template_decl()
+    }
+
+    fn parse_embed_or_template_decl(&mut self) -> Result<EmbedDecl, CompileError> {
+        if self.peek_kind() == Some(TokenKind::Embed) {
+            self.parse_embed_decl()
+        } else {
+            self.parse_template_decl()
+        }
+    }
+
+    /// Typed HTML (#3927, slice 1): `template name: Fields = "path"` or
+    /// `template name = "path"`. Like an embed, the path is a plain string
+    /// literal; the file's markup, its placeholders and the fields type are
+    /// checker concerns.
+    fn parse_template_decl(&mut self) -> Result<EmbedDecl, CompileError> {
+        let kw = self.expect(TokenKind::Ident, "to start a template declaration")?;
+        let name = self.expect_ident("after `template`")?;
+        let fields = if self.eat(TokenKind::Colon).is_some() {
+            Some(self.parse_type_ref("for the template's fields type")?)
+        } else {
+            None
+        };
+        self.expect(TokenKind::Eq, "after the template's name or fields type")?;
+        let (path, path_span) = self.expect_str_lit("for the template file's path")?;
+        Ok(EmbedDecl {
+            name,
+            path,
+            path_span,
+            template: Some(TemplateHead {
+                keyword: kw.span,
+                fields,
+            }),
             documentation: None,
             span: kw.span.merge(path_span),
             trivia: Trivia::default(),

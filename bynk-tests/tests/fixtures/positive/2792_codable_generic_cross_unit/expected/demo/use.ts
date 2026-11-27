@@ -41,7 +41,7 @@ export function __deserialise_Card(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.rank`, expected: "number", actual: typeof obj["rank"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["rank"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.rank`, expected: "safe integer", actual: String(obj["rank"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.rank`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["rank"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __rank = obj["rank"];
   return Ok({ name: __name, rank: __rank } as Card);

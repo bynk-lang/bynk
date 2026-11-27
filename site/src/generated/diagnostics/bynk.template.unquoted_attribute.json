@@ -1,0 +1,10 @@
+{
+  "blurb": "An unquoted attribute value ends at the first space, so a value that holds one could add attributes of its own, such as an event handler. Escaping cannot make that safe, so a template refuses a placeholder in an unquoted value. Quote the value; the placeholder is then escaped for an attribute, quotes included.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.unquoted_attribute",
+  "constructs": [],
+  "example": "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<img alt=\\(alt)>   // ✗ unquoted: a space in `alt` would start a new attribute\n<img alt=\"\\(alt)\">   // ✓",
+  "severity": "error",
+  "summary": "A template placeholder fills an unquoted attribute value (#3927)."
+}

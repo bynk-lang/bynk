@@ -5,8 +5,6 @@
 
 use std::path::Path;
 
-use bynk_ts::TsType;
-
 use super::boundary::emit_boundary_helpers;
 use super::ctx::UnitFacts;
 use super::ts_types::asset_ts_type;
@@ -140,23 +138,10 @@ pub fn emit_project(
     // file's text, emitted before the functions for the same reason as an
     // asset. A unit that `uses` this one imports it like a function
     // (`record_name_ref`); the bundler drops one nothing references.
+    // #3927: a template is a function of its fields instead (`templates::emit_embed`).
     for item in &commons.commons.items {
         if let CommonsItem::Embed(e) = item {
-            let key = bynk_project::assets::normalise_asset_path(&e.path);
-            let text = ctx.embed_text.get(&key).cloned().unwrap_or_else(|| {
-                panic!(
-                    "bynk internal error: embed `{}` reached emission without its text",
-                    e.name.name
-                )
-            });
-            body.push(bynk_ts::TsStmt::decl(
-                bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
-                    name: ts_ident(&e.name.name),
-                    ty: Some(TsType::named("string")),
-                    init: bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(text)),
-                })),
-                Some(e.span),
-            ));
+            body.push(super::templates::emit_embed(e, commons, ctx));
         }
     }
     // #2617: each constant is an exported, hoisted function, after the types

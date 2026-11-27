@@ -275,3 +275,34 @@ test("a listener that throws is kept with the faults, not thrown into the event 
   assert.equal(faults.length, 1);
   assert.match(String((faults[0] as Error).message), /listener boom/);
 });
+
+test("a client end holds the frames and the close that arrive before it listens, and delivers them when it does", async () => {
+  const { h } = host();
+  const { client, server } = hosted(h);
+  // The server writes while the object runs `on open`, before the case has a listener on its end.
+  server.send("welcome");
+  server.send("second");
+  server.close(1008, "gone");
+  await webSocketQuiet();
+  assert.equal(client.closeEvent?.code, 1008);
+  const heard: unknown[] = [];
+  const closes: unknown[] = [];
+  client.addEventListener("message", (e) => heard.push((e as { data: unknown }).data));
+  client.addEventListener("close", (e) => closes.push((e as { code: number }).code));
+  await webSocketQuiet();
+  assert.deepEqual(heard, ["welcome", "second"]);
+  assert.deepEqual(closes, [1008]);
+  // Told once: a second listener is not given the close again.
+  client.addEventListener("close", () => closes.push(-1));
+  await webSocketQuiet();
+  assert.deepEqual(closes, [1008]);
+});
+
+test("closeFrame sends a code a page's own close may not, and the object sees it", async () => {
+  const { h, seen } = host();
+  const { client } = hosted(h);
+  client.closeFrame(1001, "going away");
+  await webSocketQuiet();
+  assert.deepEqual(seen.close, [[1001, "going away", true]]);
+  assert.equal(client.closeEvent?.code, 1001);
+});

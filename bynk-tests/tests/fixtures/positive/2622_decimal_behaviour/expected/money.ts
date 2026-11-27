@@ -6,7 +6,7 @@ import { __bynkDecimalAdd, __bynkDecimalDiv, __bynkDecimalFromInt, __bynkDecimal
 import { __bynkDistinct } from "./__bynk_runtime/keys.js";
 import { __bynkCmpDecimal } from "./__bynk_runtime/compare.js";
 import type { ValidationError, DecodeError } from "./__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "./__bynk_runtime/boundary.js";
 
 export type Price = { readonly coefficient: bigint; readonly scale: number } & { readonly __brand: "Price" };
 
@@ -105,7 +105,7 @@ export function decodeReceipt(s: string): Option<Receipt> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Receipt(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Receipt);
@@ -155,7 +155,7 @@ export function decodeCharge(json: string): Option<Charge> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Charge(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Charge);
@@ -220,7 +220,7 @@ export function decodeLine(json: string): Option<Line> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Line(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Line);
@@ -286,7 +286,7 @@ export function lineError(json: string): string {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Line(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Line);
@@ -397,7 +397,7 @@ export function __deserialise_Line(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["qty"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["qty"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __qty = obj["qty"];
   return Ok({ sku: __sku, unit: __unit, qty: __qty } as Line);
@@ -460,7 +460,7 @@ export function __deserialise_Receipt(json: __JsonValue, path: string = "$"): Re
       return Ok({ tag: "Waived", note: __note } as Receipt);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

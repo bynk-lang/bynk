@@ -1,0 +1,7 @@
+suite chat.room {
+  case "a stranger is refused" as integration {
+    let tc = TestConnection[Frame]()
+    let _ <- Gateway.open(tc, Val[RoomId]) by Member(Val[UserId])
+    expect tc.refusedWith() == Some(401)
+  }
+}

@@ -55,7 +55,7 @@ export function __deserialise_Result_String_SqlError(json: __JsonValue, path: st
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<string, SqlError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Result_SqlRun_SqlError(value: Result<SqlRun, SqlError>): __JsonValue {
@@ -79,5 +79,5 @@ export function __deserialise_Result_SqlRun_SqlError(json: __JsonValue, path: st
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<SqlRun, SqlError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

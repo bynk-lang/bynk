@@ -1,0 +1,51 @@
+// #3901: the upgrade's credential, at `system`. A valid principal is admitted and welcomed; every other
+// credential is refused by the Worker's seam before any connection exists, with the status it answered, which
+// `refusedWith()` reads. (The old single-element `[token]` form and the `400` it gets are pinned by the
+// handshake's own workerd tests; no case can present it, since a case acts as a principal.)
+suite room as system {
+  case "a valid principal is admitted and welcomed" {
+    let tc = TestConnection[Frame]()
+    let _ <- lobby.open(tc, "abc") by Member("ann")
+    expect tc.refusedWith() == None
+    expect tc.sent() == [Frame { text: "hello" }]
+  }
+
+  case "a missing credential is refused with 401" {
+    let tc = TestConnection[Frame]()
+    let _ <- lobby.open(tc, "abc") by Nobody
+    expect tc.refusedWith() == Some(401)
+    expect tc.sent() == []
+  }
+
+  case "a forged token is refused with 401" {
+    let tc = TestConnection[Frame]()
+    let _ <- lobby.open(tc, "abc") by Forged
+    expect tc.refusedWith() == Some(401)
+  }
+
+  case "an expired token is refused with 401" {
+    let tc = TestConnection[Frame]()
+    let _ <- lobby.open(tc, "abc") by Expired
+    expect tc.refusedWith() == Some(401)
+  }
+
+  case "a token for another issuer is refused with 401" {
+    let tc = TestConnection[Frame]()
+    let _ <- lobby.open(tc, "abc") by WrongIssuer
+    expect tc.refusedWith() == Some(401)
+  }
+
+  case "a token for another audience is refused with 401" {
+    let tc = TestConnection[Frame]()
+    let _ <- lobby.open(tc, "abc") by WrongAudience
+    expect tc.refusedWith() == Some(401)
+  }
+
+  case "a client going away is not the server closing the connection" {
+    let tc = TestConnection[Frame]()
+    let _ <- lobby.open(tc, "abc") by Member("ann")
+    expect tc.closed() == false
+    let _ <- lobby.close(tc)
+    expect tc.closed() == false
+  }
+}

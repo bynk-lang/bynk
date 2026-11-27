@@ -1,0 +1,2 @@
+bynk.html.no_constructor `Html` has no `of` constructor
+# exact

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.move_transfer_lost",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An agent move's commit was refused because the receiver no longer expects the class (`transferred_pending_not_found`): its pending transfer was cancelled, or the receiver was pushed with the class live. Nothing has committed and the data is safe on the source; the next `bynk deploy` pushes the receiver's phase 1 again, then the commit."
+}

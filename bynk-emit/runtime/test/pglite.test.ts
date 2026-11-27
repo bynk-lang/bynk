@@ -2,6 +2,8 @@
 // PGlite package. The fidelity cases are the ones the proposal named: SQLSTATE
 // for a constraint violation, ADR 0799 F's value rules, and `transaction`'s
 // rollback.
+import { __bynkDecimalParse } from "../src/decimal.ts";
+const D = (s: string) => { const r = __bynkDecimalParse(s); if (r.tag !== "Some") throw new Error(s); return r.value; };
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { makeIntegrationPostgres } from "../src/testing/pglite.ts";
@@ -59,7 +61,7 @@ test("values read as ADR 0799 F says: int8 and numeric as text, timestamptz as I
     "insert into v values ($1, $2, $3, '2026-11-12', '2026-11-12 10:20:30', $4, $5)",
     [
       { tag: "PgText", value: "9007199254740993" },
-      { tag: "PgNumeric", value: "12345678901234567890.123456789" },
+      { tag: "PgNumeric", value: D("12345678901234567890.123456789") },
       { tag: "PgTimestamp", value: Date.UTC(2026, 10, 12, 10, 20, 30, 123) },
       { tag: "PgBytea", value: new Uint8Array([0xde, 0xad, 0xbe, 0xef]) },
       { tag: "PgJson", value: '{"a":[1,2,{"b":null}],"s":"x"}' },

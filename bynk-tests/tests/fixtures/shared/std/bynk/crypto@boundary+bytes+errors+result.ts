@@ -220,7 +220,7 @@ export function __deserialise_CryptoError(json: __JsonValue, path: string = "$")
     case "OpenFailed":
       return Ok({ tag: "OpenFailed" } as CryptoError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -245,7 +245,7 @@ export function __deserialise_Digest(json: __JsonValue, path: string = "$"): Res
       case "Sha512":
         return Ok({ tag: "Sha512" } as Digest);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -261,7 +261,7 @@ export function __deserialise_Digest(json: __JsonValue, path: string = "$"): Res
     case "Sha512":
       return Ok({ tag: "Sha512" } as Digest);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -286,7 +286,7 @@ export function __deserialise_Signature(json: __JsonValue, path: string = "$"): 
       case "RsaPkcs1Sha256":
         return Ok({ tag: "RsaPkcs1Sha256" } as Signature);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -302,7 +302,7 @@ export function __deserialise_Signature(json: __JsonValue, path: string = "$"): 
     case "RsaPkcs1Sha256":
       return Ok({ tag: "RsaPkcs1Sha256" } as Signature);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

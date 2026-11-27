@@ -1036,10 +1036,12 @@ export async function __call(
   let streamed: unknown;
   try {
     const headers = await __headers(options, init, request, route);
-    // #4610: the credential is an `Authorization` header, from the options, the init or a typed record.
+    // #4610, #4631: the credential is an `Authorization` header or an explicitly set `Cookie` one, from the
+    // options, the init, a typed record or typed cookies. A browser's own cookie jar sets no header here, so a
+    // page's cookie-credentialed call (`credentials: "include"`) is not affected.
     const url = __url(options, route, request);
     if (
-      (headers.get("authorization") ?? "") !== "" &&
+      ((headers.get("authorization") ?? "") !== "" || (headers.get("cookie") ?? "") !== "") &&
       !(options.fetch !== undefined && __bindingFetches.has(options.fetch)) &&
       __cleartextRemote(url)
     ) {
@@ -1243,7 +1245,7 @@ export function __deserialise_Prefs(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.visits`, expected: "number", actual: typeof __d_visits });
   }
   if (!globalThis.Number.isSafeInteger(__d_visits)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.visits`, expected: "safe integer", actual: String(__d_visits) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.visits`, expected: "safe integer", actual: globalThis.Number.isInteger(__d_visits) ? "integer outside the safe range" : "non-integer number" });
   }
   const __visits = __d_visits;
   return Ok({ theme: __theme, lang: __lang, visits: __visits } as __Wire_Prefs);
@@ -1370,7 +1372,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);

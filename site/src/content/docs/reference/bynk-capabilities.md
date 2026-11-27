@@ -1831,7 +1831,7 @@ answers a `PgError`.
 | `PgBytea(Bytes)` | `bytea` |
 | `PgBoolean(Bool)` | `boolean` |
 | `PgTimestamp(Instant)` | a `timestamptz` |
-| `PgJson(String)` · `PgNumeric(String)` | JSON text and a decimal as text, which the server types from the column or a cast (`$1::jsonb`, `$2::numeric`) |
+| `PgJson(String)` · `PgNumeric(Decimal)` | JSON text and a `Decimal` as its canonical text, which the server types from the column or a cast (`$1::jsonb`, `$2::numeric`) |
 
 The variants carry the `Pg` prefix because a bare `Null`, `Integer`, `Real`,
 `Text` or `Boolean` would resolve to `SqlValue`'s. `PgError` is likewise
@@ -1920,13 +1920,14 @@ statement's own failure and `PgDecode(DecodeError)` for a row that did not
 decode. The variants carry the `Pg` prefix because `Sql` and `Decode` are
 `SqlReadError`'s.
 
-A row field is an `Int`, `Float`, `String`, `Bool`, `Bytes`, `Decimal` or
-`Instant` (or a refined or opaque type over one, or an `Option` of either). Two
-of the rows' text forms are read for you, and only in a typed read:
+A row field is one of the [column types](#sql-column-types) (or a refined or
+opaque type over a scalar one, or an `Option` of either). Three of the rows' text
+forms are read for you, and only in a typed read:
 
 - An `Int` field reads an `int8` that arrives as text, when it is a whole number
   within ±2^53. A larger one fails the decode, naming the field, rather than
-  losing digits; read it as a `Decimal` or a `String` column instead.
+  losing digits; read it as a `Decimal` or a `String` column instead. A
+  `Duration` field reads a `bigint` of milliseconds the same way.
 - An `Instant` field reads a `timestamptz`'s ISO-8601 text and normalises it to
   UTC. The forms are the driver's (`2026-11-11T12:34:56.789Z`) and Postgres' own
   text (`2026-11-11 12:34:56.789+00`, `…+05:30`, `…-0800`, a fraction of up to six
@@ -2061,7 +2062,7 @@ statement does not survive Hyperdrive's transaction pooling and cannot bind
 | `MySqlText(String)` | text |
 | `MySqlBytes(Bytes)` | a `BLOB` |
 | `MySqlBoolean(Bool)` | `1` or `0`: a `TINYINT(1)`, MySQL's flag |
-| `MySqlDecimal(String)` · `MySqlJson(String)` | a `DECIMAL` as text and JSON text for a `JSON` column, so neither loses a digit |
+| `MySqlDecimal(Decimal)` · `MySqlJson(String)` | a `DECIMAL` as its canonical text and JSON text for a `JSON` column, so neither loses a digit |
 | `MySqlDateTime(String)` | the wall-clock text of a `DATETIME` (`2026-11-12 09:30:00`): no zone, not an instant |
 | `MySqlTimestamp(Instant)` | an `Instant` as UTC text (`2026-11-12 09:30:00.000`): right for a `DATETIME` that holds UTC by convention, and for a `TIMESTAMP` only when the session's zone is UTC |
 
@@ -2074,8 +2075,9 @@ are fixed: a `BIGINT` (signed or unsigned) and a `DECIMAL` arrive as **strings**
 a `TINYINT(1)` as `true` or `false` (any other `TINYINT` is a number, and `D1`'s
 `0` and `1` do not apply), a `BLOB` as base64, a `JSON` column nested, and
 `DATETIME`, `TIMESTAMP` and `DATE` as the server's text with no zone put on it
-(Bynk does not invent an instant: an `Instant` field refuses it and a `String`
-field reads it). `run` reports `MySqlRun { rowCount, insertId }`: the rows affected
+(a typed read's `Instant` field reads a `DATETIME` or `TIMESTAMP` as UTC, as
+`MySqlTimestamp` binds it, and refuses a `DATE`; a `String` field reads any of
+them as the text). `run` reports `MySqlRun { rowCount, insertId }`: the rows affected
 and the `AUTO_INCREMENT` id the statement inserted (`0` when none),
 since MySQL has no `RETURNING`. An id or a count past 2^53 is not an `Int`, so
 `run` answers `Err(MySqlFailed(0, …))` naming it instead of a `0` that would read
@@ -2107,9 +2109,10 @@ per Worker invocation, as for `Postgres`.
 **Typed reads and transactions.** `select[T]` and `firstAs[T]` and `transaction`
 behave as `Postgres`'s, with backtick-quoted columns (an embedded backtick
 doubled), a `MySqlStatement { sql, params }` per transaction statement, and
-`MySqlReadError` (`MySqlSql`, `MySqlDecode`). A row field is an `Int`, `Float`,
-`String`, `Bool`, `Bytes` or `Decimal` (or a refined or opaque type over one, or an
-`Option` of either); an `Int` reads a `BIGINT` that arrives as text.
+`MySqlReadError` (`MySqlSql`, `MySqlDecode`). A row field is one of the
+[column types](#sql-column-types) (or a refined or opaque type over a scalar one,
+or an `Option` of either); an `Int` or a `Duration` reads a `BIGINT` that arrives
+as text, and an `Instant` reads a `DATETIME` or `TIMESTAMP` as UTC.
 
 **Tests.** There is no in-memory MySQL: a test never reaches a database, so every
 operation of an instance **faults until the case stubs it**:
@@ -2193,8 +2196,8 @@ with each vector's metadata read as `M` on its own, for what `upsertValue` write
 `VectorMatchOf[M]` (a `VectorReadOf[M]` for `getByIdsValue`) has `metadata: Option[Result[M,
 DecodeError]]`, `None` when the vector has none or the query omitted it, `Some(Ok(m))` when it
 reads and `Some(Err(e))` when it does not (a vector stored by an older shape of `M`), so one stale
-vector is one `Err` and the rest still read. The error names the path and what was expected, but its message can quote part of the stored
-value, so do not log it unredacted. Use `returnMetadata: All` with them: an `Indexed` read returns only the
+vector is one `Err` and the rest still read. The error names the path, what was expected and the JSON kind found, never the stored value, so
+it is safe to log. Use `returnMetadata: All` with them: an `Indexed` read returns only the
 filterable properties, which decode as `M` only when `M` has just those fields. `query` and
 `getByIds` are unchanged, for metadata written outside Bynk. They are experimental with the rest of
 `Vectorize`, and compiler-lowered over `query` and `getByIds`, so `stub Docs.query(_, _) returns …`
@@ -2573,9 +2576,13 @@ when `bynk deploy` creates it; any other value is
 
 Statements are SQL text with positional parameters, `?1`, `?2` and so on. Each
 parameter is a `SqlValue`, named by SQLite storage class: `Null`,
-`Integer(Int)`, `Real(Float)`, `Text(String)`, `Blob(Bytes)` or
-`Boolean(Bool)`, which binds as `1` or `0`. A value is always bound, never
-spliced into the text.
+`Integer(Int)`, `Real(Float)`, `Text(String)`, `Blob(Bytes)`,
+`Boolean(Bool)`, which binds as `1` or `0`, `Numeric(Decimal)`, which binds as
+its canonical text, or `Timestamp(Instant)`, which binds as integer
+milliseconds. (`Decimal` is a keyword, so the variant is `Numeric`, as
+`PgNumeric` is.) A `Duration` binds as `Integer(d.toMillis())`, and an enum as
+`Text` of its variant's name, a `match` over its variants. A value is always
+bound, never spliced into the text.
 
 The SQL must be a string literal, or a bare reference to a `String` `const`
 bound to one: the first argument of `all`, `first` and `run`, and the `sql` of
@@ -2644,14 +2651,41 @@ foreign-key violation, which a handler answers (a duplicate key is typically a
 `Conflict`), or `Failed(message)` for anything else, with the database's
 message. `SqlError` is extensible, so a `match` over it needs a wildcard.
 
-`Json.decodeSql[T]`'s `T` is a row: a record whose fields are `Int`, `Float`,
-`String`, `Bool`, `Bytes` or `Decimal`, a refined or opaque type over one, or an
-`Option` of either (`NULL` is `None`), or a `List` of such records. A `Decimal`
+`Json.decodeSql[T]`'s `T` is a row: a record whose fields are one of the
+[column types](#sql-column-types), a refined or opaque type over a scalar one, or
+an `Option` of either (`NULL` is `None`), or a `List` of such records. A `Decimal`
 field reads canonical decimal text, so declare its column `TEXT`: a `DECIMAL`,
 `NUMERIC` or `REAL` column has numeric affinity in SQLite, arrives as a JSON
 number and fails the decode, so the compiler warns where it can see the declared
 type (`bynk.d1.decimal_numeric_affinity`). Anything else is
-`bynk.types.sql_row_shape`. Only `0` and `1` become booleans: a `Bool` column
+`bynk.types.sql_row_shape`.
+
+#### Column types {#sql-column-types}
+
+`D1`, `Postgres` and `MySql` read the same row field types, in typed reads
+(`select[T]`, `firstAs[T]`) and in `Json.decodeSql`, by one storage convention
+each. A field that does not read its convention fails the decode, naming the
+field.
+
+| Field type | `D1` (SQLite) | `Postgres` | `MySql` |
+|---|---|---|---|
+| `Int` | `INTEGER` | `bigint` (text, within ±2^53) | `BIGINT` (text, within ±2^53) |
+| `Float` | `REAL` | `double precision` | `DOUBLE` |
+| `String` | `TEXT` | `text` | `VARCHAR`, `TEXT` |
+| `Bool` | `INTEGER` `0` / `1` | `boolean` | `TINYINT(1)` |
+| `Bytes` | `BLOB` | `bytea` | `BLOB` |
+| `Decimal` | canonical `TEXT` | `numeric` | `DECIMAL` |
+| `Instant` | `INTEGER` milliseconds | `timestamptz` | `DATETIME` or `TIMESTAMP`, read as UTC |
+| `Duration` | `INTEGER` milliseconds | `bigint` milliseconds | `BIGINT` milliseconds |
+| a payload-less enum | `TEXT`, the variant's name | `text` | `VARCHAR`, `TEXT` |
+
+`Instant` and `Duration` as milliseconds sort, and match the wire form; a `D1`
+`Decimal` as text compares exactly only when the scales agree, so sort it
+numerically with a `CAST`, or keep a separate column. A `D1` `Instant` field also
+reads an RFC 3339 text with an offset, as the wire codec does; any other text
+fails the decode. Where the compiler can see a `D1` column's declared type it
+warns when the field's convention disagrees (`bynk.d1.column_affinity`: an
+`Instant` or `Duration` over a `TEXT` column, an enum over an `INTEGER` one). Only `0` and `1` become booleans: a `Bool` column
 holding `2` still fails the decode. `Json.decode` itself is unchanged and
 still refuses `0`/`1` for a `Bool`, at every boundary.
 
@@ -3243,7 +3277,26 @@ shell.replace("{{title}}", escapeText(title))
 
 Neither is safe in an unquoted attribute, in a URL attribute such as `href` or `src` (where
 `javascript:` passes), or inside `<script>` or `<style>`; escaping cannot make an untrusted
-value a safe URL or script. Typed HTML is the track that builds on these two.
+value a safe URL or script. A [`template`](/reference/embeds/#templates) calls them for you, in
+each placeholder's context, and refuses a placeholder where neither is enough.
+
+#### `Html` and templates (experimental)
+
+Behind `bynk.html.typed` in `[unstable] allow`, `bynk.html` also declares `Html` (#3927):
+markup a page includes as is. It is an opaque type, not a `String`, so text reaches markup only
+through the escape its context needs.
+
+| Operation | Type | |
+| --- | --- | --- |
+| `shell.fill(fields)` | `Html` | a [`template`](/reference/embeds/#templates) with fields, given the whole record |
+| `footer` | `Html` | a template with no fields |
+| `h.toString()` | `String` | the markup, for a test or another kind of body |
+
+`Html` has no constructor: `Html.of` is `bynk.html.no_constructor`, because no string becomes markup
+unchecked. `Html` is not data: a type that holds one has no codec, and is refused as a request parameter
+and in an agent's `store` (`bynk.html.at_boundary`). Naming `Html`, or declaring a `template`,
+without the gate is `bynk.stability.experimental`. `escapeText` and `escapeAttr` keep their
+names and behaviour, and need no gate.
 
 ### `If-Range`: `bynk.range`
 

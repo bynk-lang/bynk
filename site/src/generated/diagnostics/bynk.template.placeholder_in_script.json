@@ -1,0 +1,10 @@
+{
+  "blurb": "A script's text is code, and no escape makes a value safe inside it: a string can be closed, and `</script>` ends the element. So a template refuses a placeholder anywhere in `<script>`. Pass data to a script another way, such as a `data-` attribute it reads, which is escaped for an attribute. A JSON data block is a later increment.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.placeholder_in_script",
+  "constructs": [],
+  "example": "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<script>greet(\"\\(name)\")</script>   // ✗ a value here is code\n<div id=\"greeting\" data-name=\"\\(name)\"></div>   // ✓",
+  "severity": "error",
+  "summary": "A template placeholder is inside `<script>` (#3927)."
+}

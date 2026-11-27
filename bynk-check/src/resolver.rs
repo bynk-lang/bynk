@@ -1084,6 +1084,19 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
     }
 }
 
+/// Whether `name` is a variant of the sum `decl`, or the built-in `fromWireName` of an enum (#4560):
+/// the members `T.name(…)` may name without the type declaring a static of that name.
+fn sum_static_member(decl: &TypeDecl, name: &str) -> bool {
+    match &decl.body {
+        TypeBody::Sum(s) => {
+            s.variants.iter().any(|v| v.name.name == name)
+                || (name == crate::checker::enum_wire::FROM_WIRE_NAME
+                    && crate::checker::enum_wire::is_enum(decl))
+        }
+        TypeBody::Refined { .. } | TypeBody::Record(_) | TypeBody::Opaque { .. } => false,
+    }
+}
+
 /// #3162: the note on `bynk.resolve.unknown_function`. A capitalised name in
 /// call position is an agent construction (`Counter("x")`), which is not a
 /// function and may sit in a suite rather than a commons, so it is not told
@@ -2659,6 +2672,36 @@ pub fn check_hidden_type_names(
     };
     let mut g = Gate {
         hidden,
+        report: &report,
+        variants: Default::default(),
+        variant_report: None,
+        locals: None,
+        caps: false,
+        units: None,
+        errors: Vec::new(),
+    };
+    gate_items(&mut g, items);
+    g.errors
+}
+
+/// Typed HTML (#3927, §14): every `bynk.html` type the project's policy blocks,
+/// written as a type in `items`, is `bynk.stability.experimental`. A type
+/// reaches no item path through a call, so the call-site check
+/// (`refuse_experimental_import`) never sees it; this walks the written types
+/// with the same machinery as a hidden type's. `gated` maps each blocked name
+/// to its item path.
+pub fn check_gated_type_names(
+    items: &[CommonsItem],
+    gated: &std::collections::BTreeMap<String, String>,
+    policy: &crate::stability::StabilityPolicy,
+) -> Vec<CompileError> {
+    let report = |id: &Ident, path: &str| {
+        policy
+            .check(path, id.span)
+            .unwrap_or_else(|| hidden_type_error(id, String::new()))
+    };
+    let mut g = Gate {
+        hidden: gated,
         report: &report,
         variants: Default::default(),
         variant_report: None,
@@ -4855,10 +4898,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                     );
                 let is_unsafe_constructor =
                     method.name == "unsafe" && matches!(decl.body, TypeBody::Opaque { .. });
-                let is_variant = match &decl.body {
-                    TypeBody::Sum(s) => s.variants.iter().any(|v| v.name.name == method.name),
-                    _ => false,
-                };
+                let is_variant = sum_static_member(decl, &method.name);
                 if !(is_static_method || is_of_constructor || is_unsafe_constructor || is_variant) {
                     cx.errors.push(
                         CompileError::new(

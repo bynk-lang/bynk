@@ -1,0 +1,6 @@
+// #3927 (typed HTML, slice 1): an integration point inside `<svg>` is refused
+commons t.page
+
+uses bynk.html
+
+template icon = "embeds/page.html"

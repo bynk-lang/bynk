@@ -112,7 +112,7 @@ export default {
               return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             }
             const __raw_r = __m.params["r"];
-            const __r_r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "path.r", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "path.r", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__pathLeaf("int", __raw_r));
+            const __r_r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "path.r", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "path.r", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__pathLeaf("int", __raw_r));
             if (__r_r.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_r.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const r = __r_r.value;
             const result = await surface.http_GET_refs_Param_r(r);

@@ -1,0 +1,10 @@
+// #3927 (typed HTML, slice 1): an `Html` field in an attribute value is refused
+commons t.page
+
+uses bynk.html
+
+type F = {
+	v: Html,
+}
+
+template shell: F = "embeds/page.html"

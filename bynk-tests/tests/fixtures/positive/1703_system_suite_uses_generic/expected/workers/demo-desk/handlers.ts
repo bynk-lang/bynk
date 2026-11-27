@@ -44,7 +44,7 @@ export function __deserialise_Envelope_Int(json: __JsonValue, path: string = "$"
     return Err({ kind: "StructuralMismatch", path: `${path}.item`, expected: "number", actual: typeof obj["item"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["item"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.item`, expected: "safe integer", actual: String(obj["item"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.item`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["item"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __item = obj["item"];
   if (typeof obj["note"] !== "string") {

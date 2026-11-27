@@ -45,7 +45,7 @@ export default {
               } catch {
                 return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
               }
-              const __r_min = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(args);
+              const __r_min = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(args);
               if (__r_min.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_min.error)), { status: 400, headers: { "content-type": "application/json" } });
               const min = __r_min.value;
               const result = await surface.listing(min);
@@ -147,7 +147,7 @@ export default {
               const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.id", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["id"]);
               if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_id.error)), { status: 400, headers: { "content-type": "application/json" } });
               const id = __r_id.value;
-              const __r_qty = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["qty"]);
+              const __r_qty = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(argsObj["qty"]);
               if (__r_qty.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_qty.error)), { status: 400, headers: { "content-type": "application/json" } });
               const qty = __r_qty.value;
               const __r_live = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.live", expected: "boolean", actual: typeof __v } as __BoundaryError))(argsObj["live"]);

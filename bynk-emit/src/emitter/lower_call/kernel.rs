@@ -6,7 +6,7 @@
 
 use bynk_check::checker::{Callee, Ty, TyId};
 use bynk_check::kernel_op::{
-    EffectOp, EffectResultOp, HttpResultOp, KernelOp, OrdOp, TestConnectionOp,
+    EffectOp, EffectResultOp, EnumOp, HttpResultOp, KernelOp, OrdOp, TestConnectionOp,
 };
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsLit, TsObjectEntry, TsType};
 
@@ -337,6 +337,15 @@ pub(in crate::emitter) fn lower_kernel_method_call(
                 }
                 return mismatch(kop);
             }
+            // #4560: `wireName` on an enum, from the wire names the codecs use.
+            KernelOp::Enum(EnumOp::WireName) => {
+                if let Some(built) =
+                    super::enum_wire::lower_wire_name(kernel_recv, receiver, cx, pre)
+                {
+                    return Some(built);
+                }
+                return mismatch(kop);
+            }
             // #2622: the `Decimal` kernel.
             KernelOp::Decimal(op) => {
                 if let Some(built) = pre.absorb_built(lower_decimal_kernel(receiver, op, args, cx))
@@ -573,6 +582,7 @@ fn lower_test_connection(op: TestConnectionOp, recv: bynk_ts::TsExpr) -> bynk_ts
         TestConnectionOp::Closed => member(recv, "closed"),
         TestConnectionOp::CloseCode => call(member(recv, "closeCodeOption"), vec![]),
         TestConnectionOp::CloseReason => call(member(recv, "closeReasonOption"), vec![]),
+        TestConnectionOp::RefusedWith => call(member(recv, "refusedWithOption"), vec![]),
         TestConnectionOp::Connection => call(member(recv, "mint"), vec![]),
     }
 }
@@ -741,6 +751,7 @@ mod tests {
             (TestConnectionOp::Closed, "c.closed"),
             (TestConnectionOp::CloseCode, "c.closeCodeOption()"),
             (TestConnectionOp::CloseReason, "c.closeReasonOption()"),
+            (TestConnectionOp::RefusedWith, "c.refusedWithOption()"),
             (TestConnectionOp::Connection, "c.mint()"),
         ] {
             assert_eq!(printed(lower_test_connection(op, node("c"))), want);

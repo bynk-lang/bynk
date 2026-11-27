@@ -1,0 +1,37 @@
+---
+#4604: a `DecodeError`'s message names the path, the expectation and the JSON kind, and never the
+value, so it is safe to log. Each case decodes a value that looks like a secret.
+---
+suite demo.redact
+
+case "text that is not JSON names an offset, never the parser's words or the input" {
+  let m = message(account("hunter2-secret-token"))
+  expect !m.contains("hunter2")
+  expect !m.contains("secret")
+  let n = message(account("{\"pin\": 1234, \"label\": \"s3cret-label\" trailing"))
+  expect !n.contains("s3cret")
+  expect !n.contains("trailing")
+}
+
+case "a number that is not a safe integer is reported by class, not echoed" {
+  expect message(account("{\"pin\":4242.5,\"ratio\":1.5,\"label\":\"x\"}")) == "expected safe integer, got non-integer number"
+  expect message(account("{\"pin\":9007199254740993,\"ratio\":1.5,\"label\":\"x\"}")) == "expected safe integer, got integer outside the safe range"
+}
+
+case "a non-finite number is reported by class" {
+  expect message(account("{\"pin\":1,\"ratio\":1e999,\"label\":\"x\"}")) == "expected finite number, got non-finite number"
+}
+
+case "a value of the wrong kind names the kind and not the value" {
+  let m = message(account("{\"pin\":\"hunter2\",\"ratio\":1.5,\"label\":\"x\"}"))
+  expect m == "expected number, got string"
+  expect !m.contains("hunter2")
+}
+
+case "a tag that names no variant is not echoed" {
+  let m = ticketMessage(ticket("{\"status\":{\"kind\":\"hunter2-secret\"}}"))
+  expect !m.contains("hunter2")
+  expect m == "expected sum variant kind, got unrecognised variant"
+  let b = ticketMessage(ticket("{\"status\":\"hunter2-secret\"}"))
+  expect !b.contains("hunter2")
+}

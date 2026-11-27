@@ -203,6 +203,6 @@ export function __deserialise_Choice_Code(json: __JsonValue, path: string = "$")
     case "Nope":
       return Ok({ tag: "Nope" } as Choice<Code>);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }

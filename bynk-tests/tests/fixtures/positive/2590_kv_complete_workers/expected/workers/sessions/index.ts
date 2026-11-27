@@ -76,7 +76,7 @@ export default {
               const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.id", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["id"]);
               if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_id.error)), { status: 400, headers: { "content-type": "application/json" } });
               const id = __r_id.value;
-              const __r_inSeconds = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.inSeconds", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.inSeconds", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["inSeconds"]);
+              const __r_inSeconds = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.inSeconds", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.inSeconds", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(argsObj["inSeconds"]);
               if (__r_inSeconds.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_inSeconds.error)), { status: 400, headers: { "content-type": "application/json" } });
               const inSeconds = __r_inSeconds.value;
               const result = await surface.expireAt(id, inSeconds);
@@ -101,7 +101,7 @@ export default {
               const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.id", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["id"]);
               if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_id.error)), { status: 400, headers: { "content-type": "application/json" } });
               const id = __r_id.value;
-              const __r_seconds = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.seconds", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.seconds", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["seconds"]);
+              const __r_seconds = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.seconds", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.seconds", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(argsObj["seconds"]);
               if (__r_seconds.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_seconds.error)), { status: 400, headers: { "content-type": "application/json" } });
               const seconds = __r_seconds.value;
               const result = await surface.expireSoon(id, seconds);

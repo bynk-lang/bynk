@@ -118,5 +118,5 @@ export function __deserialise_Result_Paginated_User_Unit(json: __JsonValue, path
     const __e = undefined;
     return Ok(Err(__e) as Result<__CommonsPaginated<__CommonsUser>, void>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

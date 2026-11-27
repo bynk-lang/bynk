@@ -26,4 +26,5 @@ pub(crate) const TEST_RUNTIME_MODULES: &[(&str, &[&str], &[&str], &str)] = &[
     ("stub_wire", &[], &[], include_str!("test_runtime/stub_wire.ts")),
     ("test_filter", &[], &[], include_str!("test_runtime/test_filter.ts")),
     ("virtual_time", &[], &[], include_str!("test_runtime/virtual_time.ts")),
+    ("ws_client", &[], &["TestConnection", "TestWebSocket", "installTestWebSocketRuntime", "takeWebSocketFaults", "webSocketQuiet"], include_str!("test_runtime/ws_client.ts")),
 ];

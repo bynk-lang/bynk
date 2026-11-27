@@ -58,6 +58,8 @@ const NON_DIAGNOSTIC_LOOKALIKES: &[&str] = &[
     // #3959: the `[unstable] allow` entry for capability parameters, a
     // built-in experimental item (`BUILTIN_EXPERIMENTAL`), not a code.
     "bynk.given.parameters",
+    // #3927: typed HTML's `[unstable] allow` entry, a built-in experimental item.
+    "bynk.html.typed",
 ];
 
 /// Collect every `"bynk.x.y"` string literal across the compiler source,

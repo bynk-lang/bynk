@@ -500,6 +500,60 @@ fn a_lax_bearer_verifier_fails_the_forged_and_expired_cases() {
     assert!(passed(&lax_exp, "an expired token is not handled"));
 }
 
+/// #3901: a WebSocket upgrade's refusals must be able to fail too. Each check of the emitted Bearer verifier is
+/// turned off in turn, and the upgrade it guards is then admitted: exactly the case that relies on the check
+/// turns red, so `refusedWith() == Some(401)` is read from the Worker's seam and not assumed.
+#[test]
+fn a_lax_bearer_verifier_fails_the_websocket_refusal_cases() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: the `tsc` shim is a POSIX shell script");
+        return;
+    }
+    if !(tool_exists("tsc") && tool_exists("node")) {
+        if require::is_required(REQUIRE_ENV) {
+            panic!("tsc and node are required, but {REQUIRE_ENV} is set and one is missing");
+        }
+        eprintln!("\n!!! MUTATION TEST SKIPPED !!!\nit needs `tsc` and `node` on PATH.\n");
+        return;
+    }
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/positive/3901_ws_system_bearer");
+    let scratch = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("behaviour-fixtures");
+    let passed = |cases: &[(String, bool)], name: &str| {
+        cases
+            .iter()
+            .find(|(n, _)| n == name)
+            .unwrap_or_else(|| panic!("no case `{name}` ran"))
+            .1
+    };
+
+    // The signature check off: a forged token is admitted.
+    let lax_sig = run_mutated(
+        &fixture,
+        &scratch,
+        "ws-sig",
+        r#"return Err("bad signature")"#,
+    );
+    assert!(!passed(&lax_sig, "a forged token is refused with 401"));
+    assert!(passed(&lax_sig, "an expired token is refused with 401"));
+    assert!(passed(&lax_sig, "a missing credential is refused with 401"));
+    assert!(passed(
+        &lax_sig,
+        "a valid principal is admitted and welcomed"
+    ));
+
+    // The `exp` check off: an expired token is admitted.
+    let lax_exp = run_mutated(
+        &fixture,
+        &scratch,
+        "ws-exp",
+        r#"return Err("token expired")"#,
+    );
+    assert!(!passed(&lax_exp, "an expired token is refused with 401"));
+    assert!(passed(&lax_exp, "a forged token is refused with 401"));
+    assert!(passed(&lax_exp, "a missing credential is refused with 401"));
+}
+
 /// #3052: an `Oidc` route's `by Forged`, `by Expired`, `by WrongIssuer` and
 /// `by WrongAudience` must be able to fail. Each check of the emitted `Oidc`
 /// verifier is turned off in turn, and exactly the cases that rely on it must

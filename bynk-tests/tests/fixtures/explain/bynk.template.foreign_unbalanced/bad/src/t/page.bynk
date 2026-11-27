@@ -1,0 +1,5 @@
+commons t.page
+
+uses bynk.html
+
+template icon = "embeds/page.html"

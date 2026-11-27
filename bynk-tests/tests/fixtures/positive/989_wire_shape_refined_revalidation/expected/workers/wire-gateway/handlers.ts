@@ -57,7 +57,7 @@ export function __deserialise_GatewayError(json: __JsonValue, path: string = "$"
       case "Rejected":
         return Ok({ tag: "Rejected" } as GatewayError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -69,7 +69,7 @@ export function __deserialise_GatewayError(json: __JsonValue, path: string = "$"
     case "Rejected":
       return Ok({ tag: "Rejected" } as GatewayError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -93,7 +93,7 @@ export function __deserialise_Result_Unit_GatewayError(json: __JsonValue, path: 
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<void, GatewayError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_AuthId(value: wire_auth.AuthId): __JsonValue {
@@ -137,7 +137,7 @@ export function __deserialise_LoginError(json: __JsonValue, path: string = "$"):
       case "Invalid":
         return Ok({ tag: "Invalid" } as wire_auth.LoginError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -149,7 +149,7 @@ export function __deserialise_LoginError(json: __JsonValue, path: string = "$"):
     case "Invalid":
       return Ok({ tag: "Invalid" } as wire_auth.LoginError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -196,5 +196,5 @@ export function __deserialise_Result_Session_LoginError(json: __JsonValue, path:
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<wire_auth.Session, wire_auth.LoginError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

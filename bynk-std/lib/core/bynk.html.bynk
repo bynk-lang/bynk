@@ -1,5 +1,24 @@
 commons bynk.html {
 	---
+	Markup: HTML a page includes as is. An `Html` is not a `String`, so text reaches markup only
+	through the escape its context needs. A template's `fill` makes one, escaping each placeholder
+	for where it sits (`template shell: PageFields = "embeds/page.html"`, then
+	`shell.fill(fields)`), and a template with no fields is one. `toString()` gives the markup
+	back, for a test or another kind of body. An `Html` is not data: it is not `Codable`, so it is
+	never decoded, stored or taken as a request parameter (`bynk.html.at_boundary`).
+	Experimental, behind `bynk.html.typed` in `[unstable] allow`.
+	---
+	type Html = opaque String
+
+	---
+	The markup, as text: for a test (`expect page.toString() == "…"`, or a snapshot of it) or a
+	body that is not a page.
+	---
+	fn Html.toString(self) -> String {
+		self.raw
+	}
+
+	---
 	Escapes `s` for HTML **element text**: `&` becomes `&amp;`, `<` becomes `&lt;` and `>`
 	becomes `&gt;`. The `&` is replaced first, so the escapes it writes are not escaped again.
 
@@ -19,7 +38,8 @@ commons bynk.html {
 
 	Safe inside `"..."` or `'...'`, as in `<img alt="{{alt}}">`. It is **not** safe in an
 	unquoted attribute, a URL attribute such as `href` or `src` (where `javascript:` passes), or
-	inside `<script>` or `<style>`: escaping cannot make an untrusted value a safe URL or script.
+	inside `<script>` or `<style>`: escaping cannot make an untrusted value a safe URL or script. A `template` escapes each
+	placeholder for its context instead.
 	---
 	fn escapeAttr(s: String) -> String {
 		escapeText(s).replace("\"", "&quot;").replace("'", "&#39;").replace("`", "&#96;")

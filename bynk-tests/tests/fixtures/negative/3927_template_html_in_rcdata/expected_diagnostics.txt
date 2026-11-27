@@ -1,0 +1,2 @@
+# exact
+bynk.template.html_in_rcdata	embeds/page.html:1:8

@@ -1,0 +1,8 @@
+// #3927 (typed HTML, slice 1): naming `Html` as a type needs `bynk.html.typed` in `[unstable] allow`
+commons t.page
+
+uses bynk.html
+
+fn wrap(h: Html) -> Html {
+	h
+}

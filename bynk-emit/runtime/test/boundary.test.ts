@@ -27,7 +27,7 @@ import {
   type ServiceBinding,
 } from "../src/boundary.ts";
 import { Ok, Err, None, type Result } from "../src/result.ts";
-import { readCapped } from "../src/boundary.ts";
+import { jsonParseMessage, readCapped } from "../src/boundary.ts";
 
 function bindingReturning(body: unknown, init?: ResponseInit): ServiceBinding {
   return { fetch: async () => new Response(JSON.stringify(body), init) };
@@ -899,4 +899,27 @@ test("callOutcome: a result is Handled; a fault is Faulted; a marked stub reads 
   } finally {
     globalThis.console.error = original;
   }
+});
+
+// #4604: a JSON parse failure names an offset and never the parser's own text, which quotes the input.
+test("jsonParseMessage: the offset when the engine gives one, and never any of the input", () => {
+  const secret = "hunter2-secret-token";
+  for (const text of [`{"a": "${secret}" x`, `{"${secret}" 1}`, `${secret}`, `{"k":"${secret}"} trailing`]) {
+    let message = "";
+    try {
+      JSON.parse(text);
+    } catch (e) {
+      message = jsonParseMessage(e);
+    }
+    assert.ok(/^not valid JSON( at offset \d+)?$/.test(message), message);
+    assert.ok(!message.includes(secret), message);
+  }
+  // A non-Error, and an Error whose text names no offset, are just "not valid JSON".
+  assert.equal(jsonParseMessage("oops"), "not valid JSON");
+  assert.equal(jsonParseMessage(new SyntaxError("Unexpected token 'h', \"hello\" is not valid JSON")), "not valid JSON");
+  // The offset is read from the end of the message, so quoted input cannot choose it.
+  assert.equal(
+    jsonParseMessage(new SyntaxError('Expected \',\' in JSON at position 99 "and in JSON at position 7" x in JSON at position 3 (line 1 column 4)')),
+    "not valid JSON at offset 3",
+  );
 });

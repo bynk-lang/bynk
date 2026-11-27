@@ -184,7 +184,7 @@ function __rehydrateCounterState(s: CounterState, stored: CounterState): void {
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).stage = __r.value as unknown as (typeof s)["stage"];
   }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.count as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Counter", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"];
   }
@@ -264,7 +264,7 @@ export function __deserialise_Level(json: __JsonValue, path: string = "$"): Resu
       case "High":
         return Ok({ tag: "High" } as Level);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -278,7 +278,7 @@ export function __deserialise_Level(json: __JsonValue, path: string = "$"): Resu
     case "High":
       return Ok({ tag: "High" } as Level);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -303,7 +303,7 @@ export function __deserialise_Stage(json: __JsonValue, path: string = "$"): Resu
       case "Dead":
         return Ok({ tag: "Dead" } as Stage);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -319,7 +319,7 @@ export function __deserialise_Stage(json: __JsonValue, path: string = "$"): Resu
     case "Dead":
       return Ok({ tag: "Dead" } as Stage);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

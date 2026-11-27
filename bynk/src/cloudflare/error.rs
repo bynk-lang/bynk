@@ -299,7 +299,7 @@ mod tests {
         let answered = |status, errors: &str| -> CloudflareError {
             RestError::answered("POST", "/r2/buckets", status, errors).into()
         };
-        assert!(answered(409, r#"[{"code":10073}]"#).is_refusal());
+        assert!(answered(409, r#"[{"code":10004}]"#).is_refusal());
         assert!(answered(400, r#"[{"code":7999}]"#).is_refusal());
         assert!(!answered(403, r#"[{"code":10000}]"#).is_refusal());
         assert!(

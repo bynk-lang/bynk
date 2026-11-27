@@ -172,7 +172,7 @@ const __entryFieldsOfStock = [] as const;
 
 function __rehydrateStockState(s: StockState, stored: StockState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "held")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "held", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "held", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.held as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "held", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "held", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.held as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Stock", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).held = __r.value as unknown as (typeof s)["held"];
   }
