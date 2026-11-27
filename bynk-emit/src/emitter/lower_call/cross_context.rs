@@ -70,6 +70,7 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
                 cx.cross_context(),
                 &cx.commons().types,
                 cx.consumed_type_ns(),
+                &|n| cx.rebrands_commons_type(n),
                 method,
                 service,
                 cx.in_test_scaffold(),
@@ -645,7 +646,7 @@ fn consumed_type_ns_unaliased(
 ///
 /// A call is cast when the return type reaches a refined or opaque type the
 /// caller binds, directly or through the fields of a record or sum it binds
-/// (#2828). Every other call lowers as before.
+/// (#2828), or a `uses`d commons type the caller rebrands (#3807). Every other call lowers as before.
 ///
 /// `in_test_scaffold` is carried for symmetry with [`param_cast`]: no test body
 /// reaches this lowering today. Below `system` a case that crosses a context is
@@ -656,6 +657,7 @@ pub(crate) fn return_cast(
     info: &bynk_check::resolver::CrossContextInfo,
     caller_types: &HashMap<String, Arc<TypeDecl>>,
     consumed_type_ns: &HashMap<String, String>,
+    rebrands: &dyn Fn(&str) -> bool,
     method: &Ident,
     call: TsExpr,
     in_test_scaffold: bool,
@@ -671,7 +673,7 @@ pub(crate) fn return_cast(
     let consumed_type_ns = &consumed_type_ns_unaliased(info, consumed, consumed_type_ns);
     let mut names = HashSet::new();
     type_ref_names(&return_type, &mut names);
-    if !reaches_brand(&names, caller_types, consumed_type_ns) {
+    if !reaches_brand(&names, caller_types, consumed_type_ns, rebrands) {
         return call;
     }
     let ns_of = |owner: &str| {
@@ -709,12 +711,18 @@ fn reaches_brand(
     names: &HashSet<String>,
     caller_types: &HashMap<String, Arc<TypeDecl>>,
     consumed_type_ns: &HashMap<String, String>,
+    rebrands: &dyn Fn(&str) -> bool,
 ) -> bool {
     let mut seen: HashSet<String> = HashSet::new();
     let mut todo: Vec<String> = names.iter().cloned().collect();
     while let Some(n) = todo.pop() {
         if consumed_type_ns.contains_key(&n) || !seen.insert(n.clone()) {
             continue;
+        }
+        // #3807: a `uses`d commons type is rebranded per context (`__ctxBrand`), so the callee's
+        // value of it is not the caller's, whatever its fields hold.
+        if rebrands(&n) {
+            return true;
         }
         let Some(decl) = caller_types.get(&n) else {
             continue;
@@ -909,6 +917,29 @@ mod tests {
         assert_eq!(
             bynk_ts::print_expr(&cast),
             "(total as unknown as shop_pay.Money)"
+        );
+    }
+}
+
+#[cfg(test)]
+mod reaches_brand_tests {
+    use super::reaches_brand;
+    use std::collections::{HashMap, HashSet};
+
+    /// #3807: a `uses`d commons type the caller rebrands carries a brand whatever its fields hold,
+    /// so a call returning it is cast to the caller's declaration (a type the caller does not
+    /// bind, and a consumed context's own type, are not).
+    #[test]
+    fn a_rebranded_commons_type_is_a_brand() {
+        let names: HashSet<String> = ["Expr".to_string()].into();
+        let types = HashMap::new();
+        let ns = HashMap::new();
+        assert!(reaches_brand(&names, &types, &ns, &|n| n == "Expr"));
+        assert!(!reaches_brand(&names, &types, &ns, &|_| false));
+        let consumed: HashMap<String, String> = [("Expr".to_string(), "other".to_string())].into();
+        assert!(
+            !reaches_brand(&names, &types, &consumed, &|n| n == "Expr"),
+            "a consumed context's own type is never the caller's declaration"
         );
     }
 }

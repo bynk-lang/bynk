@@ -1156,6 +1156,61 @@ fn traced_build_passes_tsc_strict() {
     );
 }
 
+/// #3807: fixtures pinned to the `workers` target (their goldens are the Workers output), built
+/// for the `bundle` target as well, because a cross-context boundary cast on that target names a
+/// namespace the module imports, and the corpus' bundle fixtures have no cross-context call into a
+/// context whose declarations span several files. `2704` is that shape (`cyc.client` calls
+/// `cyc.graph`, split over `dirs.bynk` and `entries.bynk`); `2901` calls across an alias.
+const ALSO_BUNDLE: &[&str] = &[
+    "2704_recursive_cycle_across_files",
+    "2901_alias_caller_plain",
+];
+
+#[test]
+fn workers_pinned_cross_context_fixtures_pass_tsc_strict_on_the_bundle_target() {
+    let Some(runner) = discover_tsc() else {
+        eprintln!(
+            "\n!!! TYPESCRIPT VERIFICATION SKIPPED (bundle target) !!!\nneither `tsc` nor `npx` is on PATH.\n"
+        );
+        assert!(
+            !require::is_required(REQUIRE_ENV),
+            "{REQUIRE_ENV} is set but no tsc runner was found"
+        );
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("bynk-tsc-bundle-also-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    for name in ALSO_BUNDLE {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/positive")
+            .join(name);
+        let out =
+            compile_fixture(&dir, bynk_driver::project::BuildTarget::Bundle).unwrap_or_else(|e| {
+                panic!(
+                    "`{name}` does not build for bundle:\n{}",
+                    bynk_driver::render::render_project_errors(&e)
+                )
+            });
+        write_outputs(&out, &root.join(name)).unwrap();
+    }
+    fs::write(
+        root.join("tsconfig.json"),
+        bynk_emit::emitter::emit_tsconfig(),
+    )
+    .unwrap();
+    let staged: Vec<String> = ALSO_BUNDLE.iter().map(|n| (*n).to_string()).collect();
+    fs::write(root.join("tsconfig.chunk.json"), chunk_tsconfig(&staged)).unwrap();
+    let (ok, output) = run_tsc_with_config(&runner, &root.join("tsconfig.chunk.json"));
+    if ok {
+        let _ = fs::remove_dir_all(&root);
+    }
+    assert!(
+        ok,
+        "a workers-pinned cross-context fixture's bundle output failed tsc --strict --noEmit:\n{output}"
+    );
+}
+
 /// #3581 (the dev agent-inspection track): a build that records agent instances
 /// and answers the inspect route must be strict-clean too, since `bynk dev` serves
 /// it. The recording factory, the agent's inspect branch, the Worker's route and
