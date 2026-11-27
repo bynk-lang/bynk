@@ -582,10 +582,20 @@ capability Pages = Upstream @origin(BlogOrigin) @timeout(30.seconds)
 `forward(request: InboundRequest, path: String) -> Effect[Result[Forwarded, UpstreamError]]`
 sends the route's request to the origin with `path` and the request's raw query. The URL is
 built textually, origin then path then query, and its origin is checked before anything is
-sent, so no `path` can change the host. A `path` that doesn't start with `/`, holds `?`, `#`
-or a control character, or has a `.` or `..` segment (encoded or not) is `Err(InvalidPath)`,
-with nothing sent. `UpstreamError` is `Timeout`, `Unreachable` or `InvalidPath`, and may gain
-variants, so a `match` on it needs a wildcard.
+sent, so no `path` can change the host: `//other.example/x` is a path on the upstream. A
+`path` that doesn't start with `/`, holds `?`, `#` or a control character, or has a `.` or
+`..` segment (encoded or not, with `\` read as `/`, as a URL parser does) is
+`Err(InvalidPath)`, with nothing sent. So is a segment whose decoding holds `/` or `\` and
+has a `.` or `..` component (`..%2F..%2Fadmin`, `..%5Cadmin`), which an upstream that decodes
+and then normalises would climb out of the mount by. An encoded slash with no dot component
+(`a%2Fb`, an R2 key) is sent as received.
+
+The method passes, `GET` and `HEAD` without a body; any other method's body streams to the
+upstream unread. A redirect is returned, never followed. A response head that doesn't arrive
+within `@timeout` is `Err(Timeout)`, and an upstream that can't be reached is
+`Err(Unreachable)`. A request is forwarded at most once: a second `forward` of it faults.
+`UpstreamError` is `Timeout`, `Unreachable` or `InvalidPath`, and may gain variants, so a
+`match` on it needs a wildcard.
 
 `InboundRequest` and `Forwarded` live for the request they belong to. A record or sum may
 hold one, but no value holding one is stored, sent or returned across a boundary
@@ -594,9 +604,7 @@ makes one, and `status()` and `header(name)` read it.
 
 All of it is experimental: it needs `bynk.Upstream`, `bynk.InboundRequest`,
 `bynk.Forwarded`, `bynk.PassThrough` and `bynk.UpstreamError` in `[unstable] allow`
-(`bynk.http.ANY` and `bynk.http.rest` for the route). This release checks a program that
-uses it; the router and the exchange arrive in the next increment, and until then a build
-with a pass-through route is refused (`bynk.http.pass_through_not_emitted`).
+(`bynk.http.ANY` and `bynk.http.rest` for the route).
 
 ### Log levels and structured fields
 
