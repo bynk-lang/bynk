@@ -474,9 +474,10 @@ pub fn phase_container_instance_names(
         let containers: HashSet<String> = table
             .derived
             .iter()
-            // A keyed instance (`@instances(by: K)`, #4112) takes the key type, whose construction is
-            // where the names are bounded: it is not warned about.
-            .filter(|(_, d)| d.is_container() && d.instance_key().is_none())
+            // A keyed instance (`@instances(by: K)`, #4112) is checked like any other: a key type
+            // bounds a name's shape, not how many there are, so it does not make an open route safe
+            // (#4584). A route served by an authenticated actor is never checked.
+            .filter(|(_, d)| d.is_container())
             .map(|(cap, _)| cap.clone())
             .collect();
         if containers.is_empty() {

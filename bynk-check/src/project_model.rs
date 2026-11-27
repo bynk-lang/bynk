@@ -1767,6 +1767,13 @@ fn instance_option_value(
         );
         return None;
     }
+    if option == crate::firstparty::QUEUE_NAME_OPTION
+        && base == "Queue"
+        && let Some(error) = crate::queue_reserved::reserved_name_error(text, ann.span)
+    {
+        errors.push_for(Some(path), error);
+        return None;
+    }
     Some(value)
 }
 
@@ -7855,6 +7862,8 @@ mod native_platform_closure_tests {
             use_views: Default::default(),
             ambiguous_uses: Default::default(),
             use_origin: Default::default(),
+            message_codes: None,
+            bundle_render_spellings: Default::default(),
         }
     }
 

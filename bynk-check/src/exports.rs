@@ -95,7 +95,7 @@ fn did_you_mean<'a>(entry: &str, kinds: &'a BTreeMap<String, UnitKind>) -> Optio
 }
 
 /// Levenshtein distance over chars.
-fn strsim(a: &str, b: &str) -> usize {
+pub(crate) fn strsim(a: &str, b: &str) -> usize {
     let b: Vec<char> = b.chars().collect();
     let mut row: Vec<usize> = (0..=b.len()).collect();
     for (i, ca) in a.chars().enumerate() {

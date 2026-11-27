@@ -338,6 +338,10 @@
       "summary": "A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential."
     },
     {
+      "code": "bynk.test.pass_through_address",
+      "summary": "A suite case addresses an `on ANY` pass-through route, which a suite can't drive until its test double (a stub of `Upstream.exchange`, `Forwarded.of`) arrives in a later release."
+    },
+    {
       "code": "bynk.test.peek_not_a_database",
       "summary": "`D1.peek` names a capability that is not derived from `D1`; only a D1 binding has a test database to read."
     },
@@ -1180,10 +1184,6 @@
     {
       "code": "bynk.http.invalid_path",
       "summary": "An HTTP route path is malformed."
-    },
-    {
-      "code": "bynk.http.pass_through_not_emitted",
-      "summary": "A build reaches an `on ANY` pass-through route, which this release checks but does not yet build."
     },
     {
       "code": "bynk.http.pass_through_signature",
