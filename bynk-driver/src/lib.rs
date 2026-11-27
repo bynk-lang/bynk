@@ -2672,6 +2672,274 @@ mod tests {
         ));
     }
 
+    /// #3565: a two-context project for the agent-move variants: `shop.orders` hosts agent
+    /// `Cart` and runs a cron, `shop.pricing` serves a route.
+    fn moving_project(name: &str, manifest: &str) -> Scratch {
+        let dir = scratch_dir(name);
+        fs::write(
+            dir.0.join("bynk.toml"),
+            format!("[build]\ntarget = \"workers\"\n{manifest}"),
+        )
+        .unwrap();
+        fs::create_dir_all(dir.0.join("src/shop")).unwrap();
+        fs::write(
+            dir.0.join("src/shop/orders.bynk"),
+            "context shop.orders\n\nagent Cart {\n  key id: String\n  store n: Cell[Int] = 0\n\n  on call bump() -> Effect[Int] { Effect.pure(1) }\n}\n\nservice tick from cron {\n  on schedule(\"0 * * * *\") () -> Effect[Result[(), String]] {\n    Effect.pure(Ok(()))\n  }\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.0.join("src/shop/pricing.bynk"),
+            "context shop.pricing\n\nservice papi from http {\n  on GET(\"/price\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"1\")\n  }\n}\n",
+        )
+        .unwrap();
+        dir
+    }
+
+    fn built_with(
+        dir: &Scratch,
+        moves: bynk_project::worker_moves::MoveVariants,
+    ) -> project::ProjectOutput {
+        let options = try_project_options(&dir.0).expect("reads");
+        project::compile_project(&options.target(project::BuildTarget::Workers).moves(moves))
+            .unwrap_or_else(|f| {
+                let msgs: Vec<&str> = f.errors.iter().map(|e| e.error.message.as_str()).collect();
+                panic!("builds: {msgs:?}")
+            })
+    }
+
+    fn doc(out: &project::ProjectOutput, path: &str) -> Option<String> {
+        out.artefacts.docs.get(Path::new(path)).map(|d| d.text())
+    }
+
+    /// #3565 (agent-context moves, slice 2): `shop.orders` joining group `core` writes the
+    /// group's receive variant beside its own files, which stay as they were.
+    #[test]
+    fn a_group_receiving_a_context_writes_its_receive_variant() {
+        use bynk_project::worker_moves::{Incoming, MoveVariants};
+        let dir = moving_project(
+            "moves_receive_group",
+            "\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.pricing\"]\n",
+        );
+        let plain = built_with(&dir, MoveVariants::default());
+        assert!(doc(&plain, "workers/core/wrangler.receive.toml").is_none());
+        let moves = MoveVariants {
+            receive: [(
+                "core".to_string(),
+                vec![Incoming {
+                    context: "shop.orders".into(),
+                    classes: vec!["Cart".into()],
+                    from_script: "shop-orders".into(),
+                }],
+            )]
+            .into(),
+            ..MoveVariants::default()
+        };
+        let moved = built_with(&dir, moves);
+        // The Worker's own files are unchanged.
+        for file in ["workers/core/wrangler.toml", "workers/core/index.ts"] {
+            assert_eq!(doc(&moved, file), doc(&plain, file), "{file}");
+        }
+        let config = doc(&moved, "workers/core/wrangler.receive.toml").unwrap();
+        assert!(config.contains("main = \"index.receive.ts\""), "{config}");
+        assert!(!config.contains("class_name = \"Cart\""), "{config}");
+        assert!(
+            config.contains("[exports.Cart]\ntype = \"durable-object\"\nstate = \"expecting-transfer\"\nstorage = \"sqlite\"\ntransfer_from = \"shop-orders\"\n"),
+            "{config}"
+        );
+        assert!(
+            config.contains("binding = \"BYNK_FORWARD_SHOP_ORDERS\"\nservice = \"shop-orders\""),
+            "{config}"
+        );
+        // The moving context's cron stays on the source until it gives it up.
+        assert!(!config.contains("0 * * * *"), "{config}");
+        assert!(
+            doc(&plain, "workers/core/wrangler.toml")
+                .unwrap()
+                .contains("0 * * * *")
+        );
+        let entry = doc(&moved, "workers/core/index.receive.ts").unwrap();
+        assert!(
+            entry.contains("members shop.pricing (tried in this order)"),
+            "{entry}"
+        );
+        assert!(
+            entry.contains("export { Cart } from \"./shop-orders.index.js\";"),
+            "{entry}"
+        );
+        assert!(
+            entry.contains("(env as __Forwards)[\"BYNK_FORWARD_SHOP_ORDERS\"].fetch(request)"),
+            "{entry}"
+        );
+        assert!(
+            !entry.contains("scheduled"),
+            "the cron stays on the source: {entry}"
+        );
+    }
+
+    /// #3565: a context moving between two groups, the source group keeping a member: the
+    /// receiver forwards to the source group's script, and the source's commit variant is its
+    /// own build (without the moving context's cron) plus the tombstone.
+    #[test]
+    fn a_context_moving_between_groups_writes_both_groups_variants() {
+        use bynk_project::worker_moves::{Incoming, MoveVariants, Outgoing};
+        let dir = moving_project(
+            "moves_between_groups",
+            "\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.pricing\"]\n\n[deploy.workers.back]\ncontexts = [\"shop.billing\"]\n",
+        );
+        fs::write(
+            dir.0.join("src/shop/billing.bynk"),
+            "context shop.billing\n\nservice bapi from http {\n  on GET(\"/bill\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"2\")\n  }\n}\n",
+        )
+        .unwrap();
+        let plain = built_with(&dir, MoveVariants::default());
+        let moves = MoveVariants {
+            receive: [(
+                "core".to_string(),
+                vec![Incoming {
+                    context: "shop.orders".into(),
+                    classes: vec!["Cart".into()],
+                    from_script: "back".into(),
+                }],
+            )]
+            .into(),
+            commit: [(
+                "back".to_string(),
+                vec![Outgoing {
+                    class: "Cart".into(),
+                    to_script: "core".into(),
+                }],
+            )]
+            .into(),
+            ..MoveVariants::default()
+        };
+        let moved = built_with(&dir, moves);
+        for file in [
+            "workers/core/wrangler.toml",
+            "workers/core/index.ts",
+            "workers/back/wrangler.toml",
+            "workers/back/index.ts",
+        ] {
+            assert_eq!(doc(&moved, file), doc(&plain, file), "{file}");
+        }
+        let receive = doc(&moved, "workers/core/wrangler.receive.toml").unwrap();
+        assert!(
+            receive.contains("binding = \"BYNK_FORWARD_SHOP_ORDERS\"\nservice = \"back\""),
+            "{receive}"
+        );
+        assert!(receive.contains("transfer_from = \"back\""), "{receive}");
+        let commit = doc(&moved, "workers/back/wrangler.commit.toml").unwrap();
+        let own = doc(&plain, "workers/back/wrangler.toml").unwrap();
+        assert!(
+            commit.starts_with(own.trim_end()),
+            "the commit variant is the source's own build plus the tombstone:\n{commit}\n---\n{own}"
+        );
+        assert!(
+            commit.contains("[exports.Cart]\ntype = \"durable-object\"\nstate = \"transferred\"\ntransferred_to = \"core\"\n"),
+            "{commit}"
+        );
+        assert!(!commit.contains("0 * * * *"), "{commit}");
+    }
+
+    /// #3565 (review of #4617): a publishing context moving to a Worker of its own. Its receive
+    /// config still binds the events fan-out, so the receive entry re-exports everything the
+    /// ordinary entry does; and its `replaces` tombstone, which names a namespace still on the
+    /// source, stays out of the receive config.
+    #[test]
+    fn a_publishing_context_received_on_its_own_worker_exports_what_its_config_binds() {
+        use bynk_project::worker_moves::{Incoming, MoveVariants};
+        let dir = scratch_dir("moves_publishing");
+        fs::write(dir.0.join("bynk.toml"), "[build]\ntarget = \"workers\"\n").unwrap();
+        fs::create_dir_all(dir.0.join("src/shop")).unwrap();
+        fs::write(
+            dir.0.join("src/shop/orders.bynk"),
+            "context shop.orders\n\nexports transparent { Paid }\nconsumes bynk { Events }\n\nevent Paid = {\n  id: String,\n}\n\nagent Cart replaces Trolley {\n  key id: String\n  store n: Cell[Int] = 0\n\n  on call bump() -> Effect[Int] { Effect.pure(1) }\n}\n\nservice pay {\n  on call(id: String) -> Effect[()] by Caller given Events {\n    Events.emit[Paid](Paid { id: id })\n  }\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.0.join("src/shop/mail.bynk"),
+            "context shop.mail\n\nconsumes shop.orders\nconsumes bynk { Logger }\n\nservice onPaid from Events(Paid) {\n  on event(e: Paid) -> Effect[()] given Logger {\n    Logger.info(e.id)\n  }\n}\n",
+        )
+        .unwrap();
+        let plain = built_with(&dir, MoveVariants::default());
+        let own = doc(&plain, "workers/shop-orders/wrangler.toml").unwrap();
+        assert!(own.contains("class_name = \"__EventsFanout\""), "{own}");
+        assert!(own.contains("renamed_to = \"Cart\""), "{own}");
+        let moves = MoveVariants {
+            receive: [(
+                "shop-orders".to_string(),
+                vec![Incoming {
+                    context: "shop.orders".into(),
+                    classes: vec!["Cart".into()],
+                    from_script: "core".into(),
+                }],
+            )]
+            .into(),
+            ..MoveVariants::default()
+        };
+        let moved = built_with(&dir, moves);
+        let config = doc(&moved, "workers/shop-orders/wrangler.receive.toml").unwrap();
+        assert!(
+            config.contains("class_name = \"__EventsFanout\""),
+            "{config}"
+        );
+        assert!(!config.contains("class_name = \"Cart\""), "{config}");
+        assert!(!config.contains("Trolley"), "{config}");
+        let entry = doc(&moved, "workers/shop-orders/index.receive.ts").unwrap();
+        assert!(entry.contains("export * from \"./index.js\";"), "{entry}");
+        let ordinary = doc(&moved, "workers/shop-orders/index.ts").unwrap();
+        assert!(ordinary.contains("__EventsFanout"), "{ordinary}");
+    }
+
+    /// #3565: a context leaving a group for a Worker of its own (the receiver is that Worker),
+    /// the group it left giving up the class, and a dissolved source's stub.
+    #[test]
+    fn a_standalone_receiver_a_source_and_a_stub_write_their_variants() {
+        use bynk_project::worker_moves::{Incoming, MoveVariants, Outgoing};
+        let dir = moving_project("moves_standalone", "");
+        let out = Outgoing {
+            class: "Cart".into(),
+            to_script: "shop-orders".into(),
+        };
+        let moves = MoveVariants {
+            receive: [(
+                "shop-orders".to_string(),
+                vec![Incoming {
+                    context: "shop.orders".into(),
+                    classes: vec!["Cart".into()],
+                    from_script: "core".into(),
+                }],
+            )]
+            .into(),
+            commit: [("shop-pricing".to_string(), vec![out.clone()])].into(),
+            stubs: [("core".to_string(), ("core".to_string(), vec![out]))].into(),
+        };
+        let moved = built_with(&dir, moves);
+        let entry = doc(&moved, "workers/shop-orders/index.receive.ts").unwrap();
+        assert!(entry.contains("export * from \"./index.js\";"), "{entry}");
+        assert!(
+            entry.contains("env[\"BYNK_FORWARD_SHOP_ORDERS\"].fetch(request)"),
+            "{entry}"
+        );
+        let commit = doc(&moved, "workers/shop-pricing/wrangler.commit.toml").unwrap();
+        assert!(commit.contains("main = \"index.ts\""), "{commit}");
+        assert!(
+            commit.contains("[exports.Cart]\ntype = \"durable-object\"\nstate = \"transferred\"\ntransferred_to = \"shop-orders\"\n"),
+            "{commit}"
+        );
+        let stub = doc(&moved, "workers/core/wrangler.commit.toml").unwrap();
+        assert!(
+            stub.contains("name = \"core\"\nmain = \"index.commit.ts\""),
+            "{stub}"
+        );
+        assert!(
+            doc(&moved, "workers/core/index.commit.ts")
+                .unwrap()
+                .contains("503")
+        );
+        // A stub has no `wrangler.toml`, so it is no Worker of the build.
+        assert!(doc(&moved, "workers/core/wrangler.toml").is_none());
+    }
+
     /// #4127: a worker group's table is laid over the project's, key by key.
     #[test]
     fn a_worker_group_overrides_observability_key_by_key() {

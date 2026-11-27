@@ -1,0 +1,28 @@
+suite shop.orders as system {
+  fn hasQty(xs: List[Item], q: Int) -> Bool { xs.any((i) => i.qty == q) }
+
+  case "any over a context record" {
+    let xs <- shop.orders.items()
+    expect xs.any((i) => i.sku == "b")
+  }
+
+  case "a suite helper's lambda over a context record" {
+    let xs <- shop.orders.items()
+    expect hasQty(xs, 2)
+  }
+
+  case "any over a commons record" {
+    let ls <- shop.orders.lines()
+    expect ls.any((l) => l.qty == 4)
+  }
+
+  case "any over a prelude record" {
+    let cs = [CloseInfo { code: 1000, reason: "done", clean: true }, CloseInfo { code: 1006, reason: "gone", clean: false }]
+    expect cs.any((c) => c.code == 1006)
+  }
+
+  case "all over a prelude record" {
+    let cs = [CloseInfo { code: 1000, reason: "done", clean: true }]
+    expect cs.all((c) => c.clean)
+  }
+}
