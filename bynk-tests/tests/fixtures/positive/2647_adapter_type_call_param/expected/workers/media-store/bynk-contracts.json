@@ -1,10 +1,10 @@
 {
   "version": 1,
   "provides": {
-    "abandon": "aeb8f4ce9d250cb9"
+    "abandon": "07f2d277eec4c418"
   },
   "expects": {},
   "provides_shapes": {
-    "abandon": "Svc(\"abandon\",P(\"upload\",N(\"R2Upload\")),Ret(U()))"
+    "abandon": "Svc(\"abandon\",P(\"upload\",Rec(\"R2Upload\",F(\"key\",B(\"String\")),F(\"uploadId\",B(\"String\")))),Ret(U()))"
   }
 }

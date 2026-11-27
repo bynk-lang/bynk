@@ -75,9 +75,9 @@ export default {
             case "abandon": {
               __route = "call abandon";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "aeb8f4ce9d250cb9") {
-                globalThis.console.error("ContractMismatch media.store call abandon", { service: "abandon", expected: "aeb8f4ce9d250cb9", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "abandon", expected: "aeb8f4ce9d250cb9", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "07f2d277eec4c418") {
+                globalThis.console.error("ContractMismatch media.store call abandon", { service: "abandon", expected: "07f2d277eec4c418", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "abandon", expected: "07f2d277eec4c418", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {

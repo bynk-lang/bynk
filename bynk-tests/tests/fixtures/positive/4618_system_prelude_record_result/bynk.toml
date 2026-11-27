@@ -1,0 +1,6 @@
+[project]
+name = "4618-system-prelude-record-result"
+version = "0.1.0"
+
+[paths]
+include = ["src"]

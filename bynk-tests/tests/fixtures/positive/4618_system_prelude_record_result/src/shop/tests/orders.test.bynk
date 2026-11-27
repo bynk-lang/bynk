@@ -1,0 +1,19 @@
+// #4618: a participant service that returns a `bynk` prelude record has the type its signature
+// declares, so a `system` case binds the result and reads its fields.
+suite shop.orders as system {
+  case "a prelude record is bound and read" {
+    let c <- shop.orders.one()
+    expect c.code == 1000
+    expect c.clean
+  }
+
+  case "a list of prelude records is bound and read" {
+    let cs <- shop.orders.many()
+    expect cs.length() == 2
+  }
+
+  case "a prelude cookie is bound and read" {
+    let k <- shop.orders.session()
+    expect k.name == "sid"
+  }
+}
