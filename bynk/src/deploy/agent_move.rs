@@ -500,8 +500,15 @@ fn set_refusals(set: &super::move_sets::MoveSet, cx: &MoveCx<'_>) -> Vec<Entry> 
     }
     let workers = set.built_workers(cx.resources);
     if cx.partial {
+        // The set's own Workers, and every Worker that calls a receiver: each is rebound before the
+        // commit, and one this run leaves out would stay bound to the source after it.
+        let receivers = set.receivers();
+        let callers = cx.resources.iter().filter_map(|(w, r)| {
+            (!workers.contains(w) && r.binds_to.iter().any(|t| receivers.contains(t))).then_some(w)
+        });
         let left_out: Vec<String> = workers
             .iter()
+            .chain(callers)
             .filter(|w| !cx.order.contains(w))
             .map(|w| (cx.script)(w))
             .collect();
@@ -510,7 +517,7 @@ fn set_refusals(set: &super::move_sets::MoveSet, cx: &MoveCx<'_>) -> Vec<Entry> 
                 set_entry(
                     "partial_selection",
                     format!(
-                        "the move of {} pushes {}, which this `--worker`/`--context` run leaves out; a move set is pushed as one, so run the whole project.",
+                        "the move of {} pushes {}, which this `--worker`/`--context` run leaves out; a move set is pushed as one, with every Worker that calls its receivers, so run the whole project.",
                         contexts_phrase(&contexts),
                         left_out
                             .iter()

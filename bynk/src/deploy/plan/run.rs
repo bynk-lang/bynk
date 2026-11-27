@@ -627,8 +627,6 @@ fn deploy(
     Ok(())
 }
 
-/// #2055: a first deploy's secrets file that a SIGKILLed run left behind goes
-/// before this run might write one of its own.
 /// #3565 (D12): each `[deploy.workers.<key>]` Worker that declares `routes` or `custom_domains`,
 /// with the first key it declares. A manifest that does not read has no groups here (the build
 /// has already reported it).
@@ -648,6 +646,8 @@ fn attached_workers(project_root: &Path) -> std::collections::BTreeMap<String, &
         .collect()
 }
 
+/// #2055: a first deploy's secrets file that a SIGKILLed run left behind goes
+/// before this run might write one of its own.
 fn sweep_and_report_stale_uploads() {
     let stale_removed = sweep_stale_upload_dirs(&std::env::temp_dir());
     if stale_removed > 0 {

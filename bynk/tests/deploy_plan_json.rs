@@ -713,6 +713,37 @@ fn a_set_through_a_partial_run_or_a_routed_worker_is_refused() {
     assert_eq!(r["reason"], "partial_selection", "{r}");
     assert_eq!(r["workers"], serde_json::json!(["core"]), "{r}");
 
+    // `--context` leaves out a Worker that calls the receiver: it would stay bound to the source
+    // after the commit.
+    let called = moved_agent_project("move_partial_caller");
+    write(
+        &called.join("src/shop/orders.bynk"),
+        "context shop.orders\n\nagent Counter {\n\tkey id: String\n\n\tstore count: Cell[Int]\n\n\ton call current() -> Effect[Int] {\n\t\tcount\n\t}\n}\n\nservice ping {\n\ton call(n: Int) -> Effect[Int] by Caller {\n\t\tn\n\t}\n}\n",
+    );
+    write(
+        &called.join("src/shop/web.bynk"),
+        "context shop.web\n\nconsumes shop.orders as Orders\n\nservice go {\n\ton call(n: Int) -> Effect[Int] by Caller {\n\t\tlet r <- Orders.ping(n)\n\t\tr\n\t}\n}\n",
+    );
+    let r = only_refusal(&deploy(
+        &called,
+        &[
+            "--format",
+            "json",
+            "--context",
+            "shop.orders",
+            "--move-agent",
+            "shop.orders",
+        ],
+    ));
+    assert_eq!(r["reason"], "partial_selection", "{r}");
+    assert_eq!(r["workers"], serde_json::json!(["shop-web"]), "{r}");
+    // The whole project plans it, with the caller rebound between the set's two nodes.
+    let (doc, moves) = planned_moves(&deploy(
+        &called,
+        &["--format", "json", "--move-agent", "shop.orders"],
+    ));
+    assert_eq!(moves[0]["rebind"], serde_json::json!(["shop-web"]), "{doc}");
+
     // A receiver with routes (D12: S9 was not run).
     let routed = moving_project(
         "move_routes",
@@ -772,5 +803,32 @@ fn a_context_carrying_class_tombstones_is_refused() {
         &["--format", "json", "--move-agent", "shop.orders"],
     ));
     assert_eq!(r["reason"], "tombstones", "{r}");
+    assert_eq!(r["tombstones"], serde_json::json!(["Tally"]), "{r}");
+}
+
+/// The same ruling for a context in a group: the group's `bynk-agents.json` carries the context's
+/// tombstones, which the gate reads (emitter → manifest → gate).
+#[test]
+fn a_group_member_carrying_class_tombstones_is_refused() {
+    let dir = moving_project(
+        "move_group_tombstones",
+        &[("shop.pay", "")],
+        "\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.pay\"]\n",
+        &record("shop-orders", &["shop.orders"]),
+    );
+    write(
+        &dir.join("src/shop/orders.bynk"),
+        "context shop.orders\n\nagent Counter replaces Tally {\n\tkey id: String\n\n\tstore count: Cell[Int]\n\n\ton call current() -> Effect[Int] {\n\t\tcount\n\t}\n}\n",
+    );
+    write(
+        &dir.join("bynk.schema.lock"),
+        "version = 2\n\n[events]\n\n[agents.\"shop.orders.Tally\"]\nversion = 1\nfloor = 1\n\n[[agents.\"shop.orders.Tally\".shapes]]\nversion = 1\nadditive = false\n\n[[agents.\"shop.orders.Tally\".shapes.fields]]\nname = \"count\"\nkind = \"Cell\"\ntype = \"Int\"\nrefinement = \"Int\"\n\n[[agents.\"shop.orders.Tally\".shapes.fields.paths]]\npath = \"count\"\ntype = \"Int\"\n",
+    );
+    let r = only_refusal(&deploy(
+        &dir,
+        &["--format", "json", "--move-agent", "shop.orders"],
+    ));
+    assert_eq!(r["reason"], "tombstones", "{r}");
+    assert_eq!(r["to"], "core", "{r}");
     assert_eq!(r["tombstones"], serde_json::json!(["Tally"]), "{r}");
 }

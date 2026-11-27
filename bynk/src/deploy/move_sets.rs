@@ -58,10 +58,8 @@ impl MoveSet {
     pub(crate) fn built_workers(&self, resources: &BTreeMap<String, Resources>) -> Vec<String> {
         let mut workers = self.receivers();
         for m in &self.moves {
-            if m.old_script_built
-                && let Some(w) = built_worker_of(&m.from_script, &m.from_worker, resources)
-            {
-                workers.push(w);
+            if m.old_script_built && resources.contains_key(&m.from_worker) {
+                workers.push(m.from_worker.clone());
             }
         }
         sorted(workers)
@@ -75,16 +73,6 @@ impl MoveSet {
             .filter(|w| !receivers.contains(w))
             .collect()
     }
-}
-
-/// The directory of a source that is still a Worker of the build: its ledger key, when that is
-/// a Worker of the build.
-fn built_worker_of(
-    _script: &str,
-    worker: &str,
-    resources: &BTreeMap<String, Resources>,
-) -> Option<String> {
-    resources.contains_key(worker).then(|| worker.to_string())
 }
 
 fn sorted(items: impl IntoIterator<Item = String>) -> Vec<String> {
@@ -229,6 +217,33 @@ pub(crate) fn place(
         commit.extend(outside(set.built_sources(resources)));
         commit.extend(callers[n].iter().cloned());
         graph.insert(commit_node(n), commit);
+    }
+    // A Worker of another set that calls a receiver of set `n` is rebound by its own set's
+    // push (a receiver at its receive, a staying source at its commit), and that push must land
+    // before `n` commits, as an ordinary caller's does.
+    for (m, set) in sets.iter().enumerate() {
+        let own = |w: &String| -> String {
+            if receiver_of.get(w) == Some(&m) {
+                receive_node(m)
+            } else {
+                commit_node(m)
+            }
+        };
+        for w in set.built_workers(resources) {
+            for t in binds(&w) {
+                if let Some(&n) = receiver_of.get(t)
+                    && n != m
+                {
+                    let node = own(&w);
+                    let deps = graph
+                        .get_mut(&commit_node(n))
+                        .expect("each set has a commit node");
+                    if !deps.contains(&node) {
+                        deps.push(node);
+                    }
+                }
+            }
+        }
     }
     // The order to visit in: the run's, each set's two nodes at its first Worker.
     let mut visit: Vec<String> = Vec::new();
@@ -453,6 +468,31 @@ mod tests {
             "{cycle:?}"
         );
         assert!(cycle.contains(&"web".to_string()), "{cycle:?}");
+    }
+
+    /// Two sets, a receiver of the first calling a receiver of the second: the first's receive
+    /// (its rebinding push) lands before the second commits.
+    #[test]
+    fn another_sets_worker_calling_a_receiver_is_pushed_before_it_commits() {
+        let sets = move_sets(&[mv("a", "a", "g1", false), mv("b", "b", "g2", false)]);
+        let resources = BTreeMap::from([
+            ("g1".to_string(), worker(&["g2"])),
+            ("g2".to_string(), worker(&[])),
+        ]);
+        let order = ["g2", "g1"].map(String::from);
+        let placed = place(&sets, &order, &resources).unwrap();
+        let at = |step: &Step| placed.steps.iter().position(|s| s == step).unwrap();
+        // Set 0 is g1's (the first in move order), set 1 g2's.
+        assert!(
+            at(&Step::Receive(0)) < at(&Step::Commit(1)),
+            "{:?}",
+            placed.steps
+        );
+        assert!(
+            at(&Step::Receive(1)) < at(&Step::Receive(0)),
+            "{:?}",
+            placed.steps
+        );
     }
 
     #[test]
