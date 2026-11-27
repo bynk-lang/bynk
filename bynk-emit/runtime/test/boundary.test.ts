@@ -544,6 +544,27 @@ test("verifyCall: accepts a request signed for this callee, returning its body",
   assert.equal(await verifyCall(await signedRequest({ body: "[1,2]" }), CALLEE_ENV, "shop.payment"), "[1,2]");
 });
 
+// #4526: a rotation leaves the edge with two keys on the callee; a call signed under either is accepted
+// until the retiring one's marker passes, and a garbled marker refuses its slot.
+test("verifyCall: accepts a call signed under either slot of a rotation, the retiring one only until its marker", async () => {
+  const until = Math.floor(Date.now() / 1000) + 3600;
+  const rotated = { BYNK_CALL_FROM_SHOP__ORDERS: "old-key", BYNK_CALL_UNTIL_SHOP__ORDERS: String(until), BYNK_CALL_FROM2_SHOP__ORDERS: "new-key" };
+  for (const signer of ["old-key", "new-key"]) {
+    const req = await signedRequest({ env: { BYNK_CALL_TO_SHOP__PAYMENT: signer }, body: "[7]" });
+    assert.equal(await verifyCall(req, rotated, "shop.payment"), "[7]", signer);
+  }
+  const unrelated = await signedRequest({ env: { BYNK_CALL_TO_SHOP__PAYMENT: "other-key" } });
+  assert.ok((await verifyCall(unrelated, rotated, "shop.payment")) instanceof Response);
+  const past = { ...rotated, BYNK_CALL_UNTIL_SHOP__ORDERS: String(Math.floor(Date.now() / 1000) - 1) };
+  const oldAfter = await signedRequest({ env: { BYNK_CALL_TO_SHOP__PAYMENT: "old-key" } });
+  const refused = await verifyCall(oldAfter, past, "shop.payment");
+  assert.ok(refused instanceof Response && refused.status === 401, "the old key after its marker");
+  const garbled = { ...rotated, BYNK_CALL_UNTIL_SHOP__ORDERS: "soon" };
+  const oldGarbled = await verifyCall(await signedRequest({ env: { BYNK_CALL_TO_SHOP__PAYMENT: "old-key" } }), garbled, "shop.payment");
+  assert.ok(oldGarbled instanceof Response && oldGarbled.status === 401, "the old key under a garbled marker");
+  assert.equal(await verifyCall(await signedRequest({ env: { BYNK_CALL_TO_SHOP__PAYMENT: "new-key" } }), past, "shop.payment"), "{}");
+});
+
 test("verifyCall: refuses a request with any signed field changed", async () => {
   const tamper: Record<string, (h: Record<string, string>) => void> = {
     caller: (h) => (h[CALLER_HEADER] = "shop.payment"),

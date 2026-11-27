@@ -426,6 +426,20 @@ pub(crate) fn vectorize_steps<'r>(
         .collect()
 }
 
+/// Whether this run's Vectorize steps call the account (#4056 Decision E): every deploy of a
+/// declared index does (it is checked against the account each time, adopted or not), and so
+/// does a `--prune` of an orphan the project made.
+pub(crate) fn vectorize_calls_the_account(
+    cx: &ProjectCx<'_>,
+    orphans: &[OrphanVectorize],
+    prune: bool,
+) -> bool {
+    cx.order
+        .iter()
+        .any(|worker| !cx.resources[worker].vectorize_indexes.is_empty())
+        || (prune && orphans.iter().any(|o| !o.adopted))
+}
+
 /// One recorded Vectorize index the build no longer declares (#3479): a
 /// capability removed or renamed, an index replaced, or a whole Worker gone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

@@ -1,0 +1,26 @@
+commons shop.rates {
+  fn band(rate: Decimal) -> String {
+    match rate {
+      0d => "zero-rated",
+      5d => "reduced",
+      20.0d => "standard",
+      -1.5d => "refund",
+      _ => "other",
+    }
+  }
+
+  fn tier(o: Option[Decimal]) -> Int {
+    match o {
+      Some(1.25d) => 1,
+      Some(_) => 2,
+      None => 3,
+    }
+  }
+
+  fn either(d: Decimal) -> Int {
+    match d {
+      1d | 2.0d => 1,
+      _ => 0,
+    }
+  }
+}

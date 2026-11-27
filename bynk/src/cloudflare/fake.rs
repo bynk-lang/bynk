@@ -10,6 +10,7 @@ use std::path::Path;
 
 use super::api::{CloudflareApi, Op, PushCall, PushRun, VectorizeOp};
 use super::error::{CloudflareError, Exit, Failure, WranglerError};
+use super::rest::vectorize::IndexConfig;
 
 /// What the fake answers a call with: what the operation returns on success (an id, the printed
 /// JSON, or for `kv_list` the ids separated by whitespace; ignored by the methods that return
@@ -127,8 +128,61 @@ impl CloudflareApi for Recording {
         Ok(self.rest(Op::R2Owned { name, jurisdiction })? == "owned")
     }
 
-    fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {
-        self.call(Op::Vectorize(op))
+    fn vectorize_names(&self) -> Result<Vec<String>, CloudflareError> {
+        let reply = self.rest(Op::Vectorize(VectorizeOp::List))?;
+        super::rest::vectorize::listed(&result(&reply))
+            .map(|(names, _)| names)
+            .ok_or_else(|| unreadable("the list of index names"))
+    }
+
+    fn vectorize_config(&self, name: &str) -> Result<IndexConfig, CloudflareError> {
+        let reply = self.rest(Op::Vectorize(VectorizeOp::Get { name }))?;
+        super::rest::vectorize::config(&result(&reply))
+            .ok_or_else(|| unreadable("the dimensions and metric"))
+    }
+
+    fn vectorize_create(
+        &self,
+        name: &str,
+        dimensions: i64,
+        metric: &str,
+    ) -> Result<(), CloudflareError> {
+        self.rest(Op::Vectorize(VectorizeOp::Create {
+            name,
+            dimensions,
+            metric,
+        }))
+        .map(drop)
+    }
+
+    /// A reply that is a bare array is taken as the `metadataIndexes` list.
+    fn vectorize_metadata_indexes(&self, name: &str) -> Result<Vec<String>, CloudflareError> {
+        let reply = self.rest(Op::Vectorize(VectorizeOp::ListMetadataIndex { name }))?;
+        let mut body = result(&reply);
+        if body["result"].is_array() {
+            body = serde_json::json!({ "result": { "metadataIndexes": body["result"].take() } });
+        }
+        super::rest::vectorize::metadata(&body)
+            .ok_or_else(|| unreadable("the list of metadata indexes"))
+    }
+
+    fn vectorize_create_metadata_index(
+        &self,
+        name: &str,
+        property: &str,
+        ty: &str,
+    ) -> Result<(), CloudflareError> {
+        self.rest(Op::Vectorize(VectorizeOp::CreateMetadataIndex {
+            name,
+            property,
+            ty,
+        }))
+        .map(drop)
+    }
+
+    fn vectorize_delete(&self, name: &str) -> Result<(), CloudflareError> {
+        self.rest(Op::Vectorize(VectorizeOp::Delete { name }))
+            .map(drop)
     }
 
     /// A reply of `Ok` is a push that exited 0; a failed exit is a push that ran and failed,
@@ -221,4 +275,15 @@ impl CloudflareApi for Recording {
     ) -> Result<String, WranglerError> {
         self.call(Op::SecretsStoreListLocal { store, persist })
     }
+}
+
+/// A reply as the body of a REST answer: the reply's JSON as its `result` (`null` when the
+/// reply is not JSON).
+fn result(reply: &str) -> serde_json::Value {
+    serde_json::json!({ "result": serde_json::from_str::<serde_json::Value>(reply).unwrap_or_default() })
+}
+
+/// A fake reply that holds no `what`, as the account renders an unreadable answer.
+fn unreadable(what: &str) -> CloudflareError {
+    CloudflareError::Other(format!("Cloudflare's answer has no {what}"))
 }

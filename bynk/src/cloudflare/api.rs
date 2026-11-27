@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use super::error::{CloudflareError, Exit, OpKind, WranglerError};
+use super::rest::vectorize::IndexConfig;
 
 /// Every account operation the resource kinds drive. [`super::Account`] routes each one: a
 /// moved kind's to Cloudflare's REST API, the rest to wrangler ([`super::Wrangler`]). 1D.4
@@ -47,8 +48,30 @@ pub(crate) trait CloudflareApi {
     /// Whether this account holds the R2 bucket `name` in `jurisdiction` (REST, `GET
     /// /r2/buckets/{name}`): answered for a bucket of its own, and 404 for any other.
     fn r2_owned(&self, name: &str, jurisdiction: Option<&str>) -> Result<bool, CloudflareError>;
-    /// One of the six Vectorize calls: what it printed.
-    fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError>;
+    /// The names of the account's Vectorize indexes (REST, `GET /vectorize/v2/indexes`).
+    fn vectorize_names(&self) -> Result<Vec<String>, CloudflareError>;
+    /// The index `name`'s dimensions and metric (REST, `GET /vectorize/v2/indexes/{name}`).
+    fn vectorize_config(&self, name: &str) -> Result<IndexConfig, CloudflareError>;
+    /// Create the index `name` with this configuration (REST, `POST /vectorize/v2/indexes`).
+    fn vectorize_create(
+        &self,
+        name: &str,
+        dimensions: i64,
+        metric: &str,
+    ) -> Result<(), CloudflareError>;
+    /// The index `name`'s metadata indexes, as `property:type` (REST, `GET
+    /// …/metadata_index/list`).
+    fn vectorize_metadata_indexes(&self, name: &str) -> Result<Vec<String>, CloudflareError>;
+    /// Enqueue a metadata index on `name` for `property` of type `ty` (REST, `POST
+    /// …/metadata_index/create`).
+    fn vectorize_create_metadata_index(
+        &self,
+        name: &str,
+        property: &str,
+        ty: &str,
+    ) -> Result<(), CloudflareError>;
+    /// Delete the index `name` (REST, `DELETE /vectorize/v2/indexes/{name}`).
+    fn vectorize_delete(&self, name: &str) -> Result<(), CloudflareError>;
 
     // The Worker (1D.3b).
 
@@ -134,7 +157,8 @@ pub(crate) struct PushRun {
     pub(crate) signalled: Option<i32>,
 }
 
-/// The six Vectorize calls.
+/// The six Vectorize calls, as the fake logs them (over REST since 1D.4c).
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum VectorizeOp<'a> {
     List,
@@ -206,6 +230,7 @@ pub(crate) enum Op<'a> {
         name: &'a str,
         jurisdiction: Option<&'a str>,
     },
+    #[cfg(test)]
     Vectorize(VectorizeOp<'a>),
     Push {
         args: &'a [String],
@@ -314,6 +339,7 @@ impl Op<'_> {
                 }
                 argv
             }
+            #[cfg(test)]
             Op::Vectorize(op) => {
                 let mut argv = vec!["vectorize".to_string()];
                 argv.extend(match op {
@@ -419,16 +445,9 @@ impl Op<'_> {
             Op::D1Create { .. } | Op::D1List | Op::R2Create { .. } | Op::R2Owned { .. } => {
                 return None;
             }
-            Op::Vectorize(VectorizeOp::List) => OpKind::VectorizeList,
-            Op::Vectorize(VectorizeOp::Get { .. }) => OpKind::VectorizeGet,
-            Op::Vectorize(VectorizeOp::Create { .. }) => OpKind::VectorizeCreate,
-            Op::Vectorize(VectorizeOp::ListMetadataIndex { .. }) => {
-                OpKind::VectorizeListMetadataIndex
-            }
-            Op::Vectorize(VectorizeOp::CreateMetadataIndex { .. }) => {
-                OpKind::VectorizeCreateMetadataIndex
-            }
-            Op::Vectorize(VectorizeOp::Delete { .. }) => OpKind::VectorizeDelete,
+            // Over REST (1D.4c).
+            #[cfg(test)]
+            Op::Vectorize(_) => return None,
             Op::Push { .. } => OpKind::Push,
             Op::TriggersDeploy { .. } => OpKind::TriggersDeploy,
             Op::Whoami => OpKind::Whoami,

@@ -1,0 +1,50 @@
+==========================
+decimal and float literal patterns
+==========================
+
+commons d {
+	fn band(rate: Decimal) -> String {
+		match rate {
+			0d => "zero",
+			-1.5d => "neg",
+			20.0d => "standard",
+			0.1 => "float",
+			_ => "other"
+		}
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (base_type))
+      (base_type)
+      (block
+        (match_expr
+          (identifier)
+          (match_arm
+            (literal_pattern
+              (decimal_literal))
+            (string_literal))
+          (match_arm
+            (literal_pattern
+              (decimal_literal))
+            (string_literal))
+          (match_arm
+            (literal_pattern
+              (decimal_literal))
+            (string_literal))
+          (match_arm
+            (literal_pattern
+              (float_literal))
+            (string_literal))
+          (match_arm
+            (wildcard_pattern)
+            (string_literal)))))))

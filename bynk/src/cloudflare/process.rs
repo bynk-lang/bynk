@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 
 use crate::probe::Provenance;
 
-use super::api::{Op, PushCall, PushRun, VectorizeOp};
+use super::api::{Op, PushCall, PushRun};
 use super::error::{Exit, Failure, WranglerError};
 
 /// The process adapter: wrangler as `provenance` resolves it, run from `project_root`.
@@ -275,10 +275,6 @@ impl Wrangler<'_> {
             environment,
         };
         self.run(&op, worker_dir, true).map(drop)
-    }
-
-    pub(crate) fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {
-        self.run_from_root(Op::Vectorize(op))
     }
 
     pub(crate) fn push(&self, call: PushCall<'_>) -> Result<PushRun, WranglerError> {
