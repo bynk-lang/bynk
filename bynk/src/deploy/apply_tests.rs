@@ -47,8 +47,8 @@ fn account(root: PathBuf) -> crate::cloudflare::fake::Recording {
         std::fs::write(root.join("calls.log"), log).unwrap();
         if std::fs::read_to_string(root.join("fail_at")).is_ok_and(|at| at.trim().parse() == Ok(n))
         {
-            // A KV call is a REST call since 1D.4a, and R2's and D1's since 1D.4b: each fails as
-            // Hyperdrive's stand-in does.
+            // A KV call is a REST call since 1D.4a, R2's and D1's since 1D.4b and Vectorize's
+            // since 1D.4c: each fails as Hyperdrive's stand-in does.
             if matches!(
                 op,
                 Op::KvCreate { .. }
@@ -58,6 +58,7 @@ fn account(root: PathBuf) -> crate::cloudflare::fake::Recording {
                     | Op::D1List
                     | Op::R2Create { .. }
                     | Op::R2Owned { .. }
+                    | Op::Vectorize(_)
             ) {
                 return Err(CloudflareError::Other(format!(
                     "Cloudflare answered 500 to call {n}"
