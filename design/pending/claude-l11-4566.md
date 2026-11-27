@@ -1,0 +1,16 @@
+---
+level: patch
+changelog: The remaining workerd system tests wait for wrangler's own Ready line before they probe their Worker, and take their ports from the shared allocator, so they no longer share the start-up races the other workerd tests had
+---
+
+## ADR: remaining-workerd-tests-use-the-shared-boot-wait
+title: Every workerd system test that boots a Worker waits with `wrangler::wait_until_ready`
+summary: Fifteen test files move off their own boot loops and pid-derived ports; no assertion changes
+
+**Context.** #4521 gave the workerd tests one boot wait, `wrangler::wait_until_ready` (the log has `Ready on http://localhost:<this test's port>` and the boot request answers), and one port allocator, after #4479 found the races that came with each test's own loop: a probe that took any HTTP reply for the Worker (wrangler's start-up `403` and `404` are replies), and a port taken during start-up. Fifteen files kept their own loop, each with a slightly different probe, and four took their ports from the process id (`http_client`, `typescript_client_workerd`) as before.
+
+**Decision.** Each of the fifteen (`agent_serialise_workerd`, `alias_service_workerd`, `callee_faulted_workerd`, `cron_failed_workerd`, `detach_workerd`, `events_ordering_workerd`, `http_client`, `par_gate_workerd`, `queue_delivery_workerd`, `queue_undecodable_workerd`, `signed_cookie_loop_workerd`, `trace_propagation_workerd`, `trace_requests_workerd`, `typescript_client_workerd`, `workers_runtime_smoke`) waits with `wait_until_ready`, with the probe it already used. A smoke that boots several Workers waits for each Worker's own Ready line, and the entry Worker's probe, which reaches the others through a Service Binding, still stands for the binding having connected (`wait_until_all_ready`). Where a test asserted on its probe's answer, the probe keeps that answer and the assertion is made on it afterwards, so no extra request is sent. The two `workers_runtime_smoke` boots read wrangler's output from a log file, not a pipe, so they can use the same wait; they keep their #4174 early exit (a wrangler that has already exited ends the wait at once, and one that could not bind its port is a failure, not a skip) through `wait_until_ready_or_exit`. `http_client` and `typescript_client_workerd` take their ports from `wrangler::ports::free_ports`. Not done, on purpose: a retry, a skip, a quarantine, or a weaker assertion, and no assertion is changed.
+
+**Not changed.** Two waits stay, and are not boot waits: `trace_requests_workerd` and `signed_cookie_loop_workerd` pause after their requests for wrangler to flush the Worker's console to its log (the untraced `trace_requests_workerd` run asserts that no line appears, so there is nothing to wait for). The convergence polls that follow a boot (the audit Worker receiving an event, the binding between two Workers connecting) are the tests' own subject and stay as polls with their own deadlines.
+
+**Consequences.** Every workerd system test that boots a Worker now uses the one boot wait. The soak is reported in the pull request.

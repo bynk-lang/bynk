@@ -26,7 +26,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::Stdio;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[path = "../require/mod.rs"]
 mod require;
@@ -257,18 +257,13 @@ fn spawn_worker(
     Ok((child, port, log_path))
 }
 
-/// Wait for the Worker on `port` to answer `/ready`; `Err` carries the log.
+/// Wait for the Worker on `port` to log its Ready line and answer `/ready`; `Err` carries the
+/// reason and the log.
 fn wait_ready(port: u16, log_path: &Path) -> Result<(), String> {
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if request(port, "GET", "/ready", None, None).is_ok_and(|r| r.status == 200) {
-            return Ok(());
-        }
-        if Instant::now() > deadline {
-            return Err(read_log(log_path));
-        }
-        std::thread::sleep(Duration::from_millis(500));
-    }
+    wrangler::wait_until_ready(log_path, port, &|| {
+        request(port, "GET", "/ready", None, None).is_ok_and(|r| r.status == 200)
+    })
+    .map_err(|why| format!("{why}\n{}", read_log(log_path)))
 }
 
 /// The `name=value` pair at the head of a `Set-Cookie`, as a browser would send it back.

@@ -15,7 +15,7 @@ use std::fs;
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[path = "../require/mod.rs"]
 mod require;
@@ -46,6 +46,49 @@ fn skip(reason: &str) -> bool {
         panic!("{REQUIRE_ENV} is set but {reason}");
     }
     true
+}
+
+/// Wait for the Worker `child` serves on `port` (logging to `log_path`) to log its Ready line and
+/// answer `GET /` at `url`: the body it answered. `Err` says why it did not, with what wrangler
+/// logged. #4174: a wrangler that has already exited will never serve, so that ends the wait at
+/// once; one that could not bind its port is a failure, not a skip.
+fn boot_answer(
+    child: &mut wrangler::Wrangler,
+    log_path: &Path,
+    port: u16,
+    url: &str,
+) -> Result<String, String> {
+    let body = std::cell::RefCell::new(None);
+    wrangler::wait_until_ready_or_exit(
+        log_path,
+        port,
+        &|| match fetch(url, "/") {
+            Ok(answer) => {
+                *body.borrow_mut() = Some(answer);
+                true
+            }
+            Err(_) => false,
+        },
+        &mut || {
+            child
+                .child()
+                .try_wait()
+                .ok()
+                .flatten()
+                .map(|status| status.to_string())
+        },
+    )
+    .map(|()| body.into_inner().expect("the probe answered"))
+    .map_err(|why| {
+        // Stop first: the log is read once the whole group is gone.
+        child.stop();
+        let logs = fs::read_to_string(log_path).unwrap_or_default();
+        assert!(
+            !logs.contains("Address already in use"),
+            "wrangler dev could not bind its ports ({why}): {logs}"
+        );
+        format!("{why}\n{logs}")
+    })
 }
 
 #[test]
@@ -83,6 +126,9 @@ fn hello_world_serves_on_workerd() {
 
     // #4174: a port the OS has just handed out, as for the other smokes (`wrangler::ports`).
     let [port, inspector_port] = wrangler::ports::free_ports();
+    let log_path = tmp.join("wrangler.log");
+    let out_log = fs::File::create(&log_path).unwrap();
+    let err_log = out_log.try_clone().unwrap();
     let child = wrangler::Wrangler::spawn(
         wrangler::npx()
             .args([
@@ -94,8 +140,8 @@ fn hello_world_serves_on_workerd() {
                 &inspector_port.to_string(),
             ])
             .current_dir(&worker_dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped()),
+            .stdout(Stdio::from(out_log))
+            .stderr(Stdio::from(err_log)),
         &tmp.join("registry"),
     );
     let mut child = match child {
@@ -110,70 +156,32 @@ fn hello_world_serves_on_workerd() {
 
     // First run provisions wrangler + workerd via npx; allow a generous
     // boot window, then a strict assertion.
-    let deadline = Instant::now() + Duration::from_secs(180);
     let url = format!("http://127.0.0.1:{port}/");
-    let mut last_err = String::new();
-    loop {
-        // #4174: a wrangler that has already exited will never serve; say so now (see
-        // `serve_smoke_with_args`).
-        if let Ok(Some(status)) = child.child().try_wait() {
-            // Stop first: the pipe reaches EOF only once the whole group is gone, and a
-            // descendant may outlive the leader.
-            child.stop();
-            let mut logs = String::new();
-            if let Some(mut e) = child.child().stderr.take() {
-                let _ = e.read_to_string(&mut logs);
-            }
-            assert!(
-                !logs.contains("Address already in use"),
-                "wrangler dev could not bind its port ({status}): {logs}"
-            );
+    let body = match boot_answer(&mut child, &log_path, port, &url) {
+        Ok(body) => body,
+        Err(why) => {
             if skip(&format!(
-                "wrangler dev exited ({status}) before serving (likely no network to \
-                 provision {WRANGLER}); last error: {last_err}\n{logs}"
+                "{why} (likely no network to provision {WRANGLER})"
             )) {
                 return;
             }
             unreachable!()
         }
-        if Instant::now() > deadline {
-            let mut child = child;
-            // Stop first: the pipe reaches EOF only once the whole group is gone.
-            child.stop();
-            let mut logs = String::new();
-            if let Some(mut e) = child.child().stderr.take() {
-                let _ = e.read_to_string(&mut logs);
-            }
-            if skip(&format!(
-                "wrangler dev did not serve within the boot window (likely no \
-                 network to provision {WRANGLER}); last error: {last_err}\n{logs}"
-            )) {
-                return;
-            }
-            unreachable!()
-        }
-        std::thread::sleep(Duration::from_millis(500));
-        match fetch(&url, "/") {
-            Ok(body) => {
-                assert!(
-                    body.contains("Hello, World!"),
-                    "unexpected body from workerd: {body}"
-                );
-                // Drop stops wrangler and its workerds before cleanup.
-                drop(child);
-                // #1686: nothing wrangler started may outlive it. Checked
-                // before the removal, which would hide a survivor's cwd.
-                #[cfg(target_os = "linux")]
-                {
-                    let left = wrangler::processes_under(&tmp);
-                    assert!(left.is_empty(), "wrangler left processes running: {left:?}");
-                }
-                let _ = fs::remove_dir_all(&tmp);
-                return;
-            }
-            Err(e) => last_err = e,
-        }
+    };
+    assert!(
+        body.contains("Hello, World!"),
+        "unexpected body from workerd: {body}"
+    );
+    // Drop stops wrangler and its workerds before cleanup.
+    drop(child);
+    // #1686: nothing wrangler started may outlive it. Checked
+    // before the removal, which would hide a survivor's cwd.
+    #[cfg(target_os = "linux")]
+    {
+        let left = wrangler::processes_under(&tmp);
+        assert!(left.is_empty(), "wrangler left processes running: {left:?}");
     }
+    let _ = fs::remove_dir_all(&tmp);
 }
 
 /// #1649 (runtime-semantics track §3.2): agent state round-trips through real
@@ -1034,6 +1042,9 @@ fn serve_smoke_with_args(
     // pid % 10000` collided with another test's (`Address already in use`), wrangler exited
     // at once, and the wait below polled the dead process for the whole boot window.
     let [port, inspector_port] = wrangler::ports::free_ports();
+    let log_path = tmp.join("wrangler.log");
+    let out_log = fs::File::create(&log_path).unwrap();
+    let err_log = out_log.try_clone().unwrap();
     let mut args: Vec<String> = [
         "dev",
         "--port",
@@ -1053,8 +1064,8 @@ fn serve_smoke_with_args(
         wrangler::npx()
             .args(&args)
             .current_dir(&worker_dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped()),
+            .stdout(Stdio::from(out_log))
+            .stderr(Stdio::from(err_log)),
         &tmp.join("registry"),
     );
     let mut child = match child {
@@ -1067,53 +1078,14 @@ fn serve_smoke_with_args(
         }
     };
 
-    let deadline = Instant::now() + Duration::from_secs(180);
     let url = format!("http://127.0.0.1:{port}/");
-    let mut last_err = String::new();
-    loop {
-        // A wrangler that has already exited will never serve: say so now, with what it said,
-        // instead of waiting out the boot window.
-        if let Ok(Some(status)) = child.child().try_wait() {
-            // Stop first: the pipe reaches EOF only once the whole group is gone, and a
-            // descendant may outlive the leader.
-            child.stop();
-            let mut logs = String::new();
-            if let Some(mut e) = child.child().stderr.take() {
-                let _ = e.read_to_string(&mut logs);
-            }
-            assert!(
-                !logs.contains("Address already in use"),
-                "wrangler dev could not bind its ports ({status}): {logs}"
-            );
-            if skip(&format!(
-                "wrangler dev exited ({status}) before serving (likely no network to \
-                 provision {WRANGLER}); last error: {last_err}\n{logs}"
-            )) {
-                return None;
-            }
-            unreachable!()
+    if let Err(why) = boot_answer(&mut child, &log_path, port, &url) {
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})"
+        )) {
+            return None;
         }
-        if Instant::now() > deadline {
-            let mut child = child;
-            // Stop first: the pipe reaches EOF only once the whole group is gone.
-            child.stop();
-            let mut logs = String::new();
-            if let Some(mut e) = child.child().stderr.take() {
-                let _ = e.read_to_string(&mut logs);
-            }
-            if skip(&format!(
-                "wrangler dev did not serve within the boot window (likely no \
-                 network to provision {WRANGLER}); last error: {last_err}\n{logs}"
-            )) {
-                return None;
-            }
-            unreachable!()
-        }
-        std::thread::sleep(Duration::from_millis(500));
-        match fetch(&url, "/") {
-            Ok(_) => break,
-            Err(e) => last_err = e,
-        }
+        unreachable!()
     }
     Some(Served {
         url,

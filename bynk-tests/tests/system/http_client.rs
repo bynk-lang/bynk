@@ -33,7 +33,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";
 
@@ -822,9 +822,7 @@ fn skip_workerd(reason: &str) -> bool {
 /// `probe` answers `200`: the process and its port, or `None` (and a skip) where
 /// workerd cannot be had.
 fn boot_workerd(dir: &Path, worker: &str, probe: &str) -> Option<(Vec<wrangler::Wrangler>, u16)> {
-    // Its own band, clear of the other smokes'.
-    let pid = std::process::id();
-    let port = 61_000 + 2 * (pid % 2_000) as u16;
+    let [port, inspector] = wrangler::ports::free_ports();
     let log = dir.join("wrangler.log");
     let out_log = fs::File::create(&log).unwrap();
     let err_log = out_log.try_clone().unwrap();
@@ -835,7 +833,7 @@ fn boot_workerd(dir: &Path, worker: &str, probe: &str) -> Option<(Vec<wrangler::
                 "--port",
                 &port.to_string(),
                 "--inspector-port",
-                &(port + 1).to_string(),
+                &inspector.to_string(),
             ])
             .current_dir(dir.join("out/workers").join(worker))
             .stdout(Stdio::from(out_log))
@@ -847,22 +845,18 @@ fn boot_workerd(dir: &Path, worker: &str, probe: &str) -> Option<(Vec<wrangler::
         return None;
     };
     let mut wranglers = vec![wrangler];
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if get(port, probe).is_ok_and(|r| r.contains("200 OK")) {
-            return Some((wranglers, port));
-        }
-        if Instant::now() > deadline {
-            let log = fs::read_to_string(&log).unwrap_or_default();
-            wrangler::stop_all(&mut wranglers);
-            skip_workerd(&format!(
-                "the Worker did not answer within the boot window (likely no network to provision {})\n{log}",
-                wrangler::SPEC
-            ));
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+    if let Err(why) = wrangler::wait_until_ready(&log, port, &|| {
+        get(port, probe).is_ok_and(|r| r.contains("200 OK"))
+    }) {
+        let log = fs::read_to_string(&log).unwrap_or_default();
+        wrangler::stop_all(&mut wranglers);
+        skip_workerd(&format!(
+            "{why} (likely no network to provision {})\n{log}",
+            wrangler::SPEC
+        ));
+        return None;
     }
+    Some((wranglers, port))
 }
 
 #[test]
@@ -1097,10 +1091,8 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
     )
     .unwrap();
 
-    let pid = std::process::id();
-    let base = 56_000 + 4 * (pid % 900) as u16;
-    let (bynk_port, web_port) = (base, base + 1);
-    let spawn = |cwd: &Path, port: u16, log: &str| {
+    let [bynk_port, web_port, bynk_inspector, web_inspector] = wrangler::ports::free_ports();
+    let spawn = |cwd: &Path, port: u16, inspector: u16, log: &str| {
         let out_log = fs::File::create(dir.join(log)).unwrap();
         let err_log = out_log.try_clone().unwrap();
         wrangler::Wrangler::spawn(
@@ -1110,7 +1102,7 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
                     "--port",
                     &port.to_string(),
                     "--inspector-port",
-                    &(port + 2).to_string(),
+                    &inspector.to_string(),
                 ])
                 .current_dir(cwd)
                 .stdout(Stdio::from(out_log))
@@ -1119,8 +1111,13 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
         )
     };
     let (a, b) = (
-        spawn(&dir.join("out/workers/forms"), bynk_port, "bynk.log"),
-        spawn(&web, web_port, "web.log"),
+        spawn(
+            &dir.join("out/workers/forms"),
+            bynk_port,
+            bynk_inspector,
+            "bynk.log",
+        ),
+        spawn(&web, web_port, web_inspector, "web.log"),
     );
     let (Ok(a), Ok(b)) = (a, b) else {
         skip_workerd("could not launch npx");
@@ -1128,28 +1125,31 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
     };
     let mut wranglers = vec![a, b];
     let path = format!("/?base=http://127.0.0.1:{bynk_port}");
-    let deadline = Instant::now() + Duration::from_secs(180);
-    let answer = loop {
-        if let Ok(r) = get(web_port, &path)
-            && r.contains("\"status\":200")
-        {
-            break r;
-        }
-        if Instant::now() > deadline {
-            let logs = format!(
-                "{}\n{}",
-                fs::read_to_string(dir.join("bynk.log")).unwrap_or_default(),
-                fs::read_to_string(dir.join("web.log")).unwrap_or_default()
-            );
-            wrangler::stop_all(&mut wranglers);
-            skip_workerd(&format!(
-                "the Workers did not answer within the boot window (likely no network to provision {})\n{logs}",
-                wrangler::SPEC
-            ));
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(500));
-    };
+    let answered = std::cell::RefCell::new(None);
+    if let Err(why) = wrangler::wait_until_all_ready(
+        &[(&dir.join("bynk.log"), bynk_port)],
+        (&dir.join("web.log"), web_port),
+        &|| match get(web_port, &path) {
+            Ok(r) if r.contains("\"status\":200") => {
+                *answered.borrow_mut() = Some(r);
+                true
+            }
+            _ => false,
+        },
+    ) {
+        let logs = format!(
+            "{}\n{}",
+            fs::read_to_string(dir.join("bynk.log")).unwrap_or_default(),
+            fs::read_to_string(dir.join("web.log")).unwrap_or_default()
+        );
+        wrangler::stop_all(&mut wranglers);
+        skip_workerd(&format!(
+            "{why} (likely no network to provision {})\n{logs}",
+            wrangler::SPEC
+        ));
+        return;
+    }
+    let answer = answered.into_inner().expect("the probe answered");
     wrangler::stop_all(&mut wranglers);
     assert!(
         answer.contains(r#""body":"https://app.example""#),
@@ -1540,10 +1540,8 @@ fn the_client_calls_a_bynk_worker_through_a_service_binding() {
     )
     .unwrap();
 
-    let pid = std::process::id();
-    let base = 60_000 + 4 * (pid % 900) as u16;
-    let (api_port, web_port) = (base, base + 1);
-    let spawn = |cwd: &Path, port: u16, log: &str| {
+    let [api_port, web_port, api_inspector, web_inspector] = wrangler::ports::free_ports();
+    let spawn = |cwd: &Path, port: u16, inspector: u16, log: &str| {
         let out_log = fs::File::create(dir.join(log)).unwrap();
         let err_log = out_log.try_clone().unwrap();
         wrangler::Wrangler::spawn(
@@ -1553,7 +1551,7 @@ fn the_client_calls_a_bynk_worker_through_a_service_binding() {
                     "--port",
                     &port.to_string(),
                     "--inspector-port",
-                    &(port + 2).to_string(),
+                    &inspector.to_string(),
                 ])
                 .current_dir(cwd)
                 .stdout(Stdio::from(out_log))
@@ -1562,45 +1560,45 @@ fn the_client_calls_a_bynk_worker_through_a_service_binding() {
         )
     };
     // The API first, so the binding finds it in the dev registry.
-    let Ok(a) = spawn(&api_dir, api_port, "api.log") else {
+    let Ok(a) = spawn(&api_dir, api_port, api_inspector, "api.log") else {
         skip_workerd("could not launch npx");
         return;
     };
     let mut wranglers = vec![a];
-    let deadline = Instant::now() + Duration::from_secs(180);
-    while !get(api_port, "/logo").is_ok_and(|r| r.contains("200 OK")) {
-        if Instant::now() > deadline {
-            let log = fs::read_to_string(dir.join("api.log")).unwrap_or_default();
-            wrangler::stop_all(&mut wranglers);
-            skip_workerd(&format!("the API Worker did not answer in time\n{log}"));
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+    if let Err(why) = wrangler::wait_until_ready(&dir.join("api.log"), api_port, &|| {
+        get(api_port, "/logo").is_ok_and(|r| r.contains("200 OK"))
+    }) {
+        let log = fs::read_to_string(dir.join("api.log")).unwrap_or_default();
+        wrangler::stop_all(&mut wranglers);
+        skip_workerd(&format!("the API Worker: {why}\n{log}"));
+        return;
     }
-    let Ok(b) = spawn(&web, web_port, "web.log") else {
+    let Ok(b) = spawn(&web, web_port, web_inspector, "web.log") else {
         wrangler::stop_all(&mut wranglers);
         skip_workerd("could not launch npx");
         return;
     };
     wranglers.push(b);
-    let answer = loop {
-        if let Ok(r) = get(web_port, "/")
-            && r.contains("\"put\"")
-        {
-            break r;
+    let answered = std::cell::RefCell::new(None);
+    if let Err(why) = wrangler::wait_until_ready(&dir.join("web.log"), web_port, &|| match get(
+        web_port, "/",
+    ) {
+        Ok(r) if r.contains("\"put\"") => {
+            *answered.borrow_mut() = Some(r);
+            true
         }
-        if Instant::now() > deadline {
-            let logs = format!(
-                "{}\n{}",
-                fs::read_to_string(dir.join("api.log")).unwrap_or_default(),
-                fs::read_to_string(dir.join("web.log")).unwrap_or_default()
-            );
-            wrangler::stop_all(&mut wranglers);
-            skip_workerd(&format!("the front end did not answer in time\n{logs}"));
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(500));
-    };
+        _ => false,
+    }) {
+        let logs = format!(
+            "{}\n{}",
+            fs::read_to_string(dir.join("api.log")).unwrap_or_default(),
+            fs::read_to_string(dir.join("web.log")).unwrap_or_default()
+        );
+        wrangler::stop_all(&mut wranglers);
+        skip_workerd(&format!("the front end: {why}\n{logs}"));
+        return;
+    }
+    let answer = answered.into_inner().expect("the probe answered");
     wrangler::stop_all(&mut wranglers);
     let json = answer.split("\r\n\r\n").nth(1).unwrap_or(&answer);
     let v: serde_json::Value =

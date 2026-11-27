@@ -86,6 +86,19 @@ pub fn wait_until_ready(
     port: u16,
     probe: &dyn Fn() -> bool,
 ) -> Result<(), String> {
+    wait_until_ready_or_exit(log_path, port, probe, &mut || None)
+}
+
+/// [`wait_until_ready`] for a smoke that can tell its wrangler has already exited (#4174): a
+/// wrangler that is gone will never serve, so `exited` (`Some(how)` once it has) ends the wait at
+/// once with that in the error, not after the whole boot deadline.
+#[allow(dead_code)]
+pub fn wait_until_ready_or_exit(
+    log_path: &std::path::Path,
+    port: u16,
+    probe: &dyn Fn() -> bool,
+    exited: &mut dyn FnMut() -> Option<String>,
+) -> Result<(), String> {
     let ready = ready_line(port);
     let deadline = std::time::Instant::now() + BOOT_DEADLINE;
     let mut logged_ready = false;
@@ -95,6 +108,9 @@ pub fn wait_until_ready(
         }
         if logged_ready && probe() {
             return Ok(());
+        }
+        if let Some(how) = exited() {
+            return Err(format!("wrangler exited ({how}) before serving"));
         }
         if std::time::Instant::now() > deadline {
             return Err(if logged_ready {
@@ -111,6 +127,23 @@ pub fn wait_until_ready(
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
+}
+
+/// [`wait_until_ready`] for a smoke that boots several Workers: each of `others` (a log and the
+/// port its Worker serves) must have logged its own Ready line, then the `entry` Worker must have
+/// logged its and answer `probe`. The probe is a request that reaches the others through a Service
+/// Binding, so it also waits out the binding connecting; `others` are gated first because the
+/// entry's probe needs them up. The error names the Worker that did not come up.
+#[allow(dead_code)]
+pub fn wait_until_all_ready(
+    others: &[(&std::path::Path, u16)],
+    entry: (&std::path::Path, u16),
+    probe: &dyn Fn() -> bool,
+) -> Result<(), String> {
+    for (log_path, port) in others {
+        wait_until_ready(log_path, *port, &|| true)?;
+    }
+    wait_until_ready(entry.0, entry.1, probe)
 }
 
 /// I2 (#1971): the `--var`s a workerd smoke passes `wrangler dev` so its
