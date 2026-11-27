@@ -1,1 +1,1 @@
-<<bynk-shared: std/bynk.ts#errors+httpresult+result+secret+text+time>>
+<<bynk-shared: std/bynk.ts#boundary+bytes+errors+httpresult+result+secret+text+time>>
