@@ -2010,9 +2010,10 @@ when `ok` is `false`. `lock_changes` says whether the revert changes the Worker'
 A check can appear for each binding or class it looks at, so a worker can have several of the
 same `check`; match on `code`, not on position.
 
-**Missing credentials.** A revert reads the account, so it stops before anything else when
-`CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_ACCOUNT_ID` is unset. With `--format json` it writes this to
-stdout, beside the `bynk: error:` line on stderr, and exits non-zero:
+**Missing credentials.** A revert reads the account, so it stops when `CLOUDFLARE_API_TOKEN` or
+`CLOUDFLARE_ACCOUNT_ID` is unset, once it has checked its own arguments and read `bynk.deploy.lock`.
+With `--format json` it writes this to stdout, beside the `bynk: error:` line on stderr, and exits
+non-zero:
 
 ```json
 {
@@ -2025,8 +2026,11 @@ stdout, beside the `bynk: error:` line on stderr, and exits non-zero:
 ```
 
 `missing` names only the variables that are unset, and the `message` says what the token needs.
-An `error` document replaces the plan; a client reads `error` first.
-The other commands that read the account say the same on stderr, as an `error:` line.
+An `error` document replaces the plan, so a client reads `error` first. **Only this failure is a
+structured document.** Every other failure of a revert (`--to` without `--context`, a
+`bynk.deploy.lock` that does not read or records no deployed Worker, a `--context` or `--worker`
+that is not recorded) is the `bynk: error:` line on stderr, a non-zero exit and an empty stdout, and
+the other commands that read the account say the same on stderr.
 
 ---
 

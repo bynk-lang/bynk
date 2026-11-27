@@ -80,16 +80,9 @@ impl MissingCredentials {
     /// `set X [and Y] to {doing}: {needs} and the account it belongs to`: what each purpose has
     /// always said.
     pub(crate) fn message(self, doing: &str, needs: &str) -> String {
-        let missing: Vec<&str> = [
-            self.token.then_some("CLOUDFLARE_API_TOKEN"),
-            self.account.then_some("CLOUDFLARE_ACCOUNT_ID"),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
         format!(
             "set {} to {doing}: {needs} and the account it belongs to",
-            missing.join(" and ")
+            self.names().join(" and ")
         )
     }
 }
