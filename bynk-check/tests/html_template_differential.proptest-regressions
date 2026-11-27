@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 156a5d4d23fc3ca0e104b519d6a3d29618efa701d3c6c841563471d43ef08ace # shrinks to pieces = [Open("p", Lower, [("\r", "title", [], '"'), (" ", "class", [None], '"')])]
