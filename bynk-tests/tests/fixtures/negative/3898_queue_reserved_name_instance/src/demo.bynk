@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk.cloudflare { Queue }
+
+// Durable event delivery D2 (#3898), §6 "user code names an event queue": `bynk-ev-` is the
+// compiler's event-queue prefix, so a `Queue @name` may not use it.
+capability Audit = Queue @name("bynk-ev-audit")
+
+service probe {
+  on call() -> Effect[Int] by Caller {
+    Effect.pure(0)
+  }
+}

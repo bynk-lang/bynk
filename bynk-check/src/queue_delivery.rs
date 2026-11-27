@@ -158,6 +158,11 @@ fn check_dead_letter(expr: &bynk_syntax::ast::Expr, queue: &str, errors: &mut Ve
                 "a queue name is 1 to 63 lowercase letters, digits or `-`, and starts and ends with a letter or digit",
             ),
         ),
+        ExprKind::StrLit(name)
+            if let Some(error) = crate::queue_reserved::reserved_name_error(name, expr.span) =>
+        {
+            errors.push(error);
+        }
         ExprKind::StrLit(name) if name == queue => errors.push(bad_option(
             expr.span,
             format!("the dead-letter queue is the consumer's own queue `{queue}`"),

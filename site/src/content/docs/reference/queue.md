@@ -24,6 +24,8 @@ service <Name> from queue("<name>") {
 - **Name:** the queue this consumer binds to, on the `from queue("…")` header.
   It must be a name Cloudflare accepts: 1 to 63 lowercase letters, digits or `-`,
   starting and ending with a letter or digit (`bynk.queue.invalid_name`).
+  It must not start with `bynk-ev-` or `bynk-dl-` (`bynk.queue.reserved_name`; see
+  [Reserved names](#reserved-names)).
 - **Parameters:** the message (conventionally named `message`), of any
   wire-deserialisable type, and optionally one `QueueDelivery` (see
   [Delivery metadata](#delivery-metadata)), in either order. Anything else is
@@ -152,6 +154,27 @@ The environment-qualified name of any queue, consumer, producer or dead-letter,
 must still fit Cloudflare's 63 characters. Only the deploy knows the environment,
 so a name that overflows once `-<environment>` is added is refused by the deploy
 plan, before anything is created.
+
+## Reserved names
+
+Bynk is moving event delivery onto queues it creates and names itself
+([#3898](https://github.com/bynk-lang/bynk/issues/3898)). Each `from Events` service
+gets an event queue, `bynk-ev-<slug>-<hash>`, and a dead-letter queue,
+`bynk-dl-<slug>-<hash>`. So a queue the program names may not start with either
+prefix, wherever it is named, and the compiler refuses it with
+`bynk.queue.reserved_name`:
+
+- a `Queue @name("…")` instance;
+- a `from queue("…")` consumer;
+- a `delivery { deadLetter: "…" }`.
+
+```bynk,fragment
+capability Audit = Queue @name("bynk-ev-audit")   // ✗ bynk.queue.reserved_name
+capability Audit = Queue @name("audit-events")    // ✓
+```
+
+Only these two prefixes are reserved. Any other name that starts with `bynk-`, such
+as `bynk-orders`, is accepted.
 
 ## Delivery metadata
 

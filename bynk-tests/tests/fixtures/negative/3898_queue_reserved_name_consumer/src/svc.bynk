@@ -1,0 +1,10 @@
+context svc
+
+// Durable event delivery D2 (#3898), §6 "user code names an event queue": a `from queue`
+// consumer of a `bynk-ev-` queue would read event traffic the compiler owns.
+service worker from queue("bynk-ev-shop-notify-0a1b2c3d") {
+  delivery { deadLetter: None }
+  on message(message: String) -> Effect[QueueResult] by Producer {
+    Ack
+  }
+}
