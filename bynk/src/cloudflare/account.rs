@@ -135,13 +135,7 @@ impl CloudflareApi for Account<'_> {
             seen.extend(rest::queues::ids(&body));
             let repeated = entries > 0 && seen.len() == before;
             let read = Page::of(&body, entries);
-            let more = read.total_pages.map_or_else(
-                || {
-                    read.per_page
-                        .is_some_and(|per| entries as u64 >= per && entries > 0)
-                },
-                |total| page < total,
-            );
+            let more = read.more(page, MissingTotal::WhileFull);
             // #4582 review: a listing that stops before its end without the name has not said
             // the queue is absent, and reading it so would let `--prune` forget a live queue.
             if id.is_none() && more && (repeated || page == rest::queues::MAX_PAGES) {
@@ -295,15 +289,11 @@ impl CloudflareApi for Account<'_> {
             let repeated = fresh.is_empty();
             names.extend(fresh);
             let read = Page::of(&body, entries);
-            let more = read.total_pages.map_or_else(
-                || {
-                    read.per_page
-                        .is_some_and(|per| entries as u64 >= per && entries > 0)
-                },
-                |total| page < total,
-            );
+            let more = read.more(page, MissingTotal::WhileFull);
             if more && (repeated || page == rest::vectorize::MAX_PAGES) {
-                cut_short = Some(if repeated {
+                cut_short = Some(if entries == 0 {
+                    format!("page {page} was empty")
+                } else if repeated {
                     format!("page {page} repeated an earlier one")
                 } else {
                     format!("it did not end within {} pages", rest::vectorize::MAX_PAGES)
@@ -674,6 +664,44 @@ mod tests {
                 200,
                 r#"{"success":true,"result":[],"result_info":{"per_page":2}}"#,
             ),
+        ]));
+        let (base, _) = answering_in_turn(answers);
+        assert_eq!(
+            account(base, &root).vectorize_names().unwrap(),
+            ["ix-0", "ix-1"]
+        );
+        // #4592 review: with `total_pages`, an empty or a repeated page before the last is
+        // named for what it is; on the last page the listing has simply ended.
+        let of_three = |names: &str| -> &'static str {
+            Box::leak(
+                format!(
+                    r#"{{"success":true,"result":[{names}],"result_info":{{"total_pages":3}}}}"#
+                )
+                .into_boxed_str(),
+            )
+        };
+        for (second, why) in [
+            (of_three(""), "page 2 was empty"),
+            (
+                of_three(r#"{"name":"ix-0"}"#),
+                "page 2 repeated an earlier one",
+            ),
+        ] {
+            let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+                (200, of_three(r#"{"name":"ix-0"}"#)),
+                (200, second),
+            ]));
+            let (base, _) = answering_in_turn(answers);
+            let said = account(base, &root)
+                .vectorize_names()
+                .unwrap_err()
+                .to_string();
+            assert!(said.contains(why), "{said}");
+        }
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, of_three(r#"{"name":"ix-0"}"#)),
+            (200, of_three(r#"{"name":"ix-1"}"#)),
+            (200, of_three("")),
         ]));
         let (base, _) = answering_in_turn(answers);
         assert_eq!(
