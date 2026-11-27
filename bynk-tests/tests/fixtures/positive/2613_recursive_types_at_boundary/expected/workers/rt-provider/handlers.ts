@@ -7,6 +7,7 @@ import type { DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../../__bynk_runtime/boundary.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
 import { Dir as __CommonsDir, Expr as __CommonsExpr, Index as __CommonsIndex, Tree as __CommonsTree } from "../../rt/shapes.js";
@@ -50,7 +51,7 @@ export const gardener = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Planted", payload: { tree: t }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "rt.provider", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Planted", payload: { tree: t }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "rt.provider", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return undefined;
     })();

@@ -16,6 +16,7 @@ import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStateme
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
 import { admitQueueBody } from "./queue_admit.ts";
+import { measureEvent } from "./queue_signing.ts";
 import { dmarcVerdictOf, handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
 import { checkUnique, commitStored, committedSize, eraseStored, markErased, newErasure, moveRenamedEntries, noteClock, readStored, readsLazily, storeKey, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
@@ -94,6 +95,7 @@ export {
   decodeAgentKey as __decodeAgentKey,
   deliverEvent as __deliverEvent,
   deserialiseEventEnvelope as __deserialiseEventEnvelope,
+  measureEvent as __bynkMeasureEvent,
   eventEnvelopeOf as __eventEnvelopeOf,
   currentTraceId as __currentTraceId,
   enterTrace as __enterTrace,

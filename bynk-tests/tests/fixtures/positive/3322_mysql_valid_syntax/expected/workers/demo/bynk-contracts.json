@@ -1,12 +1,12 @@
 {
   "version": 1,
   "provides": {
-    "batch": "7d8f2ef7972af7cb",
-    "probe": "2d051dfd62c7f581"
+    "batch": "6d12614d26d0cf86",
+    "probe": "317e0ca63c8ba039"
   },
   "expects": {},
   "provides_shapes": {
-    "batch": "Svc(\"batch\",P(\"name\",B(\"String\")),Ret(R(L(N(\"MySqlRun\")),N(\"MySqlError\"))))",
-    "probe": "Svc(\"probe\",P(\"name\",B(\"String\")),Ret(R(B(\"String\"),N(\"MySqlError\"))))"
+    "batch": "Svc(\"batch\",P(\"name\",B(\"String\")),Ret(R(L(Rec(\"MySqlRun\",F(\"insertId\",B(\"Int\")),F(\"rowCount\",B(\"Int\")))),Sum(\"MySqlError\",V(\"MySqlConnection\",F(\"message\",B(\"String\"))),V(\"MySqlConstraint\",F(\"code\",B(\"Int\")),F(\"message\",B(\"String\"))),V(\"MySqlFailed\",F(\"code\",B(\"Int\")),F(\"message\",B(\"String\"))),V(\"MySqlSerialization\",F(\"code\",B(\"Int\")),F(\"message\",B(\"String\")))))))",
+    "probe": "Svc(\"probe\",P(\"name\",B(\"String\")),Ret(R(B(\"String\"),Sum(\"MySqlError\",V(\"MySqlConnection\",F(\"message\",B(\"String\"))),V(\"MySqlConstraint\",F(\"code\",B(\"Int\")),F(\"message\",B(\"String\"))),V(\"MySqlFailed\",F(\"code\",B(\"Int\")),F(\"message\",B(\"String\"))),V(\"MySqlSerialization\",F(\"code\",B(\"Int\")),F(\"message\",B(\"String\")))))))"
   }
 }

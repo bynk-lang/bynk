@@ -56,9 +56,9 @@ export default {
             case "save": {
               __route = "call save";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "e740b99bfc611306") {
-                globalThis.console.error("ContractMismatch shop.orders call save", { service: "save", expected: "e740b99bfc611306", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "save", expected: "e740b99bfc611306", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "0ac6a024539a0ae4") {
+                globalThis.console.error("ContractMismatch shop.orders call save", { service: "save", expected: "0ac6a024539a0ae4", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "save", expected: "0ac6a024539a0ae4", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {

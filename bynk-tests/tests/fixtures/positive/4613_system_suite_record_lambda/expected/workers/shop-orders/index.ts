@@ -35,9 +35,9 @@ export default {
             case "close": {
               __route = "call close";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "3abd65d2c88fd7d3") {
-                globalThis.console.error("ContractMismatch shop.orders call close", { service: "close", expected: "3abd65d2c88fd7d3", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "close", expected: "3abd65d2c88fd7d3", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "19632117461c3d19") {
+                globalThis.console.error("ContractMismatch shop.orders call close", { service: "close", expected: "19632117461c3d19", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "close", expected: "19632117461c3d19", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {

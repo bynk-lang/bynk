@@ -1,10 +1,10 @@
 {
   "version": 1,
   "provides": {
-    "listing": "ba0da0f88da474ef"
+    "listing": "1f3304524db50073"
   },
   "expects": {},
   "provides_shapes": {
-    "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),N(\"SqlReadError\"))))"
+    "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),Sum(\"SqlReadError\",V(\"Decode\",F(\"error\",N(\"DecodeError\"))),V(\"Sql\",F(\"error\",Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\"))))))))))"
   }
 }

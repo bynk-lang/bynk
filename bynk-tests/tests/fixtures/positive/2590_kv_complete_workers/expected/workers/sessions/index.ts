@@ -111,9 +111,9 @@ export default {
             case "pages": {
               __route = "call pages";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "ed899da493293d1e") {
-                globalThis.console.error("ContractMismatch sessions call pages", { service: "pages", expected: "ed899da493293d1e", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "pages", expected: "ed899da493293d1e", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "e3d7bd04476573b4") {
+                globalThis.console.error("ContractMismatch sessions call pages", { service: "pages", expected: "e3d7bd04476573b4", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "pages", expected: "e3d7bd04476573b4", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {
