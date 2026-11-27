@@ -2209,6 +2209,53 @@ pub fn uses_span_of(
     None
 }
 
+/// #4618: the types `table`'s service signatures name that its unit takes from a first-party adapter
+/// it consumes (`consumes bynk { CloseInfo, Cookie }`), and what those types reach, added to
+/// `types` where `types` does not bind the name. A caller reads a signature in `types`, and the
+/// adapters' names are in neither `unit`'s own types nor its `uses` commons', so without them a
+/// service returning `CloseInfo` read as returning nothing.
+///
+/// A name `types` does not bind, which a first-party unit does, can only have come from that
+/// unit's `consumes`, so it is that unit's type: the `consumes` list is not read, because a
+/// `system` harness holds only its participants for its target's entry (#2832), and both sides of a
+/// call hash the contract from this one table. `bynk` is read
+/// before `bynk.cloudflare`; the two declare no name in common.
+fn add_adapter_signature_types(
+    table: &UnitTable,
+    unit_tables: &HashMap<String, UnitTable>,
+    types: &mut HashMap<String, Arc<TypeDecl>>,
+) {
+    let adapters: Vec<&UnitTable> = [
+        crate::firstparty::BYNK_UNIT,
+        crate::firstparty::CLOUDFLARE_UNIT,
+    ]
+    .into_iter()
+    .filter_map(|u| unit_tables.get(u))
+    .collect();
+    let no_vars = std::collections::HashSet::new();
+    let mut queue: Vec<String> = Vec::new();
+    let mut names: Vec<_> = table.services.iter().collect();
+    names.sort_by_key(|(n, _)| n.as_str());
+    for (sname, sdecl) in names {
+        let Some(svc) = resolver::cross_context_service_for(sname, sdecl) else {
+            continue;
+        };
+        for (_, tr) in &svc.params {
+            crate::project_model::type_ref_names(tr, &no_vars, &mut queue);
+        }
+        crate::project_model::type_ref_names(&svc.return_type, &no_vars, &mut queue);
+    }
+    while let Some(name) = queue.pop() {
+        if types.contains_key(&name) {
+            continue;
+        }
+        if let Some(decl) = adapters.iter().find_map(|t| t.types.get(&name)) {
+            queue.extend(crate::project_model::type_decl_ref_names(decl));
+            types.insert(name, decl.clone());
+        }
+    }
+}
+
 /// Build the [`resolver::CrossContextInfo`] for a given consuming context.
 /// Used by both the resolver/checker (per-file processing) and the emitter
 /// (composition root + boundary casts).
@@ -2319,10 +2366,10 @@ pub fn build_cross_context_info(
                     .collect(),
             );
         }
-        consumed_types.insert(t.clone(), other_types_combined);
         if !owners.is_empty() {
             consumed_type_owners.insert(t.clone(), owners);
         }
+        consumed_types.insert(t.clone(), other_types_combined);
         let Some(other_table) = unit_tables.get(t) else {
             continue;
         };
@@ -3031,6 +3078,9 @@ fn contract_types_inner(
         if !subst.is_empty() {
             out.insert(key, Arc::new(rename_decl_refs(&decl, &subst)));
         }
+    }
+    if let Some(table) = unit_tables.get(unit) {
+        add_adapter_signature_types(table, unit_tables, &mut out);
     }
     walk.visiting.remove(unit);
     if !cyclic {
