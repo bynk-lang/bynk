@@ -118,6 +118,14 @@ switch (res.kind) {
 | `credentials` | Passed to `fetch`. `"include"` sends cookies to another origin; that needs a [`cors`](/reference/http/) policy with `credentials: true` and explicit origins. |
 | `origin` | Sent as the `Origin` header. See [Cookies and CSRF](#cookies-and-csrf). |
 
+**A credential is never sent over cleartext.** A call that carries an `Authorization` header (a
+bearer or OIDC token, from `headers`, the call's `init` or a typed `headers` record) to an `http:` or
+`ws:` URL throws a `CleartextCredential` before anything is sent, unless the host is loopback:
+`localhost`, a `*.localhost` name, `127.0.0.0/8` or `[::1]`, as `bynk dev` and the test tiers use.
+Use an `https://` base URL for anything else. A relative `baseUrl` is checked against
+`location.origin`. Anonymous calls are unaffected, and so are cookie credentials, which the browser
+governs with `Secure`.
+
 Each function takes the route's parameters in order (path parameters, then the
 `body`, then the `query`) and an optional last `init`, a standard `RequestInit`
 merged over the client's defaults, so a `signal` or a framework's `cache` option
