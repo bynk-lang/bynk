@@ -421,7 +421,7 @@ pub(crate) struct Resources {
 }
 
 /// #3386: one `SignedCookie` actor of a context, as the manifest records it: the env binding of
-/// its signing key, which `deploy` mints when unset.
+/// its signing key, which `deploy` mints when unset. #3939: or an `ApiKey` actor's pepper.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub(crate) struct SessionKey {
     /// The actor's name.
@@ -429,6 +429,20 @@ pub(crate) struct SessionKey {
     /// The name of the env binding holding the key: a name, never a value.
     #[serde(rename = "secret")]
     pub(crate) binding: String,
+    /// #3939: which kind of key it is, as the manifest says (additive within version 2: an entry
+    /// without it is a signing key, as every older manifest's is).
+    #[serde(default)]
+    pub(crate) kind: SessionKeyKind,
+}
+
+/// #3939: a `SignedCookie` actor's signing key, or an `ApiKey` actor's pepper. Both are minted when
+/// unset and take the same form, but `--force` replaces only a signing key (`decide_pepper`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum SessionKeyKind {
+    #[default]
+    Cookie,
+    Pepper,
 }
 
 /// I3 (#1971): one foreign caller a context admits, as the manifest records it.
@@ -1264,8 +1278,19 @@ pub(crate) mod tests {
                 .map(|(actor, binding)| SessionKey {
                     actor: actor.to_string(),
                     binding: binding.to_string(),
+                    kind: SessionKeyKind::Cookie,
                 })
                 .collect();
+            self
+        }
+        /// #3939: the pepper each `ApiKey` actor of this context holds, as `(actor, binding)`.
+        pub(crate) fn api_key_peppers(mut self, keys: &[(&str, &str)]) -> Self {
+            self.session_keys
+                .extend(keys.iter().map(|(actor, binding)| SessionKey {
+                    actor: actor.to_string(),
+                    binding: binding.to_string(),
+                    kind: SessionKeyKind::Pepper,
+                }));
             self
         }
         /// #3328: this context's `from email` addresses.
@@ -2797,6 +2822,27 @@ state = "deleted"
         assert_eq!(read.declared, vec!["AUTH_JWT_SECRET".to_string()]);
         assert_eq!(read.read, vec!["API_KEY".to_string()]);
         assert!(!read.read_complete);
+
+        // #3939 (K1): a pepper's entry says so; an entry without `kind` is a signing key, as every
+        // older manifest's is.
+        std::fs::write(
+            &path,
+            r#"{"version":2,"declared":[],"session":[{"actor":"User","secret":"SESSION_KEY"},{"actor":"Client","secret":"CLIENT_KEY_PEPPER","kind":"pepper"}]}"#,
+        )
+        .unwrap();
+        let read = read_secrets_manifest(&dir).expect("a v2 manifest with session keys parses");
+        let kinds: Vec<(&str, SessionKeyKind)> = read
+            .session
+            .iter()
+            .map(|k| (k.binding.as_str(), k.kind))
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![
+                ("SESSION_KEY", SessionKeyKind::Cookie),
+                ("CLIENT_KEY_PEPPER", SessionKeyKind::Pepper)
+            ]
+        );
 
         // v1 is refused rather than read with defaults, and that is the point:
         // a v1 file carries no evidence either way about computed names, so

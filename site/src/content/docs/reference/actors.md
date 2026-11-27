@@ -284,7 +284,7 @@ actor Client {
 
 | Key | Meaning |
 |---|---|
-| `secret` | The environment variable holding the **pepper**, the key every stored hash is made with. Required. `bynk deploy` mints it when unset, as it mints a `SignedCookie` key |
+| `secret` | The environment variable holding the **pepper**, the key every stored hash is made with. Required. `bynk deploy` mints it when unset, as it mints a `SignedCookie` key, but never replaces a set one, even under `--force` (see [the deployed pepper](#the-deployed-pepper)) |
 | `prefix` | The key's leading tag, 2 to 16 lower-case letters and digits, starting with a letter. Default `bk`. Each `ApiKey` actor in a context needs its own (`bynk.actor.api_key_prefix_shared`) |
 | `header` | A header to read the key from, such as `x-api-key`. Absent, the key is read from `Authorization: Bearer <key>` |
 
@@ -294,6 +294,23 @@ does not expire yet and the pepper cannot be rotated without ending every key. T
 context-owned, string-constructible type. The pepper's variable may not be another actor's `secret`
 or `previous` (`bynk.actor.api_key_secret_shared`). The scheme, its types and its warning are
 experimental: list the types in `[unstable] allow`.
+
+### The deployed pepper
+
+`bynk deploy` sets the pepper as a Worker secret, once per environment:
+
+- **Unset:** it mints one (32 random bytes, base64url).
+- **Already set:** it keeps it. **`--force` does not replace it.** `--force` replaces a
+  `SignedCookie` signing key, but a set pepper is kept, and the deploy says so, because a new
+  pepper ends every key issued under the old one: each stored hash was made with it. With
+  `previous` refused until a later release, there is no way back.
+- **Supplied:** a value you set for the variable in the environment or in `--secrets-file` replaces
+  the pepper, whether or not one is set. Do this only to end every key on purpose: once the new
+  pepper is set, **every key issued before is refused**, and each holder needs a new one. A supplied
+  value must be unpadded base64url of at least 32 bytes.
+
+Each environment (`--env`) holds its own pepper and its own key store, so a key works only in the
+environment that issued it.
 
 ### The key
 

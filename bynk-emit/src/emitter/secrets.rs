@@ -114,19 +114,22 @@ pub(crate) fn declared_secrets(table: &UnitTable) -> BTreeSet<String> {
 /// the cookie (a login service) still gets its key.
 ///
 /// #3939 (track §18, K1): an `ApiKey` actor's pepper takes the same path. It has the session key's
-/// form (unpadded base64url of at least 32 bytes) and lifecycle: `deploy` mints it when unset and
-/// never replaces a set one, since a new pepper ends every key stored under the old one.
-pub(crate) fn session_keys(table: &UnitTable) -> Vec<(String, String)> {
+/// form (unpadded base64url of at least 32 bytes): `deploy` mints it when unset, and never
+/// replaces a set one, even under `--force`, since a new pepper ends every key stored under it.
+///
+/// Each is `(actor, binding, pepper)`: `pepper` marks an `ApiKey` actor's, which the manifest
+/// records as `"kind": "pepper"` so that `deploy` keeps a set one under `--force`.
+pub(crate) fn session_keys(table: &UnitTable) -> Vec<(String, String, bool)> {
     let peppers = table
         .actors
         .values()
         .filter_map(|a| bynk_check::api_key::api_key_seam_of(a, None))
-        .map(|s| (s.actor, s.secret));
-    let mut keys: Vec<(String, String)> = table
+        .map(|s| (s.actor, s.secret, true));
+    let mut keys: Vec<(String, String, bool)> = table
         .actors
         .values()
         .filter_map(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
-        .map(|s| (s.actor, s.secret))
+        .map(|s| (s.actor, s.secret, false))
         .chain(peppers)
         .collect();
     keys.sort();
@@ -217,7 +220,7 @@ pub struct SecretsParts {
     /// Whether `names` is every name read (a vacuous `true` for none).
     complete: bool,
     foreign: Vec<bynk_check::actors::ForeignCaller>,
-    session: Vec<(String, String)>,
+    session: Vec<(String, String, bool)>,
 }
 
 impl SecretsParts {
@@ -279,7 +282,7 @@ fn render(
     declared: &BTreeSet<String>,
     reads: &SecretReads,
     foreign: &[bynk_check::actors::ForeignCaller],
-    session: &[(String, String)],
+    session: &[(String, String, bool)],
 ) -> Option<String> {
     // `complete` is the third thing worth saying: a context that reads one
     // computed name and nothing else knows something — that it does not know —
@@ -298,9 +301,15 @@ fn render(
     } else {
         let rendered: Vec<String> = session
             .iter()
-            .map(|(actor, secret)| {
+            .map(|(actor, secret, pepper)| {
+                // #3939: additive, so a manifest of signing keys alone stays byte-identical.
+                let kind = if *pepper {
+                    ", \"kind\": \"pepper\""
+                } else {
+                    ""
+                };
                 format!(
-                    "    {{ \"actor\": {}, \"secret\": {} }}",
+                    "    {{ \"actor\": {}, \"secret\": {}{kind} }}",
                     json_string(actor),
                     json_string(secret)
                 )
@@ -366,7 +375,7 @@ mod tests {
 
     #[test]
     fn a_session_key_is_listed_beside_the_declared_secrets_not_among_them() {
-        let session = [("User".to_string(), "SESSION_KEY".to_string())];
+        let session = [("User".to_string(), "SESSION_KEY".to_string(), false)];
         let text =
             render(&set(&[]), &reads(&[], true), &[], &session).expect("a session key renders");
         assert_eq!(
@@ -375,6 +384,21 @@ mod tests {
         );
         // Declared secrets are the operator's to supply; the session key is not one of them.
         assert!(!text.contains("\"declared\": [\n"));
+    }
+
+    /// #3939 (K1): an `ApiKey` actor's pepper is listed as a session key, marked `"kind": "pepper"`
+    /// so that `deploy` keeps a set one under `--force`; a signing key's entry is unchanged.
+    #[test]
+    fn a_pepper_is_listed_as_a_session_key_of_kind_pepper() {
+        let session = [
+            ("Client".to_string(), "CLIENT_KEY_PEPPER".to_string(), true),
+            ("User".to_string(), "SESSION_KEY".to_string(), false),
+        ];
+        let text = render(&set(&[]), &reads(&[], true), &[], &session).expect("it renders");
+        assert!(text.contains(
+            "{ \"actor\": \"Client\", \"secret\": \"CLIENT_KEY_PEPPER\", \"kind\": \"pepper\" }"
+        ));
+        assert!(text.contains("{ \"actor\": \"User\", \"secret\": \"SESSION_KEY\" }"));
     }
 
     #[test]

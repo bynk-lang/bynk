@@ -1,7 +1,7 @@
 ---
 level: minor
 probes: emit_diagnostics, ast_importers, diagnostic_coverage, explained_codes
-changelog: `bynk deploy` mints an `ApiKey` actor's pepper as a Worker secret, and a `system` test acts as an `ApiKey` actor with `by Client("…")` or refuses one with `by Malformed`, `by Unknown` and `by Forged`, each checking the key store did the same work (experimental, under `bynk.actor.ApiKey`)
+changelog: `bynk deploy` mints an `ApiKey` actor's pepper as a Worker secret and keeps a set one even under `--force`, and a `system` test acts as an `ApiKey` actor with `by Client("…")` or refuses one with `by Malformed`, `by Unknown` and `by Forged`, each checking the key store did the same work (experimental, under `bynk.actor.ApiKey`)
 ---
 
 ## ADR: api-key-test-and-deploy
@@ -21,6 +21,6 @@ Each principal's driver counts the key store's comparisons and fails the case un
 
 **Decision C — not against a real runtime.** `bynk test --against` refuses a case that acts as an `ApiKey` actor or drives `by Malformed` or `by Unknown` (`bynk.test.remote_unsupported_api_key`). The harness would have to mint into the deployed key store, and the comparison counter needs Node.
 
-**Decision D — the pepper is deployed like a session key.** An `ApiKey` actor's pepper variable joins `session_keys`, so `bynk deploy` mints it as a Worker secret when it is unset and never replaces a set one (#4056, Decision B). A new pepper ends every key stored under the old one, so `--force` replacing it is the documented consequence. Live check K1 confirms this on a real account.
+**Decision D — the pepper is deployed like a session key, but `--force` keeps it.** An `ApiKey` actor's pepper variable joins `session_keys`, marked `"kind": "pepper"` in `bynk-secrets.json` so that `deploy` tells it from a signing key by kind, never by name. `bynk deploy` mints it as a Worker secret when it is unset (#4056, Decision B). Unlike a signing key, a set pepper is kept even under `--force`, and the deploy says so. The maintainer ruled this on #4595: a new pepper ends every key issued under the old one, rotation (`previous`) is refused until a later slice, and `--force` is also the flag that fixes a cookie-key mismatch. Replacing a pepper takes a deliberate act: a value the operator supplies, in the environment or `--secrets-file`, is always set, and it ends every earlier key. Live check K1 confirms this on a real account.
 
 **Consequences.** A service author can test an `ApiKey` route end to end, failure cases included, and deploy it with no hand-made secret. Listing and revoking keys (slice 2), expiry, last use and rotation (slice 3), sums (slice 4), and OpenAPI and the client (slice 5) follow.
