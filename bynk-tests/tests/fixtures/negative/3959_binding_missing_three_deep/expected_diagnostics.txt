@@ -1,0 +1,2 @@
+bynk.given.binding_missing	src/lib/chain.bynk:16:2
+# exact

@@ -172,6 +172,10 @@
       "summary": "A call binds a name that is not one of its callee's capability parameters, or binds on a callee that has none."
     },
     {
+      "code": "bynk.given.parameterised_fn_value",
+      "summary": "A function with capability parameters is named as a value; a lambda that binds them takes its place."
+    },
+    {
       "code": "bynk.resolve.arity_mismatch",
       "summary": "A function was called with the wrong number of arguments."
     },
