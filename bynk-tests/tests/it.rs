@@ -315,6 +315,8 @@ mod system {
     mod accepted_contracts_behaviour;
     #[path = "adapter_flattened_capability_stub_behaviour.rs"]
     mod adapter_flattened_capability_stub_behaviour;
+    #[path = "agent_move_forward_workerd.rs"]
+    mod agent_move_forward_workerd;
     #[path = "agent_serialise_workerd.rs"]
     mod agent_serialise_workerd;
     #[path = "agent_state_schema_lock.rs"]

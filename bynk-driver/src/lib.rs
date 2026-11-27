@@ -2750,6 +2750,16 @@ mod tests {
             config.contains("binding = \"BYNK_FORWARD_SHOP_ORDERS\"\nservice = \"shop-orders\""),
             "{config}"
         );
+        // The cancel config (D8) forwards as the receive config does, and expects nothing.
+        let cancel = doc(&moved, "workers/core/wrangler.cancel.toml").unwrap();
+        assert!(cancel.contains("main = \"index.receive.ts\""), "{cancel}");
+        assert!(
+            cancel.contains("binding = \"BYNK_FORWARD_SHOP_ORDERS\"\nservice = \"shop-orders\""),
+            "{cancel}"
+        );
+        assert!(!cancel.contains("[exports.Cart]"), "{cancel}");
+        assert!(!cancel.contains("class_name = \"Cart\""), "{cancel}");
+        assert!(doc(&plain, "workers/core/wrangler.cancel.toml").is_none());
         // The moving context's cron stays on the source until it gives it up.
         assert!(!config.contains("0 * * * *"), "{config}");
         assert!(

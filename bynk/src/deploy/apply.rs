@@ -311,6 +311,12 @@ pub(crate) struct PlanApply<'a> {
     pub(crate) with_upload: bool,
     pub(crate) runner: &'static str,
     pub(crate) lives: Lives<'a>,
+    /// #3565 (slice 4b): the run's move sets, when it moves agents: the apply walks their steps.
+    pub(crate) placed: Option<&'a super::agent_move::Placed>,
+    /// The account the moves read (D7), when the run moves agents.
+    pub(crate) move_account: Option<&'a dyn super::move_apply::MoveAccount>,
+    /// The account the moves push through, from several threads at once.
+    pub(crate) move_api: Option<&'a crate::cloudflare::Account<'a>>,
 }
 
 /// Provision → wire → push, per context of the plan, in dependency order, each pushed Worker
@@ -318,6 +324,27 @@ pub(crate) struct PlanApply<'a> {
 pub(crate) fn apply_plan(
     apply: &PlanApply<'_>,
     writer: &mut LedgerWriter<'_>,
+) -> Result<(), ExitCode> {
+    let PlanApply { order, placed, .. } = *apply;
+    // Shared across the loop so two contexts wanting the same secret prompt
+    // once. Dropped with the run — nothing here is ever written (ADR 0195 D1).
+    let mut resolved_secrets = BTreeMap::new();
+    if let Some(placed) = placed {
+        return super::move_run::apply_placed(apply, writer, placed, &mut resolved_secrets);
+    }
+    for i in 0..order.len() {
+        apply_one(apply, writer, i, &mut resolved_secrets)?;
+    }
+    Ok(())
+}
+
+/// [`apply_plan`]'s step for the `i`th Worker of the order: provision → wire → push, then record
+/// it. `Err` is the code the run exits with.
+pub(crate) fn apply_one(
+    apply: &PlanApply<'_>,
+    writer: &mut LedgerWriter<'_>,
+    i: usize,
+    resolved_secrets: &mut BTreeMap<String, String>,
 ) -> Result<(), ExitCode> {
     let PlanApply {
         plan,
@@ -333,127 +360,123 @@ pub(crate) fn apply_plan(
         with_upload,
         runner,
         lives,
+        ..
     } = *apply;
     let env = opts.environment.as_str();
-    // Shared across the loop so two contexts wanting the same secret prompt
-    // once. Dropped with the run — nothing here is ever written (ADR 0195 D1).
-    let mut resolved_secrets = BTreeMap::new();
-    for (i, (worker, context)) in order.iter().zip(&plan.contexts).enumerate() {
-        if order.len() > 1 {
-            eprint!(
-                "{}",
-                deploying_notice(&opts.environment, worker, i + 1, order.len())
-            );
-        }
-        // 1D.2b (#4001): each context's plan is what is applied, for the Worker the run records.
-        debug_assert_eq!(
-            context.steps().worker.map(|(w, _)| w),
-            Some(worker.as_str()),
-            "a plan's contexts follow its order"
+    let (worker, context) = (&order[i], &plan.contexts[i]);
+    if order.len() > 1 {
+        eprint!(
+            "{}",
+            deploying_notice(&opts.environment, worker, i + 1, order.len())
         );
-        let run = &mut RunCx {
-            tools,
-            workers_dir,
-            project: resources,
-            writer,
-            secrets: &mut Secrets {
-                source: secret_source,
-                force: opts.force,
-                edge_keys: &keys.edge_keys,
-                expired: &keys.expired,
-                cleaned: &keys.cleaned,
-                foreign_keys: &keys.foreign_keys,
-                foreign_secrets: &keys.foreign_secrets,
-                listed: &keys.listed,
-                resolved: &mut resolved_secrets,
-                with_upload,
-            },
-            wrangler_args: &opts.wrangler_args,
-            environment: &opts.environment,
-            lives,
-        };
-        match apply_worker(run, context) {
-            Ok(Pushed::Ok) => {
-                // P3 (#2342): e.g. a rate limiter's id the source dropped is free again.
-                let pushed = PushedWorker::of(worker, workers_dir, groups, &resources[worker]);
-                let recorded = record_pushed(writer, &opts.environment, &pushed, |lock| {
-                    record_fresh_moves(lock, opts, worker, moves);
-                    // #4526: what its rotations left retiring, and what was cleaned up.
-                    record_edge_slots(
-                        lock,
-                        &opts.environment,
-                        worker,
-                        (&keys.edge_keys, &keys.cleaned.borrow()),
-                    );
-                });
-                // I3 (#1971): the secrets just minted for this context's
-                // foreign callers, handed to their operators.
-                for caller in &resources[worker].foreign_callers {
-                    if let Some(ForeignKey::Set {
-                        value,
-                        minted: true,
-                    }) = keys
-                        .foreign_keys
-                        .get(&(worker.clone(), caller.binding.clone()))
-                    {
-                        colour::eprint(&foreign_hand_off(env, worker, caller, value, runner));
-                    }
-                }
-                if let Err(e) = recorded {
-                    colour::eprint(&unrecorded_deploy_failure(
-                        &opts.environment,
-                        worker,
-                        &writer.path().display().to_string(),
-                        &e,
-                    ));
-                    return Err(ExitCode::FAILURE);
-                }
-            }
-            // A shared Ctrl-C. Stop, but report nothing and exit cleanly: the
-            // user asked for this, and the terminal signalled us too. `worker`
-            // is deliberately *not* recorded as deployed — the push was cut
-            // short, so whether it landed is unknown, and the ledger only ever
-            // claims what it watched succeed.
-            Ok(Pushed::Interrupted) => return Err(ExitCode::SUCCESS),
-            Err(f) => {
-                emsg!("bynk: error: {}", f.message);
-                // Stop rather than push on: everything left in the order either
-                // binds to what just failed or would be uploaded into a
-                // topology that is not what the plan described. `worker` itself
-                // is excluded — the line above already named it as the failure,
-                // and listing it here again as "not deployed" would double-count
-                // it against the number.
-                colour::eprint(&stopped_report(&opts.environment, &order[i + 1..]));
-                // #2004 review: a run that re-keyed an edge and stopped between
-                // its two ends leaves them refusing each other. The next plain
-                // run sees a key on each end and keeps both, so say how to
-                // repair it.
-                if let Some(hint) =
-                    interrupted_rotation_hint(&opts.environment, &keys.edge_keys, &order[..i])
+    }
+    // 1D.2b (#4001): each context's plan is what is applied, for the Worker the run records.
+    debug_assert_eq!(
+        context.steps().worker.map(|(w, _)| w),
+        Some(worker.as_str()),
+        "a plan's contexts follow its order"
+    );
+    let run = &mut RunCx {
+        tools,
+        workers_dir,
+        project: resources,
+        writer,
+        secrets: &mut Secrets {
+            source: secret_source,
+            force: opts.force,
+            edge_keys: &keys.edge_keys,
+            expired: &keys.expired,
+            cleaned: &keys.cleaned,
+            foreign_keys: &keys.foreign_keys,
+            foreign_secrets: &keys.foreign_secrets,
+            listed: &keys.listed,
+            resolved: resolved_secrets,
+            with_upload,
+        },
+        wrangler_args: &opts.wrangler_args,
+        environment: &opts.environment,
+        lives,
+    };
+    match apply_worker(run, context) {
+        Ok(Pushed::Ok) => {
+            // P3 (#2342): e.g. a rate limiter's id the source dropped is free again.
+            let pushed = PushedWorker::of(worker, workers_dir, groups, &resources[worker]);
+            let recorded = record_pushed(writer, &opts.environment, &pushed, |lock| {
+                record_fresh_moves(lock, opts, worker, moves);
+                // #4526: what its rotations left retiring, and what was cleaned up.
+                record_edge_slots(
+                    lock,
+                    &opts.environment,
+                    worker,
+                    (&keys.edge_keys, &keys.cleaned.borrow()),
+                );
+            });
+            // I3 (#1971): the secrets just minted for this context's
+            // foreign callers, handed to their operators.
+            for caller in &resources[worker].foreign_callers {
+                if let Some(ForeignKey::Set {
+                    value,
+                    minted: true,
+                }) = keys
+                    .foreign_keys
+                    .get(&(worker.clone(), caller.binding.clone()))
                 {
-                    colour::eprint(&hint);
+                    colour::eprint(&foreign_hand_off(env, worker, caller, value, runner));
                 }
-                // I3 (#1971): a secret minted for this context's foreign
-                // caller may already be set, and the next run would keep it
-                // without ever showing it, so hand it off now.
-                for caller in &resources[worker].foreign_callers {
-                    if let Some(ForeignKey::Set {
-                        value,
-                        minted: true,
-                    }) = keys
-                        .foreign_keys
-                        .get(&(worker.clone(), caller.binding.clone()))
-                    {
-                        colour::eprint(&foreign_binding_maybe_set_notice(env, worker, caller));
-                        colour::eprint(&foreign_hand_off(env, worker, caller, value, runner));
-                    }
-                }
-                // Wrangler's own code, not a flat 1 (slice 0's contract).
-                return Err(ExitCode::from(f.code));
             }
+            if let Err(e) = recorded {
+                colour::eprint(&unrecorded_deploy_failure(
+                    &opts.environment,
+                    worker,
+                    &writer.path().display().to_string(),
+                    &e,
+                ));
+                return Err(ExitCode::FAILURE);
+            }
+        }
+        // A shared Ctrl-C. Stop, but report nothing and exit cleanly: the
+        // user asked for this, and the terminal signalled us too. `worker`
+        // is deliberately *not* recorded as deployed — the push was cut
+        // short, so whether it landed is unknown, and the ledger only ever
+        // claims what it watched succeed.
+        Ok(Pushed::Interrupted) => return Err(ExitCode::SUCCESS),
+        Err(f) => {
+            emsg!("bynk: error: {}", f.message);
+            // Stop rather than push on: everything left in the order either
+            // binds to what just failed or would be uploaded into a
+            // topology that is not what the plan described. `worker` itself
+            // is excluded — the line above already named it as the failure,
+            // and listing it here again as "not deployed" would double-count
+            // it against the number.
+            colour::eprint(&stopped_report(&opts.environment, &order[i + 1..]));
+            // #2004 review: a run that re-keyed an edge and stopped between
+            // its two ends leaves them refusing each other. The next plain
+            // run sees a key on each end and keeps both, so say how to
+            // repair it.
+            if let Some(hint) =
+                interrupted_rotation_hint(&opts.environment, &keys.edge_keys, &order[..i])
+            {
+                colour::eprint(&hint);
+            }
+            // I3 (#1971): a secret minted for this context's foreign
+            // caller may already be set, and the next run would keep it
+            // without ever showing it, so hand it off now.
+            for caller in &resources[worker].foreign_callers {
+                if let Some(ForeignKey::Set {
+                    value,
+                    minted: true,
+                }) = keys
+                    .foreign_keys
+                    .get(&(worker.clone(), caller.binding.clone()))
+                {
+                    colour::eprint(&foreign_binding_maybe_set_notice(env, worker, caller));
+                    colour::eprint(&foreign_hand_off(env, worker, caller, value, runner));
+                }
+            }
+            // Wrangler's own code, not a flat 1 (slice 0's contract).
+            return Err(ExitCode::from(f.code));
         }
     }
-
     Ok(())
 }
 
@@ -554,7 +577,7 @@ pub(crate) fn apply_worker(
     };
     let worker_dir = run.workers_dir.join(worker);
     let mut apply = ApplyWorker {
-        config: worker_dir.join("wrangler.toml"),
+        configs: vec![worker_dir.join("wrangler.toml")],
         worker_dir,
         worker,
         declared,
@@ -562,11 +585,92 @@ pub(crate) fn apply_worker(
         run,
         bound: BTreeMap::new(),
         outcome: Ok(None),
+        prepare: None,
     };
     for_each_apply_phase(&mut apply);
     apply
         .outcome?
         .ok_or_else(|| DeployFailure::driver(format!("`{worker}` was not pushed")))
+}
+
+/// #3565 (slice 4b): what a Worker of a move set pushes with, prepared before the move takes its
+/// baselines: everything [`apply_worker`] does but the push, with each of `variants` (its phase
+/// configurations, beside `wrangler.toml`) materialised as `wrangler.toml` is.
+pub(crate) struct PreparedPush {
+    pub(crate) worker: String,
+    pub(crate) worker_dir: std::path::PathBuf,
+    /// Not on the account yet: its secrets ride its first push (`--secrets-file`).
+    pub(crate) first_deploy: bool,
+    /// The secrets the push would set: on a first deploy, the file's; otherwise those
+    /// [`apply_prepared_secrets`] sets before the move's baselines.
+    pub(crate) secrets: Vec<(String, String)>,
+    /// The deploy facts of its normal build, which each phase adjusts.
+    pub(crate) facts: facts::Facts,
+}
+
+/// [`apply_worker`] without the push: provision, materialise (`wrangler.toml` and each of
+/// `variants`), migrations, and the secrets the push would need, decided but not set.
+pub(crate) fn prepare_worker(
+    run: &mut RunCx<'_, '_, '_>,
+    context: &ContextPlan<'_>,
+    variants: &[&str],
+) -> Result<PreparedPush, DeployFailure> {
+    let steps = context.steps();
+    let Some((worker, declared)) = steps.worker else {
+        return Err(DeployFailure::driver(format!(
+            "the plan for `{}` names no Worker to apply",
+            context.worker
+        )));
+    };
+    let worker_dir = run.workers_dir.join(worker);
+    let mut configs = vec![worker_dir.join("wrangler.toml")];
+    configs.extend(
+        variants
+            .iter()
+            .map(|v| worker_dir.join(v))
+            .filter(|p| p.is_file()),
+    );
+    let mut apply = ApplyWorker {
+        configs,
+        worker_dir,
+        worker,
+        declared,
+        steps,
+        run,
+        bound: BTreeMap::new(),
+        outcome: Ok(None),
+        prepare: Some(None),
+    };
+    for_each_apply_phase(&mut apply);
+    apply.outcome?;
+    apply
+        .prepare
+        .flatten()
+        .ok_or_else(|| DeployFailure::driver(format!("`{worker}` was not prepared")))
+}
+
+/// Set the secrets a prepared Worker that is already on the account needs, and delete the edge
+/// keys its rotation retired, before the move takes its baselines (each is a deployment).
+pub(crate) fn apply_prepared_secrets(
+    run: &mut RunCx<'_, '_, '_>,
+    prepared: &PreparedPush,
+) -> Result<(), DeployFailure> {
+    if prepared.first_deploy {
+        return Ok(());
+    }
+    apply_secrets(
+        run.tools.api,
+        &prepared.worker_dir,
+        &prepared.worker,
+        &prepared.secrets,
+        run.environment,
+    )?;
+    apply_edge_deletes(
+        run.tools.api,
+        run.secrets,
+        &prepared.worker,
+        run.environment,
+    )
 }
 
 /// [`apply_worker`]'s pass over one Worker. Stops at the first failure: every later phase checks
@@ -577,11 +681,15 @@ struct ApplyWorker<'p, 'a, 'w, 's, 'r> {
     worker: &'r str,
     declared: &'r Resources,
     worker_dir: std::path::PathBuf,
-    config: std::path::PathBuf,
+    /// The configurations it materialises: `wrangler.toml`, then (#3565) any phase variant.
+    configs: Vec<std::path::PathBuf>,
     /// What each kind's steps bound, by kind, for its materialisation.
     bound: BTreeMap<KindId, Box<dyn std::any::Any>>,
     /// The push's outcome once it has run, or the failure that stopped the Worker.
     outcome: Result<Option<Pushed>, DeployFailure>,
+    /// #3565: `Some` when preparing a Worker of a move set ([`prepare_worker`]): the push slot
+    /// prepares instead of pushing, and leaves what it prepared here.
+    prepare: Option<Option<PreparedPush>>,
 }
 
 impl ApplyWorker<'_, '_, '_, '_, '_> {
@@ -611,7 +719,14 @@ impl ApplyWorker<'_, '_, '_, '_, '_> {
     /// deploy-time concept the compiler never sees. The top-level stanza is left
     /// untouched; it continues to serve the plain, no-`--env` `bynk deploy`.
     fn environment_block(&mut self) -> Result<(), DeployFailure> {
-        let (worker, environment, config) = (self.worker, self.run.environment, &self.config);
+        for config in self.configs.clone() {
+            self.environment_block_of(&config)?;
+        }
+        Ok(())
+    }
+
+    fn environment_block_of(&self, config: &Path) -> Result<(), DeployFailure> {
+        let (worker, environment) = (self.worker, self.run.environment);
         if environment == "default" {
             return Ok(());
         }
@@ -714,10 +829,12 @@ impl ApplyVisitor for ApplyWorker<'_, '_, '_, '_, '_> {
                 .bound
                 .get(&K::ID)
                 .and_then(|bound| bound.downcast_ref::<BTreeMap<String, K::Bound>>());
-            match bound {
-                Some(bound) => K::materialise(&this.config, this.worker, bound),
-                None => K::materialise(&this.config, this.worker, &BTreeMap::new()),
+            let empty = BTreeMap::new();
+            let bound = bound.unwrap_or(&empty);
+            for config in &this.configs {
+                K::materialise(config, this.worker, bound)?;
             }
+            Ok(())
         });
     }
 
@@ -727,19 +844,32 @@ impl ApplyVisitor for ApplyWorker<'_, '_, '_, '_, '_> {
             ApplySlot::EnvironmentBlock => self.phase(Self::environment_block),
             // #3479: an adopted index keeps the name it has on the account.
             ApplySlot::AdoptedVectorize => self.phase(|this| {
-                materialise_adopted_vectorize(&this.config, this.worker, this.declared, environment)
+                for config in &this.configs {
+                    materialise_adopted_vectorize(config, this.worker, this.declared, environment)?;
+                }
+                Ok(())
             }),
             // #3477: an adopted container image replaces the Dockerfile `wrangler` would build,
             // in the configuration it is about to read, and is recorded before the push.
             ApplySlot::AdoptedContainers => self.phase(|this| {
-                materialise_adopted_containers(
-                    &this.config,
-                    this.worker,
-                    this.declared,
-                    environment,
-                )
+                for config in &this.configs {
+                    materialise_adopted_containers(
+                        config,
+                        this.worker,
+                        this.declared,
+                        environment,
+                    )?;
+                }
+                Ok(())
             }),
             ApplySlot::Migrations => self.phase(Self::migrations),
+            ApplySlot::Push if self.prepare.is_some() => self.phase(|this| {
+                let prepared =
+                    prepare_push(this.run, this.worker, &this.worker_dir, this.declared)?;
+                this.prepare = Some(Some(prepared));
+                this.outcome = Ok(Some(Pushed::Ok));
+                Ok(())
+            }),
             ApplySlot::Push => self.phase(|this| {
                 let pushed = push_worker(this.run, this.worker, &this.worker_dir, this.declared)?;
                 this.outcome = Ok(Some(pushed));
@@ -747,6 +877,46 @@ impl ApplyVisitor for ApplyWorker<'_, '_, '_, '_, '_> {
             }),
         }
     }
+}
+
+/// #3565: [`push_worker`] up to the push: whether it is a first deploy, the secrets it would set,
+/// and its facts.
+fn prepare_push(
+    run: &mut RunCx<'_, '_, '_>,
+    worker: &str,
+    worker_dir: &Path,
+    declared: &Resources,
+) -> Result<PreparedPush, DeployFailure> {
+    let (api, project_root, environment) = (run.tools.api, run.tools.project_root, run.environment);
+    let first_deploy = !run.writer.lock().is_deployed(environment, worker);
+    let secrets = prepare_bindings(
+        api,
+        worker_dir,
+        worker,
+        declared,
+        run.secrets,
+        first_deploy,
+        environment,
+    )?;
+    let facts = facts::build_facts(
+        worker,
+        environment,
+        declared,
+        &read_contracts_manifest(worker_dir).unwrap_or_default(),
+        run.writer.lock(),
+        &schema_agent_versions(project_root),
+        &bynk_project::worker_layout::WorkerLayout::for_project(
+            project_root,
+            &std::collections::HashMap::new(),
+        ),
+    );
+    Ok(PreparedPush {
+        worker: worker.to_string(),
+        worker_dir: worker_dir.to_path_buf(),
+        first_deploy,
+        secrets,
+        facts,
+    })
 }
 
 /// #3073: the `--var` that sets the facts this version carries about itself,

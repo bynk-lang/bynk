@@ -1,0 +1,5 @@
+---
+level: patch
+probes: diagnostic_coverage, explained_codes
+changelog: `bynk deploy --move-agent <context>` now moves a context that hosts agents to another Worker script with its state: it prepares the set's Workers, then pushes each receiver expecting the classes while it forwards the moving contexts, rebinds the callers, commits each source (every push of a phase at once), confirms the commit on the account's Durable Object namespace listing, and only then pushes the receivers live. A run stopped part-way resumes on the next `bynk deploy` from the step it reached, repeating any push not recorded as landed; a commit the listing does not confirm is never followed by a push live (`bynk.deploy.move_commit_unconfirmed`), a lost transfer goes back for its own classes only (`bynk.deploy.move_transfer_lost`), and a Worker deployed by something else stops the move (`bynk.deploy.move_interleaved`). `--cancel-move <context>` cancels a move before any commit may have landed (`bynk.deploy.cancel_move_unused` for a name that matches no move under way), and a Worker of a move under way may not set a secret until the move is done (`bynk.deploy.move_open`) (#3565)
+---

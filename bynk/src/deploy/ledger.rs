@@ -273,6 +273,11 @@ pub(crate) struct AgentMoveRecord {
     /// (§3.4): the listing, never this, says where the data is.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) namespaces: BTreeMap<String, String>,
+    /// The moved classes whose commit the listing has confirmed while others of the set have not
+    /// committed (a fan-in where one transfer was lost): they are not received or committed again,
+    /// so only the lost ones go back (§3.4).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) committed: Vec<String>,
 }
 
 /// #3565: where a move set had got to (`design/tracks/agent-context-moves.md` §3.3).
@@ -571,6 +576,23 @@ impl DeployLock {
         self.environments
             .values()
             .any(|env| !env.agent_moves.is_empty())
+    }
+
+    /// #3565: record that a push of `worker` gave up `classes` (class → the script it was
+    /// transferred to), beside [`Environment::deleted_classes`].
+    pub(crate) fn record_transferred(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        classes: BTreeMap<String, String>,
+    ) {
+        self.environments
+            .entry(environment.to_string())
+            .or_default()
+            .transferred_classes
+            .entry(worker.to_string())
+            .or_default()
+            .extend(classes);
     }
 
     /// #3565: the agent moves under way in `environment`.
@@ -3444,6 +3466,7 @@ pub(crate) mod tests {
                 ("Cart".into(), "ns-cart".into()),
                 ("Ledger".into(), "ns-ledger".into()),
             ]),
+            committed: Vec::new(),
         }
     }
 

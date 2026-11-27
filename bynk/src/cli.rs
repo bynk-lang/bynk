@@ -373,10 +373,21 @@ pub enum Command {
         /// onto, with its data (#3565): the deploy pushes the receiving Worker, the
         /// callers and the source in phases, so the agents keep their state, with a
         /// window of about one push in which calls to the context fail. Repeatable;
-        /// each context is named, never a blanket. Planned with `--dry-run` in this
-        /// release.
+        /// each context is named, never a blanket. A move stopped part-way resumes on
+        /// the next `bynk deploy`, without the flag.
         #[arg(long = "move-agent", value_name = "CONTEXT")]
         move_agent: Vec<String>,
+        /// Cancel the agent move under way that moves this context, with every other
+        /// context of its set (#3565): each receiving Worker is pushed without its
+        /// pending transfers, still forwarding to the old script, and the move's record
+        /// is closed. Refused once a commit may have landed: from then on the only way is
+        /// forward, with a plain `bynk deploy`.
+        #[arg(
+            long = "cancel-move",
+            value_name = "CONTEXT",
+            conflicts_with = "move_agent"
+        )]
+        cancel_move: Option<String>,
         /// With `--context`: deploy a callee ahead of live callers still on an
         /// older contract, when every such change is compatible for them. The
         /// older contracts are recorded in `bynk.contracts.lock` (commit it),

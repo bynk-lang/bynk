@@ -37,6 +37,9 @@ pub const RECEIVE_CONFIG: &str = "wrangler.receive.toml";
 pub const RECEIVE_ENTRY: &str = "index.receive.ts";
 /// The source Worker's config in the commit phase.
 pub const COMMIT_CONFIG: &str = "wrangler.commit.toml";
+/// The receiving Worker's config for `--cancel-move` (D8): the receive config without its
+/// `expecting-transfer` entries, still forwarding the moving contexts.
+pub const CANCEL_CONFIG: &str = "wrangler.cancel.toml";
 /// A dissolved source's stub entry in the commit phase.
 pub const STUB_ENTRY: &str = "index.commit.ts";
 
@@ -68,6 +71,33 @@ fn names_class(block: &TomlBlock, classes: &[&str]) -> bool {
 /// contexts' crons, queues and addresses: each incoming class unbound and `expecting-transfer`,
 /// a forwarding Service Binding per incoming context, and the receive entry as `main`.
 pub(crate) fn receive_config(doc: &mut TomlDocument, incoming: &[Incoming]) {
+    forwarding_config(doc, incoming);
+    for i in incoming {
+        for class in &i.classes {
+            doc.push_block(TomlBlock::keyed_table(
+                WranglerKey::Exports,
+                class.clone(),
+                vec![
+                    TomlEntry::kv("type", TomlValue::str("durable-object")),
+                    TomlEntry::kv("state", TomlValue::str("expecting-transfer")),
+                    TomlEntry::kv("storage", TomlValue::str("sqlite")),
+                    TomlEntry::kv("transfer_from", TomlValue::str(i.from_script.clone())),
+                ],
+            ));
+        }
+    }
+}
+
+/// D8: the cancel's config, from the receiver's ordinary one: as the receive config, forwarding
+/// the moving contexts to their sources, but expecting nothing (Cloudflare's documented cancel of
+/// a pending transfer).
+pub(crate) fn cancel_config(doc: &mut TomlDocument, incoming: &[Incoming]) {
+    forwarding_config(doc, incoming);
+}
+
+/// The receive and cancel configs' common part: the moving classes unbound and unexported, the
+/// receive entry, and a Service Binding to each moving context's source.
+fn forwarding_config(doc: &mut TomlDocument, incoming: &[Incoming]) {
     let classes: Vec<&str> = incoming
         .iter()
         .flat_map(|i| i.classes.iter().map(String::as_str))
@@ -85,20 +115,6 @@ pub(crate) fn receive_config(doc: &mut TomlDocument, incoming: &[Incoming]) {
                 TomlEntry::kv("service", TomlValue::str(i.from_script.clone())),
             ],
         ));
-    }
-    for i in incoming {
-        for class in &i.classes {
-            doc.push_block(TomlBlock::keyed_table(
-                WranglerKey::Exports,
-                class.clone(),
-                vec![
-                    TomlEntry::kv("type", TomlValue::str("durable-object")),
-                    TomlEntry::kv("state", TomlValue::str("expecting-transfer")),
-                    TomlEntry::kv("storage", TomlValue::str("sqlite")),
-                    TomlEntry::kv("transfer_from", TomlValue::str(i.from_script.clone())),
-                ],
-            ));
-        }
     }
 }
 

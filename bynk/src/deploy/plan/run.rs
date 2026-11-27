@@ -153,6 +153,8 @@ pub struct DeployOptions {
     /// #3565: `--move-agent <context>` (repeatable): a context with agents that moves to another
     /// Worker script keeps its state, moved in phases (`design/tracks/agent-context-moves.md`).
     pub move_agent: Vec<String>,
+    /// #3565 (D8): `--cancel-move <context>`: cancel the move under way that moves it.
+    pub cancel_move: Option<String>,
     pub wrangler_args: Vec<String>,
 }
 
@@ -443,8 +445,43 @@ fn deploy(
         moves,
         warnings,
         planned: planned_moves,
+        placed,
         ..
     } = agents;
+
+    // #3565 (D8): `--cancel-move` names a move under way, which this run cancels instead of
+    // deploying anything else.
+    let cancelling = match &opts.cancel_move {
+        None => None,
+        Some(name) => {
+            let found = placed.as_ref().and_then(|p| {
+                p.sets.iter().zip(&p.resumes).position(|(set, resumes)| {
+                    resumes.is_some()
+                        && set.moves.iter().any(|m| {
+                            crate::deploy::agent_move::is_named(
+                                &m.context,
+                                std::slice::from_ref(name),
+                            )
+                        })
+                })
+            });
+            match found {
+                Some(n) => Some(n),
+                None => {
+                    let entry = Entry::new(
+                        crate::deploy::agent_move::CANCEL_MOVE_UNUSED,
+                        format!(
+                            "`--cancel-move {name}` names no context of an agent move under way in `{}`",
+                            opts.environment
+                        ),
+                    )
+                    .with("name", name.as_str());
+                    emsg!("bynk: error: {}", entry.line());
+                    return Err(run_stop(Stop::refused(entry), &warnings));
+                }
+            }
+        }
+    };
 
     check_foreign_pins(project_root, &workers_dir, &order, opts)
         .map_err(|stop| run_stop(stop, &warnings))?;
@@ -531,7 +568,38 @@ fn deploy(
     }
     let plan = print_plan_then_forward_warnings(plan, opts, &order, &resources, project_root);
     if opts.dry_run {
+        if let (Some(n), Some(placed)) = (cancelling, &placed)
+            && let Some(r) = &placed.resumes[n]
+        {
+            colour::eprint(&format!(
+                "bynk: --cancel-move would cancel the agent move `{}` (at step `{}`); --dry-run pushes nothing\n",
+                r.move_id, r.step
+            ));
+        }
         return Ok(());
+    }
+    // #3565 (slice 4b): a run that moves agents builds their phase variants beside each Worker's
+    // own files, which are byte-identical to the plan's build.
+    if let Some(placed) = &placed {
+        let variants = crate::deploy::move_run::variants(
+            placed,
+            lock.open_moves(&opts.environment),
+            &resources,
+            &opts.environment,
+        );
+        if workers::compile_built(
+            project_root,
+            &build_dir,
+            workers::Build::new(true, false)
+                .no_install(opts.no_install)
+                .environment(&opts.environment)
+                .moves(variants),
+            bynk_driver::progress::terminal_sink(),
+        )
+        .is_none()
+        {
+            return Err(ExitCode::FAILURE.into());
+        }
     }
     if let Some(refusal) = recreate {
         emsg!("bynk: error: {refusal}");
@@ -606,8 +674,28 @@ fn deploy(
         &secret_source,
     )?;
     sweep_and_report_stale_uploads();
+    // #3565 (D7): a run that moves agents reads the account's namespaces and deployments.
+    let move_rest = match &placed {
+        Some(_) => match crate::cloudflare::rest::for_purpose(
+            "agent move",
+            crate::migrate::SWEEP_TOKEN_NEEDS,
+        ) {
+            Ok(rest) => Some(rest),
+            Err(e) => {
+                emsg!("bynk: error: {e}");
+                return Err(ExitCode::FAILURE.into());
+            }
+        },
+        None => None,
+    };
+    let move_account = move_rest.map(|rest| crate::deploy::revert::LiveAccount { rest, api: &api });
     let mut writer = LedgerWriter::new(&mut lock, &lock_path);
     let apply = PlanApply {
+        placed: placed.as_ref(),
+        move_account: move_account
+            .as_ref()
+            .map(|a| a as &dyn crate::deploy::move_apply::MoveAccount),
+        move_api: placed.as_ref().map(|_| &api),
         plan: &plan,
         order: &order,
         opts,
@@ -622,6 +710,10 @@ fn deploy(
         runner,
         lives,
     };
+    if let (Some(n), Some(placed)) = (cancelling, &placed) {
+        return crate::deploy::move_run::cancel_set(&apply, &mut writer, placed, n)
+            .map_err(Into::into);
+    }
     apply_plan(&apply, &mut writer)?;
     prune_plan(&apply, &mut writer)?;
     Ok(())

@@ -52,6 +52,8 @@ pub struct Build {
     trace_requests: bool,
     /// #3581: record agent instances and answer the inspect route (`bynk dev`).
     inspect_agents: bool,
+    /// #3565: the phase variants of the agent moves `bynk deploy` applies.
+    moves: bynk_project::worker_moves::MoveVariants,
 }
 
 impl Build {
@@ -63,7 +65,14 @@ impl Build {
             no_install: false,
             trace_requests: false,
             inspect_agents: false,
+            moves: Default::default(),
         }
+    }
+
+    /// #3565: also write the phase variants of `moves`.
+    pub fn moves(mut self, moves: bynk_project::worker_moves::MoveVariants) -> Self {
+        self.moves = moves;
+        self
     }
 
     /// `bynk dev` (#3581): build the Workers so a running session can list and read
@@ -176,6 +185,7 @@ pub fn compile_built(
             .schema_registry(schema_lock)
             .progress(progress)
             .environment(build.environment.as_str())
+            .moves(build.moves.clone())
             .tests(false),
         Err(e) => {
             emsg!("bynk: error: {e}");
