@@ -101,7 +101,6 @@ export class TestWebSocket {
   /** The Durable Object that accepted this (server) end for hibernation, if one did. */
   host: (() => WebSocketHost | undefined) | undefined;
   private attachment: unknown = null;
-  private accepted = false;
   private readonly listeners = new Map<string, Set<Listener>>();
   /** What this end has been told, kept for a test to read: frames it received as events. */
   readonly received: (string | ArrayBuffer)[] = [];
@@ -111,10 +110,11 @@ export class TestWebSocket {
     this.side = side;
   }
 
-  /** A non-hibernatable server end: its frames reach its own listeners. */
-  accept(): void {
-    this.accepted = true;
-  }
+  /**
+   * A non-hibernatable server end: its frames reach its own listeners. The double delivers to listeners from
+   * the start, where the platform holds an end's frames until `accept()`; a case never listens before it.
+   */
+  accept(): void {}
 
   addEventListener(type: string, listener: Listener): void {
     const set = this.listeners.get(type) ?? new Set<Listener>();
@@ -316,7 +316,8 @@ function patchGlobals(): () => void {
   g.WebSocketPair = TestWebSocketPair;
   g.Response = UpgradeResponse as unknown as typeof Response;
   return (): void => {
-    g.WebSocketPair = before.pair;
+    if (before.pair === undefined) delete g.WebSocketPair;
+    else g.WebSocketPair = before.pair;
     g.Response = before.response;
   };
 }

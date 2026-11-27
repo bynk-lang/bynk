@@ -240,6 +240,7 @@ test("two installs share the patch: it is put back only when the last of them le
   second();
   assert.equal(globalThis.Response, before);
   assert.equal((globalThis as { WebSocketPair?: unknown }).WebSocketPair, undefined);
+  assert.equal("WebSocketPair" in globalThis, false);
 });
 
 test("webSocketQuiet that runs out of turns is an error naming the cause, not a return that reads as quiet", async () => {
