@@ -1642,6 +1642,7 @@ pub const BUILTIN_GATED: &[(&str, &str)] = &[
     ("bynk.ApiKeyLabel", "bynk.actor.ApiKey"),
     ("bynk.ApiKeyPepper", "bynk.actor.ApiKey"),
     ("bynk.ApiKeySecret", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeySweep", "bynk.actor.ApiKey"),
     ("bynk.ApiKeyValue", "bynk.actor.ApiKey"),
     ("bynk.TooManyKeys", "bynk.actor.ApiKey"),
 ];

@@ -360,7 +360,7 @@ assert((await req("GET", "/me", bearer(used.key), undefined, rotating)).status =
 }
 assert(JSON.stringify(await pepperOf("acct-61", rotating)) === '["Current"]', "the admitted key was re-hashed under the new pepper by the same request (`touch`)");
 const swept = await req("POST", "/accounts/acct-62/sweep", {}, undefined, rotating);
-assert(swept.status === 200 && (await swept.json()) === 1, "sweep counts the idle key still under previous");
+assert(swept.status === 200 && JSON.stringify(await swept.json()) === '{"expired":0,"retired":0,"previous":1}', "sweep counts the idle key still under previous, and removes nothing");
 const minted2 = (await (await req("POST", "/accounts/acct-61/keys", {}, { label: "after" }, rotating)).json()) as { key: string };
 assert((await req("GET", "/me", bearer(minted2.key), undefined, rotating)).status === 200, "a key minted during the rotation is admitted");
 // Drop `previous`.
@@ -388,9 +388,13 @@ const forgedRef = await refusalIn(bearer(formatApiKey("acme", parsedUsed.handle,
 assert(idleRef === forgedRef, `a key under neither pepper is the same 401 as a forged key:\n${idleRef}\n---\n${forgedRef}`);
 assert(idleRef === ref401, "a key under neither pepper is the same 401 as a malformed key");
 assert(JSON.stringify(await pepperOf("acct-62", dropped)) === '["Retired"]', "a key under neither pepper is listed as Retired");
+// `mint` never removes a key under neither pepper: which keys those are depends on the minting
+// Worker's pepper config, which may be stale mid-rollout or wrong. Only `sweep` does, on purpose.
+assert((await req("POST", "/accounts/acct-62/keys", {}, { label: "later" }, dropped)).status === 201, "a mint for the identity succeeds");
+assert(JSON.stringify((await pepperOf("acct-62", dropped)).sort()) === '["Current","Retired"]', "mint left the retired key in place");
 const pruned = await req("POST", "/accounts/acct-62/sweep", {}, undefined, dropped);
-assert(pruned.status === 200 && (await pruned.json()) === 0, "sweep removes the retired key, leaving none under previous");
-assert(JSON.stringify(await pepperOf("acct-62", dropped)) === "[]", "the retired key is gone");
+assert(pruned.status === 200 && JSON.stringify(await pruned.json()) === '{"expired":0,"retired":1,"previous":0}', "sweep removes the retired key and says so");
+assert(JSON.stringify(await pepperOf("acct-62", dropped)) === '["Current"]', "the retired key is gone, the new one kept");
 
 // A missing pepper faults the request; it never admits or refuses quietly.
 console.error = () => {};

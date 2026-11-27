@@ -134,8 +134,8 @@ enum Member {
     List,
     Revoke,
     RevokeAll,
-    /// #3939 (slice 3): prune expired keys and keys under neither pepper; answer how many remain
-    /// under `previous`.
+    /// #3939 (slice 3): remove expired keys and keys under neither pepper; answer an `ApiKeySweep`
+    /// of what it removed and how many remain under `previous`.
     Sweep,
 }
 
@@ -213,7 +213,8 @@ impl Member {
             )),
             Self::List => tys.intern(Ty::List(std_named(ctx, "ApiKeyInfo")?)),
             Self::Revoke => tys.intern(Ty::Base(BaseType::Bool)),
-            Self::RevokeAll | Self::Sweep => tys.intern(Ty::Base(BaseType::Int)),
+            Self::RevokeAll => tys.intern(Ty::Base(BaseType::Int)),
+            Self::Sweep => std_named(ctx, "ApiKeySweep")?,
         })
     }
 }

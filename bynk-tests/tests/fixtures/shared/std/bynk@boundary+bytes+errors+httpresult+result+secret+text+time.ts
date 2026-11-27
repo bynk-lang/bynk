@@ -160,6 +160,20 @@ export const ApiKeyPepper = {
 };
 
 /**
+ * What an `ApiKey` actor's `sweep` did for one identity: how many expired keys
+ * it removed, how many keys under neither pepper (`Retired`) it removed, and how
+ * many keys are still under `previous`, which dropping it now would end.
+ */
+export interface ApiKeySweep {
+  readonly expired: number;
+  readonly retired: number;
+  readonly previous: number;
+}
+
+export const ApiKeySweep = {
+};
+
+/**
  * The refusal of `mint` when the identity already holds the most live keys it
  * may (`limit`, 100).
  */
@@ -1054,6 +1068,43 @@ export function __deserialise_ApiKeySecret(json: __JsonValue, path: string = "$"
   if (__r_expires.tag === "Err") return __r_expires;
   const __expires = __r_expires.value;
   return Ok({ id: __id, key: __key, label: __label, created: __created, expires: __expires } as ApiKeySecret);
+}
+
+export function __serialise_ApiKeySweep(value: ApiKeySweep): __JsonValue {
+  return {
+    expired: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.expired),
+    retired: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.retired),
+    previous: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.previous),
+  };
+}
+
+export function __deserialise_ApiKeySweep(json: __JsonValue, path: string = "$"): Result<ApiKeySweep, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["expired"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.expired`, expected: "number", actual: typeof obj["expired"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["expired"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.expired`, expected: "safe integer", actual: String(obj["expired"]) });
+  }
+  const __expired = obj["expired"];
+  if (typeof obj["retired"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.retired`, expected: "number", actual: typeof obj["retired"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["retired"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.retired`, expected: "safe integer", actual: String(obj["retired"]) });
+  }
+  const __retired = obj["retired"];
+  if (typeof obj["previous"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.previous`, expected: "number", actual: typeof obj["previous"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["previous"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.previous`, expected: "safe integer", actual: String(obj["previous"]) });
+  }
+  const __previous = obj["previous"];
+  return Ok({ expired: __expired, retired: __retired, previous: __previous } as ApiKeySweep);
 }
 
 export function __serialise_ApiKeyValue(value: ApiKeyValue): __JsonValue {

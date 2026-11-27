@@ -475,6 +475,7 @@ mod tests {
             "ApiKeyLabel",
             "ApiKeyPepper",
             "ApiKeySecret",
+            "ApiKeySweep",
             "ApiKeyValue",
             "TooManyKeys",
         ] {

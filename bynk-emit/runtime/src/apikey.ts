@@ -514,7 +514,7 @@ export interface ApiKeyStore {
   kidsOf(deps: unknown): Promise<ReadonlyMap<string, string>>;
   knownOf(deps: unknown): Promise<readonly string[]>;
   knownAtOf(deps: unknown): Promise<number>;
-  sweep(now: number, live: readonly string[], current: string, deps: unknown): Promise<number>;
+  sweep(now: number, live: readonly string[], current: string, deps: unknown): Promise<readonly number[]>;
 }
 
 /**
@@ -594,7 +594,9 @@ export async function apiKeyList<R>(
 
 /**
  * #3939 (slice 3): `sweep`: remove the identity's expired keys and its keys under neither pepper,
- * and answer how many remain under `previous`, the keys dropping `previous` now would end. `live`
+ * and answer an `ApiKeySweep`: how many of each it removed, and how many remain under `previous`
+ * (the keys dropping it now would end). Only `sweep` removes keys under neither pepper, never
+ * `mint`: which keys those are depends on this Worker's pepper config, so it is the operator's call. `live`
  * comes from the pepper, which a service handler holds; `sweep` is legal nowhere else.
  */
 export async function apiKeySweep(
@@ -603,10 +605,11 @@ export async function apiKeySweep(
   live: readonly string[] | null,
   store: (handle: string) => ApiKeyStore,
   deps: unknown,
-): Promise<number> {
+): Promise<{ readonly expired: number; readonly retired: number; readonly previous: number }> {
   if (live === null) pepperFault("`sweep` needs the API key pepper, which reaches a service handler only");
-  if (handle.tag !== "Some") return 0;
-  return store(handle.value).sweep(nowMs, live, live[0], deps);
+  if (handle.tag !== "Some") return { expired: 0, retired: 0, previous: 0 };
+  const [expired, retired, previous] = await store(handle.value).sweep(nowMs, live, live[0], deps);
+  return { expired, retired, previous };
 }
 
 /**

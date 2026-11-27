@@ -518,13 +518,13 @@ async function __sysdrive_api_http_POST_accounts_Param_id_sweep(id: any, __extra
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/accounts/${id}/sweep`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.ACME_API.fetch(__req);
-  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j));
+  return __responseToHttpResult(__res, __ns_acme_api.__deserialise_ApiKeySweep);
 }
 async function __sysdrive_raw_api_http_POST_accounts_Param_id_sweep(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/accounts/${id}/sweep`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.ACME_API.fetch(__req);
-  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j));
+  return __responseToHttpOutcome(__res, __ns_acme_api.__deserialise_ApiKeySweep);
 }
 async function __sysdrive_api_http_POST_accounts_Param_id_close(id: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
@@ -813,7 +813,19 @@ async function test_sweep_removes_expired_keys_and_counts_none_under_previous() 
     const deps = __makeHarness();
     const __r0 = await __sysdrive_api_http_POST_accounts_Param_id_keys(("acct-53" as any), { label: ("a" as any) }, undefined, "");
     const kept = await __sysdrive_api_http_POST_accounts_Param_id_sweep(("acct-53" as any), undefined, "");
-    if (!(((__c: boolean) => __c)(kept.tag === "Ok" && kept.value === 0))) { throw __bynkExpectFailure("tests/api.bynk:114:10", 4699, 4712, "expect kept is Ok(0)", "kept", () => __bynkShow(kept)); }
+    const keptCounts = ((__d) => {
+      switch (__d.tag) {
+        case "Ok": {
+          const s = __d.value;
+          return [s.expired, s.retired, s.previous];
+        }
+        default: {
+          return [-1];
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(kept);
+    if (!(__bynkEq(keptCounts, [0, 0, 0]))) { throw __bynkExpectFailure("tests/api.bynk:119:10", 4821, 4844, "expect keptCounts == [0, 0, 0]\n  expected: keptCounts == [0, 0, 0]\n  actual:   " + __bynkShow((keptCounts)) + " == " + __bynkShow(([0, 0, 0]))); }
     const one = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-53" as any), undefined, "");
     const n = ((__d) => {
       switch (__d.tag) {
@@ -827,12 +839,24 @@ async function test_sweep_removes_expired_keys_and_counts_none_under_previous() 
       }
       throw new globalThis.Error("non-exhaustive match");
     })(one);
-    if (!(n === 1)) { throw __bynkExpectFailure("tests/api.bynk:120:10", 4854, 4860, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
+    if (!(n === 1)) { throw __bynkExpectFailure("tests/api.bynk:125:10", 4986, 4992, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
     __bynkAdvanceClock(7862400000);
     const swept = await __sysdrive_api_http_POST_accounts_Param_id_sweep(("acct-53" as any), undefined, "");
-    if (!(((__c: boolean) => __c)(swept.tag === "Ok" && swept.value === 0))) { throw __bynkExpectFailure("tests/api.bynk:123:10", 4966, 4980, "expect swept is Ok(0)", "swept", () => __bynkShow(swept)); }
+    const sweptCounts = ((__d) => {
+      switch (__d.tag) {
+        case "Ok": {
+          const s = __d.value;
+          return [s.expired, s.retired, s.previous];
+        }
+        default: {
+          return [-1];
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(swept);
+    if (!(__bynkEq(sweptCounts, [1, 0, 0]))) { throw __bynkExpectFailure("tests/api.bynk:132:10", 5198, 5222, "expect sweptCounts == [1, 0, 0]\n  expected: sweptCounts == [1, 0, 0]\n  actual:   " + __bynkShow((sweptCounts)) + " == " + __bynkShow(([1, 0, 0]))); }
     const none = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-53" as any), undefined, "");
-    if (!(((__c: boolean) => __c)(none.tag === "Ok" && none.value.length === 0))) { throw __bynkExpectFailure("tests/api.bynk:125:10", 5056, 5070, "expect none is Ok([])", "none", () => __bynkShow(none)); }
+    if (!(((__c: boolean) => __c)(none.tag === "Ok" && none.value.length === 0))) { throw __bynkExpectFailure("tests/api.bynk:134:10", 5298, 5312, "expect none is Ok([])", "none", () => __bynkShow(none)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -852,9 +876,9 @@ async function test_a_listed_key_is_under_the_current_pepper() {
     void (((__d) => {
       if (__d.tag === "Ok" && __d.value.length === 1) {
         const k = __d.value[0];
-        return __bynkExpect((((__c: boolean) => __c)(k.pepper.tag === "Current")), "tests/api.bynk:132:22", 5401, 5420, "expect k.pepper is Current", "k.pepper", () => __bynkShow(k.pepper));
+        return __bynkExpect((((__c: boolean) => __c)(k.pepper.tag === "Current")), "tests/api.bynk:141:22", 5643, 5662, "expect k.pepper is Current", "k.pepper", () => __bynkShow(k.pepper));
       }
-      return __bynkExpect((false), "tests/api.bynk:133:16", 5437, 5442, "expect false (in the `_` arm of `match listed`)", "listed", () => __bynkShow(__d));
+      return __bynkExpect((false), "tests/api.bynk:142:16", 5679, 5684, "expect false (in the `_` arm of `match listed`)", "listed", () => __bynkShow(__d));
     })(listed));
     return { pass: true };
   } catch (e) {
@@ -873,11 +897,11 @@ async function test_a_verified_key_holder_over_the_identity_limit_is_refused_wit
     const a = await __sysdrive_api_http_GET_usage(undefined, ("acct-40" as any));
     const b = await __sysdrive_api_http_GET_usage(undefined, ("acct-40" as any));
     const c = await __sysdrive_api_http_GET_usage(undefined, ("acct-40" as any));
-    if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "usage for acct-40"))) { throw __bynkExpectFailure("tests/api.bynk:141:10", 5756, 5784, "expect a is Ok(\"usage for acct-40\")", "a", () => __bynkShow(a)); }
-    if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "usage for acct-40"))) { throw __bynkExpectFailure("tests/api.bynk:142:10", 5794, 5822, "expect b is Ok(\"usage for acct-40\")", "b", () => __bynkShow(b)); }
-    if (!(((__c: boolean) => __c)(c.tag === "TooManyRequests"))) { throw __bynkExpectFailure("tests/api.bynk:143:10", 5832, 5855, "expect c is TooManyRequests(_)", "c", () => __bynkShow(c)); }
+    if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "usage for acct-40"))) { throw __bynkExpectFailure("tests/api.bynk:150:10", 5998, 6026, "expect a is Ok(\"usage for acct-40\")", "a", () => __bynkShow(a)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "usage for acct-40"))) { throw __bynkExpectFailure("tests/api.bynk:151:10", 6036, 6064, "expect b is Ok(\"usage for acct-40\")", "b", () => __bynkShow(b)); }
+    if (!(((__c: boolean) => __c)(c.tag === "TooManyRequests"))) { throw __bynkExpectFailure("tests/api.bynk:152:10", 6074, 6097, "expect c is TooManyRequests(_)", "c", () => __bynkShow(c)); }
     const other = await __sysdrive_api_http_GET_usage(undefined, ("acct-41" as any));
-    if (!(((__c: boolean) => __c)(other.tag === "Ok" && other.value === "usage for acct-41"))) { throw __bynkExpectFailure("tests/api.bynk:145:10", 5919, 5951, "expect other is Ok(\"usage for acct-41\")", "other", () => __bynkShow(other)); }
+    if (!(((__c: boolean) => __c)(other.tag === "Ok" && other.value === "usage for acct-41"))) { throw __bynkExpectFailure("tests/api.bynk:154:10", 6161, 6193, "expect other is Ok(\"usage for acct-41\")", "other", () => __bynkShow(other)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -895,10 +919,10 @@ async function test_a_forged_key_never_consumes_the_identity_limit() {
     const f1 = await __sysdrive_forged_api_http_GET_usage(undefined, "");
     const f2 = await __sysdrive_forged_api_http_GET_usage(undefined, "");
     const f3 = await __sysdrive_forged_api_http_GET_usage(undefined, "");
-    if (!(((__c: boolean) => __c)(f3.tag === "Rejected" && f3.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:153:10", 6260, 6288, "expect f3 is Rejected(Unauthorized)", "f3", () => __bynkShow(f3)); }
+    if (!(((__c: boolean) => __c)(f3.tag === "Rejected" && f3.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:162:10", 6502, 6530, "expect f3 is Rejected(Unauthorized)", "f3", () => __bynkShow(f3)); }
     const a = await __sysdrive_api_http_GET_usage(undefined, ("bynk-test" as any));
     const b = await __sysdrive_api_http_GET_usage(undefined, ("bynk-test" as any));
-    if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "usage for bynk-test"))) { throw __bynkExpectFailure("tests/api.bynk:156:10", 6402, 6432, "expect b is Ok(\"usage for bynk-test\")", "b", () => __bynkShow(b)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "usage for bynk-test"))) { throw __bynkExpectFailure("tests/api.bynk:165:10", 6644, 6674, "expect b is Ok(\"usage for bynk-test\")", "b", () => __bynkShow(b)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -914,7 +938,7 @@ async function test_the_key_s_header_is_hidden_from_the_handler() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_auth_header(__requestHeaders([]), ("acct-7" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "none"))) { throw __bynkExpectFailure("tests/api.bynk:161:10", 6635, 6650, "expect r is Ok(\"none\")", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "none"))) { throw __bynkExpectFailure("tests/api.bynk:170:10", 6877, 6892, "expect r is Ok(\"none\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -930,7 +954,7 @@ async function test_a_key_is_minted_for_an_account() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_accounts_Param_id_keys(("acct-9" as any), { label: ("ci" as any) }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Created"))) { throw __bynkExpectFailure("tests/api.bynk:167:10", 6884, 6899, "expect r is Created(_)", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Created"))) { throw __bynkExpectFailure("tests/api.bynk:176:10", 7126, 7141, "expect r is Created(_)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -953,15 +977,15 @@ async function test_a_minted_key_is_listed_by_its_id_and_label() {
           const listed = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-20" as any), undefined, "");
           if (listed.tag === "Ok" && listed.value.length === 1) {
             const k = listed.value[0];
-            if (!(k.id === s.id)) { throw __bynkExpectFailure("tests/api.bynk:178:14", 7266, 7278, "expect k.id == s.id\n  expected: k.id == s.id\n  actual:   " + __bynkShow((k.id)) + " == " + __bynkShow((s.id))); }
-            if (!(k.label === s.label)) { throw __bynkExpectFailure("tests/api.bynk:179:14", 7292, 7310, "expect k.label == s.label\n  expected: k.label == s.label\n  actual:   " + __bynkShow((k.label)) + " == " + __bynkShow((s.label))); }
-            if (!(k.created === s.created)) { throw __bynkExpectFailure("tests/api.bynk:180:14", 7324, 7346, "expect k.created == s.created\n  expected: k.created == s.created\n  actual:   " + __bynkShow((k.created)) + " == " + __bynkShow((s.created))); }
+            if (!(k.id === s.id)) { throw __bynkExpectFailure("tests/api.bynk:187:14", 7508, 7520, "expect k.id == s.id\n  expected: k.id == s.id\n  actual:   " + __bynkShow((k.id)) + " == " + __bynkShow((s.id))); }
+            if (!(k.label === s.label)) { throw __bynkExpectFailure("tests/api.bynk:188:14", 7534, 7552, "expect k.label == s.label\n  expected: k.label == s.label\n  actual:   " + __bynkShow((k.label)) + " == " + __bynkShow((s.label))); }
+            if (!(k.created === s.created)) { throw __bynkExpectFailure("tests/api.bynk:189:14", 7566, 7588, "expect k.created == s.created\n  expected: k.created == s.created\n  actual:   " + __bynkShow((k.created)) + " == " + __bynkShow((s.created))); }
             return undefined;
           }
-          return __bynkExpect((false), "tests/api.bynk:182:18", 7371, 7376, "expect false (in the `_` arm of `match listed`)", "listed", () => __bynkShow(listed));
+          return __bynkExpect((false), "tests/api.bynk:191:18", 7613, 7618, "expect false (in the `_` arm of `match listed`)", "listed", () => __bynkShow(listed));
         }
         default: {
-          return __bynkExpect((false), "tests/api.bynk:185:16", 7404, 7409, "expect false (in the `_` arm of `match minted`)", "minted", () => __bynkShow(__d));
+          return __bynkExpect((false), "tests/api.bynk:194:16", 7646, 7651, "expect false (in the `_` arm of `match minted`)", "minted", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -986,7 +1010,7 @@ async function test_revoking_another_identity_s_key_is_refused_and_leaves_it() {
         case "Created": {
           const s = __d.value;
           const other = await __sysdrive_api_http_DELETE_accounts_Param_id_keys_Param_key(("acct-22" as any), s.id, undefined, "");
-          if (!(((__c: boolean) => __c)(other.tag === "NotFound"))) { throw __bynkExpectFailure("tests/api.bynk:194:12", 7804, 7821, "expect other is NotFound", "other", () => __bynkShow(other)); }
+          if (!(((__c: boolean) => __c)(other.tag === "NotFound"))) { throw __bynkExpectFailure("tests/api.bynk:203:12", 8046, 8063, "expect other is NotFound", "other", () => __bynkShow(other)); }
           const listed = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-21" as any), undefined, "");
           const n = ((__d) => {
             switch (__d.tag) {
@@ -1000,17 +1024,17 @@ async function test_revoking_another_identity_s_key_is_refused_and_leaves_it() {
             }
             throw new globalThis.Error("non-exhaustive match");
           })(listed);
-          if (!(n === 1)) { throw __bynkExpectFailure("tests/api.bynk:200:12", 7981, 7987, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
+          if (!(n === 1)) { throw __bynkExpectFailure("tests/api.bynk:209:12", 8223, 8229, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
           const own = await __sysdrive_api_http_DELETE_accounts_Param_id_keys_Param_key(("acct-21" as any), s.id, undefined, "");
-          if (!(((__c: boolean) => __c)(own.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:202:12", 8080, 8096, "expect own is NoContent", "own", () => __bynkShow(own)); }
+          if (!(((__c: boolean) => __c)(own.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:211:12", 8322, 8338, "expect own is NoContent", "own", () => __bynkShow(own)); }
           const again = await __sysdrive_api_http_DELETE_accounts_Param_id_keys_Param_key(("acct-21" as any), s.id, undefined, "");
-          if (!(((__c: boolean) => __c)(again.tag === "NotFound"))) { throw __bynkExpectFailure("tests/api.bynk:204:12", 8191, 8208, "expect again is NotFound", "again", () => __bynkShow(again)); }
+          if (!(((__c: boolean) => __c)(again.tag === "NotFound"))) { throw __bynkExpectFailure("tests/api.bynk:213:12", 8433, 8450, "expect again is NotFound", "again", () => __bynkShow(again)); }
           const left = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-21" as any), undefined, "");
-          if (!(((__c: boolean) => __c)(left.tag === "Ok" && left.value.length === 0))) { throw __bynkExpectFailure("tests/api.bynk:206:12", 8288, 8302, "expect left is Ok([])", "left", () => __bynkShow(left)); }
+          if (!(((__c: boolean) => __c)(left.tag === "Ok" && left.value.length === 0))) { throw __bynkExpectFailure("tests/api.bynk:215:12", 8530, 8544, "expect left is Ok([])", "left", () => __bynkShow(left)); }
           return undefined;
         }
         default: {
-          return __bynkExpect((false), "tests/api.bynk:208:16", 8323, 8328, "expect false (in the `_` arm of `match minted`)", "minted", () => __bynkShow(__d));
+          return __bynkExpect((false), "tests/api.bynk:217:16", 8565, 8570, "expect false (in the `_` arm of `match minted`)", "minted", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -1032,11 +1056,11 @@ async function test_revokeAll_empties_the_identity_s_keys__and_a_later_key_still
     const __r0 = await __sysdrive_api_http_POST_accounts_Param_id_keys(("acct-23" as any), { label: ("a" as any) }, undefined, "");
     const __r1 = await __sysdrive_api_http_POST_accounts_Param_id_keys(("acct-23" as any), { label: ("b" as any) }, undefined, "");
     const closed = await __sysdrive_api_http_POST_accounts_Param_id_close(("acct-23" as any), undefined, "");
-    if (!(((__c: boolean) => __c)(closed.tag === "Ok" && closed.value === 2))) { throw __bynkExpectFailure("tests/api.bynk:217:10", 8783, 8798, "expect closed is Ok(2)", "closed", () => __bynkShow(closed)); }
+    if (!(((__c: boolean) => __c)(closed.tag === "Ok" && closed.value === 2))) { throw __bynkExpectFailure("tests/api.bynk:226:10", 9025, 9040, "expect closed is Ok(2)", "closed", () => __bynkShow(closed)); }
     const empty = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-23" as any), undefined, "");
-    if (!(((__c: boolean) => __c)(empty.tag === "Ok" && empty.value.length === 0))) { throw __bynkExpectFailure("tests/api.bynk:219:10", 8875, 8890, "expect empty is Ok([])", "empty", () => __bynkShow(empty)); }
+    if (!(((__c: boolean) => __c)(empty.tag === "Ok" && empty.value.length === 0))) { throw __bynkExpectFailure("tests/api.bynk:228:10", 9117, 9132, "expect empty is Ok([])", "empty", () => __bynkShow(empty)); }
     const fresh = await __sysdrive_api_http_POST_accounts_Param_id_keys(("acct-23" as any), { label: ("c" as any) }, undefined, "");
-    if (!(((__c: boolean) => __c)(fresh.tag === "Created"))) { throw __bynkExpectFailure("tests/api.bynk:221:10", 8991, 9010, "expect fresh is Created(_)", "fresh", () => __bynkShow(fresh)); }
+    if (!(((__c: boolean) => __c)(fresh.tag === "Created"))) { throw __bynkExpectFailure("tests/api.bynk:230:10", 9233, 9252, "expect fresh is Created(_)", "fresh", () => __bynkShow(fresh)); }
     const one = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-23" as any), undefined, "");
     const n = ((__d) => {
       switch (__d.tag) {
@@ -1050,7 +1074,7 @@ async function test_revokeAll_empties_the_identity_s_keys__and_a_later_key_still
       }
       throw new globalThis.Error("non-exhaustive match");
     })(one);
-    if (!(n === 1)) { throw __bynkExpectFailure("tests/api.bynk:227:10", 9152, 9158, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
+    if (!(n === 1)) { throw __bynkExpectFailure("tests/api.bynk:236:10", 9394, 9400, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

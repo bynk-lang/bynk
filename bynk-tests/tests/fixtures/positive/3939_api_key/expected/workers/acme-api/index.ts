@@ -192,7 +192,7 @@ export default {
             if (__r_id.tag === "Err") return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "RefinementViolation", path: "path.id", violation: __r_id.error })), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
             const id = __r_id.value;
             const result = await surface.http_POST_accounts_Param_id_sweep(id);
-            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { notGet: "POST /accounts/:id/sweep" }), request, ["Bynk realm=\"acme.api\""]), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_ApiKeySweep, { notGet: "POST /accounts/:id/sweep" }), request, ["Bynk realm=\"acme.api\""]), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {

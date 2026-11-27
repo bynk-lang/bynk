@@ -1,7 +1,7 @@
 ---
 level: minor
 probes: emit_diagnostics, ast_importers, diagnostic_coverage, explained_codes
-changelog: An `ApiKey` actor's keys expire under its `ttl`, record their last use at most once an hour, and survive a pepper rotation through `previous`, re-hashed on their next use; `Actor.sweep(identity)` reports the keys a rotation would still end, `list` shows each key's pepper, and a `system` test drives `by Expired` at an `ApiKey` route (experimental, under `bynk.actor.ApiKey`)
+changelog: An `ApiKey` actor's keys expire under its `ttl`, record their last use at most once an hour, and survive a pepper rotation through `previous`, re-hashed on their next use; `Actor.sweep(identity)` removes the keys a rotation has ended and reports those it would still end, `list` shows each key's pepper, and a `system` test drives `by Expired` at an `ApiKey` route (experimental, under `bynk.actor.ApiKey`)
 ---
 
 ## ADR: api-key-expiry-and-rotation
@@ -13,7 +13,7 @@ summary: Slice 3 of the API keys track: key expiry, last-use recording, pepper r
 **Decision A — `ttl`.** An `ApiKey` actor may declare `ttl`, a positive whole number of seconds (`90.days`). The scheme-config rule that admits a duration only for `SignedCookie` admits it for this one key.
 - `mint` sets `expires` to the creation time plus the `ttl`, and `ApiKeySecret.expires` reports it.
 - The seam compares the presented key first and checks expiry after, so an expired key gets the same `401` after the same work as a forged one.
-- `mint` (before the 100-key cap) and `list` remove expired keys.
+- `mint` (before the 100-key cap) and `list` remove expired keys, and only expired ones (Decision D).
 - `by Expired` is admitted on a route a single `ApiKey` actor with a `ttl` guards. The driver mints a real key the `ttl` and an hour before the harness clock and expects one compare against the record. On an actor without a `ttl` it stays `bynk.test.expired_needs_bearer_route`.
 - Expiry and last use are stamped by `mint` with the program's `Clock`, so the seam reads the same clock: the harness clock at `system`, unlike a JWT `exp`.
 
@@ -31,11 +31,16 @@ summary: Slice 3 of the API keys track: key expiry, last-use recording, pepper r
 - While it is set, the seam hashes a presented key under both peppers, and the store compares the hash its record's `kid` names.
 - A key admitted under `previous` is re-hashed under `secret` (Decision C).
 - A record under neither `kid` is compared against the dummy hash and refused with the ordinary `401`, after the same work and with no write.
-- `mint` and `sweep` remove such records. `list` shows them.
+- Only `sweep` removes such records; `list` shows them as `Retired`. Until a sweep they count towards the 100-key cap.
 - Dropping `previous` ends every key not used since the rotation began, as §7 rules, and the reference says so beside the rotation steps.
+- **This departs from §7**, which has `mint` prune these records too. Which records are under neither pepper depends on the pepper config of the Worker that runs the call, and two hazards make that a poor trigger for a permanent delete:
+  - *the rollout window*: while a rotation deploy rolls out, a Worker still on the old config sees every key re-hashed under the new pepper as under neither, and a `mint` there would delete keys in use;
+  - *a mistyped `previous`*: a wrong value makes every key not yet re-hashed look retired, and a `mint` would end them all before anyone notices.
+  
+  An explicit `sweep`, run once the rotation deploy has fully rolled out and the new config is confirmed, keeps the delete a deliberate act. The reference says so.
 
 **Decision E — `sweep` and `pepper`.** These follow the coordinator's ruling on the slice 3 plan.
-- **`Actor.sweep(identity)`** is `Effect[Int]` and needs `given Clock`. It removes the identity's expired keys and keys under neither pepper, and answers how many remain under `previous`: the keys dropping it now would end. A service sums it over its own identities, since no store-wide index exists (Q1).
+- **`Actor.sweep(identity)`** is `Effect[ApiKeySweep]` and needs `given Clock`. It removes the identity's expired keys and its keys under neither pepper, and answers `ApiKeySweep { expired, retired, previous }`: how many expired keys and how many `Retired` keys it removed, and how many remain under `previous`, the keys dropping it now would end. A service sums it over its own identities, since no store-wide index exists (Q1). `ApiKeySweep` is in the `bynk` prelude under the same gate.
 - **Where `sweep` is legal.** It tells the live pepper's keys from the rest, which takes the pepper, so like `mint` it is legal only in a service handler (`bynk.actor.api_key_mint_outside_handler`, whose message now names both).
 - **`ApiKeyInfo.pepper`** is `ApiKeyPepper` (`Current | Previous | Retired`), in the `bynk` prelude under the same gate (Q2).
   - In a service handler, `list` reads it against the live peppers.

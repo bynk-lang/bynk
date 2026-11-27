@@ -1,6 +1,6 @@
 context acme.api
 
-consumes bynk { Clock, ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret }
+consumes bynk { Clock, ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeySweep }
 consumes bynk.cloudflare { RateLimit }
 
 type AccountId = String where NonEmpty && MaxLength(64)
@@ -70,9 +70,9 @@ service api from http {
 	}
 
 	// #3939 (slice 3, §7): `sweep` removes the identity's expired keys and keys under neither pepper,
-	// and answers how many remain under `previous`: the keys dropping it now would end.
+	// and answers how many of each it removed and how many remain under `previous`.
 	@rateLimit(PerIp, key: clientIp)
-	on POST("/accounts/:id/sweep") (id: AccountId) -> Effect[HttpResult[Int]] by Visitor given Clock {
+	on POST("/accounts/:id/sweep") (id: AccountId) -> Effect[HttpResult[ApiKeySweep]] by Visitor given Clock {
 		let n <- Client.sweep(id)
 		Ok(n)
 	}

@@ -333,21 +333,27 @@ To rotate a pepper you supplied:
    seam hashes a presented key under both, and the store compares the hash its record names. A key
    admitted under `previous` is re-hashed under `secret` in the same request, and `list` shows each
    key's `pepper`: `Current` once re-hashed, `Previous` until then.
-2. **Wait, and sweep.** `Client.sweep(identity)` removes the identity's expired keys and keys under
-   neither pepper, and answers how many still remain under `previous`: the keys that would stop
-   working if you dropped it now. Sum it over your identities to decide when to drop.
+2. **Wait, and sweep.** Once the deploy has fully rolled out and you have confirmed the new config,
+   `Client.sweep(identity)` removes the identity's expired keys and its keys under neither pepper,
+   and answers an `ApiKeySweep`: `expired` and `retired`, the counts it removed, and `previous`, how
+   many still remain under `previous`, the keys that would stop working if you dropped it now. Sum
+   `previous` over your identities to decide when to drop. **Do not sweep mid-rollout**: a Worker
+   still on the old config sees every key already re-hashed under the new pepper as under neither,
+   and its sweep would delete those keys. A mistyped `previous` has the same effect, so check that
+   keys still verify before you sweep.
 3. **Drop `previous`.** Remove the variable (`wrangler secret delete CLIENT_KEY_PEPPER_PREV`) and
    deploy. **Every key not used since the rotation began stops working**: its hash was made with the
    old pepper, and a stored hash cannot be re-keyed without the secret, which is never stored. Such a
    key gets the ordinary `401`, after the same work as any other refused key, and `list` shows it as
-   `Retired` until the next `mint` or `sweep` removes it.
+   `Retired` until a `sweep` removes it. `mint` never removes a `Retired` key, so it counts towards
+   the 100-key limit until a sweep.
 
 ### Expiry and last use
 
 With a `ttl`, a key's `expires` is its creation time plus the `ttl`. The seam compares the presented
 key first and checks expiry after, so an expired key gets the same `401` after the same work as a
 forged one. `mint` and `list` remove expired keys, and they no longer count towards the 100-key
-limit. Without a `ttl` a key never expires: review `list` from time to time, or revoke keys you no
+limit; a `Retired` key still counts until a `sweep` ([rotating the pepper](#rotating-the-pepper)). Without a `ttl` a key never expires: review `list` from time to time, or revoke keys you no
 longer recognise.
 
 An admitted key's last use is recorded **at most once an hour**, which is enough to spot a stale key.
@@ -467,7 +473,7 @@ service console from http {
 | `list(identity)` | `Effect[List[ApiKeyInfo]]` | Needs `given Clock`. Each key's id, label, creation time, expiry and last use; never a secret or a digest. In a service handler or an agent's handler |
 | `revoke(identity, id)` | `Effect[Bool]` | `false` when the key is not that identity's, or is already gone, and then nothing changes. In a service handler or an agent's handler |
 | `revokeAll(identity)` | `Effect[Int]` | The number of keys revoked. One commit empties the identity's keys, then the identity takes a new key store, so every old key is refused. In a service handler or an agent's handler |
-| `sweep(identity)` | `Effect[Int]` | Needs `given Clock`. Removes the identity's expired keys and keys under neither pepper, and answers how many remain under `previous` ([rotating the pepper](#rotating-the-pepper)). Only in a service handler, where the pepper is (`bynk.actor.api_key_mint_outside_handler`) |
+| `sweep(identity)` | `Effect[ApiKeySweep]` | Needs `given Clock`. Removes the identity's expired keys and keys under neither pepper, and answers `{ expired, retired, previous }`: the counts removed, and how many remain under `previous` ([rotating the pepper](#rotating-the-pepper)). Run it only once a rotation deploy has fully rolled out. Only in a service handler, where the pepper is (`bynk.actor.api_key_mint_outside_handler`) |
 
 `list`, `revoke` and `revokeAll` need no pepper, only calls to the generated key store, so an
 agent's handler can call them too (an account-closure workflow can call `revokeAll`). In an agent's
@@ -494,6 +500,8 @@ the seam then refuses it exactly as it refuses a key that was never minted.
   the live peppers.
 - **`ApiKeyPepper`** is `Current`, `Previous` or `Retired`: which pepper a key is hashed under
   ([rotating the pepper](#rotating-the-pepper)).
+- **`ApiKeySweep`** is `{ expired: Int, retired: Int, previous: Int }`: the expired and `Retired`
+  keys a `sweep` removed, and the keys still under `previous`.
 
 A key is a bearer credential: anyone holding it is the client. Nothing stops a handler from writing
 the minted key somewhere unsafe before it returns it; the types make that hard, not impossible.

@@ -158,6 +158,20 @@ export const ApiKeyPepper = {
 };
 
 /**
+ * What an `ApiKey` actor's `sweep` did for one identity: how many expired keys
+ * it removed, how many keys under neither pepper (`Retired`) it removed, and how
+ * many keys are still under `previous`, which dropping it now would end.
+ */
+export interface ApiKeySweep {
+  readonly expired: number;
+  readonly retired: number;
+  readonly previous: number;
+}
+
+export const ApiKeySweep = {
+};
+
+/**
  * The refusal of `mint` when the identity already holds the most live keys it
  * may (`limit`, 100).
  */

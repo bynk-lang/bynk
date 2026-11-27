@@ -16,11 +16,11 @@ import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __decodeAgentKey } from "../../__bynk_runtime/agent.js";
 import { __apiKeyEqual, __apiKeyList, __apiKeyLiveKidsOf, __apiKeyPeppersOf, __apiKeyRevoke, __apiKeySweep, __mintApiKey, __newApiKeyHandle } from "../../__bynk_runtime/apikey.js";
 
-import { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, TooManyKeys } from "../../bynk.js";
+import { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeySweep, TooManyKeys } from "../../bynk.js";
 
 import * as bynk from "../../bynk.js";
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
-import { __serialise_ApiKeyId, __deserialise_ApiKeyId, __serialise_ApiKeyInfo, __deserialise_ApiKeyInfo, __serialise_ApiKeyLabel, __deserialise_ApiKeyLabel, __serialise_ApiKeyPepper, __deserialise_ApiKeyPepper, __serialise_ApiKeySecret, __deserialise_ApiKeySecret, __serialise_ApiKeyValue, __deserialise_ApiKeyValue } from "../../bynk.js";
+import { __serialise_ApiKeyId, __deserialise_ApiKeyId, __serialise_ApiKeyInfo, __deserialise_ApiKeyInfo, __serialise_ApiKeyLabel, __deserialise_ApiKeyLabel, __serialise_ApiKeyPepper, __deserialise_ApiKeyPepper, __serialise_ApiKeySecret, __deserialise_ApiKeySecret, __serialise_ApiKeySweep, __deserialise_ApiKeySweep, __serialise_ApiKeyValue, __deserialise_ApiKeyValue } from "../../bynk.js";
 
 export { type ApiKeyId };
 
@@ -98,7 +98,7 @@ export const api = {
     const gone = await (async (__sub: AccountId) => __apiKeyRevoke("acme", key, (__h, __k) => __makeClientKeyOwner(__sub, deps.env).revoke(__h, __k, deps)))(id);
     return (gone ? HttpResult.NoContent : HttpResult.NotFound);
   },
-  async http_POST_accounts_Param_id_sweep(id: AccountId, deps: { Clock: bynk.Clock; env: { ACCOUNTS: __DurableObjectNamespace; CLIENT_KEY_OWNER: __DurableObjectNamespace; CLIENT_KEYS: __DurableObjectNamespace } }): globalThis.Promise<HttpResult<number>> {
+  async http_POST_accounts_Param_id_sweep(id: AccountId, deps: { Clock: bynk.Clock; env: { ACCOUNTS: __DurableObjectNamespace; CLIENT_KEY_OWNER: __DurableObjectNamespace; CLIENT_KEYS: __DurableObjectNamespace } }): globalThis.Promise<HttpResult<ApiKeySweep>> {
     const n = await (async (__sub: AccountId) => __apiKeySweep(await __makeClientKeyOwner(__sub, deps.env).current(deps), await deps.Clock.now(), await __apiKeyLiveKidsOf(deps, "Client", { secret: "CLIENT_KEY_PEPPER", previous: "CLIENT_KEY_PEPPER_PREV" }), (__h) => __makeClientKeys(__h, deps.env), deps))(id);
     return HttpResult.Ok(n);
   },
@@ -590,11 +590,8 @@ export class ClientKeys {
       } else {
         __state.known = live;
         __state.knownAt = now;
-        const ks = await __bynkThen(((() => __bynkThen(__state.kids.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
         const es = await __bynkThen(((() => __bynkThen(__state.expires.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
-        const unkeyed = ((ks).filter((__x: { readonly key: string; readonly value: string }) => ((e: { readonly key: string; readonly value: string }) => !(live).some((__x: string) => ((l: string) => l === e.value)(__x)))(__x))).map((__x: { readonly key: string; readonly value: string }) => ((e: { readonly key: string; readonly value: string }) => e.key)(__x));
-        const ended = ((es).filter((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.value <= now)(__x))).map((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.key)(__x));
-        const dead = [...unkeyed, ...ended];
+        const dead = ((es).filter((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.value <= now)(__x))).map((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.key)(__x));
         const __r0 = await (async (__xs: readonly string[]) => {
           for (const __x of __xs) {
             await (async (k: string) => (async () => {
@@ -806,14 +803,15 @@ export class ClientKeys {
     return __state.knownAt;
   }
 
-  async sweep(now: number, live: readonly string[], current: string, deps: {}): globalThis.Promise<number> {
+  async sweep(now: number, live: readonly string[], current: string, deps: {}): globalThis.Promise<readonly number[]> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const ks = await __bynkThen(((() => __bynkThen(__state.kids.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
       const es = await __bynkThen(((() => __bynkThen(__state.expires.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
-      const unkeyed = ((ks).filter((__x: { readonly key: string; readonly value: string }) => ((e: { readonly key: string; readonly value: string }) => !(live).some((__x: string) => ((l: string) => l === e.value)(__x)))(__x))).map((__x: { readonly key: string; readonly value: string }) => ((e: { readonly key: string; readonly value: string }) => e.key)(__x));
       const ended = ((es).filter((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.value <= now)(__x))).map((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.key)(__x));
-      const dead = [...unkeyed, ...ended];
+      const unkeyed = ((ks).filter((__x: { readonly key: string; readonly value: string }) => ((e: { readonly key: string; readonly value: string }) => !(live).some((__x: string) => ((l: string) => l === e.value)(__x)))(__x))).map((__x: { readonly key: string; readonly value: string }) => ((e: { readonly key: string; readonly value: string }) => e.key)(__x));
+      const orphaned = (unkeyed).filter((__x: string) => ((k: string) => !(ended).some((__x: string) => ((x: string) => x === k)(__x)))(__x));
+      const dead = [...ended, ...orphaned];
       const __r0 = await (async (__xs: readonly string[]) => {
         for (const __x of __xs) {
           await (async (k: string) => (async () => {
@@ -873,7 +871,7 @@ export class ClientKeys {
       __state.known = live;
       __state.knownAt = now;
       const left = await __bynkThen(((() => __state.kids.values()))(), (__q) => __q);
-      return ((left).filter((__x: string) => ((k: string) => k !== current)(__x))).length;
+      return [(ended).length, (orphaned).length, ((left).filter((__x: string) => ((k: string) => k !== current)(__x))).length];
     })();
     await this.commitState(__state);
     return __result;
@@ -1013,7 +1011,7 @@ const __ClientKeysWire: __AgentWire = {
   expire: { args: [{ enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) } },
   knownOf: { args: [], result: { enc: __serialise_List_String, dec: __deserialise_List_String } },
   knownAtOf: { args: [], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) } },
-  sweep: { args: [{ enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) }, { enc: __serialise_List_String, dec: __deserialise_List_String }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) } },
+  sweep: { args: [{ enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) }, { enc: __serialise_List_String, dec: __deserialise_List_String }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: __serialise_List_Int, dec: __deserialise_List_Int } },
   revoke: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: (__v: boolean) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j) } },
   clear: { args: [], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) } },
 };
@@ -1236,7 +1234,7 @@ export function __deserialise_NewKey(json: __JsonValue, path: string = "$"): Res
 }
 
 
-export { __serialise_ApiKeyId, __deserialise_ApiKeyId, __serialise_ApiKeyInfo, __deserialise_ApiKeyInfo, __serialise_ApiKeyLabel, __deserialise_ApiKeyLabel, __serialise_ApiKeyPepper, __deserialise_ApiKeyPepper, __serialise_ApiKeySecret, __deserialise_ApiKeySecret, __serialise_ApiKeyValue, __deserialise_ApiKeyValue };
+export { __serialise_ApiKeyId, __deserialise_ApiKeyId, __serialise_ApiKeyInfo, __deserialise_ApiKeyInfo, __serialise_ApiKeyLabel, __deserialise_ApiKeyLabel, __serialise_ApiKeyPepper, __deserialise_ApiKeyPepper, __serialise_ApiKeySecret, __deserialise_ApiKeySecret, __serialise_ApiKeySweep, __deserialise_ApiKeySweep, __serialise_ApiKeyValue, __deserialise_ApiKeyValue };
 
 export function __serialise_List_ApiKeyInfo(value: readonly ApiKeyInfo[]): __JsonValue {
   return value.map((v) => __serialise_ApiKeyInfo(v));
@@ -1614,6 +1612,29 @@ export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "
     }
     const __v = entryV;
     out.set(__k as string, __v as number);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_Int(value: readonly number[]): __JsonValue {
+  return value.map((v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(v));
+}
+
+export function __deserialise_List_Int(json: __JsonValue, path: string = "$"): Result<readonly number[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: number[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    if (typeof item !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+    }
+    if (!globalThis.Number.isSafeInteger(item)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+    }
+    const __el = item;
+    out.push(__el as number);
   }
   return Ok(out);
 }

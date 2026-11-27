@@ -79,7 +79,7 @@ pub fn members(a: &bynk_syntax::ast::ActorDecl) -> Vec<(&'static str, String)> {
         ),
         (
             "sweep",
-            format!("sweep(identity: {identity}) -> Effect[Int]"),
+            format!("sweep(identity: {identity}) -> Effect[ApiKeySweep]"),
         ),
     ]
 }

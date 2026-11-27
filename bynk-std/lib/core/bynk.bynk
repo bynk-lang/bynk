@@ -41,6 +41,7 @@ adapter bynk {
 		ApiKeyInfo,
 		ApiKeyLabel,
 		ApiKeyPepper,
+		ApiKeySweep,
 		ApiKeySecret,
 		TooManyKeys,
 		PassThrough,
@@ -133,6 +134,17 @@ adapter bynk {
 	refused, and `mint` or `sweep` removes it.
 	---
 	type ApiKeyPepper = enum { Current, Previous, Retired }
+
+	---
+	What an `ApiKey` actor's `sweep` did for one identity: how many expired keys
+	it removed, how many keys under neither pepper (`Retired`) it removed, and how
+	many keys are still under `previous`, which dropping it now would end.
+	---
+	type ApiKeySweep = {
+		expired: Int,
+		retired: Int,
+		previous: Int,
+	}
 
 	---
 	The refusal of `mint` when the identity already holds the most live keys it

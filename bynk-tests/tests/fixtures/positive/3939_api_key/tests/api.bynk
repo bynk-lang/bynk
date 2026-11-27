@@ -107,11 +107,16 @@ suite acme.api as system {
 		expect t2 != t0
 		expect t2 is Some(_)
 	}
-	// §9 / §7: `sweep` removes expired keys, and with no `previous` set none remain under it.
+	// §9 / §7: `sweep` removes expired keys (and says how many), and with no `previous` set none remain
+	// under it.
 	case "sweep removes expired keys and counts none under previous" {
 		let _ <- api.POST("/accounts/:id/keys", "acct-53", NewKey { label: "a" }) by Visitor
 		let kept <- api.POST("/accounts/:id/sweep", "acct-53") by Visitor
-		expect kept is Ok(0)
+		let keptCounts = match kept {
+			Ok(s) => [s.expired, s.retired, s.previous],
+			_ => [-1],
+		}
+		expect keptCounts == [0, 0, 0]
 		let one <- api.GET("/accounts/:id/keys", "acct-53") by Visitor
 		let n = match one {
 			Ok(keys) => keys.length(),
@@ -120,7 +125,11 @@ suite acme.api as system {
 		expect n == 1
 		advance Clock by 91.days
 		let swept <- api.POST("/accounts/:id/sweep", "acct-53") by Visitor
-		expect swept is Ok(0)
+		let sweptCounts = match swept {
+			Ok(s) => [s.expired, s.retired, s.previous],
+			_ => [-1],
+		}
+		expect sweptCounts == [1, 0, 0]
 		let none <- api.GET("/accounts/:id/keys", "acct-53") by Visitor
 		expect none is Ok([])
 	}
