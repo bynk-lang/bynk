@@ -1,1 +1,1 @@
-bynk.commons.consumes_not_types `Clock` is a capability of `bynk`, not a type
+bynk.commons.consumes_not_types `Log` is a capability of `logging`, which is not a first-party unit

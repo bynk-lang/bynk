@@ -1,0 +1,3 @@
+bynk.given.binding_kind_mismatch `Sessions` is a `Kv`, but `Db` takes a `D1`
+bynk.given.binding_kind_mismatch `Orders` is a `D1`, but `Store` takes a `Kv`
+# exact

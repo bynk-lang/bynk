@@ -1,0 +1,12 @@
+{
+  "blurb": "A commons function's capability parameter (`given Store: Kv`) stands for whichever instance its caller chooses, and every call says which one, inside the argument list after the ordinary arguments: `forget(id, given Store = Sessions)`. Nothing is inferred or defaulted, even when the caller holds only one capability of the kind, because binding the wrong instance reads or writes the wrong data and is well-typed. The fix offers one binding per capability of the kind the caller holds; it is applied by `bynk check --fix` only when there is exactly one, so the tools never choose between instances.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.binding_missing",
+  "constructs": [
+    "call"
+  ],
+  "example": "fn touch(id: String) -> Effect[()] given Sessions {\n\tforget(id)                           // ✗ `Store` is unbound\n}\n\nfn touch(id: String) -> Effect[()] given Sessions {\n\tforget(id, given Store = Sessions)   // ✓ the instance is written at the call\n}",
+  "severity": "error",
+  "summary": "A call leaves one of its callee's capability parameters unbound; the fix is machine-applicable only when the caller holds exactly one candidate."
+}

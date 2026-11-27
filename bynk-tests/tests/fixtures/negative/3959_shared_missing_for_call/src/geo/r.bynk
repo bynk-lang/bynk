@@ -1,0 +1,15 @@
+---
+#3959: a shared capability (`given Logger`) of a commons function follows the inclusion
+rule of ADR 0726 B: the caller's own `given` must hold it, in a context and in a commons.
+---
+commons geo.r
+
+consumes bynk { Logger }
+
+fn warn(what: String) -> Effect[()] given Logger {
+	Logger.warn(what)
+}
+
+fn run() -> Effect[()] {
+	warn("x")
+}

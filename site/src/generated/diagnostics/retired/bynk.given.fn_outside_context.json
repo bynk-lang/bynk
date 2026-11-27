@@ -1,0 +1,6 @@
+{
+  "code": "bynk.given.fn_outside_context",
+  "lastRelease": "0.661.1",
+  "replacement": "`given Store: Kv, Logger` on a commons function, bound at each call with `given Store = Sessions`",
+  "why": "A commons free function may now declare `given` (#3959): capability parameters, which every call binds, and shared capabilities; an adapter's helper that declares `given` is `bynk.given.fn_unsupported`."
+}

@@ -1,0 +1,24 @@
+---
+#3959, §14.1 `bynk.given.parameter_name_conflict`: a parameter may not shadow a selected
+kind or capability, another parameter, or a type parameter, so `Name.op(…)` means one thing.
+---
+commons lib.cache
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+fn kind(key: String) -> Effect[()] given Kv: Kv {
+	Kv.delete(key)
+}
+
+fn shared(key: String) -> Effect[()] given Logger: Kv {
+	Logger.delete(key)
+}
+
+fn twice(key: String) -> Effect[()] given S: Kv, S: Kv {
+	S.delete(key)
+}
+
+fn typed[T](key: String, x: T) -> Effect[()] given T: Kv {
+	T.delete(key)
+}

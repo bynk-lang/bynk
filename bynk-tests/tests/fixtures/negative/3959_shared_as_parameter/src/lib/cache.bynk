@@ -1,0 +1,11 @@
+---
+#3959, §14.1 `bynk.given.shared_as_parameter`: a capability with no instances is named
+bare, as a shared capability; a binding would add a name and no choice.
+---
+commons lib.cache
+
+consumes bynk { Logger }
+
+fn note(text: String) -> Effect[()] given L: Logger {
+	L.info(text)
+}

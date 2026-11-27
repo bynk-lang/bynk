@@ -1,0 +1,10 @@
+context shop
+
+uses lib.cache
+consumes bynk.cloudflare { Kv }
+
+capability Sessions = Kv
+
+fn touch(id: String) -> Effect[()] given Sessions {
+	forget(id, given Store = Sessions, Cache = Sessions)
+}

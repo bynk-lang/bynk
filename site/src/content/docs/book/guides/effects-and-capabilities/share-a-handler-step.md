@@ -88,10 +88,12 @@ returns an effect is an error (`bynk.types.combinator_return_mismatch`): use `an
   the capability, not to the call site.
 - A `case` in a suite may call the function directly. It gets the target's capabilities
   as its handlers do.
-- The function is not shared across contexts. A `commons` function cannot declare
-  `given` (`bynk.given.fn_outside_context`): the contexts that use it may consume
-  different capabilities. There, pass the operation in as a function value
-  (`log: (String) -> Effect[()]`) and give it `(m) => Logger.error(m)` from the handler.
+- The function is not shared across contexts. To share a step between contexts, put it
+  in a `commons`, which names shared capabilities such as `Logger` bare and takes an
+  instance it needs as a capability parameter that every call binds (experimental; see
+  [Capability parameters in a commons](/reference/capabilities/#capability-parameters)).
+  Or pass the operation in as a function value (`log: (String) -> Effect[()]`) and give
+  it `(m) => Logger.error(m)` from the handler.
 - Only a free function that returns `Effect[T]` may declare `given`; a method cannot,
   and `Events` cannot be named (`bynk.given.fn_unsupported`). Emit events from the handler.
 
