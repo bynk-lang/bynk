@@ -3789,7 +3789,7 @@ fn keyword_and_snippet_candidates() -> Vec<Completion> {
 
 /// Lex + recovery-parse one source, yielding its primary [`SourceUnit`]
 /// (`None` when nothing parses — an empty or header-broken file).
-fn parse_source_unit(src: &str) -> Option<SourceUnit> {
+pub(crate) fn parse_source_unit(src: &str) -> Option<SourceUnit> {
     let tokens = lexer::tokenize(src).ok()?;
     parser::parse_unit_with_recovery(&tokens, src).0
 }
