@@ -148,7 +148,6 @@ test("installed, the upgrade code the Worker runs builds a 101 carrying the clie
   const before = globalThis.Response;
   const restore = installTestWebSocketRuntime();
   try {
-    assert.equal(installTestWebSocketRuntime(), restore);
     const { client } = newWebSocketPair();
     const response = webSocketUpgradeResponse(client, "bynk.bearer");
     assert.equal(response.status, 101);
@@ -227,4 +226,51 @@ test("no production runtime module imports the test WebSocket doubles", () => {
   };
   walk(src);
   assert.deepEqual(offenders, []);
+});
+
+test("two installs share the patch: it is put back only when the last of them lets go", () => {
+  const before = globalThis.Response;
+  const first = installTestWebSocketRuntime();
+  const second = installTestWebSocketRuntime();
+  assert.notEqual(globalThis.Response, before);
+  first();
+  first();
+  assert.notEqual(globalThis.Response, before);
+  assert.equal(typeof (globalThis as { WebSocketPair?: unknown }).WebSocketPair, "function");
+  second();
+  assert.equal(globalThis.Response, before);
+  assert.equal((globalThis as { WebSocketPair?: unknown }).WebSocketPair, undefined);
+});
+
+test("webSocketQuiet that runs out of turns is an error naming the cause, not a return that reads as quiet", async () => {
+  let rounds = 0;
+  const pair = new TestWebSocketPair();
+  const state = makeHibernatableTestState("room", () => ({
+    webSocketMessage: async (ws: TestWebSocket): Promise<void> => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      rounds += 1;
+      if (rounds < 20) ws.send("again");
+    },
+  }));
+  state.acceptWebSocket(pair[1]);
+  pair[0].addEventListener("message", () => pair[0].send("again"));
+  pair[0].send("go");
+  await assert.rejects(() => webSocketQuiet(3), /\d+ WebSocket deliveries still in flight after 3 turns/);
+  // Left alone it settles, and a patient wait says so.
+  await webSocketQuiet();
+  assert.equal(takeWebSocketFaults().length, 0);
+});
+
+test("a listener that throws is kept with the faults, not thrown into the event loop", async () => {
+  takeWebSocketFaults();
+  const pair = new TestWebSocketPair();
+  pair[1].accept();
+  pair[1].addEventListener("message", () => {
+    throw new Error("listener boom");
+  });
+  pair[0].send("x");
+  await webSocketQuiet();
+  const faults = takeWebSocketFaults();
+  assert.equal(faults.length, 1);
+  assert.match(String((faults[0] as Error).message), /listener boom/);
 });

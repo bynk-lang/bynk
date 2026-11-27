@@ -42,7 +42,8 @@ export function takeWebSocketFaults(): unknown[] {
 /**
  * Resolves once every frame and close the doubles delivered has been handled, including the work a handler
  * awaited, and nothing new has started for a whole turn of the event loop. Bounded, so a handler that
- * answers every frame with a frame cannot hold a case forever.
+ * answers every frame with a frame cannot hold a case forever; reaching the bound is an error naming the
+ * cause, never a return that reads as quiet, since a case would then check a half-finished exchange.
  */
 export async function webSocketQuiet(maxTurns: number = 1000): Promise<void> {
   for (let turn = 0; turn < maxTurns; turn += 1) {
@@ -52,6 +53,7 @@ export async function webSocketQuiet(maxTurns: number = 1000): Promise<void> {
       if (inflight === 0) return;
     }
   }
+  throw new Error(`webSocketQuiet: ${inflight} WebSocket deliveries still in flight after ${maxTurns} turns`);
 }
 
 function track<T>(work: () => T | Promise<T>): void {
@@ -179,7 +181,15 @@ export class TestWebSocket {
   }
 
   private fire(type: string, event: unknown): void {
-    for (const l of [...(this.listeners.get(type) ?? [])]) l(event);
+    // A listener is the case's own code; what it throws is kept with the host's faults, and is never allowed to
+    // escape into the microtask that delivered the frame, where it would be an uncaught exception.
+    for (const l of [...(this.listeners.get(type) ?? [])]) {
+      try {
+        l(event);
+      } catch (e) {
+        faults.push(e);
+      }
+    }
   }
 
   private deliver(data: string | ArrayBuffer): void {
@@ -257,15 +267,33 @@ interface UpgradeInit extends ResponseInit {
   webSocket?: unknown;
 }
 
-let uninstall: (() => void) | undefined;
+// How many callers hold the patch, and what to put back when the last lets go.
+let installs = 0;
+let restoreGlobals: (() => void) | undefined;
 
 /**
  * Makes the three globals the generated upgrade code reaches exist: `WebSocketPair`, and a `Response` that
- * accepts status `101` and carries `webSocket`. Idempotent; the returned function restores what was there.
+ * accepts status `101` and carries `webSocket`. Each call returns its own release; the globals are put back
+ * when the last of them has been called, so two participant Workers that install and release in their own
+ * teardowns do not take the patch from each other. A release called twice counts once.
  * A test build calls it when it stands up a participant Worker with a WebSocket service, nothing else does.
  */
 export function installTestWebSocketRuntime(): () => void {
-  if (uninstall !== undefined) return uninstall;
+  if (installs === 0) restoreGlobals = patchGlobals();
+  installs += 1;
+  let released = false;
+  return (): void => {
+    if (released) return;
+    released = true;
+    installs -= 1;
+    if (installs === 0) {
+      restoreGlobals?.();
+      restoreGlobals = undefined;
+    }
+  };
+}
+
+function patchGlobals(): () => void {
   const g = globalThis as unknown as { WebSocketPair?: unknown; Response: typeof Response };
   const before = { pair: g.WebSocketPair, response: g.Response };
   const Base = before.response;
@@ -287,11 +315,9 @@ export function installTestWebSocketRuntime(): () => void {
   }
   g.WebSocketPair = TestWebSocketPair;
   g.Response = UpgradeResponse as unknown as typeof Response;
-  uninstall = (): void => {
+  return (): void => {
     g.WebSocketPair = before.pair;
     g.Response = before.response;
-    uninstall = undefined;
   };
-  return uninstall;
 }
 
