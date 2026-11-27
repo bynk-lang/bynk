@@ -1,0 +1,14 @@
+// #3807: a context whose declarations span two files, called from another context on the bundle
+// target. `Dir` is declared here and `Entry` in `entries.bynk`, so no single file of the context
+// holds both names a caller's casts spell.
+context split.graph
+
+exports transparent { Dir, Entry }
+
+type Dir = { name: String, entries: List[Entry] }
+
+service dirs {
+  on call(d: Dir) -> Effect[Dir] by Caller {
+    Effect.pure(d)
+  }
+}
