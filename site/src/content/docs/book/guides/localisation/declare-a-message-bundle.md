@@ -190,7 +190,8 @@ the code `cart.greeting` without colliding, and no unit reads another's bundle.
   is. The same holds in the unit's suites.
 - **A code the program computes is not checked.** `message(code)` with `code` a
   parameter, as in `greet`, keeps the runtime fallback to the code itself, which
-  is how one function renders whichever code its caller passes.
+  is how one function renders whichever code its caller passes. A `Message`
+  written as a record literal instead of through `message` is not checked either.
 - **A unit with no bundle has nothing to check against.** Its `render` is
   `bynk.locale`'s, which returns the code and its parameters, and a literal code
   there is not checked.

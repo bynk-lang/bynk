@@ -4,7 +4,7 @@
   "categoryAnchor": "message-bundles",
   "code": "bynk.messages.cross_unit_render",
   "constructs": [],
-  "example": "// shop/messages.bynk\ncommons shop.messages\n\nfn greet(tag: LocaleTag, name: String) -> String {\n  render(tag, withText(message(\"cart.greeting\"), \"name\", name))\n}\n\n// shop/cart.bynk\ncommons shop.cart\n\nuses shop.messages\n\nfn banner(tag: LocaleTag, name: String) -> String {\n  render(tag, m)                   // ✗ `render` reads shop.messages' bundle\n  greet(tag, name)                 // ✓ call what shop.messages exports\n}",
+  "example": "// shop/messages.bynk\ncommons shop.messages\n\nfn greet(tag: LocaleTag, name: String) -> String {\n  render(tag, withText(message(\"cart.greeting\"), \"name\", name))\n}\n\n// shop/cart.bynk\ncommons shop.cart\n\nuses shop.messages\n\nfn banner(tag: LocaleTag, name: String) -> String {\n  render(tag, m)                   // ✗ `m` is a Message passed in; `render` reads shop.messages' bundle\n  greet(tag, name)                 // ✓ call what shop.messages exports\n}",
   "severity": "error",
   "summary": "A unit reaches for the `render` of a unit that declares a message bundle: a message code resolves only against the bundles of the unit where `message(code)` is called, so another unit's messages are used through a function it exports."
 }

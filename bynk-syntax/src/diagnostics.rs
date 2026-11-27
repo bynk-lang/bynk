@@ -3355,7 +3355,7 @@ agent Cart {
                 uses shop.messages\n\
                 \n\
                 fn banner(tag: LocaleTag, name: String) -> String {\n\
-                \x20 render(tag, m)                   // ✗ `render` reads shop.messages' bundle\n\
+                \x20 render(tag, m)                   // ✗ `m` is a Message passed in; `render` reads shop.messages' bundle\n\
                 \x20 greet(tag, name)                 // ✓ call what shop.messages exports\n\
                 }",
     },
