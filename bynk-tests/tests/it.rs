@@ -521,6 +521,8 @@ mod system {
     mod par_traverse_behaviour;
     #[path = "pass_through_check_behaviour.rs"]
     mod pass_through_check_behaviour;
+    #[path = "pass_through_workerd.rs"]
+    mod pass_through_workerd;
     #[path = "property_behaviour.rs"]
     mod property_behaviour;
     #[path = "question_in_case_behaviour.rs"]

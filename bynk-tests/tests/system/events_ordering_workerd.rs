@@ -509,30 +509,28 @@ fn per_publisher_fifo_on_workerd() {
     // Both processes must be answering before any trigger fires. That is
     // necessary, not sufficient: the Service Binding between them converges
     // later, which `await_binding` waits out.
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if Instant::now() > deadline {
-            let logs = format!(
-                "--- publisher log ---\n{}\n--- subscriber log ---\n{}",
-                read_log(&pub_log),
-                read_log(&sub_log)
-            );
-            drop(wranglers);
-            let _ = fs::remove_dir_all(&tmp);
-            if skip(&format!(
-                "wrangler dev did not serve within the boot window (likely no \
-                 network to provision {WRANGLER})\n{logs}"
-            )) {
-                return;
-            }
-            unreachable!()
+    // Each Worker must have logged its own Ready line and answer its probe before any trigger
+    // fires.
+    let booted =
+        wrangler::wait_until_ready(&pub_log, pub_port, &|| port_open(pub_port)).and_then(|()| {
+            wrangler::wait_until_ready(&sub_log, sub_port, &|| {
+                http("GET", sub_port, "/trace", None).is_ok()
+            })
+        });
+    if let Err(why) = booted {
+        let logs = format!(
+            "--- publisher log ---\n{}\n--- subscriber log ---\n{}",
+            read_log(&pub_log),
+            read_log(&sub_log)
+        );
+        drop(wranglers);
+        let _ = fs::remove_dir_all(&tmp);
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})\n{logs}"
+        )) {
+            return;
         }
-        let pub_up = port_open(pub_port);
-        let sub_up = http("GET", sub_port, "/trace", None).is_ok();
-        if pub_up && sub_up {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+        unreachable!()
     }
 
     // Both answering is not the binding being connected: see `await_binding`.

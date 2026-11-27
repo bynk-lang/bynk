@@ -22,7 +22,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Stdio;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[path = "../require/mod.rs"]
 mod require;
@@ -205,16 +205,15 @@ fn serve(tmp: &Path, traced: bool) -> Option<Run> {
     // The first call answers once both Workers are up and the Service Binding has
     // connected, so it is the readiness probe. It is sent again below, so the
     // probe's answer is not one of the compared ones.
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if let Ok((200, _)) = get(caller_port, "/square/2") {
-            break;
-        }
-        if Instant::now() > deadline {
-            drop(wranglers);
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+    if wrangler::wait_until_all_ready(
+        &[(&callee_log, callee_port)],
+        (&caller_log, caller_port),
+        &|| matches!(get(caller_port, "/square/2"), Ok((200, _))),
+    )
+    .is_err()
+    {
+        drop(wranglers);
+        return None;
     }
     let answers = REQUESTS
         .iter()

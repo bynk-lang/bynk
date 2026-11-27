@@ -1,0 +1,12 @@
+context shop.web
+
+uses bynk.locale.types
+uses shop.messages
+consumes bynk { Locale }
+
+service api from http {
+  on GET("/hello") () -> Effect[HttpResult[String]] by v: Visitor given Locale {
+    let tag <- Locale.current()
+    Ok(render(tag, Message { code: "cart.greeting", params: Map.empty() }))
+  }
+}

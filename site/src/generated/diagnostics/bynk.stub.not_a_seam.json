@@ -1,5 +1,5 @@
 {
-  "blurb": "A `stub` substitutes one of the capabilities the unit under test depends on: one the context declares, or reaches through a `consumes`. Any other name, including a misspelt one, leaves nothing to substitute. A commons has no capabilities, so it cannot be stubbed at all. Name a capability of the target, or add the `consumes` it needs. See `bynk.stub.unknown_op` for a wrong operation.",
+  "blurb": "A `stub` substitutes one of the capabilities the unit under test depends on: one the context declares, or reaches through a `consumes`. Any other name, including a misspelt one, leaves nothing to substitute. A commons suite's seams are the doubles of the capabilities its commons selects, and its suite-local instances. A capability parameter is never a seam: stub what a call binds it to, the instance in a context's suite or the kind's double in a commons suite. Name a capability of the target, or add the `consumes` it needs. See `bynk.stub.unknown_op` for a wrong operation.",
   "category": "Stubs",
   "categoryAnchor": "stubs",
   "code": "bynk.stub.not_a_seam",

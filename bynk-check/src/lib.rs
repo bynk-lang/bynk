@@ -122,6 +122,7 @@ pub mod store_ops;
 pub mod store_write;
 pub mod stub_agent;
 pub mod stub_outcome;
+pub mod suite_instances;
 pub mod symbols;
 pub mod test_env;
 pub mod test_suites;
