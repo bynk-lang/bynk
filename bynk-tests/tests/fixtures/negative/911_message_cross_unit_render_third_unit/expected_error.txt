@@ -1,0 +1,3 @@
+bynk.resolve.unknown_function
+# uses is not transitive: the bundle is out of reach through a third unit
+# exact

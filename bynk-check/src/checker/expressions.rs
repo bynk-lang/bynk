@@ -815,6 +815,25 @@ pub(crate) fn check_expect(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<Ty
     Some(tys.intern(Ty::Unit))
 }
 
+/// The note on `bynk.observe.not_a_seam`: #3959 (track §9), for a capability
+/// parameter of a function in scope, what to observe in its place.
+fn observation_note(name: &str, ctx: &Ctx) -> String {
+    let bound = ctx
+        .input
+        .fns
+        .values()
+        .flat_map(|f| &f.given)
+        .find(|g| g.is_parameter() && g.key() == name)
+        .and_then(|g| g.bound.as_ref());
+    match bound {
+        Some(kind) => format!(
+            "`{name}` is a capability parameter, which a case never names: observe the capability the call binds it to, an instance of `{0}` (in a commons suite, the kind's double `{0}` or a suite-local instance)",
+            kind.name
+        ),
+        None => "observe a capability the target `consumes` / has in scope via `given`".to_string(),
+    }
+}
+
 /// Resolve an observation seam `Cap.op` (v0.117) against the capabilities the
 /// unit under test consumes. Returns the operation's signature on success; on
 /// failure it pushes `bynk.observe.not_a_seam` / `bynk.observe.unknown_op` and
@@ -831,7 +850,7 @@ fn resolve_observation_seam(cap: &Ident, op: &Ident, ctx: &mut Ctx) -> Option<Ca
                     cap.name
                 ),
             )
-            .with_note("observe a capability the target `consumes` / has in scope via `given`"),
+            .with_note(observation_note(&cap.name, ctx)),
         );
         return None;
     };
@@ -2168,7 +2187,14 @@ pub(crate) fn variant_owner<'a, D: AsRef<TypeDecl>>(
     if let [only] = owners {
         return Some(only);
     }
-    let exp = expected?;
+    let mut exp = expected?;
+    // #3752 (§12): a body returning `Effect[T]` is checked against it, and a
+    // variant is never itself an `Effect`, so the sum it names is `T`'s. Without
+    // this, `bynk`'s `PassThrough.Forward` would make an email handler's bare
+    // `Forward` ambiguous beside `EmailVerdict.Forward`.
+    if let Ty::Effect(inner) = &*tys.get(exp) {
+        exp = *inner;
+    }
     let Ty::Named { name, .. } = &*tys.get(exp) else {
         return None;
     };

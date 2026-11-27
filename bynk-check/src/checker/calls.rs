@@ -4,6 +4,7 @@
 //! re-exports these via `use calls::*`.
 
 use super::codable::{check_op_codable_args, check_reply_codable, op_encoding};
+use super::pass_through_calls::check_pass_through_call;
 use super::*;
 
 /// v0.39 (ADR 0072): record a parameter-name inlay hint for one call argument,
@@ -951,6 +952,89 @@ pub(crate) fn require_callee_given(
     ctx.errors.push(err);
 }
 
+/// #911: `bynk.locale.render_shadows_bundle`. A bundle's `render` is not importable, so a unit that
+/// `uses bynk.locale` and also `uses` a unit that declares a bundle gets `bynk.locale`'s `render`
+/// for a bare `render`, which reads no bundle and returns the code. That is rarely what the author
+/// meant, so it warns, naming the unit(s). A qualified `Locale.render` is deliberate.
+fn warn_render_shadows_bundle(name: &Ident, callee: &FnDecl, ctx: &mut Ctx) {
+    let scope = &ctx.input.message_scope;
+    if name.name != "render" || scope.locale_render != Some(callee.span) {
+        return;
+    }
+    let (message, note) = match scope.bundle_units.as_slice() {
+        [] => return,
+        [unit] => (
+            format!(
+                "`render` here is `bynk.locale`'s, which reads no message bundle and returns the code; `{unit}` declares one"
+            ),
+            format!(
+                "to render `{unit}`'s messages, call a function it exports: its own `render` is not importable (`bynk.messages.cross_unit_render`)"
+            ),
+        ),
+        units => (
+            format!(
+                "`render` here is `bynk.locale`'s, which reads no message bundle and returns the code; {} declare bundles",
+                units
+                    .iter()
+                    .map(|u| format!("`{u}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            "to render a unit's messages, call a function it exports: a bundle's own `render` is not importable (`bynk.messages.cross_unit_render`)".to_string(),
+        ),
+    };
+    let err =
+        CompileError::new("bynk.locale.render_shadows_bundle", name.span, message).with_note(note);
+    ctx.errors.push(err);
+}
+
+/// #911: `bynk.messages.unknown_code`. In a unit that declares a message bundle (and in its
+/// suites), a literal `message("code")` names a code of the unit's own `@reference` block: a
+/// code resolves only against the bundles of the unit where `message(code)` is called. A code
+/// the program computes (`message(code)` with `code` a parameter) is not checked, and a unit
+/// with no bundle has nothing to check against: its `render` is `bynk.locale`'s code-echo.
+/// The callee is `bynk.locale`'s `message` by where it is declared, so `Locale.message` and
+/// `message as msg` are checked and a unit's own `message` function is not.
+fn check_message_literal(callee: &FnDecl, args: &[Expr], ctx: &mut Ctx) {
+    let Some(codes) = ctx.input.message_scope.codes.clone() else {
+        return;
+    };
+    if ctx.input.message_scope.locale_message != Some(callee.span) {
+        return;
+    }
+    let [arg] = args else {
+        return; // an arity error is reported by the call check itself
+    };
+    let ExprKind::StrLit(code) = &arg.kind else {
+        return;
+    };
+    if codes.contains(code) {
+        return;
+    }
+    let nearest = codes
+        .iter()
+        .map(|c| (crate::exports::strsim(code, c), c))
+        .filter(|(d, _)| *d <= 2)
+        .min_by_key(|(d, _)| *d)
+        .map(|(_, c)| c.clone());
+    let mut err = CompileError::new(
+        "bynk.messages.unknown_code",
+        arg.span,
+        format!("`{code}` is not a code of this unit's reference message bundle"),
+    )
+    .with_note(
+        "a message code resolves only against the bundles of the unit where `message(code)` is called; declare the code in this unit's `@reference` block, or call a function the unit that declares it exports",
+    );
+    if let Some(near) = nearest {
+        err = err.with_suggestion(
+            format!("use `{near}`"),
+            vec![(arg.span, format!("\"{near}\""))],
+            Applicability::MaybeIncorrect,
+        );
+    }
+    ctx.errors.push(err);
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_call(
     name: &Ident,
@@ -981,6 +1065,8 @@ pub(crate) fn check_call(
             .insert(expr_id, Callee::Fn(Arc::clone(&fn_decl), Vec::new()));
         warn_bynk_list_deprecation(name, args, span, ctx);
         refuse_experimental_import(name, ctx);
+        check_message_literal(&fn_decl, args, ctx);
+        warn_render_shadows_bundle(name, &fn_decl, ctx);
         let site = super::cap_bindings::CallSite {
             args,
             bindings,
@@ -3091,7 +3177,7 @@ fn reject_method_type_args(method: &Ident, args: &[Expr], span: Span, ctx: &mut 
 /// have, which the kernel checker has then rejected (`method_not_found`), so no
 /// callee is recorded; an *accepted* call with no op is a gap between the
 /// checker's dispatch and [`crate::kernel_op`], a compiler bug.
-fn record_kernel(
+pub(super) fn record_kernel(
     ctx: &mut Ctx,
     expr_id: ExprId,
     recv: TyId,
@@ -3807,6 +3893,10 @@ fn check_method_call_inner(
     }
     // #4111: a `Secret` has only the built-ins `reveal` and `matches`.
     if let Some(r) = check_secret_call(recv_ty, method, args, span, expr_id, ctx) {
+        return r;
+    }
+    // #3752: an `InboundRequest`'s and a `Forwarded`'s reads.
+    if let Some(r) = check_pass_through_call(recv_ty, method, args, span, expr_id, ctx) {
         return r;
     }
     // Find a named type for the receiver, then look up its instance methods.
@@ -4592,6 +4682,17 @@ fn check_test_service_address(
                 extra_headers: false,
             },
         );
+        // #3752: a pass-through route has no suite address until its double lands.
+        let kinds = sig.handlers.iter().map(|h| &h.kind);
+        if let Some(err) =
+            crate::http_pass_through::suite_address_refusal(kinds, &id.name, method, path)
+        {
+            ctx.errors.push(err);
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
         let matched = sig.handlers.iter().find(|h| {
             matches!(&h.kind, HandlerKind::Http { method: m, path: p } if m.as_str() == method.name && p == path)
         });
@@ -5550,7 +5651,9 @@ pub(crate) fn check_effect_let_principal(
             // now-allowed wrong-method call would otherwise drop the `by`.)
             let wrong_method = bynk_syntax::ast::HttpMethod::from_ident(&method.name).is_some()
                 && matches!(args.first().map(|a| &a.kind), Some(bynk_syntax::ast::ExprKind::StrLit(path))
-                    if sig.handlers.iter().any(|h| matches!(&h.kind, bynk_syntax::ast::HandlerKind::Http { path: p, .. } if p == path)));
+                    if sig.handlers.iter().any(|h| matches!(&h.kind, bynk_syntax::ast::HandlerKind::Http { method: m, path: p }
+                        // #3752: a pass-through route's own refusal says why.
+                        if p == path && *m != bynk_syntax::ast::HttpMethod::Any)));
             if wrong_method {
                 ctx.errors.push(
                     CompileError::new(

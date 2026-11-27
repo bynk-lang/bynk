@@ -477,6 +477,8 @@ mod system {
     mod http_security_behaviour;
     #[path = "idempotency_workerd.rs"]
     mod idempotency_workerd;
+    #[path = "if_match_narrowing_behaviour.rs"]
+    mod if_match_narrowing_behaviour;
     #[path = "inline_value_names.rs"]
     mod inline_value_names;
     #[path = "int_binding_arithmetic_behaviour.rs"]
@@ -517,6 +519,10 @@ mod system {
     mod par_gate_workerd;
     #[path = "par_traverse_behaviour.rs"]
     mod par_traverse_behaviour;
+    #[path = "pass_through_check_behaviour.rs"]
+    mod pass_through_check_behaviour;
+    #[path = "pass_through_workerd.rs"]
+    mod pass_through_workerd;
     #[path = "property_behaviour.rs"]
     mod property_behaviour;
     #[path = "question_in_case_behaviour.rs"]

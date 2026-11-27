@@ -12,6 +12,12 @@
 /book/reference/changelog/ /reference/releases/ 301
 /book/reference/changelog /reference/releases/ 301
 
+# #3752: `bynk.http.pass_through_not_emitted` refused a pass-through build until its
+# router landed (slice 3b); it never shipped in a release, and the section it
+# pointed to now describes the built route.
+/reference/diagnostics/bynk.http.pass_through_not_emitted/ /reference/http/ 301
+/reference/diagnostics/bynk.http.pass_through_not_emitted /reference/http/ 301
+
 # Every tool links a diagnostic code as /d/<code> (slice 4, #3876); the page it
 # names may move, so the link stays a 302.
 /d /reference/diagnostics/ 302

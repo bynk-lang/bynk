@@ -338,6 +338,10 @@
       "summary": "A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential."
     },
     {
+      "code": "bynk.test.pass_through_address",
+      "summary": "A suite case addresses an `on ANY` pass-through route, which a suite can't drive until its test double (a stub of `Upstream.exchange`, `Forwarded.of`) arrives in a later release."
+    },
+    {
       "code": "bynk.test.peek_not_a_database",
       "summary": "`D1.peek` names a capability that is not derived from `D1`; only a D1 binding has a test database to read."
     },
@@ -1058,6 +1062,10 @@
       "summary": "A GET or DELETE handler declares a `body` parameter."
     },
     {
+      "code": "bynk.http.cache_on_pass_through",
+      "summary": "An `on ANY` pass-through route carries `@cache`; the upstream's `Cache-Control` is its answer's freshness."
+    },
+    {
       "code": "bynk.http.cache_public_reads_cookies",
       "summary": "A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another."
     },
@@ -1126,6 +1134,10 @@
       "summary": "A `RequestCookies` appears on a handler that is not an HTTP route."
     },
     {
+      "code": "bynk.http.cors_with_pass_through",
+      "summary": "A service that declares an `on ANY` pass-through route also declares `cors { }`."
+    },
+    {
       "code": "bynk.http.duplicate_route",
       "summary": "Two handlers share the same method and route."
     },
@@ -1166,8 +1178,16 @@
       "summary": "An HTTP handler's `headers` parameter is neither a record type nor `RequestHeaders`."
     },
     {
+      "code": "bynk.http.inbound_request_not_pass_through",
+      "summary": "An `InboundRequest` parameter on a route that is not `on ANY`, or not named `request`."
+    },
+    {
       "code": "bynk.http.invalid_path",
       "summary": "An HTTP route path is malformed."
+    },
+    {
+      "code": "bynk.http.pass_through_signature",
+      "summary": "An `on ANY` route does not return `Effect[PassThrough]` or takes a parameter it may not, or another route returns `Effect[PassThrough]`."
     },
     {
       "code": "bynk.http.path_param_not_stringy",
@@ -1208,6 +1228,10 @@
     {
       "code": "bynk.http.unbound_path_param",
       "summary": "A `:name` route segment has no matching handler parameter."
+    },
+    {
+      "code": "bynk.types.inbound_request_at_boundary",
+      "summary": "An `InboundRequest` or `Forwarded`, or a type holding one, where a value is stored, sent or returned across a boundary."
     }
   ],
   "identifier": [

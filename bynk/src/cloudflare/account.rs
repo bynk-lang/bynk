@@ -72,6 +72,88 @@ impl<'a> Account<'a> {
     ) -> Result<serde_json::Value, CloudflareError> {
         Ok(self.rest(purpose)?.request(request)?)
     }
+
+    /// The id of the queue `name`, checked before it reaches a request path; `None` when the
+    /// account has no such queue.
+    fn queue_id(&self, name: &str) -> Result<Option<String>, CloudflareError> {
+        let Some(id) = self.queue_find(name)? else {
+            return Ok(None);
+        };
+        if !rest::queues::is_queue_id(&id) {
+            return Err(CloudflareError::Other(format!(
+                "the queue `{name}` has the id `{id}`, which is not a queue id, so nothing was deleted"
+            )));
+        }
+        Ok(Some(id))
+    }
+
+    /// The consumers of the queue `queue_id`, each id checked before it reaches a request path.
+    fn consumers_of(
+        &self,
+        name: &str,
+        queue_id: &str,
+    ) -> Result<Vec<rest::queues::Consumer>, CloudflareError> {
+        let request = rest::queues::list_consumers(queue_id);
+        let body = self.send(Purpose::Queues, &request)?;
+        let consumers = rest::queues::consumers(&body)
+            .ok_or_else(|| unreadable(&request, "`result` list of consumers"))?;
+        if let Some(bad) = consumers.iter().find(|c| !rest::queues::is_queue_id(&c.id)) {
+            return Err(CloudflareError::Other(format!(
+                "the queue `{name}` has a consumer with the id `{}`, which is not a consumer id, \
+                 so nothing was deleted",
+                bad.id
+            )));
+        }
+        Ok(consumers)
+    }
+
+    /// #4601: remove each of queue `name`'s consumers (id `queue_id`), so the queue can then be
+    /// deleted. Cloudflare refuses to delete a queue a Worker consumes (400 `11005`) and to delete
+    /// that Worker while it consumes the queue (403 `10064`); removing the consumer first breaks
+    /// the cycle. Only the project's own Workers (`detach`) are removed: any other consumer (a
+    /// foreign Worker, an HTTP pull consumer) refuses the delete before anything is removed. A
+    /// removal answered 404 (the consumer, or the whole queue, already gone) is skipped: the
+    /// queue's own delete then answers for it, and a queue already gone reads as such (`11000`)
+    /// to the prune. Any other refusal stops before the queue is deleted, naming the order and
+    /// any consumers this call already removed, since those stay removed.
+    fn remove_queue_consumers(
+        &self,
+        name: &str,
+        queue_id: &str,
+        detach: &BTreeSet<String>,
+    ) -> Result<(), CloudflareError> {
+        let consumers = self.consumers_of(name, queue_id)?;
+        let foreign: Vec<_> = consumers.iter().filter(|c| !c.is_own(detach)).collect();
+        if !foreign.is_empty() {
+            return Err(CloudflareError::Other(rest::queues::foreign_consumers(
+                name, &foreign,
+            )));
+        }
+        let mut removed = Vec::new();
+        for consumer in &consumers {
+            let who = format!("`{}`", consumer.script.as_deref().unwrap_or(&consumer.id));
+            match self.send(
+                Purpose::Queues,
+                &rest::queues::delete_consumer(queue_id, &consumer.id),
+            ) {
+                Ok(_) => removed.push(who),
+                Err(e) if e.status() == Some(404) => {}
+                Err(e) => {
+                    let already = if removed.is_empty() {
+                        String::new()
+                    } else {
+                        format!("; already detached: {}", removed.join(", "))
+                    };
+                    return Err(CloudflareError::Other(format!(
+                        "could not detach {who} from the queue `{name}`, so the queue was not \
+                         deleted (a consumed queue is deleted only after its consumers are \
+                         removed{already}): {e}"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 /// `name`, refused unless it can be a bucket name, before it reaches a request path.
@@ -135,13 +217,7 @@ impl CloudflareApi for Account<'_> {
             seen.extend(rest::queues::ids(&body));
             let repeated = entries > 0 && seen.len() == before;
             let read = Page::of(&body, entries);
-            let more = read.total_pages.map_or_else(
-                || {
-                    read.per_page
-                        .is_some_and(|per| entries as u64 >= per && entries > 0)
-                },
-                |total| page < total,
-            );
+            let more = read.more(page, MissingTotal::WhileFull);
             // #4582 review: a listing that stops before its end without the name has not said
             // the queue is absent, and reading it so would let `--prune` forget a live queue.
             if id.is_none() && more && (repeated || page == rest::queues::MAX_PAGES) {
@@ -166,15 +242,21 @@ impl CloudflareApi for Account<'_> {
         }
     }
 
-    fn queue_delete(&self, name: &str) -> Result<bool, CloudflareError> {
-        let Some(id) = self.queue_find(name)? else {
+    fn queue_consumers(
+        &self,
+        name: &str,
+    ) -> Result<Option<Vec<rest::queues::Consumer>>, CloudflareError> {
+        match self.queue_id(name)? {
+            Some(id) => self.consumers_of(name, &id).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    fn queue_delete(&self, name: &str, detach: &BTreeSet<String>) -> Result<bool, CloudflareError> {
+        let Some(id) = self.queue_id(name)? else {
             return Ok(false);
         };
-        if !rest::queues::is_queue_id(&id) {
-            return Err(CloudflareError::Other(format!(
-                "the queue `{name}` has the id `{id}`, which is not a queue id, so nothing was deleted"
-            )));
-        }
+        self.remove_queue_consumers(name, &id, detach)?;
         self.send(Purpose::Queues, &rest::queues::delete(&id))
             .map(|_| true)
     }
@@ -275,9 +357,12 @@ impl CloudflareApi for Account<'_> {
 
     /// Followed while a page is full, which, with no paging documented, is one request; never
     /// past [`rest::vectorize::MAX_PAGES`], and not past a page that brings no name not already
-    /// listed (an endpoint that ignored `?page=N` would repeat its first).
+    /// listed (an endpoint that ignored `?page=N` would repeat its first). A listing stopped that
+    /// way before its end is an error, never a shorter list: an index it could not see would read
+    /// as absent, and `--prune` must never take that as "forget it".
     fn vectorize_names(&self) -> Result<Vec<String>, CloudflareError> {
         let mut names: Vec<String> = Vec::new();
+        let mut cut_short = None;
         let rule = Numbered {
             cap: Some(rest::vectorize::MAX_PAGES),
             missing_total: MissingTotal::WhileFull,
@@ -291,9 +376,25 @@ impl CloudflareApi for Account<'_> {
             let fresh: Vec<String> = listed.into_iter().filter(|n| !names.contains(n)).collect();
             let repeated = fresh.is_empty();
             names.extend(fresh);
-            Ok(Page::of(&body, entries).done_if(repeated))
+            let read = Page::of(&body, entries);
+            let more = read.more(page, MissingTotal::WhileFull);
+            if more && (repeated || page == rest::vectorize::MAX_PAGES) {
+                cut_short = Some(if entries == 0 {
+                    format!("page {page} was empty")
+                } else if repeated {
+                    format!("page {page} repeated an earlier one")
+                } else {
+                    format!("it did not end within {} pages", rest::vectorize::MAX_PAGES)
+                });
+            }
+            Ok(read.done_if(repeated))
         })?;
-        Ok(names)
+        match cut_short {
+            Some(why) => Err(CloudflareError::Other(format!(
+                "the account's Vectorize index listing could not be read to its end ({why}), so which indexes exist is not known"
+            ))),
+            None => Ok(names),
+        }
     }
 
     fn vectorize_config(&self, name: &str) -> Result<IndexConfig, CloudflareError> {
@@ -527,6 +628,154 @@ mod tests {
         );
     }
 
+    /// #4601: a stub of the account the 1D.4 sandbox teardown met (#4056). Queue `jobs`
+    /// (`4e5f6a7b`) has one consumer, the Worker `shop-jobs` (`9f8e7d`), and Cloudflare refuses to
+    /// delete the queue while it does: 400 `11005`. `consumer_delete` is the status a consumer's
+    /// removal answers. Every request is logged, in order.
+    fn consumed_queue_stub(
+        consumer_delete: u16,
+    ) -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen = log.clone();
+        std::thread::spawn(move || {
+            let mut consumed = true;
+            for stream in listener.incoming().flatten() {
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                let request: Vec<&str> = line.split_whitespace().take(2).collect();
+                let (method, path) = (request[0].to_string(), request[1].to_string());
+                let mut length = 0usize;
+                loop {
+                    let mut header = String::new();
+                    if reader.read_line(&mut header).unwrap_or(0) == 0 || header == "\r\n" {
+                        break;
+                    }
+                    if let Some(n) = header.to_ascii_lowercase().strip_prefix("content-length:") {
+                        length = n.trim().parse().unwrap_or(0);
+                    }
+                }
+                let _ = reader.read_exact(&mut vec![0u8; length]);
+                seen.lock().unwrap().push(format!("{method} {path}"));
+                let (status, body) = match (method.as_str(), path.as_str()) {
+                    ("GET", p) if p.starts_with("/accounts/acct/queues?") => (
+                        200,
+                        r#"{"success":true,"result":[{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#.to_string(),
+                    ),
+                    ("GET", "/accounts/acct/queues/4e5f6a7b/consumers") => (
+                        200,
+                        if consumed {
+                            r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"}]}"#
+                        } else {
+                            r#"{"success":true,"result":[]}"#
+                        }
+                        .to_string(),
+                    ),
+                    ("DELETE", "/accounts/acct/queues/4e5f6a7b/consumers/9f8e7d") => {
+                        if consumer_delete == 200 {
+                            consumed = false;
+                            (200, r#"{"success":true,"result":null}"#.to_string())
+                        } else {
+                            (
+                                consumer_delete,
+                                r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#.to_string(),
+                            )
+                        }
+                    }
+                    ("DELETE", "/accounts/acct/queues/4e5f6a7b") if consumed => (
+                        400,
+                        r#"{"success":false,"errors":[{"code":11005,"message":"Cannot delete a queue with a consumer"}]}"#.to_string(),
+                    ),
+                    ("DELETE", "/accounts/acct/queues/4e5f6a7b") => {
+                        (200, r#"{"success":true,"result":null}"#.to_string())
+                    }
+                    _ => (404, r#"{"success":false,"errors":[{"code":7003}]}"#.to_string()),
+                };
+                let mut stream = stream;
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+            }
+        });
+        (base, log)
+    }
+
+    /// #4601: a queue a Worker consumes is deleted by removing the consumer first, then the queue.
+    /// Deleting the queue first is refused with 400 `11005` (the stub, as Cloudflare answered in
+    /// #4056's teardown), which is what `--prune` met before the consumers were removed.
+    #[test]
+    fn a_consumed_queue_is_deleted_after_its_consumer_is_removed() {
+        let (base, seen) = consumed_queue_stub(200);
+        let root = std::env::temp_dir();
+        let own = BTreeSet::from(["shop-jobs".to_string()]);
+        assert_eq!(account(base, &root).queue_delete("jobs", &own), Ok(true));
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [
+                "GET /accounts/acct/queues?per_page=100&page=1",
+                "GET /accounts/acct/queues/4e5f6a7b/consumers",
+                "DELETE /accounts/acct/queues/4e5f6a7b/consumers/9f8e7d",
+                "DELETE /accounts/acct/queues/4e5f6a7b",
+            ]
+        );
+    }
+
+    /// #4601: a consumer that cannot be removed stops the delete before the queue is touched, and
+    /// the error names the Worker and the order.
+    #[test]
+    fn a_consumer_that_cannot_be_removed_leaves_the_queue_and_says_why() {
+        let (base, seen) = consumed_queue_stub(403);
+        let root = std::env::temp_dir();
+        let own = BTreeSet::from(["shop-jobs".to_string()]);
+        let e = account(base, &root)
+            .queue_delete("jobs", &own)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.starts_with("could not detach `shop-jobs` from the queue `jobs`, so the queue was not deleted (a consumed queue is deleted only after its consumers are removed): DELETE /queues/4e5f6a7b/consumers/9f8e7d: Cloudflare answered 403"),
+            "{e}"
+        );
+        assert!(
+            !seen
+                .lock()
+                .unwrap()
+                .contains(&"DELETE /accounts/acct/queues/4e5f6a7b".to_string()),
+            "the queue was not touched"
+        );
+    }
+
+    /// #4601: a consumer that is not one of the project's Workers (here, `shop-jobs` is not in
+    /// `detach`) refuses the delete before anything is removed: neither the consumer nor the
+    /// queue is touched, and the refusal names it with the command that detaches it.
+    #[test]
+    fn a_foreign_consumer_refuses_the_delete_before_anything_is_removed() {
+        let (base, seen) = consumed_queue_stub(200);
+        let root = std::env::temp_dir();
+        let e = account(base, &root)
+            .queue_delete("jobs", &BTreeSet::from(["shop-api".to_string()]))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            e,
+            "the queue `jobs` is consumed by the Worker `shop-jobs` (not one of this project's \
+             Workers), so nothing was deleted for it: detach it by hand (`wrangler queues \
+             consumer remove jobs shop-jobs`) or keep the queue"
+        );
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [
+                "GET /accounts/acct/queues?per_page=100&page=1",
+                "GET /accounts/acct/queues/4e5f6a7b/consumers",
+            ],
+            "nothing was deleted"
+        );
+    }
+
     /// An id that could leave the namespaces path is refused before any request is sent.
     #[test]
     fn an_id_that_is_not_a_namespace_id_is_never_sent() {
@@ -583,6 +832,7 @@ mod tests {
 
     /// #4568 review: the index listing is followed while pages are full, and stops at a page
     /// that brings no new name, so an endpoint that ignored `?page=N` is asked twice, not forever.
+    /// A listing stopped before its end, by that or by the cap, is an error, not the names seen.
     #[test]
     fn the_index_listing_follows_full_pages_and_stops_on_a_repeat() {
         let page = |from: usize, to: usize| -> &'static str {
@@ -619,11 +869,81 @@ mod tests {
         let answers: &'static [(u16, &'static str)] =
             Box::leak(Box::new([(200, page(0, 2)), (200, page(0, 2))]));
         let (base, seen) = answering_in_turn(answers);
+        let said = account(base, &root)
+            .vectorize_names()
+            .unwrap_err()
+            .to_string();
+        assert!(
+            said.contains("could not be read to its end (page 2 repeated an earlier one)"),
+            "{said}"
+        );
+        assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
+        // Full pages to the cap, with no end in sight: an error, not the names seen so far.
+        let pages = rest::vectorize::MAX_PAGES as usize;
+        let answers: &'static [(u16, &'static str)] = Box::leak(
+            (0..pages)
+                .map(|p| (200, page(2 * p, 2 * p + 2)))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        );
+        let (base, seen) = answering_in_turn(answers);
+        let said = account(base, &root)
+            .vectorize_names()
+            .unwrap_err()
+            .to_string();
+        assert!(said.contains("it did not end within 100 pages"), "{said}");
+        assert_eq!(seen.join().unwrap().len(), pages);
+        // An empty last page is the listing's end.
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, page(0, 2)),
+            (
+                200,
+                r#"{"success":true,"result":[],"result_info":{"per_page":2}}"#,
+            ),
+        ]));
+        let (base, _) = answering_in_turn(answers);
         assert_eq!(
             account(base, &root).vectorize_names().unwrap(),
             ["ix-0", "ix-1"]
         );
-        assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
+        // #4592 review: with `total_pages`, an empty or a repeated page before the last is
+        // named for what it is; on the last page the listing has simply ended.
+        let of_three = |names: &str| -> &'static str {
+            Box::leak(
+                format!(
+                    r#"{{"success":true,"result":[{names}],"result_info":{{"total_pages":3}}}}"#
+                )
+                .into_boxed_str(),
+            )
+        };
+        for (second, why) in [
+            (of_three(""), "page 2 was empty"),
+            (
+                of_three(r#"{"name":"ix-0"}"#),
+                "page 2 repeated an earlier one",
+            ),
+        ] {
+            let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+                (200, of_three(r#"{"name":"ix-0"}"#)),
+                (200, second),
+            ]));
+            let (base, _) = answering_in_turn(answers);
+            let said = account(base, &root)
+                .vectorize_names()
+                .unwrap_err()
+                .to_string();
+            assert!(said.contains(why), "{said}");
+        }
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, of_three(r#"{"name":"ix-0"}"#)),
+            (200, of_three(r#"{"name":"ix-1"}"#)),
+            (200, of_three("")),
+        ]));
+        let (base, _) = answering_in_turn(answers);
+        assert_eq!(
+            account(base, &root).vectorize_names().unwrap(),
+            ["ix-0", "ix-1"]
+        );
     }
 
     /// 1D.4d: the queues listing is followed while pages are full (when `total_pages` is left out)

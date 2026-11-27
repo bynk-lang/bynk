@@ -414,6 +414,9 @@ pub(crate) struct Applied<K: ResourceKind> {
     pub(crate) bound: Vec<(String, K::Bound)>,
     /// What to record, each written in order before anything else is asked of the account.
     pub(crate) commits: Vec<Commit<K::Change>>,
+    /// The failure that stopped the step part-way, returned once `commits` are written: what it
+    /// did to the account before failing is recorded (#3999).
+    pub(crate) stopped: Option<DeployFailure>,
 }
 
 impl<K: ResourceKind> Applied<K> {
@@ -422,6 +425,7 @@ impl<K: ResourceKind> Applied<K> {
         Applied {
             bound: Vec::new(),
             commits: Vec::new(),
+            stopped: None,
         }
     }
 
@@ -430,12 +434,19 @@ impl<K: ResourceKind> Applied<K> {
         Applied {
             bound: vec![(binding.to_string(), bound)],
             commits: Vec::new(),
+            stopped: None,
         }
     }
 
     /// And `commit` to write.
     pub(crate) fn with(mut self, commit: Commit<K::Change>) -> Self {
         self.commits.push(commit);
+        self
+    }
+
+    /// Stopped by `failure`, after its commits are written.
+    pub(crate) fn stopping(mut self, failure: DeployFailure) -> Self {
+        self.stopped = Some(failure);
         self
     }
 
@@ -607,6 +618,16 @@ pub(crate) trait ResourceKind: Sized {
     /// What `--prune` says before it asks about `orphan`.
     fn prune_notice(_orphan: &Self::Orphan, _environment: &str) -> Option<Notice> {
         None
+    }
+
+    /// [`ResourceKind::prune_notice`], given what the run read of the account just before it
+    /// asks (`orphans`): a queue names the Workers it detaches (#4601).
+    fn prune_notice_in(
+        orphan: &Self::Orphan,
+        environment: &str,
+        _orphans: &Orphans,
+    ) -> Option<Notice> {
+        Self::prune_notice(orphan, environment)
     }
 
     /// Delete `orphan` from the account, and what forgetting it changes. Only called for a
@@ -1002,7 +1023,7 @@ pub(crate) fn prune_notices(orphans: &Orphans, environment: &str) -> (Vec<Notice
     impl KindVisitor for Announce<'_> {
         fn visit<K: ResourceKind>(&mut self) {
             for orphan in K::orphans_in(self.orphans) {
-                if let Some(notice) = K::prune_notice(orphan, self.environment) {
+                if let Some(notice) = K::prune_notice_in(orphan, self.environment, self.orphans) {
                     self.notices.push(notice);
                 }
                 self.count += usize::from(K::prunable(orphan));

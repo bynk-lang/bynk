@@ -1621,6 +1621,10 @@ fn instance_option_value(
             );
             return None;
         }
+        // #3752: an `Upstream`'s `@timeout`, a positive whole number of seconds.
+        (firstparty::OptionKind::Duration, kind) if base == "Upstream" => OptionValue::Seconds(
+            crate::http_pass_through::upstream_timeout(kind, option, arg.span, path, errors)?,
+        ),
         (firstparty::OptionKind::Duration, _) if base == "Container" => OptionValue::Seconds(
             container_sleep_after(&arg.value.kind, arg.span, path, errors)?,
         ),
@@ -1667,6 +1671,11 @@ fn instance_option_value(
     let OptionValue::Str(text) = &value else {
         return Some(value);
     };
+    // #3752 (D13): an `Upstream`'s `@origin` is a serialised origin.
+    if base == "Upstream" && option == "origin" {
+        return crate::http_pass_through::upstream_origin_ok(text, arg.span, path, errors)
+            .then_some(value);
+    }
     if base == "Email" && option == crate::firstparty::EMAIL_TO_OPTION && !is_email_address(text) {
         errors.push_for(
             Some(path),
@@ -1694,28 +1703,8 @@ fn instance_option_value(
     if base == "Container" && !container_str_ok(text, option, ann, path, errors) {
         return None;
     }
-    // Hyperdrive H5 (#3322, DECISION B): `@tls` is one of a closed set.
-    if option == crate::firstparty::MYSQL_TLS_OPTION
-        && !crate::firstparty::MYSQL_TLS_MODES
-            .iter()
-            .any(|(mode, _)| mode == text)
+    if option == crate::firstparty::MYSQL_TLS_OPTION && !mysql_tls_ok(text, base, ann, path, errors)
     {
-        errors.push_for(
-            Some(path),
-            CompileError::new(
-                "bynk.capability.invalid_option",
-                ann.span,
-                format!("`{text}` is not a TLS mode a `{base}` can use"),
-            )
-            .with_note(format!(
-                "the modes are {}; `\"required\"` is the default",
-                crate::firstparty::MYSQL_TLS_MODES
-                    .iter()
-                    .map(|(m, _)| format!("`\"{m}\"`"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )),
-        );
         return None;
     }
     if option == crate::firstparty::SERVICE_WORKER_OPTION && !is_worker_name(text) {
@@ -1778,7 +1767,48 @@ fn instance_option_value(
         );
         return None;
     }
+    if option == crate::firstparty::QUEUE_NAME_OPTION
+        && base == "Queue"
+        && let Some(error) = crate::queue_reserved::reserved_name_error(text, ann.span)
+    {
+        errors.push_for(Some(path), error);
+        return None;
+    }
     Some(value)
+}
+
+/// Hyperdrive H5 (#3322, DECISION B): whether a `@tls` is one of the closed set of
+/// modes. Pushes the error and returns `false` otherwise.
+fn mysql_tls_ok(
+    text: &str,
+    base: &str,
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    if crate::firstparty::MYSQL_TLS_MODES
+        .iter()
+        .any(|(mode, _)| *mode == text)
+    {
+        return true;
+    }
+    errors.push_for(
+        Some(path),
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            ann.span,
+            format!("`{text}` is not a TLS mode a `{base}` can use"),
+        )
+        .with_note(format!(
+            "the modes are {}; `\"required\"` is the default",
+            crate::firstparty::MYSQL_TLS_MODES
+                .iter()
+                .map(|(m, _)| format!("`\"{m}\"`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    );
+    false
 }
 
 /// #3302: whether every entry of an `Email` instance's address list is an
@@ -2880,6 +2910,11 @@ pub fn check_function_type_boundary_items(
                         if streamed_body {
                             continue;
                         }
+                        // #3752: a pass-through route's `request` is where an
+                        // `InboundRequest` arrives (`crate::http_pass_through`).
+                        if crate::http_pass_through::is_inbound_request(&p.type_ref, types) {
+                            continue;
+                        }
                         if !type_ref_is_held(&p.type_ref) && !http_headers && !multipart_body {
                             // Only the `@name` arm is relaxed for a request record;
                             // every other boundary check still runs on it.
@@ -2891,7 +2926,10 @@ pub fn check_function_type_boundary_items(
                             reject_fn_types(&p.type_ref, what, types, errors);
                         }
                     }
-                    if matches!(h.kind, HandlerKind::Http { .. }) {
+                    // #3752: a pass-through route returns `PassThrough`, which holds the
+                    // `Forwarded` it passes through.
+                    if crate::http_pass_through::returns_pass_through(&h.return_type, types) {
+                    } else if matches!(h.kind, HandlerKind::Http { .. }) {
                         crate::api_key::reject_http_result(&h.return_type, types, errors);
                     } else {
                         reject_fn_types(&h.return_type, "a service handler signature", types, errors);
@@ -7824,6 +7862,8 @@ mod native_platform_closure_tests {
             use_views: Default::default(),
             ambiguous_uses: Default::default(),
             use_origin: Default::default(),
+            message_codes: None,
+            bundle_render_spellings: Default::default(),
         }
     }
 

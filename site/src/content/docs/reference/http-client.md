@@ -17,7 +17,8 @@ for what it does not generate.
 This is the third surface a contract takes. [`bynk openapi`](/reference/tooling/bynk-openapi/)
 is the language-neutral description, and the [TypeScript client](/reference/typescript-client/)
 is the signed, Workers-only client for `on call` services. This one is for
-browsers and framework servers calling `from http` routes.
+browsers and framework servers calling `from http` routes, and for connecting to a
+`from websocket` service (see [WebSocket services](#websocket-services)).
 
 | You want | Use |
 |---|---|
@@ -31,7 +32,7 @@ cannot disagree about a shape or a status.
 ## Generating it
 
 ```sh
-bynk client --out web/src/lib/api.ts            # every `from http` service
+bynk client --out web/src/lib/api.ts            # every `from http` and `from websocket` service
 bynk client --service orders --out api.ts       # one service; repeat to add more
 bynk client > api.ts                            # stdout, to compose in a shell or CI
 ```
@@ -499,15 +500,94 @@ A server-side call (a framework's server, Node) has no preflight and can set it 
 `viaBinding(...)` turns it on for a Service Binding call (override it with `sendContract: false`
 after the spread). The server ignores the header on a `from http` route.
 
+## WebSocket services
+
+A `from websocket` service gets a `connect` on the same client, beside the HTTP routes of other services. It
+shares the client's `baseUrl` (`https` becomes `wss`, `http` becomes `ws`) and its other options, and it
+takes the route's parameters, the credential the service's actor reads, and an optional `connect` options
+object, in that order:
+
+```ts
+const api = createClient({ baseUrl: "https://api.example.com" });
+
+const conn = api.gateway.connect("lobby", { bearer: token });   // route parameter, then credentials
+if ("kind" in conn) throw new Error(conn.kind);                  // a CallFailure: nothing was opened
+await conn.opened;
+
+conn.send({ text: "hi", reply: null });                          // the service's `in` type, checked first
+for await (const frame of conn.frames) show(frame.text);         // the service's `out` type, decoded
+conn.onClose(({ code, reason, clean }) => log(code, reason, clean));
+```
+
+`connect` returns the connection, or a `CallFailure` (`Invalid` for a route parameter the server would refuse,
+which is checked before anything is opened) and never throws.
+
+**The route's parameters** are the `on open` parameters, typed and checked as an HTTP path parameter is, and
+sent in the query string of the upgrade, which is where the Worker reads them.
+
+**The credential** follows the service's actor. A client that offers the wrong one for its actor is refused
+at the edge, as any other is.
+
+| The `on open` actor | `credentials` | What is sent |
+|---|---|---|
+| `Bearer` | `{ bearer: string \| () => string \| Promise<string> }` | the subprotocol pair `["bynk.bearer", token]`; optional where an actor sum has an anonymous member |
+| `Oidc` | `{ oidc: string \| () => string \| Promise<string> }` | the subprotocol pair `["bynk.oidc", token]` |
+| `SignedCookie` | none | nothing: the browser sends its session cookie. The service's `cors` must list the page's origin |
+| `None` (`Visitor`) | none | nothing |
+
+A token given as a function is read at each connect and each reconnect, so a short-lived token needs no wrapper.
+The client never reads or stores one.
+
+**Frames are typed and checked both ways.** `send(frame)` encodes the value and runs the server's own checks on it
+first, so a refinement the server would refuse is returned as `CallFailure` `Invalid` and nothing is sent.
+Before the connection opens a frame waits for it; once it is closed, or reconnecting, `send` returns `CallFailure`
+`Transport`. A frame the server sends is decoded as the service's `out` type by the codec the server writes it with (see
+[the wire form of a frame](/reference/websocket/#the-wire-form-of-a-frame)), so an `Option` is `T | null`; one that does not decode closes the
+connection. The client closes with `4008` where the server would use `1008`, because a page may close only with
+`1000` or a code from `3000` to `4999`. As on the server, a plain `Bytes` frame is a binary message (a
+`Uint8Array`) and any other frame type is JSON text. `frames` is an async iterator that ends when the connection
+does, and `onFrame(listener)` is the callback form; frames are kept for `frames` from the first time it is read.
+
+**Closing.** `close(code?, reason?)` closes for good, with `1000` or a code from `3000` to `4999`. `onClose` reports
+`{ code, reason, clean, willReconnect }` for every close, including one a reconnect follows.
+
+**Reconnecting is opt-in.** Without `reconnect` a connection that closes stays closed.
+
+```ts
+const conn = api.gateway.connect("lobby", { bearer: token }, {
+  reconnect: { credentials: async () => ({ bearer: await freshToken() }) },
+});
+conn.onReconnect((attempt) => log("back", attempt));
+```
+
+The client reconnects after the server closes the connection with `1008` and the reason `authentication expired`
+(a credential's expiry is re-checked at every frame; see [WebSocket](/reference/websocket/#a-credential-that-expires-on-a-live-connection))
+and after `1006`, an abnormal disconnection, with an exponential backoff (250 ms doubling, at most 30 s;
+`backoff(attempt)` replaces it) for at most `maxAttempts` (5) in a row, asking `credentials` for a fresh credential
+each time; without `credentials` it offers the credentials `connect` was given again, so a reconnect never quietly
+becomes an anonymous connection. A close the client made (`close()`, or a frame it refused) never reconnects, and
+neither does another `1008`; `close()` also stops an attempt that is still being made, so nothing opens after it. **Frames are not replayed**: a frame sent while the connection was down, or one the server sent meanwhile,
+is the application's to resend or fetch again, and a frame still queued when the connection closes is dropped,
+never resent on the next one. `credentials` is called once for every attempt, not once per connection. The `frames` iterator and the listeners carry across a reconnect, and leaving a `for await` early stops that iterator buffering.
+
+**Environment.** The client uses the platform `WebSocket` (browsers, Workers, Node 22 and later) and no
+dependency. A `webSocket` option on `createClient` supplies another constructor, as `fetch` does: a Node client
+that must send an `Origin` or a `Cookie` header passes one that adds them, since the standard constructor cannot.
+`connect` takes a `path` option (default `/`): the Worker routes an upgrade by its header, not its path.
+
+A service's contract hash is not generated for a WebSocket service, and `sendContract` does not apply to it.
+
 ## Routes left out
 
 A route the client cannot yet represent faithfully is named on stderr and left out,
 never generated wrong: a raw `query: RequestQuery`, `cookies: RequestCookies` or `headers: RequestHeaders` view,
 a route guarded by a request signature (the client holds no secret), a route with a
 [rest segment](/reference/http/#rest-segments) (`/files/*key`, whose value holds `/`, which one encoded
-segment can't carry; `bynk openapi` leaves it out for the same reason), and a route whose types hold an `Option`
-inside a `Map`, a `Set` or a `Result`. If every selected route is left out the
-command fails.
+segment can't carry; `bynk openapi` leaves it out for the same reason), a
+[pass-through route](/reference/http/#pass-through-routes) (`on ANY`, which answers with whatever its upstream
+does), and a route whose types hold an `Option`
+inside a `Map`, a `Set` or a `Result`. A WebSocket service whose frame or route-parameter types hold such an
+`Option` is left out the same way. If every selected route and connection is left out the command fails.
 
 ## Size
 

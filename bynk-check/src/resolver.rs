@@ -234,6 +234,9 @@ pub struct ResolvedCommons {
     /// whose free functions may declare capability parameters and shared
     /// capabilities. Set with [`ResolvedCommons::with_is_commons`].
     pub(crate) is_commons: bool,
+    /// #911: what the checker needs to know about message bundles for this unit's bodies (see
+    /// [`crate::symbols::MessageScope`]). Set with [`ResolvedCommons::with_message_scope`].
+    pub(crate) message_scope: crate::symbols::MessageScope,
     /// Names of types brought into scope via `uses` of a *commons*
     /// specifically (as opposed to a local declaration, or a type surfaced
     /// via `consumes`) — every name [`compute_is_uses_commons_type`] accepts
@@ -549,7 +552,15 @@ impl ResolvedCommons {
             unselected_types: HashSet::new(),
             stability: Default::default(),
             is_commons: false,
+            message_scope: Default::default(),
         }
+    }
+
+    /// #911: record this unit's [`crate::symbols::MessageScope`]. A builder, so a construction
+    /// without a bundle need not call it.
+    pub fn with_message_scope(mut self, scope: crate::symbols::MessageScope) -> Self {
+        self.message_scope = scope;
+        self
     }
 
     /// #2881: record which of this unit's functions came in through `uses`
@@ -1066,6 +1077,8 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             unselected_types: HashSet::new(),
             stability: Default::default(),
             is_commons: false,
+            // Single-file mode has no bundle to check a literal code against.
+            message_scope: Default::default(),
         };
         (resolved, errors)
     }
@@ -1195,7 +1208,33 @@ pub fn private_imports_in<'a>(
             });
         }
     }
+    // #911: a bundle's `render` as this unit spells it qualified (`Messages.render`). Keyed by the
+    // exact spelling, so `order.render()` on a record, or a `render` of a unit with no bundle, is
+    // never taken for it. A unit that declares its own bundle sees these too: its own `render` is
+    // the bare one only.
+    for (spelling, unit) in &local.bundle_render_spellings {
+        out.entry(spelling.clone()).or_insert(PrivateImport {
+            unit: unit.clone(),
+            kind: crate::symbols::MESSAGE_RENDERER,
+        });
+    }
     out
+}
+
+/// #911: `bynk.messages.cross_unit_render`: `span` reaches for the `render` of `unit`, whose
+/// message bundles belong to that unit. A code resolves only against the bundles of the unit
+/// where `message(code)` is called, so another unit's messages are used through a function that
+/// unit exports.
+pub fn cross_unit_render(unit: &str, span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.messages.cross_unit_render",
+        span,
+        format!("`render` reads the message bundles of `{unit}`, which belong to that unit"),
+    )
+    .with_note(format!(
+        "a message code resolves only against the bundles of the unit where `message(code)` is called; \
+         to use `{unit}`'s messages, call a function that unit exports, which renders them there"
+    ))
 }
 
 /// #2618: report a reference to a used commons' `private` declaration as
@@ -1243,6 +1282,11 @@ pub fn rewrite_private_references(
             let Some(p) = private.get(&subject) else {
                 return e;
             };
+            if p.kind == crate::symbols::MESSAGE_RENDERER {
+                // #911: not a `private` declaration: the bundle's own `render`, which reads
+                // that unit's bundles and no other unit's.
+                return cross_unit_render(&p.unit, e.span);
+            }
             CompileError::new(
                 "bynk.visibility.private_item",
                 e.span,

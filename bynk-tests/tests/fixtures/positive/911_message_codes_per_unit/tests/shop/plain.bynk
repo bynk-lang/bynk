@@ -1,0 +1,5 @@
+suite shop.plain {
+  case "a unit with no bundle renders the code" {
+    expect echo("en") == "anything.at.all"
+  }
+}

@@ -1186,6 +1186,12 @@
   "bynk.lex.unterminated_string": [
     "/reference/spec/lexical-grammar/#32-literals"
   ],
+  "bynk.locale.render_shadows_bundle": [
+    "/book/guides/localisation/declare-a-message-bundle/#message-codes-belong-to-their-unit"
+  ],
+  "bynk.messages.cross_unit_render": [
+    "/book/guides/localisation/declare-a-message-bundle/#message-codes-belong-to-their-unit"
+  ],
   "bynk.messages.format_mismatch": [
     "/book/guides/localisation/format-with-icu/#what-the-compiler-checks"
   ],
@@ -1212,6 +1218,9 @@
   ],
   "bynk.messages.placeholder_mismatch": [
     "/book/guides/localisation/declare-a-message-bundle/#adding-a-locale"
+  ],
+  "bynk.messages.unknown_code": [
+    "/book/guides/localisation/declare-a-message-bundle/#message-codes-belong-to-their-unit"
   ],
   "bynk.mysql.sql_invalid": [
     "/reference/bynk-capabilities/#mysql-sql-checked-for-syntax"
@@ -1565,6 +1574,10 @@
     "/reference/queue/#handler-form",
     "/reference/queue/",
     "/book/guides/entry-points/queue/"
+  ],
+  "bynk.queue.reserved_name": [
+    "/reference/queue/#reserved-names",
+    "/reference/spec/static-semantics/#events"
   ],
   "bynk.queue.return_not_queue_result": [
     "/reference/queue/#handler-form",

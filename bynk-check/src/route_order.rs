@@ -172,6 +172,44 @@ pub fn shadowed(routes: &[(&str, &str)]) -> Vec<(usize, Vec<usize>)> {
     out
 }
 
+/// #3752 (D5): the `ANY` pass-through routes that never own a request. An `ANY`
+/// route owns a request only when it is strictly more specific than every
+/// ordinary route matching the path, whatever their method; at equal shape the
+/// ordinary route wins. So one is unreachable when every path it matches is
+/// matched as specifically by ordinary routes. The result is as [`shadowed`]'s:
+/// each such route's index and the ordinary routes that cover it.
+pub fn pass_through_shadowed(routes: &[(&str, &str)]) -> Vec<(usize, Vec<usize>)> {
+    let segs: Vec<Vec<Seg>> = routes.iter().map(|(_, p)| segments(p)).collect();
+    pass_through_yields(routes)
+        .into_iter()
+        .filter(|(r, covering)| {
+            !covering.is_empty()
+                && covered(&segs[*r], 0, covering.iter().map(|&a| &segs[a]).collect())
+        })
+        .collect()
+}
+
+/// #3752 (D5): for each `ANY` route of `routes` (`(method, path)` pairs), the
+/// ordinary routes, of any method, that share a path with it and beat it there or
+/// tie it, so own every path the two share. The router answers such a path from
+/// the ordinary route (or its `405`), never the upstream.
+pub fn pass_through_yields(routes: &[(&str, &str)]) -> Vec<(usize, Vec<usize>)> {
+    let segs: Vec<Vec<Seg>> = routes.iter().map(|(_, p)| segments(p)).collect();
+    (0..routes.len())
+        .filter(|&r| routes[r].0 == "ANY")
+        .map(|r| {
+            let yields = (0..routes.len())
+                .filter(|&a| {
+                    routes[a].0 != "ANY"
+                        && overlaps(&segs[a], &segs[r])
+                        && precedes(&segs[a], &segs[r]) != Some(false)
+                })
+                .collect();
+            (r, yields)
+        })
+        .collect()
+}
+
 /// Whether the paths `route` matches from segment `at` on are all matched by one
 /// of `earlier`: routes already known to match the segments before `at`. A rest
 /// in `earlier` at `at` matches everything from there on; a rest in `route`
@@ -398,5 +436,26 @@ mod tests {
         // Not last: a literal shape (the checker refuses it).
         assert_eq!(segments("/*a/b"), vec![Seg::Lit("*a"), Seg::Lit("b")]);
         assert_eq!(segments("/a/*b/"), vec![Seg::Lit("a"), Seg::Rest]);
+    }
+
+    // #3752 (D5): an `ANY` route that ordinary routes always beat.
+    #[test]
+    fn a_pass_through_route_beaten_everywhere_is_unreachable() {
+        // Equal shape: the ordinary route wins, whatever its method.
+        let tie = [("ANY", "/blog/*path"), ("POST", "/blog/*rest")];
+        assert_eq!(pass_through_shadowed(&tie), vec![(0, vec![1])]);
+        // A root catch-all beside an ordinary route still owns every other path.
+        let root = [("ANY", "/*path"), ("GET", "/api/items")];
+        assert!(pass_through_shadowed(&root).is_empty());
+        // A literal `GET /blog` beats `ANY /blog/*path` only at `/blog`.
+        let blog = [("ANY", "/blog/*path"), ("GET", "/blog")];
+        assert!(pass_through_shadowed(&blog).is_empty());
+        // A literal `ANY` route beats an ordinary rest where it is more specific.
+        assert!(pass_through_shadowed(&[("ANY", "/files/a"), ("GET", "/files/*key")]).is_empty());
+        // A parameter `ANY` route beside an ordinary one of the same shape never owns.
+        let same = [("ANY", "/files/:id"), ("DELETE", "/files/:name")];
+        assert_eq!(pass_through_shadowed(&same), vec![(0, vec![1])]);
+        // An ordinary route is never covered by an `ANY` route here.
+        assert!(pass_through_shadowed(&[("GET", "/a"), ("ANY", "/*p")]).is_empty());
     }
 }

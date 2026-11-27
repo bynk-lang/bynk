@@ -644,6 +644,8 @@
 /book/reference/diagnostics/bynk.lex.unterminated_string/
 /book/reference/diagnostics/bynk.list.deprecated_function/
 /book/reference/diagnostics/bynk.locale.multiple_message_bundles/
+/book/reference/diagnostics/bynk.locale.render_shadows_bundle/
+/book/reference/diagnostics/bynk.messages.cross_unit_render/
 /book/reference/diagnostics/bynk.messages.format_mismatch/
 /book/reference/diagnostics/bynk.messages.incomplete/
 /book/reference/diagnostics/bynk.messages.invalid_locale_tag/
@@ -653,6 +655,7 @@
 /book/reference/diagnostics/bynk.messages.multiple_reference/
 /book/reference/diagnostics/bynk.messages.outside_commons/
 /book/reference/diagnostics/bynk.messages.placeholder_mismatch/
+/book/reference/diagnostics/bynk.messages.unknown_code/
 /book/reference/diagnostics/bynk.mysql.sql_invalid/
 /book/reference/diagnostics/bynk.mysql.sql_param_count/
 /book/reference/diagnostics/bynk.namespace.reserved/
@@ -1762,6 +1765,7 @@
 /reference/diagnostics/bynk.http.cache_max_age_fractional_seconds/
 /reference/diagnostics/bynk.http.cache_no_store_conflict/
 /reference/diagnostics/bynk.http.cache_on_non_get/
+/reference/diagnostics/bynk.http.cache_on_pass_through/
 /reference/diagnostics/bynk.http.cache_public_authenticated/
 /reference/diagnostics/bynk.http.cache_public_reads_cookies/
 /reference/diagnostics/bynk.http.cache_unknown_arg/
@@ -1788,6 +1792,7 @@
 /reference/diagnostics/bynk.http.cors_unknown_field/
 /reference/diagnostics/bynk.http.cors_wildcard_credentials/
 /reference/diagnostics/bynk.http.cors_wildcard_expose_credentials/
+/reference/diagnostics/bynk.http.cors_with_pass_through/
 /reference/diagnostics/bynk.http.duplicate_rejected/
 /reference/diagnostics/bynk.http.duplicate_route/
 /reference/diagnostics/bynk.http.error_status_position/
@@ -1809,6 +1814,7 @@
 /reference/diagnostics/bynk.http.headers_field_consumed_optional/
 /reference/diagnostics/bynk.http.headers_field_not_stringy/
 /reference/diagnostics/bynk.http.headers_wrong_type/
+/reference/diagnostics/bynk.http.inbound_request_not_pass_through/
 /reference/diagnostics/bynk.http.invalid_path/
 /reference/diagnostics/bynk.http.invalid_response_header/
 /reference/diagnostics/bynk.http.json_duplicate/
@@ -1829,6 +1835,8 @@
 /reference/diagnostics/bynk.http.limits_unknown_field/
 /reference/diagnostics/bynk.http.multipart_body_unbounded/
 /reference/diagnostics/bynk.http.multipart_large_cap/
+/reference/diagnostics/bynk.http.pass_through_not_emitted/
+/reference/diagnostics/bynk.http.pass_through_signature/
 /reference/diagnostics/bynk.http.path_param_not_stringy/
 /reference/diagnostics/bynk.http.query_field_not_stringy/
 /reference/diagnostics/bynk.http.query_not_http/
@@ -1898,9 +1906,11 @@
 /reference/diagnostics/bynk.list.par_limit_range/
 /reference/diagnostics/bynk.list.par_traverse_unit/
 /reference/diagnostics/bynk.locale.multiple_message_bundles/
+/reference/diagnostics/bynk.locale.render_shadows_bundle/
 /reference/diagnostics/bynk.map.deprecated_function/
 /reference/diagnostics/bynk.match.as_on_wildcard/
 /reference/diagnostics/bynk.match.refined_pattern_is_range/
+/reference/diagnostics/bynk.messages.cross_unit_render/
 /reference/diagnostics/bynk.messages.format_mismatch/
 /reference/diagnostics/bynk.messages.incomplete/
 /reference/diagnostics/bynk.messages.invalid_locale_tag/
@@ -1910,6 +1920,7 @@
 /reference/diagnostics/bynk.messages.multiple_reference/
 /reference/diagnostics/bynk.messages.outside_commons/
 /reference/diagnostics/bynk.messages.placeholder_mismatch/
+/reference/diagnostics/bynk.messages.unknown_code/
 /reference/diagnostics/bynk.mysql.sql_invalid/
 /reference/diagnostics/bynk.mysql.sql_param_count/
 /reference/diagnostics/bynk.namespace.reserved/
@@ -2055,6 +2066,7 @@
 /reference/diagnostics/bynk.queue.message_type_mismatch/
 /reference/diagnostics/bynk.queue.no_dead_letter/
 /reference/diagnostics/bynk.queue.producer_never_sends/
+/reference/diagnostics/bynk.queue.reserved_name/
 /reference/diagnostics/bynk.queue.retry_delay_out_of_range/
 /reference/diagnostics/bynk.queue.return_not_queue_result/
 /reference/diagnostics/bynk.queue.undecodable_unreachable/
@@ -2209,6 +2221,7 @@
 /reference/diagnostics/bynk.test.helper_given_at_system/
 /reference/diagnostics/bynk.test.no_subject_needs_oidc_route/
 /reference/diagnostics/bynk.test.nobody_needs_secured_route/
+/reference/diagnostics/bynk.test.pass_through_address/
 /reference/diagnostics/bynk.test.peek_not_a_database/
 /reference/diagnostics/bynk.test.peek_not_bound/
 /reference/diagnostics/bynk.test.peek_outside_case/
@@ -2320,6 +2333,7 @@
 /reference/diagnostics/bynk.types.if_branch_mismatch/
 /reference/diagnostics/bynk.types.if_non_bool_cond/
 /reference/diagnostics/bynk.types.if_without_else_requires_unit/
+/reference/diagnostics/bynk.types.inbound_request_at_boundary/
 /reference/diagnostics/bynk.types.interpolation_non_scalar/
 /reference/diagnostics/bynk.types.invalid_regex/
 /reference/diagnostics/bynk.types.inverted_range/

@@ -1049,4 +1049,24 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     clock.t = 30_000 + 999_999;
     assert.equal((await idem.claim("k", 1)).tag, "AlreadyClaimed", "and is confirmed for its full window");
   });
+
+  // --- Upstream ----------------------------------------------------------
+
+  // #3752 (D13): the provider hands its declared origin and timeout, with the
+  // request and path, to the exchange the compose injects; built without one it
+  // reaches nothing.
+  t("UpstreamProvider.forward: hands the declared origin, timeout, request and path to its exchange", async () => {
+    const seen = [];
+    const exchange = async (config, request, path) => {
+      seen.push({ config, request, path });
+      return { tag: "Ok", value: "answer" };
+    };
+    const config = { origin: "https://upstream.example", timeoutSecs: 30 };
+    const got = await new b.UpstreamProvider(config, exchange).forward("the request", "/posts/x");
+    assert.deepEqual(got, { tag: "Ok", value: "answer" });
+    assert.deepEqual(seen, [{ config, request: "the request", path: "/posts/x" }]);
+  });
+  t("UpstreamProvider.forward: built without an instance's origin, it reaches nothing", async () => {
+    await assert.rejects(() => new b.UpstreamProvider().forward("r", "/"), /reaches only the `@origin`/);
+  });
 }

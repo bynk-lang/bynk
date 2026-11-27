@@ -13284,6 +13284,10 @@
       "required": false,
       "types": [
         {
+          "type": "capability_decl",
+          "named": true
+        },
+        {
           "type": "case",
           "named": true
         },
@@ -14714,6 +14718,10 @@
   },
   {
     "type": "@",
+    "named": false
+  },
+  {
+    "type": "ANY",
     "named": false
   },
   {

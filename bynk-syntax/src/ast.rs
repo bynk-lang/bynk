@@ -527,6 +527,10 @@ pub struct SuiteDecl {
     /// #3066: suite-local `const` declarations — static values private to this
     /// suite, with the same initialiser rules as a unit's constants.
     pub consts: Vec<ConstDecl>,
+    /// #3959: suite-local capability instances, `capability Archive = Kv`: in a
+    /// commons suite, a fresh double of a kind its commons selects, with no
+    /// binding and no deploy effect (capability-parameters track §9).
+    pub capabilities: Vec<CapabilityDecl>,
     /// v0.118: the suite-level tier default (`suite … as integration`). `None`
     /// means the `unit` default; a `case`'s own tier overrides it. A `property`
     /// ignores a suite tier (tiers are a `case`-only affordance).
@@ -2643,6 +2647,9 @@ pub enum HttpMethod {
     Put,
     Patch,
     Delete,
+    /// #3752 (D7): `on ANY("…")`, a pass-through route that answers every method
+    /// the platform delivers and returns `Effect[PassThrough]`.
+    Any,
 }
 
 impl HttpMethod {
@@ -2653,6 +2660,7 @@ impl HttpMethod {
             HttpMethod::Put => "PUT",
             HttpMethod::Patch => "PATCH",
             HttpMethod::Delete => "DELETE",
+            HttpMethod::Any => "ANY",
         }
     }
 
@@ -2663,6 +2671,7 @@ impl HttpMethod {
             "PUT" => Some(HttpMethod::Put),
             "PATCH" => Some(HttpMethod::Patch),
             "DELETE" => Some(HttpMethod::Delete),
+            "ANY" => Some(HttpMethod::Any),
             _ => None,
         }
     }

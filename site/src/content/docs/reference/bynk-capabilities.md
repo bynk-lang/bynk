@@ -557,6 +557,59 @@ gets a stream of its own:
 `stub Fetch.receiveStream(_, _) returns Ok(StreamResponse { status: 200, headers: Map.empty(), body: Stream.of([Bytes.fromUtf8("x")]) })`.
 In the browser playground they throw, as `send` does.
 
+### Forwarding to an upstream: `Upstream` {#upstream}
+
+`Upstream` is the capability a [pass-through route](/reference/http/#pass-through-routes)
+forwards with. Each instance names one upstream **origin**, declared, never computed:
+
+```bynk,ignore
+consumes bynk { Upstream, InboundRequest, PassThrough, UpstreamError }
+
+const BlogOrigin: String = env(BLOG_ORIGIN, "https://bynk-blog.pages.dev")
+
+capability Pages = Upstream @origin(BlogOrigin) @timeout(30.seconds)
+```
+
+- **`@origin`** (required) is a serialised origin, `scheme://host[:port]`: lower case, with
+  no path, query, fragment, user information or trailing slash. It is a string literal or a
+  `String` constant, an [`env(…)`](/reference/constants/#values-that-differ-per-environment)
+  one included, read the way `cors` origins are. The scheme is `https`, or `http` for a
+  loopback host only (`localhost`, `127.0.0.1`, `[::1]`). Anything else is
+  `bynk.capability.invalid_option`.
+- **`@timeout`** bounds the wait for the upstream's response head, a positive whole number
+  of seconds (default 30). The body streams after it.
+
+`forward(request: InboundRequest, path: String) -> Effect[Result[Forwarded, UpstreamError]]`
+sends the route's request to the origin with `path` and the request's raw query. The URL is
+built textually, origin then path then query, and its origin is checked before anything is
+sent, so no `path` can change the host: `//other.example/x` is a path on the upstream. A
+`path` that doesn't start with `/`, holds `?`, `#` or a control character, or has a `.` or
+`..` segment (encoded or not, with `\` read as `/`, as a URL parser does) is
+`Err(InvalidPath)`, with nothing sent. So is a segment whose decoding holds `/` or `\` and
+has a `.` or `..` component (`..%2F..%2Fadmin`, `..%5Cadmin`), which an upstream that decodes
+and then normalises would climb out of the mount by. A segment is checked through three rounds
+of decoding, since a cache or framework in front of an upstream may decode a path again: a
+`.` or `..` component (`%252e%252e`) or a control character (`%0d%0a`, which would let a
+decoding upstream write a header or a log line) at any round is refused, and so is a segment
+still encoded after the third. An encoded slash with no dot component (`a%2Fb`, an R2 key)
+is sent as received.
+
+The method passes, `GET` and `HEAD` without a body; any other method's body streams to the
+upstream unread. A redirect is returned, never followed. A response head that doesn't arrive
+within `@timeout` is `Err(Timeout)`, and an upstream that can't be reached is
+`Err(Unreachable)`. A request is forwarded at most once: a second `forward` of it faults.
+`UpstreamError` is `Timeout`, `Unreachable` or `InvalidPath`, and may gain variants, so a
+`match` on it needs a wildcard.
+
+`InboundRequest` and `Forwarded` live for the request they belong to. A record or sum may
+hold one, but no value holding one is stored, sent or returned across a boundary
+(`bynk.types.inbound_request_at_boundary`). `Forwarded` has no constructor: only `forward`
+makes one, and `status()` and `header(name)` read it.
+
+All of it is experimental: it needs `bynk.Upstream`, `bynk.InboundRequest`,
+`bynk.Forwarded`, `bynk.PassThrough` and `bynk.UpstreamError` in `[unstable] allow`
+(`bynk.http.ANY` and `bynk.http.rest` for the route).
+
 ### Log levels and structured fields
 
 `debug`, `info`, `warn` and `error` write the message as it is, through the
@@ -2433,8 +2486,8 @@ containers as they have values to send, and `bynk check` warns
 follows the handler's parameters, and the locals bound from them, into the first
 argument of `send`, `receiveBytes` and `sendBytes`. It does not warn when the name
 comes from a constant, from the authenticated identity, from a closed set (a
-`match` over an enum's names), from a route served `by` an actor that
-authenticates, or from an instance's own key type (below); and it does not follow a name through a function, which is where
+`match` over an enum's names), or from a route served `by` an actor that
+authenticates; and it does not follow a name through a function, which is where
 an author bounds the set, so a name laundered through one is not warned about,
 rather than warned about wrongly. A refined type limits what a name looks like, not
 how many there are: bound the count with an authenticated actor, a `RateLimit`, or
@@ -2465,11 +2518,15 @@ so the limits on a name above (1 to 256 bytes, no control character) still apply
 to it. A refined type limits what a name looks like, not how many there are: a
 route anyone can call that takes a `TenantId` still lets a caller send any
 `TenantId`, so pair a key with an authenticated actor, a `RateLimit`, or a closed
-set (a `match` over an enum that builds the key). A keyed instance is not warned
-about, because the key's construction is where the author bounds the names; that
-is the author's claim, and `bynk check` does not verify it, so a key on a route
-anyone can call, with nothing else limiting how many names are sent, bounds only
-their shape.
+set (a `match` over an enum that builds the key). A key does not make a route
+anyone can call safe, so a keyed instance is checked like any other:
+`bynk.container.unbounded_instances` warns when its name comes from request input
+on a route whose `by` has an open member (`Visitor`, or a sum that includes one),
+and does not warn on a route served by an authenticated actor. A `RateLimit` reduces
+the rate but does not bound the number of instances (it is usually keyed per client,
+so it slows each caller without limiting how many distinct names arrive across many
+callers), so `bynk check` does not take it into account and it does not clear the
+warning.
 
 A running container costs money. See Cloudflare's
 [Containers pricing](https://developers.cloudflare.com/containers/pricing/) and

@@ -1,7 +1,7 @@
 use super::*;
 use bynk_driver::emsg;
 
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 pub(crate) struct DeployLock {
     // No serde `default`: a ledger with no `version` is not a fresh project, it
     // is corruption (a truncated write), and must fail the read rather than
@@ -37,6 +37,12 @@ pub(crate) type Expects = BTreeMap<String, BTreeMap<String, String>>;
 fn lock_version() -> u32 {
     1
 }
+
+/// #3565 (D5): the version a ledger is written as while an agent move is open in any
+/// environment. A bynk that predates moves refuses it ("unsupported deploy lock version"),
+/// rather than reading past the open record it does not know and pushing the half-moved
+/// classes as plain live ones.
+const LOCK_VERSION_MOVING: u32 = 2;
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct Environment {
@@ -226,6 +232,64 @@ pub(crate) struct Environment {
     /// Worker; additive and `default`ed, so an older ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     email_addresses: BTreeMap<String, BTreeSet<String>>,
+    /// #3565: per Worker, the agent classes whose `transferred` tombstone (class → the script
+    /// it was transferred to) a successful push carried in this environment, beside
+    /// [`Environment::deleted_classes`] and for the same reason: a record of what was pushed,
+    /// never a claim about the namespace. Additive and `default`ed, so an older ledger still
+    /// reads.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    transferred_classes: BTreeMap<String, BTreeMap<String, String>>,
+    /// #3565: the agent moves under way in this environment, one record per move set
+    /// (`design/tracks/agent-context-moves.md` §3, §4.1). A record is written before a move's
+    /// first push and removed when its last push lands, so it is empty except mid-move; while
+    /// any environment has one, the ledger is written as version 2 ([`LOCK_VERSION_MOVING`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) agent_moves: Vec<AgentMoveRecord>,
+}
+
+/// #3565: one move set under way (`design/tracks/agent-context-moves.md` §3.3): every move
+/// of a run that shares a source or a receiver, moved as one unit.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct AgentMoveRecord {
+    /// A random id, also carried in each phase version's deploy facts, so a resume can tell
+    /// its own unrecorded push from anything else's.
+    #[serde(rename = "move")]
+    pub(crate) move_id: String,
+    pub(crate) step: MoveStep,
+    /// RFC 3339: when the move's first push was about to start.
+    pub(crate) started: String,
+    /// The bynk version that started the move.
+    pub(crate) bynk: String,
+    /// The Workers whose push for the current step has landed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) done: Vec<String>,
+    pub(crate) moves: Vec<AgentMoveEntry>,
+    /// Each Worker of the set → the deployment id it was last seen at, or `"none"` for
+    /// a receiver that did not exist before the move.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) deployments: BTreeMap<String, String>,
+}
+
+/// #3565: where a move set had got to (`design/tracks/agent-context-moves.md` §3.3).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum MoveStep {
+    Receiving,
+    Received,
+    Committing,
+    Committed,
+    GoingLive,
+}
+
+/// #3565: one context of a move set, with the classes it takes from one script to another.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct AgentMoveEntry {
+    pub(crate) context: String,
+    pub(crate) classes: Vec<String>,
+    pub(crate) from_worker: String,
+    pub(crate) from_script: String,
+    pub(crate) to_worker: String,
+    pub(crate) to_script: String,
 }
 
 /// #3819: what the ledger records for an agent class whose ids come from the unrestricted
@@ -469,7 +533,50 @@ struct WorkerRecord {
     fresh_agents: BTreeMap<String, Vec<String>>,
 }
 
+/// #3565 (D5): the ledger is written with the version its content needs, never the one it
+/// was read with, so the version cannot drift from whether a move is open.
+impl Serialize for DeployLock {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        struct Written<'a> {
+            version: u32,
+            environments: &'a BTreeMap<String, Environment>,
+            #[serde(skip_serializing_if = "Vec::is_empty")]
+            contract_shapes: &'a Vec<ContractShape>,
+        }
+        // Destructured, so a field added to the ledger fails to compile here until it is
+        // written too.
+        let DeployLock {
+            version: _,
+            environments,
+            contract_shapes,
+        } = self;
+        Written {
+            version: self.written_version(),
+            environments,
+            contract_shapes,
+        }
+        .serialize(serializer)
+    }
+}
+
 impl DeployLock {
+    /// #3565: whether any environment has an agent move under way.
+    pub(crate) fn has_open_move(&self) -> bool {
+        self.environments
+            .values()
+            .any(|env| !env.agent_moves.is_empty())
+    }
+
+    /// #3565 (D5): the version this ledger is written as.
+    fn written_version(&self) -> u32 {
+        if self.has_open_move() {
+            LOCK_VERSION_MOVING
+        } else {
+            lock_version()
+        }
+    }
+
     /// #3112: move any per-Worker shapes an older ledger carries into the
     /// hash-keyed table, so none is lost when the file is next written.
     fn fold_legacy_shapes(&mut self) {
@@ -970,7 +1077,7 @@ impl DeployLock {
 /// independently too — the `kv` line is prunable, the `workers` line is
 /// report-only (a whole-Worker delete is a materially larger blast radius
 /// than a namespace or a queue, and out of this slice's scope).
-#[derive(Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Orphans {
     pub(crate) kv: Vec<OrphanKv>,
     /// P5 (#2323): recorded R2 buckets the build no longer declares. Reported
@@ -1006,6 +1113,11 @@ pub(crate) struct Orphans {
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) worker_agent_state: BTreeMap<String, BTreeMap<String, Vec<String>>>,
     pub(crate) queues: Vec<String>,
+    /// #4601: the project's own Workers each orphaned queue's prune detaches first, by ledger
+    /// name, read from the account just before `--prune` asks ([`super::kind::vet_orphan_queues`]).
+    /// Empty in the plan: the plan never calls Cloudflare.
+    #[serde(skip)]
+    pub(crate) queue_detaching: BTreeMap<String, Vec<String>>,
 }
 
 impl Orphans {
@@ -1055,6 +1167,7 @@ impl Orphans {
                 })
                 .collect(),
             worker_scripts: BTreeMap::new(),
+            queue_detaching: self.queue_detaching.clone(),
             worker_agent_state: self
                 .worker_agent_state
                 .iter()
@@ -1064,6 +1177,17 @@ impl Orphans {
         };
         show_kind_orphans(self, environment, &mut shown);
         shown
+    }
+}
+
+impl Environment {
+    /// #4601: the script name, on Cloudflare in `environment`, of every Worker this ledger records
+    /// for it: the project's own Workers, the only queue consumers `--prune` detaches.
+    pub(crate) fn worker_scripts(&self, environment: &str) -> BTreeSet<String> {
+        self.workers
+            .iter()
+            .map(|(key, record)| env_qualify(environment, record.script.as_deref().unwrap_or(key)))
+            .collect()
     }
 }
 
@@ -1122,6 +1246,7 @@ pub(crate) fn find_orphans(
             .map(|(worker, record)| (worker.clone(), record.fresh_agents.clone()))
             .collect(),
         queues: Vec::new(),
+        queue_detaching: BTreeMap::new(),
     };
     // 1D.1 (#3929): each converted kind's orphans.
     find_kind_orphans(&OrphanCx { env, resources }, &mut orphans);
@@ -1157,7 +1282,13 @@ pub(crate) fn read_lock(path: &Path) -> Result<DeployLock, String> {
             path.display()
         )
     })?;
-    if lock.version != lock_version() {
+    if lock.version == LOCK_VERSION_MOVING && !lock.has_open_move() {
+        return Err(format!(
+            "deploy ledger `{}` says version {LOCK_VERSION_MOVING}, which only a ledger with an agent move under way has, but it records no move — it is corrupt; restore it from version control",
+            path.display()
+        ));
+    }
+    if lock.version != lock_version() && lock.version != LOCK_VERSION_MOVING {
         return Err(format!("unsupported deploy lock version {}", lock.version));
     }
     lock.fold_legacy_shapes();
@@ -1718,6 +1849,8 @@ pub(crate) mod tests {
                     renamed_classes: BTreeMap::new(),
                     agent_jurisdictions: BTreeMap::new(),
                     email_addresses: BTreeMap::new(),
+                    transferred_classes: BTreeMap::new(),
+                    agent_moves: Vec::new(),
                     kv: BTreeMap::from([("api".into(), KvNamespace { id: "abc".into() })]),
                     kv_instances: BTreeMap::from([(
                         "api".into(),
@@ -3237,6 +3370,111 @@ pub(crate) mod tests {
             );
         write_lock(&path, &lock).unwrap();
         assert_eq!(read_lock(&path).unwrap(), lock);
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// #3565: the fan-in move set of `design/tracks/agent-context-moves.md` §4.1, part-way
+    /// through phase 2.
+    fn fan_in_move() -> AgentMoveRecord {
+        let entry = |context: &str, class: &str, from: &str| AgentMoveEntry {
+            context: context.into(),
+            classes: vec![class.into()],
+            from_worker: from.into(),
+            from_script: from.into(),
+            to_worker: "core".into(),
+            to_script: "core".into(),
+        };
+        AgentMoveRecord {
+            move_id: "3f9c2a71".into(),
+            step: MoveStep::Committing,
+            started: "2026-11-27T10:15:02Z".into(),
+            bynk: "0.0.0".into(),
+            done: vec!["shop-orders".into()],
+            moves: vec![
+                entry("shop.orders", "Cart", "shop-orders"),
+                entry("shop.billing", "Ledger", "shop-billing"),
+            ],
+            deployments: BTreeMap::from([
+                ("core".into(), "none".into()),
+                ("shop-billing".into(), "d-2".into()),
+                ("shop-orders".into(), "d-1".into()),
+            ]),
+        }
+    }
+
+    /// #3565 (D5): a ledger with a move under way is written as version 2 and reads back with
+    /// the record intact; once the last move closes it is version 1 again, as before moves.
+    #[test]
+    fn an_open_move_is_written_as_version_2_and_round_trips() {
+        let path = scratch_lock_path("open-move");
+        let mut lock: DeployLock = toml::from_str("version = 1\n").unwrap();
+        let env = lock.environments.entry("default".into()).or_default();
+        env.agent_moves.push(fan_in_move());
+        env.transferred_classes.insert(
+            "shop-orders".into(),
+            BTreeMap::from([("Cart".into(), "core".into())]),
+        );
+        write_lock(&path, &lock).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("version = 2\n"), "{text}");
+        assert!(
+            text.contains("[[environments.default.agent_moves]]")
+                && text.contains("move = \"3f9c2a71\"")
+                && text.contains("step = \"committing\"")
+                && text.contains("core = \"none\""),
+            "{text}"
+        );
+        // A bynk from before moves accepts only version 1 (`read_lock`'s check before #3565),
+        // so it refuses this file instead of reading past the record.
+        let written: toml::Value = toml::from_str(&text).unwrap();
+        assert_ne!(written["version"].as_integer(), Some(lock_version().into()));
+        let read = read_lock(&path).unwrap();
+        assert_eq!(read.environments, lock.environments);
+        assert!(read.has_open_move());
+
+        let mut closed = read;
+        closed
+            .environments
+            .get_mut("default")
+            .unwrap()
+            .agent_moves
+            .clear();
+        write_lock(&path, &closed).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("version = 1\n"), "{text}");
+        assert!(!text.contains("agent_moves"), "{text}");
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// #3565: a ledger with no move writes neither new field, so it is the file it was.
+    #[test]
+    fn a_ledger_without_a_move_is_written_as_before() {
+        let path = scratch_lock_path("no-move");
+        // (`kv` is always written, as it was before moves.)
+        let before = "version = 1\n\n[environments.default]\nqueues = [\"jobs\"]\n\n[environments.default.kv]\n";
+        std::fs::write(&path, before).unwrap();
+        let lock = read_lock(&path).unwrap();
+        write_lock(&path, &lock).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// #3565 (D5): version 2 belongs to a ledger mid-move, so one that records no move is
+    /// corrupt, said with its own message; any other version is still unsupported.
+    #[test]
+    fn a_version_2_ledger_with_no_move_is_corrupt() {
+        let path = scratch_lock_path("v2-no-move");
+        std::fs::write(&path, "version = 2\n").unwrap();
+        let e = read_lock(&path).unwrap_err();
+        assert!(
+            e.contains("says version 2") && e.contains("records no move") && e.contains("corrupt"),
+            "{e}"
+        );
+        std::fs::write(&path, "version = 3\n").unwrap();
+        assert_eq!(
+            read_lock(&path).unwrap_err(),
+            "unsupported deploy lock version 3"
+        );
         let _ = std::fs::remove_file(path);
     }
 

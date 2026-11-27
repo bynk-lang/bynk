@@ -228,7 +228,8 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         matches!(options.roots, Roots::Split { .. }),
         tys,
         options.progress.as_ref(),
-    );
+    )
+    .with_moves(&options.moves);
     // #1078: `bynk-emit` no longer writes `bynk.schema.lock` itself — the
     // reconciled content comes back on `ProjectOutput::schema_lock`
     // (`finish_build` populates it from `RunChecks::Checked`, only ever

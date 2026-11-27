@@ -798,17 +798,57 @@
    -> error GET /queues?per_page=100&page=1: unreadable answer (expected value at line 1 column 1)
 == Queues delete (REST) · deleted
    request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
    request: DELETE /accounts/acct/queues/4e5f6a7b
    -> ok ()
+== Queues delete (REST) · consumed: the consumer is removed first
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
+   request: DELETE /accounts/acct/queues/4e5f6a7b/consumers/9f8e7d
+   request: DELETE /accounts/acct/queues/4e5f6a7b
+   -> ok ()
+== Queues delete (REST) · consumer cannot be removed
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
+   request: DELETE /accounts/acct/queues/4e5f6a7b/consumers/9f8e7d
+   -> error could not detach `shop-jobs` from the queue `jobs`, so the queue was not deleted (a consumed queue is deleted only after its consumers are removed): DELETE /queues/4e5f6a7b/consumers/9f8e7d: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== Queues delete (REST) · consumer already removed, answered 404
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
+   request: DELETE /accounts/acct/queues/4e5f6a7b/consumers/9f8e7d
+   request: DELETE /accounts/acct/queues/4e5f6a7b
+   -> ok ()
+== Queues delete (REST) · queue gone between the listing and the consumer delete, code 10104
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
+   request: DELETE /accounts/acct/queues/4e5f6a7b/consumers/9f8e7d
+   request: DELETE /accounts/acct/queues/4e5f6a7b
+   -> ok ()
+== Queues delete (REST) · second own consumer cannot be detached
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
+   request: DELETE /accounts/acct/queues/4e5f6a7b/consumers/9f8e7d
+   request: DELETE /accounts/acct/queues/4e5f6a7b/consumers/1a2b3c
+   -> error could not detach `shop-mail` from the queue `jobs`, so the queue was not deleted (a consumed queue is deleted only after its consumers are removed; already detached: `shop-jobs`): DELETE /queues/4e5f6a7b/consumers/1a2b3c: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== Queues delete (REST) · an HTTP pull consumer refuses the delete, nothing removed
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
+   -> error the queue `jobs` is consumed by the HTTP pull consumer `1a2b3c`, so nothing was deleted for it: detach it by hand (`wrangler queues consumer http remove jobs`) or keep the queue
+== Queues delete (REST) · a foreign Worker consumer refuses the delete, nothing removed
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
+   -> error the queue `jobs` is consumed by the Worker `billing` (not one of this project's Workers), so nothing was deleted for it: detach it by hand (`wrangler queues consumer remove jobs billing`) or keep the queue
 == Queues delete (REST) · already gone
    request: GET /accounts/acct/queues?per_page=100&page=1
    -> ok ()
 == Queues delete (REST) · not found, code 11000
    request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
    request: DELETE /accounts/acct/queues/4e5f6a7b
    -> ok ()
 == Queues delete (REST) · not found, code 10104
    request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
    request: DELETE /accounts/acct/queues/4e5f6a7b
    -> ok ()
 

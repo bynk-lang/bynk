@@ -1,0 +1,11 @@
+commons shop.web
+
+uses bynk.locale.types
+uses shop.cart as Cart
+uses shop.account as Account
+
+// Both units own `greeting`, with different templates: each resolves it in its own bundle,
+// and this unit reaches each through the function it exports.
+fn both(tag: LocaleTag, name: String) -> String {
+  Cart.greeting(tag, name).concat(" / ").concat(Account.greeting(tag, name))
+}

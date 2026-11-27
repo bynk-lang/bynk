@@ -15,7 +15,8 @@ service <Name> from http {
 }
 ```
 
-- **Methods:** `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
+- **Methods:** `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `ANY` for a
+  [pass-through route](#pass-through-routes).
 - **Route:** must start with `/`; a `:name` segment is a path parameter, and a
   final `*name` segment is a [rest segment](#rest-segments) that matches the rest
   of the path (experimental).
@@ -199,6 +200,93 @@ service files from http {
 A handler's emitted name comes from its route (`http_GET_files_Rest_key` here), and two
 routes of a context whose names would be the same (`/a-b`, `/a_b` and `/a/b`), in one
 service or in two, are `bynk.http.handler_name_collision`.
+
+## Pass-through routes {#pass-through-routes}
+
+A pass-through route hands a request to another site and sends its answer back: a reverse
+proxy that puts a site under a path. It is declared with **`ANY`** and returns
+**`Effect[PassThrough]`**:
+
+```bynk,ignore
+consumes bynk { Upstream, InboundRequest, PassThrough, UpstreamError }
+
+capability Pages = Upstream @origin("https://bynk-blog.pages.dev") @timeout(30.seconds)
+
+service proxy from http {
+	on ANY("/blog/*path") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor given Pages {
+		if path == "" {
+			let q = request.query()
+			Respond(PermanentRedirect(if q == "" { "/blog/" } else { "/blog/?\(q)" }))
+		} else {
+			let got <- Pages.forward(request, path)
+			match got {
+				Ok(response) => Forward(response)
+				Err(Timeout) => Respond(GatewayTimeout("the blog did not answer in time"))
+				Err(_) => Respond(BadGateway("the blog could not be reached"))
+			}
+		}
+	}
+}
+```
+
+- **`ANY`** answers every method the platform delivers, `HEAD` and `OPTIONS` included,
+  because the upstream has its own method contract. An `ANY` route must return
+  `Effect[PassThrough]`, and no other route may (`bynk.http.pass_through_signature`).
+- **`PassThrough`** is `Forward(response)`, an upstream's answer from
+  [`Upstream.forward`](/reference/bynk-capabilities/#upstream), or `Respond(result)`, any
+  `HttpResult[()]` answered locally. Where a program's own sum also declares `Forward` or
+  `Respond` and both are in scope, qualify the one you mean (`PassThrough.Forward(…)`).
+- **Parameters.** An `ANY` route takes its path parameters, a [rest](#rest-segments),
+  `request: InboundRequest` and `cf`. The body belongs to the upstream, so `body`, `@raw`,
+  `@form` and `@multipart` are refused, and `headers`, `query` and `cookies` are read through
+  `request` (`bynk.http.pass_through_signature`).
+- **`InboundRequest`** has `method()` (upper case), `headers()` (the
+  [`RequestHeaders`](#request-headers) view, the consumed credential hidden) and `query()` (the
+  raw query string, without `?`). Only an `ANY` route takes one, as `request`
+  (`bynk.http.inbound_request_not_pass_through`).
+- **No `@cache`** (`bynk.http.cache_on_pass_through`): the upstream's `Cache-Control` is a
+  forwarded answer's freshness. **No `cors { }`** in a service that declares an `ANY` route
+  (`bynk.http.cors_with_pass_through`): put the proxy in its own `from http` service.
+- **Which route answers.** An `ANY` route takes part in [route order](#route-order) with every
+  ordinary route, whatever its method. It answers a request only where it is strictly more
+  specific than every ordinary route matching the path; at equal shape the ordinary route
+  wins. So a root catch-all `ANY("/*path")` beside `GET /api/items` leaves `/api/items` its own
+  `405`, `Allow` and preflight. An `ANY` route that ordinary routes always beat is
+  `bynk.http.unreachable_route`.
+- **Leaving it out.** `bynk client` and `bynk openapi` leave a pass-through route out and name
+  it on stderr: it answers with whatever its upstream does.
+- **Experimental.** It needs `bynk.http.ANY` (and `bynk.http.rest` for a rest) in
+  `[unstable] allow`, beside the `bynk` items it uses.
+
+### What a pass-through answer keeps and suspends {#pass-through-suspensions}
+
+A `Forward(response)` sends the upstream's answer through as it came: status, headers and a
+streamed body, never buffered. On a path an `ANY` route owns, the router synthesises
+nothing of its own:
+
+| Behaviour | On a pass-through path |
+|---|---|
+| Weak `ETag`, the router's `304` | **Suspended.** The upstream's own `ETag` passes as sent, strong or weak. |
+| `HEAD` from `GET` | **Suspended.** `HEAD` is forwarded as `HEAD`. |
+| `OPTIONS`, `405` and `Allow` | **Suspended.** The method is forwarded. A path an ordinary route owns keeps them. |
+| CORS, the preflight | **Suspended.** The upstream's `Access-Control-*` pass, and a preflight is forwarded. A CORS service's preflight never answers for a pass-through path. |
+| Status | **Any** the upstream sends. A `101` is answered `502`. |
+| Methods | `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` and `OPTIONS` are forwarded. Any other method, and any `Upgrade` request, is answered `501` before the handler runs. |
+| Hop-by-hop headers, `proxy-authenticate` | **Stripped** from the answer. |
+| `Set-Cookie` | **Stripped**: an upstream's cookie never lands on the proxy's origin. |
+| `Strict-Transport-Security` | **Always removed** from the upstream's answer, then the service's own `security { }` policy is stamped, if it declares `hsts`. |
+| `X-Content-Type-Options: nosniff` | **Kept**, from the service's `security { }`. |
+| `Content-Security-Policy`, `Referrer-Policy` | **Filled, not overwritten**: stamped on a `text/html` answer only where the upstream sent none. |
+| `Cache-Control`, `Vary`, `Expires`, `Age` | **Passed through.** |
+| Error shapes, `on rejected` | **Not applied** to the upstream's body: its `404` page is the page. The router's own refusals (`400 MalformedPath`, an actor's `401` or `403`, `429`, `501`) and every `Respond(…)` are shaped as on an ordinary route. |
+
+A `Respond(result)` is an ordinary `HttpResult[()]` answer, without CORS; to a `HEAD` it
+has no body.
+
+The request reaches the upstream with its method, the path given to `forward` and its raw
+query. The body streams through unread. This release forwards **no** header the client
+sent; the forwarding policy, which passes the end-to-end headers and replaces the
+`X-Forwarded-*` ones, is the next increment's.
 
 ## Request headers
 

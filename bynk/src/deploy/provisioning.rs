@@ -418,8 +418,15 @@ pub(crate) fn queues_to_record(declared: &Resources, created: &BTreeSet<String>)
 /// already gone, so a re-run `--prune` is safe (#839): one the listing does not
 /// show, or a delete answered with one of [`queues::NOT_FOUND`](crate::cloudflare::rest::queues::NOT_FOUND)
 /// (Cloudflare's recorded `11000`, or the documented `10104 QueueNotFound`), is success.
-pub(crate) fn delete_queue(api: &dyn CloudflareApi, name: &str) -> Result<(), CloudflareError> {
-    match api.queue_delete(name) {
+///
+/// Only the consumers in `detach`, the project's own Workers, are removed before the queue
+/// (#4601); any other consumer refuses the delete before anything is removed.
+pub(crate) fn delete_queue(
+    api: &dyn CloudflareApi,
+    name: &str,
+    detach: &BTreeSet<String>,
+) -> Result<(), CloudflareError> {
+    match api.queue_delete(name, detach) {
         Ok(_) => Ok(()),
         Err(e)
             if e.rest().is_some_and(|r| {
@@ -622,14 +629,18 @@ mod tests {
         // answered for a queue already gone (#4056's sandbox check, #4600); `10104
         // QueueNotFound` is what its reference documents.
         let absent = Recording::new(|_: &Op<'_>| Ok::<_, CloudflareError>("absent".into()));
-        assert_eq!(delete_queue(&absent, "jobs"), Ok(()));
+        assert_eq!(delete_queue(&absent, "jobs", &BTreeSet::new()), Ok(()));
         for code in [11000, 10104] {
             let raced = Recording::new(move |_: &Op<'_>| Err(queue_refusal("DELETE", 404, code)));
-            assert_eq!(delete_queue(&raced, "jobs"), Ok(()), "code {code}");
+            assert_eq!(
+                delete_queue(&raced, "jobs", &BTreeSet::new()),
+                Ok(()),
+                "code {code}"
+            );
         }
         // Any other refusal is a real failure, in Cloudflare's words.
         let other = Recording::new(|_: &Op<'_>| Err(queue_refusal("DELETE", 400, 10107)));
-        let e = delete_queue(&other, "jobs").unwrap_err();
+        let e = delete_queue(&other, "jobs", &BTreeSet::new()).unwrap_err();
         assert!(e.to_string().contains("400"), "{e}");
     }
 

@@ -29,7 +29,7 @@ class __Stub_Fetch {
   }
 
   async send(req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.Response, __ns_bynk.FetchError>> {
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -47,9 +47,12 @@ class __Stub_Fetch {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -60,6 +63,7 @@ class __Stub_Fetch {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     if (this.__case === "a bare request sends no content type, authorisation, header or body") {
       return Ok({ status: 204, headers: new globalThis.Map<string, string>(), body: "", setCookies: [] });
@@ -106,7 +110,7 @@ async function test_a_bare_request_sends_no_content_type__authorisation__header_
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a bare request sends no content type, authorisation, header or body"), { Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"] }, __obs);
     const { poster, probe } = __ns_mirror;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -124,9 +128,12 @@ async function test_a_bare_request_sends_no_content_type__authorisation__header_
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -137,6 +144,7 @@ async function test_a_bare_request_sends_no_content_type__authorisation__header_
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const n = await probe.call("https://upstream.test/", deps);
     if (!(n === 204)) { throw __bynkExpectFailure("tests/mirror.bynk:10:9", 362, 370, "expect n == 204\n  expected: n == 204\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((204))); }
@@ -175,7 +183,7 @@ async function test_a_field_written_explicitly_overrides_its_default() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a field written explicitly overrides its default"), { Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"] }, __obs);
     const { poster, probe } = __ns_mirror;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -193,9 +201,12 @@ async function test_a_field_written_explicitly_overrides_its_default() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -206,6 +217,7 @@ async function test_a_field_written_explicitly_overrides_its_default() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const n = await poster.call("https://upstream.test/", "hi", deps);
     if (!(n === 201)) { throw __bynkExpectFailure("tests/mirror.bynk:21:9", 871, 879, "expect n == 201\n  expected: n == 201\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((201))); }

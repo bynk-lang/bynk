@@ -1,0 +1,10 @@
+{
+  "blurb": "Bynk delivers events through queues it creates and names itself: each `from Events` service gets an event queue whose name starts with `bynk-ev-` and a dead-letter queue whose name starts with `bynk-dl-`. A queue the program names under either prefix could collide with one of them, or send into or consume event traffic the compiler owns, so the two prefixes are refused wherever a queue is named: a `Queue @name(\"…\")` instance, a `from queue(\"…\")` consumer and a `deadLetter: \"…\"`. Only these two prefixes are reserved; other names that start with `bynk-` are fine. Rename the queue.",
+  "category": "Queue",
+  "categoryAnchor": "queue",
+  "code": "bynk.queue.reserved_name",
+  "constructs": [],
+  "example": "capability Audit = Queue @name(\"bynk-ev-audit\")   // ✗ `bynk-ev-` is reserved for event queues\ncapability Audit = Queue @name(\"audit-events\")   // ✓\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"bynk-dl-outbound\" }   // ✗ `bynk-dl-` is reserved for event dead-letter queues\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
+  "severity": "error",
+  "summary": "A `Queue @name`, `from queue` or `deadLetter` names a queue under a prefix Bynk reserves for event delivery (`bynk-ev-`, `bynk-dl-`)."
+}

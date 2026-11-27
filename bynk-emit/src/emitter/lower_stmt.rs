@@ -332,8 +332,12 @@ fn emit_block_inner(body: &mut Body, block: &Block, cx: &mut LowerCtx, async_tai
             // and no temp number is burned on a discarded attempt.
             let mut pre = Pre::new();
             let cond_expr = pre.lower_node(cond, cx);
+            let (cond_expr, narrowing) =
+                super::lower::expect_narrowing::enter_branches(cond_expr, cx);
             let then_tail = lower_tail_expr(&then_block.tail, cx, async_tail);
+            narrowing.else_branch(cx);
             let else_tail = lower_tail_expr(&else_block.tail, cx, async_tail);
+            narrowing.leave(cx);
             body.extend(pre.items());
             if then_tail.pre.is_empty() && else_tail.pre.is_empty() {
                 // `finish_built` is the one place a `bynk_ts::TsExpr` becomes a
@@ -499,8 +503,12 @@ fn lower_tail_expr(e: &Expr, cx: &mut LowerCtx, async_tail: bool) -> Lowered {
         } if ternary_shaped(cond, then_block, else_block, cx) => {
             let mut pre = Pre::new();
             let cond_expr = pre.lower_node(cond, cx);
+            let (cond_expr, narrowing) =
+                super::lower::expect_narrowing::enter_branches(cond_expr, cx);
             let then_tail = lower_tail_expr(&then_block.tail, cx, true);
+            narrowing.else_branch(cx);
             let else_tail = lower_tail_expr(&else_block.tail, cx, true);
+            narrowing.leave(cx);
             if then_tail.pre.is_empty() && else_tail.pre.is_empty() {
                 return pre.finish(ternary_built(cond_expr, then_tail.expr, else_tail.expr));
             }
@@ -1028,13 +1036,17 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                     lv = pre.bind_temp(lv, cx);
                     rv = pre.bind_temp(rv, cx);
                 }
-                let (lc, rc) = super::lower::expect_narrowing::narrowing_proof(
-                    (*op == BinOp::Eq || *op == BinOp::NotEq).then_some(*op == BinOp::Eq),
-                    lv.clone(),
-                    rv.clone(),
-                    cx,
-                );
-                let cond = build_value_bin_op(*op, l, vec![lc, rc], cx);
+                // Lowering the comparison widens a read an earlier one narrowed (#3775); this one
+                // is recorded only afterwards, so it does not widen itself.
+                let cond = build_value_bin_op(*op, l, vec![lv.clone(), rv.clone()], cx);
+                if matches!(op, BinOp::Eq | BinOp::NotEq) {
+                    super::lower::expect_narrowing::record_narrowing(
+                        *op == BinOp::Eq,
+                        &lv,
+                        &rv,
+                        cx,
+                    );
+                }
                 // #2622: an operand that holds a `Decimal` prints through the
                 // decimal-aware show, since `JSON.stringify` throws on a `bigint`.
                 let decimal = cx
@@ -1384,6 +1396,7 @@ pub(super) fn if_tail(
 ) {
     let mut pre = Pre::new();
     let cond_expr = pre.lower_node(cond, cx);
+    let (cond_expr, narrowing) = super::lower::expect_narrowing::enter_branches(cond_expr, cx);
     body.extend(pre.items());
     // is-binding declarations on the truthy path. #908: scoped to the
     // then-branch only (see the IIFE sibling above for the same reasoning).
@@ -1395,6 +1408,7 @@ pub(super) fn if_tail(
     then_body.extend(is_bindings.iter().map(super::lower::stmt_item));
     emit_block_inner(&mut then_body, then_block, cx, async_tail);
     cx.shadow_scopes.pop();
+    narrowing.else_branch(cx);
     // #1654: the else-branch's bindings, those the condition's falsity proves.
     cx.shadow_scopes.push(HashMap::new());
     let mut else_bindings = Vec::new();
@@ -1403,6 +1417,7 @@ pub(super) fn if_tail(
     else_body.extend(else_bindings.iter().map(super::lower::stmt_item));
     emit_block_inner(&mut else_body, else_block, cx, async_tail);
     cx.shadow_scopes.pop();
+    narrowing.leave(cx);
     push_if(body, cond_expr, then_body, else_body);
 }
 
@@ -1493,6 +1508,25 @@ pub(super) fn match_tail(
 /// what follows the discriminant in a tail `match` and fills a value-position
 /// `match`'s arrow.
 pub(super) fn match_dispatch(
+    body: &mut Body,
+    path: &PatPath,
+    disc_ty: &Option<TyId>,
+    arms: &[MatchArm],
+    cx: &mut LowerCtx,
+    async_tail: bool,
+) {
+    // #4520: the arms of a literal `switch` narrow its scrutinee to their literal; an if-chain's do
+    // not (its guards and nested patterns are tests, not literal cases).
+    let narrowing = (is_literal_match(disc_ty, cx.commons().tys())
+        && !bynk_model::match_needs_if_chain(arms))
+    .then(|| super::lower::expect_narrowing::enter_arms(path.node(), cx));
+    match_dispatch_arms(body, path, disc_ty, arms, cx, async_tail);
+    if let Some(outer) = narrowing {
+        super::lower::expect_narrowing::leave_arms(outer, cx);
+    }
+}
+
+fn match_dispatch_arms(
     body: &mut Body,
     path: &PatPath,
     disc_ty: &Option<TyId>,

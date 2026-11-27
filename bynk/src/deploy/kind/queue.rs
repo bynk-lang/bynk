@@ -252,12 +252,27 @@ impl ResourceKind for Queue {
         )))
     }
 
+    /// With the project's own Workers the prune detaches first, when it read any (#4601).
+    fn prune_notice_in(queue: &String, environment: &str, orphans: &Orphans) -> Option<Notice> {
+        let detaching = orphans.queue_detaching.get(queue).filter(|d| !d.is_empty());
+        let Some(detaching) = detaching else {
+            return Self::prune_notice(queue, environment);
+        };
+        let named: Vec<String> = detaching.iter().map(|w| format!("`{w}`")).collect();
+        Some(Notice::Styled(format!(
+            "bynk: will delete queue `{}` (detaching {})",
+            env_qualify(environment, queue),
+            named.join(", ")
+        )))
+    }
+
     fn prune(
         cx: &StepCx<'_, '_, Queue>,
         queue: &String,
     ) -> Result<Option<Commit<QueueChange>>, DeployFailure> {
         let physical = env_qualify(cx.environment, queue);
-        delete_queue(cx.tools.api, &physical).map_err(|e| {
+        let own = own_workers(cx.lock, cx.environment);
+        delete_queue(cx.tools.api, &physical, &own).map_err(|e| {
             DeployFailure::driver(format!(
                 "could not delete the orphaned queue `{physical}`: {e}"
             ))
@@ -354,8 +369,19 @@ fn apply_queues(
     // Bound first, so the borrow of the run's attempts ends before any queue is made.
     let todo = unattempted_queues(declared, &mut attempted.borrow_mut());
     for queue in todo {
-        if attempt_create(cx, &queue)? {
-            created.insert(queue);
+        match attempt_create(cx, &queue) {
+            Ok(true) => {
+                created.insert(queue);
+            }
+            Ok(false) => {}
+            // #3999: the queues this step made before the failure are on the account, so they
+            // are recorded as Bynk's before the failure is returned, and `--prune` can delete them.
+            Err(failure) => {
+                let made = created.iter().map(|queue| record(cx, queue, true));
+                return Ok(made
+                    .fold(Applied::nothing(), Applied::with)
+                    .stopping(failure));
+            }
         }
     }
     // Recorded before the push, as KV is: what the ledger claims is only ever what it
@@ -418,11 +444,67 @@ pub(crate) struct PlanQueue {
     pub(crate) queue: String,
 }
 
+/// #4601: the script of every Worker the ledger records for `environment`: the project's own,
+/// the only queue consumers `--prune` detaches.
+fn own_workers(lock: &DeployLock, environment: &str) -> BTreeSet<String> {
+    lock.environments
+        .get(environment)
+        .map(|env| env.worker_scripts(environment))
+        .unwrap_or_default()
+}
+
+/// #4601 (the ruling for this area with #4097): read each orphaned queue's consumers before
+/// `--prune` asks. A queue only the project's own Workers consume is pruned, its Workers named
+/// in the confirmation and detached first. A queue a foreign Worker or an HTTP pull consumer
+/// reads (or whose consumers cannot be read) is refused: dropped from what is pruned, with why,
+/// so nothing is deleted for it and it stays reported. The other orphans are untouched.
+pub(crate) fn vet_orphan_queues(
+    api: &dyn CloudflareApi,
+    lock: &DeployLock,
+    environment: &str,
+    orphans: &Orphans,
+) -> (Orphans, Vec<String>) {
+    let own = own_workers(lock, environment);
+    let mut vetted = orphans.clone();
+    let mut refused = Vec::new();
+    let mut detaching_of = BTreeMap::new();
+    vetted.queues.retain(|queue| {
+        let physical = env_qualify(environment, queue);
+        match api.queue_consumers(&physical) {
+            Ok(None) => true,
+            Ok(Some(consumers)) => {
+                let foreign: Vec<_> = consumers.iter().filter(|c| !c.is_own(&own)).collect();
+                if foreign.is_empty() {
+                    let detaching = consumers.iter().filter_map(|c| c.script.clone()).collect();
+                    detaching_of.insert(queue.clone(), detaching);
+                    true
+                } else {
+                    refused.push(crate::cloudflare::rest::queues::foreign_consumers(
+                        &physical, &foreign,
+                    ));
+                    false
+                }
+            }
+            Err(e) => {
+                refused.push(format!(
+                    "the consumers of the queue `{physical}` could not be read, so nothing was \
+                     deleted for it: {e}"
+                ));
+                false
+            }
+        }
+    });
+    vetted.queue_detaching = detaching_of;
+    (vetted, refused)
+}
+
 #[cfg(test)]
 mod tests {
     // ---- 1D.1d (#3929): the `Queue` impl ----
 
     use super::*;
+    use crate::cloudflare::Op;
+    use crate::cloudflare::fake::Recording;
     use crate::deploy::config::tests::project;
 
     #[test]
@@ -591,5 +673,193 @@ mod tests {
             !calls(&["plain"], &[], true),
             "no queue and no orphan: nothing asked"
         );
+    }
+
+    // ---- #4601: an orphaned queue's consumers, read before `--prune` asks ----
+
+    /// A ledger whose `environment` records the Worker `shop-jobs` (the project's own).
+    fn with_own_worker(environment: &str) -> DeployLock {
+        let mut lock = DeployLock::default();
+        lock.record_deployed(environment, "shop-jobs", None);
+        lock
+    }
+
+    /// The fake account: each orphan's consumers, as [`Recording`]'s `queue_consumers` reads them.
+    fn consumers_by_queue(by_queue: &'static [(&'static str, &'static str)]) -> Recording {
+        Recording::new(move |op: &Op<'_>| match op {
+            Op::QueueConsumers { name } => Ok::<_, CloudflareError>(
+                by_queue
+                    .iter()
+                    .find(|(q, _)| q == name)
+                    .map_or("absent", |(_, c)| c)
+                    .to_string(),
+            ),
+            other => panic!("vetting only reads consumers, not {other:?}"),
+        })
+    }
+
+    fn queues(names: &[&str]) -> Orphans {
+        Orphans {
+            queues: names.iter().map(|n| n.to_string()).collect(),
+            ..Orphans::default()
+        }
+    }
+
+    /// The ruling (#4097, #4601 review): a queue a foreign Worker or an HTTP pull consumer reads
+    /// is refused, naming each with the command that detaches it; a queue only the project's own
+    /// Workers consume is kept, its Workers named; one with no consumers, or already gone, is kept
+    /// as it was. Vetting only reads: nothing is deleted here.
+    #[test]
+    fn a_foreign_or_pull_consumer_refuses_its_queue_and_the_others_are_kept() {
+        let api = consumers_by_queue(&[
+            ("clean", ""),
+            ("theirs", "c1=billing"),
+            ("pulled", "c2=pull"),
+            ("ours", "c3=shop-jobs"),
+            ("mixed", "c3=shop-jobs c4=billing"),
+        ]);
+        let lock = with_own_worker("default");
+        let orphans = queues(&["clean", "theirs", "pulled", "ours", "mixed", "gone"]);
+        let (vetted, refused) = vet_orphan_queues(&api, &lock, "default", &orphans);
+        assert_eq!(vetted.queues, ["clean", "ours", "gone"]);
+        assert_eq!(
+            vetted.queue_detaching,
+            BTreeMap::from([
+                ("clean".to_string(), vec![]),
+                ("ours".to_string(), vec!["shop-jobs".to_string()]),
+            ])
+        );
+        assert_eq!(
+            refused,
+            [
+                "the queue `theirs` is consumed by the Worker `billing` (not one of this \
+                 project's Workers), so nothing was deleted for it: detach it by hand (`wrangler \
+                 queues consumer remove theirs billing`) or keep the queue",
+                "the queue `pulled` is consumed by the HTTP pull consumer `c2`, so nothing was \
+                 deleted for it: detach it by hand (`wrangler queues consumer http remove \
+                 pulled`) or keep the queue",
+                "the queue `mixed` is consumed by the Worker `billing` (not one of this \
+                 project's Workers), so nothing was deleted for it: detach it by hand (`wrangler \
+                 queues consumer remove mixed billing`) or keep the queue",
+            ]
+        );
+        let (notices, count) = prune_notices(&vetted, "default");
+        assert_eq!(count, 3);
+        assert!(notices.contains(&Notice::Styled(
+            "bynk: will delete queue `ours` (detaching `shop-jobs`)".to_string()
+        )));
+        assert!(notices.contains(&Notice::Styled(
+            "bynk: will delete queue `clean`".to_string()
+        )));
+    }
+
+    /// In a named environment the queue and the project's Workers are both the qualified names
+    /// the account holds: `shop-jobs-staging` is the project's own there, `shop-jobs` is not.
+    #[test]
+    fn a_named_environment_vets_the_qualified_queue_against_its_own_qualified_workers() {
+        let api = consumers_by_queue(&[
+            ("ours-staging", "c1=shop-jobs-staging"),
+            ("theirs-staging", "c2=shop-jobs"),
+        ]);
+        let lock = with_own_worker("staging");
+        let (vetted, refused) =
+            vet_orphan_queues(&api, &lock, "staging", &queues(&["ours", "theirs"]));
+        assert_eq!(vetted.queues, ["ours"]);
+        assert_eq!(refused.len(), 1);
+        assert!(
+            refused[0].starts_with(
+                "the queue `theirs-staging` is consumed by the Worker `shop-jobs` (not one of"
+            ),
+            "{}",
+            refused[0]
+        );
+        assert_eq!(
+            Queue::prune_notice_in(&"ours".to_string(), "staging", &vetted),
+            Some(Notice::Styled(
+                "bynk: will delete queue `ours-staging` (detaching `shop-jobs-staging`)"
+                    .to_string()
+            ))
+        );
+    }
+
+    /// Consumers that cannot be read are not taken as none: the queue is refused, in
+    /// Cloudflare's words.
+    #[test]
+    fn consumers_that_cannot_be_read_refuse_the_queue() {
+        let api = Recording::new(|_: &Op<'_>| {
+            Err::<String, _>(CloudflareError::Other("Cloudflare answered 500".into()))
+        });
+        let (vetted, refused) =
+            vet_orphan_queues(&api, &DeployLock::default(), "default", &queues(&["jobs"]));
+        assert!(vetted.queues.is_empty());
+        assert_eq!(
+            refused,
+            [
+                "the consumers of the queue `jobs` could not be read, so nothing was deleted for it: \
+              Cloudflare answered 500"
+            ]
+        );
+    }
+
+    /// #3999: a queue create that fails after an earlier one succeeded leaves that earlier queue
+    /// recorded as Bynk's, so `--prune` can delete it, and the failure still stops the deploy.
+    #[test]
+    fn the_queues_made_before_a_failed_create_are_recorded_as_created() {
+        use crate::cloudflare::{CloudflareError, Op, fake::Recording};
+        let declared = Resources::default().consumes(&["a-jobs", "b-jobs", "c-jobs"]);
+        let api = Recording::new(|op: &Op<'_>| match op {
+            Op::QueueInfo { .. } => Ok("absent".to_string()),
+            Op::QueueCreate { name: "b-jobs" } => Err(CloudflareError::from(
+                crate::cloudflare::rest::RestError::answered("POST", "/queues", 500, "[]"),
+            )),
+            _ => Ok(String::new()),
+        });
+        let project = BTreeMap::new();
+        let dir = std::env::temp_dir().join(format!("bynk-queue-3999-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(LOCK_FILE);
+        let site = Site {
+            tools: Tools {
+                api: &api,
+                project_root: Path::new("/nonexistent"),
+            },
+            environment: "default",
+            worker: "shop",
+            project: &project,
+        };
+        let mut lock = DeployLock::default();
+        let failed = provision_kind::<Queue>(
+            site,
+            &declared,
+            &mut LedgerWriter::new(&mut lock, &path),
+            Lives::default(),
+        )
+        .unwrap_err();
+        assert!(
+            failed
+                .message
+                .contains("could not create the queue `b-jobs`"),
+            "{}",
+            failed.message
+        );
+        assert_eq!(
+            api.calls(),
+            [
+                "queues info a-jobs",
+                "queues create a-jobs",
+                "queues info b-jobs",
+                "queues create b-jobs"
+            ],
+            "nothing is asked after the failure"
+        );
+        let env = &lock.environments["default"];
+        assert!(env.queues.contains("a-jobs"), "{:?}", env.queues);
+        assert!(!env.queues.contains("b-jobs") && !env.queues.contains("c-jobs"));
+        assert!(env.reused_queues.is_empty());
+        // Written to disk too, not only held in memory.
+        let on_disk = std::fs::read_to_string(&path).unwrap();
+        assert!(on_disk.contains("a-jobs"), "{on_disk}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
