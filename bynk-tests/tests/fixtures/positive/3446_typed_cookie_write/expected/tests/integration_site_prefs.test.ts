@@ -5,7 +5,6 @@ import { Ok, Err, Some, None, type Result } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { __JsonValue, __BoundaryError, __ServiceBinding } from "../__bynk_runtime/boundary.js";
 import { __responseToHttpResult, __responseToHttpOutcome, __cookieString, __requestHeaderPairs } from "../__bynk_runtime/http.js";
-import type { Cookie } from "../bynk.js";
 import * as __ns_site_prefs from "../workers/site-prefs/handlers.js";
 import worker___ns_site_prefs from "../workers/site-prefs/index.js";
 import * as __ns_bynk from "./../bynk.js";

@@ -905,8 +905,14 @@ pub(super) fn emit_integration_module(
     let runtime_names = emitter::runtime_header::derived_test_runtime_names(&stmts);
     let mut head =
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import);
-    // #3277: a case that reads a result's cookies names the `Cookie` type.
-    if runtime_use.http_result_cookie() {
+    // #3277: a case that reads a result's cookies names the `Cookie` type. #4619: unless every
+    // case that names it has bound its own (the std `bynk` types a case destructures, #4613),
+    // which shadows the import and leaves it unused.
+    if runtime_use.http_result_cookie()
+        && bynk_ts::unbound_names_in(&stmts, |_| true)
+            .iter()
+            .any(|n| n == "Cookie")
+    {
         head.push(TsStmt::decl(
             TsDecl::Import {
                 type_only: true,

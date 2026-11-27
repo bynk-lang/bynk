@@ -5,7 +5,6 @@ import { Ok, Err, Some, None, type Result } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { __JsonValue, __BoundaryError, __ServiceBinding } from "../__bynk_runtime/boundary.js";
 import { __responseToHttpResult, __responseToHttpOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
-import type { Cookie } from "../bynk.js";
 import * as __ns_auth_api from "../workers/auth-api/handlers.js";
 import worker___ns_auth_api from "../workers/auth-api/index.js";
 import * as __ns_bynk from "./../bynk.js";
