@@ -97,8 +97,22 @@ function assert(cond: boolean, msg: string): void {
 }
 
 type Fetcher = { fetch(input: string, init?: unknown): Promise<Response> };
+// #3939 (slice 3): every storage write the key store makes, so a refusal can be shown to write none.
+let storeWrites = 0;
+function spied(state: { storage: Record<string, unknown> }): unknown {
+  const storage = state.storage as Record<string, (...a: unknown[]) => unknown>;
+  for (const m of ["put", "delete", "deleteAll", "transaction"]) {
+    const f = storage[m];
+    if (typeof f !== "function") continue;
+    storage[m] = (...a: unknown[]) => {
+      storeWrites += 1;
+      return f.apply(storage, a);
+    };
+  }
+  return state;
+}
 // An in-process Durable Object namespace over the emitted agent class, as the test tier builds one.
-function namespace(cls: unknown, env: unknown): { idFromName(n: string): unknown; get(id: unknown): Fetcher } {
+function namespace(cls: unknown, env: unknown, spy = false): { idFromName(n: string): unknown; get(id: unknown): Fetcher } {
   const instances = new Map<string, { fetch(r: Request): Promise<Response> }>();
   return {
     idFromName: (n: string) => n,
@@ -107,7 +121,7 @@ function namespace(cls: unknown, env: unknown): { idFromName(n: string): unknown
       let inst = instances.get(k);
       if (inst === undefined) {
         const C = serialiseAgentClass(cls as never, {}) as unknown as new (s: unknown, e: unknown) => { fetch(r: Request): Promise<Response> };
-        inst = new C(makeTestState(k), env);
+        inst = new C(spy ? spied(makeTestState(k) as never) : makeTestState(k), env);
         instances.set(k, inst);
       }
       const target = inst;
@@ -121,7 +135,7 @@ const env: Record<string, unknown> = {
   CLIENT_KEY_PEPPER: PEPPER,
   RATELIMIT_PER_IP: { limit: async () => ({ success: true }) },
 };
-env.CLIENT_KEYS = namespace(handlers.ClientKeys, env);
+env.CLIENT_KEYS = namespace(handlers.ClientKeys, env, true);
 env.CLIENT_KEY_OWNER = namespace(handlers.ClientKeyOwner, env);
 env.ACCOUNTS = namespace(handlers.Accounts, env);
 
@@ -240,7 +254,7 @@ const spying = {
   },
 };
 assert((await req("GET", "/me", bearer(secret.key), undefined, spying)).status === 200, "the spied store still admits");
-assert(bodies.length === 1, "one store call per request (D3 D, nothing cached)");
+assert(bodies.length === 1, "one store call per request (D3 D, nothing cached; a key used within the hour is not touched)");
 assert(!bodies[0].includes(PEPPER) && !bodies[0].includes(secret.key.slice(-49)), "neither the pepper nor the secret reaches the store");
 
 // #3939 (slice 2, §9) / §13 revocation: a revoked key is refused on the next request, as the same
@@ -271,7 +285,7 @@ assert((await req("GET", "/me", bearer(secret.key))).status === 200, "revoking o
 // §9 list: ids, labels, created, expires and last use; never a secret or a digest.
 const listed = (await (await req("GET", "/accounts/acct-7/keys", {})).json()) as Record<string, unknown>[];
 assert(listed.length === 1 && listed[0].id === secret.id && listed[0].label === "ci", `the one key left is listed: ${JSON.stringify(listed)}`);
-assert(JSON.stringify(Object.keys(listed[0]).sort()) === JSON.stringify(["created", "expires", "id", "label", "lastUsed"]), `a listed key has no other field: ${JSON.stringify(listed[0])}`);
+assert(JSON.stringify(Object.keys(listed[0]).sort()) === JSON.stringify(["created", "expires", "id", "label", "lastUsed", "pepper", "pepperAsOf"]), `a listed key has no other field: ${JSON.stringify(listed[0])}`);
 assert(!JSON.stringify(listed).includes(secret.key.slice(-49)), "the list never carries the secret");
 
 // §6: `revokeAll`'s first commit empties and retires the store; if its second commit (the owner's
@@ -300,6 +314,87 @@ assert(/^[0-9a-f]{32}$/.test(freshHandle), `the new handle is 16 bytes of hex: $
 const identityHex = [...new TextEncoder().encode("acct-7")].map((b) => b.toString(16).padStart(2, "0")).join("");
 assert(!freshHandle.includes(identityHex), "the new handle does not encode the identity");
 assert((await req("GET", "/me", bearer(fresh.key))).status === 200, "a key minted after revokeAll is admitted");
+
+// #3939 (slice 3) / §13: no refusal writes to the key store. `verify` only reads, so a malformed,
+// unknown, forged or expired key leaves the store's storage untouched.
+const unwritten = async (key: string, what: string, e: Record<string, unknown> = env) => {
+  const before = storeWrites;
+  const r = await req("GET", "/me", bearer(key), undefined, e);
+  assert(r.status === 401, `${what} is refused, got ${r.status}`);
+  assert(storeWrites === before, `${what} wrote to the key store (${storeWrites - before} writes)`);
+};
+const fresh7 = (await (await req("POST", "/accounts/acct-60/keys", {}, { label: "w" })).json()) as { key: string };
+const parsed7 = parseApiKey(fresh7.key, "acme")!;
+await unwritten(flip(fresh7.key), "a malformed key");
+await unwritten(formatApiKey("acme", parsed7.handle, "00000000000000cc", new Uint8Array(32).fill(6)), "an unknown key number");
+await unwritten(formatApiKey("acme", "000000000000000000000000000000dd", parsed7.keyNo, new Uint8Array(32).fill(7)), "an unknown handle");
+await unwritten(formatApiKey("acme", parsed7.handle, parsed7.keyNo, new Uint8Array(32).fill(8)), "a forged secret");
+// A key past its `ttl` (90 days) under a clock 91 days on.
+const later = { ...env, __bynkClock: { now: async () => Date.now() + 91 * 86_400_000 } };
+await unwritten(fresh7.key, "an expired key", later);
+// §16 Q7: an admitted key is touched once (its last use), and not again within the hour.
+let before = storeWrites;
+assert((await req("GET", "/me", bearer(fresh7.key))).status === 200, "the fresh key is admitted");
+assert(storeWrites > before, "the first admission records last use");
+before = storeWrites;
+assert((await req("GET", "/me", bearer(fresh7.key))).status === 200, "the fresh key is admitted again");
+assert(storeWrites === before, "a second admission within the hour writes nothing");
+
+// #3939 (slice 3, §7) and live check K2's steps, in process: rotate the pepper with `previous`.
+const { newApiKeyPepper } = await import("./__bynk_runtime/apikey.js");
+const P2 = newApiKeyPepper();
+const used = (await (await req("POST", "/accounts/acct-61/keys", {}, { label: "used" })).json()) as { id: string; key: string };
+const idle = (await (await req("POST", "/accounts/acct-62/keys", {}, { label: "idle" })).json()) as { id: string; key: string };
+const ref401 = await refusal(bearer(flip(used.key)));
+const rotating = { ...env, CLIENT_KEY_PEPPER: P2, CLIENT_KEY_PEPPER_PREV: PEPPER };
+type Info = { id: string; pepper: { kind: string } };
+const pepperOf = async (id: string, e: Record<string, unknown>) =>
+  ((await (await req("GET", `/accounts/${id}/keys`, {}, undefined, e)).json()) as Info[]).map((k) => k.pepper.kind);
+assert(JSON.stringify(await pepperOf("acct-61", rotating)) === '["Previous"]', "before its next use, a key under the old pepper is listed as Previous");
+assert((await req("GET", "/me", bearer(used.key), undefined, rotating)).status === 200, "a key minted before the rotation is admitted under previous");
+// The re-hash and the new kid set are written once, on that success; the next admission writes nothing.
+{
+  const w = storeWrites;
+  assert((await req("GET", "/me", bearer(used.key), undefined, rotating)).status === 200, "the re-hashed key is admitted again");
+  assert(storeWrites === w, "a second admission in the same rotation writes nothing");
+}
+assert(JSON.stringify(await pepperOf("acct-61", rotating)) === '["Current"]', "the admitted key was re-hashed under the new pepper by the same request (`touch`)");
+const swept = await req("POST", "/accounts/acct-62/sweep", {}, undefined, rotating);
+assert(swept.status === 200 && JSON.stringify(await swept.json()) === '{"expired":0,"retired":0,"previous":1}', "sweep counts the idle key still under previous, and removes nothing");
+const minted2 = (await (await req("POST", "/accounts/acct-61/keys", {}, { label: "after" }, rotating)).json()) as { key: string };
+assert((await req("GET", "/me", bearer(minted2.key), undefined, rotating)).status === 200, "a key minted during the rotation is admitted");
+// Drop `previous`.
+const dropped = { ...env, CLIENT_KEY_PEPPER: P2 };
+const droppedCounted = { ...counted, CLIENT_KEY_PEPPER: P2 };
+assert((await req("GET", "/me", bearer(used.key), undefined, dropped)).status === 200, "the re-hashed key outlives previous");
+assert((await req("GET", "/me", bearer(minted2.key), undefined, dropped)).status === 200, "a key minted under the new pepper is admitted");
+// A key under neither pepper: one dummy compare, no write, and the ordinary 401, byte for byte.
+{
+  const b = { ...compares };
+  const w = storeWrites;
+  const r = await req("GET", "/me", bearer(idle.key), undefined, droppedCounted);
+  assert(r.status === 401, `a key under neither pepper is refused, got ${r.status}`);
+  assert(compares.all - b.all === 1 && compares.dummy - b.dummy === 1, "a key under neither pepper is one dummy compare");
+  assert(storeWrites === w, "a key under neither pepper writes nothing");
+}
+const refusalIn = async (headers: Record<string, string>, e: Record<string, unknown>) => {
+  const r = await req("GET", "/me", headers, undefined, e);
+  const hs = [...r.headers.entries()].sort().map(([k, v]) => `${k}: ${v}`).join("\n");
+  return `${r.status}\n${hs}\n\n${await r.text()}`;
+};
+const idleRef = await refusalIn(bearer(idle.key), dropped);
+const parsedUsed = parseApiKey(used.key, "acme")!;
+const forgedRef = await refusalIn(bearer(formatApiKey("acme", parsedUsed.handle, parsedUsed.keyNo, new Uint8Array(32).fill(9))), dropped);
+assert(idleRef === forgedRef, `a key under neither pepper is the same 401 as a forged key:\n${idleRef}\n---\n${forgedRef}`);
+assert(idleRef === ref401, "a key under neither pepper is the same 401 as a malformed key");
+assert(JSON.stringify(await pepperOf("acct-62", dropped)) === '["Retired"]', "a key under neither pepper is listed as Retired");
+// `mint` never removes a key under neither pepper: which keys those are depends on the minting
+// Worker's pepper config, which may be stale mid-rollout or wrong. Only `sweep` does, on purpose.
+assert((await req("POST", "/accounts/acct-62/keys", {}, { label: "later" }, dropped)).status === 201, "a mint for the identity succeeds");
+assert(JSON.stringify((await pepperOf("acct-62", dropped)).sort()) === '["Current","Retired"]', "mint left the retired key in place");
+const pruned = await req("POST", "/accounts/acct-62/sweep", {}, undefined, dropped);
+assert(pruned.status === 200 && JSON.stringify(await pruned.json()) === '{"expired":0,"retired":1,"previous":0}', "sweep removes the retired key and says so");
+assert(JSON.stringify(await pepperOf("acct-62", dropped)) === '["Current"]', "the retired key is gone, the new one kept");
 
 // A missing pepper faults the request; it never admits or refuses quietly.
 console.error = () => {};
@@ -396,8 +491,9 @@ fn drive(fixture_name: &str, driver: &str) {
         let start = handlers
             .find(agent)
             .unwrap_or_else(|| panic!("`{agent}` is emitted"));
+        // The class ends at its first closing brace in column 0.
         let end = handlers[start + 1..]
-            .find("\nexport class ")
+            .find("\n}\n")
             .map_or(handlers.len(), |i| start + 1 + i);
         let class = &handlers[start..end];
         for forbidden in ["CLIENT_KEY_PEPPER", "deps.__apiKey", "Pepper", "pepper"] {

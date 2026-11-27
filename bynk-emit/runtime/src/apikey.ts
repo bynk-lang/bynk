@@ -389,6 +389,24 @@ export function apiKeyFirstDigest(digests: readonly ApiKeyDigest[]): Uint8Array 
   return digests[0].digest;
 }
 
+/** #3939 (slice 3): the `kid` of the pepper now live (`secret`'s). A record `verify` admits under
+ *  any other is re-hashed under this one by `touch`, the next commit (ADR Decision C). */
+export function apiKeyCurrentKid(digests: readonly ApiKeyDigest[]): string {
+  return digests[0].kid;
+}
+
+/** #3939 (slice 3): the `kid`s of the peppers now held, `secret`'s first, as the store records them. */
+export function apiKeyLiveKids(digests: readonly ApiKeyDigest[]): string[] {
+  return digests.map((d) => d.kid);
+}
+
+/** #3939 (slice 3): the time the seam passes the key store, for expiry and last use: the harness
+ *  clock when the run sets one (`env.__bynkClock`), else the wall clock. */
+export async function apiKeyNow(env: unknown): Promise<number> {
+  const clock = (env as { __bynkClock?: { now(): Promise<number> | number } } | null | undefined)?.__bynkClock;
+  return clock === undefined ? Date.now() : await clock.now();
+}
+
 /** The fixed dummy digest (32 zero bytes). An HMAC-SHA-256 output equals it with probability
  *  2^-256, and `verify` also refuses whenever it compared the dummy, so it never admits. */
 export function apiKeyDummyDigest(): Uint8Array {
@@ -417,6 +435,19 @@ export interface MintRequest {
   readonly keyNo: string;
   readonly digest: Uint8Array;
   readonly kid: string;
+  /** #3939 (slice 3): when the key expires (`now + ttl`), or `None` for an actor with no `ttl`. */
+  readonly until: { readonly tag: "Some"; readonly value: number } | { readonly tag: "None" };
+  /** #3939 (slice 3, §7): the `kid`s of the peppers now held, `secret`'s first. The store prunes
+   *  each record under neither, with the expired ones, before it checks the cap. */
+  readonly live: readonly string[];
+}
+
+/** What `mintApiKey` reads beyond the pepper: the actor's `ttl` and its `previous` variable. */
+export interface MintOptions {
+  /** The actor's `ttl` in milliseconds; absent or `null`, keys do not expire. */
+  readonly ttlMs?: number | null;
+  /** The name of the actor's `previous` variable, for the fault message. */
+  readonly previous?: string;
 }
 
 /**
@@ -434,9 +465,20 @@ export async function mintApiKey<R>(
   nowMs: number,
   limit: number,
   store: (req: MintRequest) => Promise<{ readonly tag: "Ok"; readonly value: string } | { readonly tag: "Err"; readonly error: number }>,
+  opts: MintOptions = {},
 ): Promise<R> {
-  const fresh = await freshApiKey(await loadApiKeyPeppers(peppers, { secret: pepperName }));
-  const stored = await store({ handle: fresh.handle, keyNo: fresh.keyNo, digest: fresh.digest, kid: fresh.kid });
+  const held = await loadApiKeyPeppers(peppers, { secret: pepperName, previous: opts.previous });
+  const fresh = await freshApiKey(held);
+  const ttl = opts.ttlMs ?? null;
+  const until = ttl === null ? ({ tag: "None" } as const) : ({ tag: "Some", value: nowMs + ttl } as const);
+  const stored = await store({
+    handle: fresh.handle,
+    keyNo: fresh.keyNo,
+    digest: fresh.digest,
+    kid: fresh.kid,
+    until,
+    live: held.map((p) => p.kid),
+  });
   // `R` is the call's checked `Result[ApiKeySecret, TooManyKeys]`, whose `ApiKeyId` and
   // `ApiKeyLabel` are brands: the id is well-formed by construction and the label was checked
   // as an `ApiKeyLabel` before the call, so the structural value is that type.
@@ -449,7 +491,7 @@ export async function mintApiKey<R>(
       key: new BynkSecret(formatApiKey(prefix, handle, fresh.keyNo, fresh.secret)),
       label,
       created: nowMs,
-      expires: { tag: "None" },
+      expires: until,
     },
   };
   return minted as unknown as R;
@@ -462,21 +504,77 @@ export async function mintApiKey<R>(
 /** An `Option[String]` as an agent call answers it. */
 type HandleOption = { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" };
 
+/** The generated `<Actor>Keys` handlers `list` and `sweep` call. */
+export interface ApiKeyStore {
+  expire(now: number, deps: unknown): Promise<number>;
+  labelsOf(deps: unknown): Promise<ReadonlyMap<string, string>>;
+  createdOf(deps: unknown): Promise<ReadonlyMap<string, number>>;
+  expiresOf(deps: unknown): Promise<ReadonlyMap<string, number>>;
+  usedOf(deps: unknown): Promise<ReadonlyMap<string, number>>;
+  kidsOf(deps: unknown): Promise<ReadonlyMap<string, string>>;
+  knownOf(deps: unknown): Promise<readonly string[]>;
+  knownAtOf(deps: unknown): Promise<number>;
+  sweep(now: number, live: readonly string[], current: string, deps: unknown): Promise<readonly number[]>;
+}
+
 /**
- * `list`: the identity's keys, as `ApiKeyInfo` values, from its current store's labels and
- * creation times. No handle, or a retired store, is no keys. Only a key in both maps is listed,
- * so a key revoked between the two reads is left out, never half-shown. Never a secret or a digest.
+ * #3939 (slice 3): the `kid`s of the actor's peppers now held, `secret`'s first, when the pepper
+ * reaches this handler (a service handler's `deps.__apiKey`), else `null` (an agent's handler).
+ */
+export async function apiKeyLiveKidsOf(
+  deps: unknown,
+  actor: string,
+  names: { readonly secret: string; readonly previous?: string },
+): Promise<string[] | null> {
+  const peppers = (deps as { __apiKey?: Record<string, ApiKeyPeppers> } | null | undefined)?.__apiKey?.[actor];
+  if (peppers === undefined) return null;
+  return (await loadApiKeyPeppers(peppers, names)).map((p) => p.kid);
+}
+
+const PEPPER_CURRENT = { tag: "Current" } as const;
+const PEPPER_PREVIOUS = { tag: "Previous" } as const;
+const PEPPER_RETIRED = { tag: "Retired" } as const;
+
+/** Which pepper a record's `kid` names, among the live ones (`secret`'s first). With none known
+ *  (a store no key has reached since slice 3), every key reads as `Current`. */
+function pepperOf(kid: string | undefined, live: readonly string[]) {
+  if (live.length === 0) return PEPPER_CURRENT;
+  if (kid === live[0]) return PEPPER_CURRENT;
+  if (kid !== undefined && live.includes(kid)) return PEPPER_PREVIOUS;
+  return PEPPER_RETIRED;
+}
+
+/**
+ * `list`: the identity's keys, as `ApiKeyInfo` values. Expired keys are removed first (§9). Each
+ * key's `pepper` is read against `live`, the peppers this handler holds; in an agent's handler,
+ * which holds none, against the `kid`s the store last saw (its last mint, sweep or admitted key).
+ * No handle, or a retired store, is no keys. Only a key in both the label and creation maps is
+ * listed, so a key revoked between the reads is left out, never half-shown. Never a secret or a
+ * digest.
  */
 export async function apiKeyList<R>(
   prefix: string,
   handle: HandleOption,
-  labelsOf: (handle: string) => Promise<ReadonlyMap<string, string>>,
-  createdOf: (handle: string) => Promise<ReadonlyMap<string, number>>,
+  nowMs: number,
+  live: readonly string[] | null,
+  store: (handle: string) => ApiKeyStore,
+  deps: unknown,
 ): Promise<R> {
   if (handle.tag !== "Some") return [] as unknown as R;
   const h = handle.value;
-  const labels = await labelsOf(h);
-  const created = await createdOf(h);
+  const keys = store(h);
+  // `expire` writes, so it is called only when some key has expired: a `list` with nothing to
+  // remove commits nothing.
+  const expiring = await keys.expiresOf(deps);
+  if ([...expiring.values()].some((t) => t <= nowMs)) await keys.expire(nowMs, deps);
+  const labels = await keys.labelsOf(deps);
+  const created = await keys.createdOf(deps);
+  const expires = await keys.expiresOf(deps);
+  const used = await keys.usedOf(deps);
+  const kids = await keys.kidsOf(deps);
+  const against = live ?? (await keys.knownOf(deps));
+  const asOf = live === null ? await keys.knownAtOf(deps) : nowMs;
+  const some = (v: number | undefined) => (v === undefined ? { tag: "None" } : { tag: "Some", value: v });
   const out: unknown[] = [];
   for (const [keyNo, label] of labels) {
     const at = created.get(keyNo);
@@ -485,11 +583,33 @@ export async function apiKeyList<R>(
       id: apiKeyIdOf(prefix, h, keyNo),
       label,
       created: at,
-      expires: { tag: "None" },
-      lastUsed: { tag: "None" },
+      expires: some(expires.get(keyNo)),
+      lastUsed: some(used.get(keyNo)),
+      pepper: pepperOf(kids.get(keyNo), against),
+      pepperAsOf: asOf,
     });
   }
   return out as unknown as R;
+}
+
+/**
+ * #3939 (slice 3): `sweep`: remove the identity's expired keys and its keys under neither pepper,
+ * and answer an `ApiKeySweep`: how many of each it removed, and how many remain under `previous`
+ * (the keys dropping it now would end). Only `sweep` removes keys under neither pepper, never
+ * `mint`: which keys those are depends on this Worker's pepper config, so it is the operator's call. `live`
+ * comes from the pepper, which a service handler holds; `sweep` is legal nowhere else.
+ */
+export async function apiKeySweep(
+  handle: HandleOption,
+  nowMs: number,
+  live: readonly string[] | null,
+  store: (handle: string) => ApiKeyStore,
+  deps: unknown,
+): Promise<{ readonly expired: number; readonly retired: number; readonly previous: number }> {
+  if (live === null) pepperFault("`sweep` needs the API key pepper, which reaches a service handler only");
+  if (handle.tag !== "Some") return { expired: 0, retired: 0, previous: 0 };
+  const [expired, retired, previous] = await store(handle.value).sweep(nowMs, live, live[0], deps);
+  return { expired, retired, previous };
 }
 
 /**
@@ -526,6 +646,7 @@ export async function apiKeyForTest(
   nowMs: number,
   limit: number,
   store: (req: MintRequest) => Promise<{ readonly tag: "Ok"; readonly value: string } | { readonly tag: "Err"; readonly error: number }>,
+  opts: MintOptions = {},
 ): Promise<string> {
   const memo = (env.__bynkApiKeys ??= new Map<string, string>()) as Map<string, string>;
   const k = `${actor}:${sub}`;
@@ -539,6 +660,7 @@ export async function apiKeyForTest(
       nowMs,
       limit,
       store,
+      opts,
     );
     if (minted.tag !== "Ok") throw new Error(`bynk: the test identity \`${sub}\` holds the most keys it may`);
     key = minted.value.key.reveal();

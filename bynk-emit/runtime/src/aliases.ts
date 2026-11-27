@@ -8,7 +8,7 @@ import { BynkSecret } from "./secret.ts";
 import { containerClass } from "./container.ts";
 import { AGENT_WIRE_PASS, agentNamespace, StateRegistry, agentBusyAfter, agentBusyResponse, callAgentOutcome, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, stubAgents, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { bearerTrust, oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
-import { apiKeyEqual, apiKeyList, apiKeyRevoke, apiKeyBadKey, apiKeyCountCompares, apiKeyExpectCompares, apiKeyForTest, apiKeyPeppersOf, apiKeyRevokedForTest, mintApiKey, apiKeyDummyDigest, apiKeyFirstDigest, apiKeyPresented, apiKeyCredentialOf, apiKeyDigests, apiKeyIdOf, formatApiKey, freshApiKey, loadApiKeyPeppers, newApiKeyHandle, newApiKeyPepper, parseApiKey, parseApiKeyId } from "./apikey.ts";
+import { apiKeyEqual, apiKeyList, apiKeyLiveKidsOf, apiKeyRevoke, apiKeySweep, apiKeyBadKey, apiKeyCountCompares, apiKeyExpectCompares, apiKeyForTest, apiKeyPeppersOf, apiKeyRevokedForTest, mintApiKey, apiKeyCurrentKid, apiKeyDummyDigest, apiKeyFirstDigest, apiKeyLiveKids, apiKeyNow, apiKeyPresented, apiKeyCredentialOf, apiKeyDigests, apiKeyIdOf, formatApiKey, freshApiKey, loadApiKeyPeppers, newApiKeyHandle, newApiKeyPepper, parseApiKey, parseApiKeyId } from "./apikey.ts";
 import { currentSession, expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
 import { boundaryError, callOutcome, jsonParseMessage, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, renameStoredFields, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, registerFrameEncoder, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketAuthExpired, webSocketBearerRefusal, webSocketClosing, webSocketAdmit, webSocketErrored, webSocketOriginAllowed, webSocketUpgradeResponse } from "./connection.ts";
@@ -216,7 +216,9 @@ export {
   varyAcceptLanguage as __varyAcceptLanguage,
   apiKeyEqual as __apiKeyEqual,
   apiKeyList as __apiKeyList,
+  apiKeyLiveKidsOf as __apiKeyLiveKidsOf,
   apiKeyRevoke as __apiKeyRevoke,
+  apiKeySweep as __apiKeySweep,
   apiKeyBadKey as __apiKeyBadKey,
   apiKeyRevokedForTest as __apiKeyRevokedForTest,
   apiKeyCountCompares as __apiKeyCountCompares,
@@ -224,7 +226,10 @@ export {
   apiKeyForTest as __apiKeyForTest,
   apiKeyPeppersOf as __apiKeyPeppersOf,
   mintApiKey as __mintApiKey,
+  apiKeyCurrentKid as __apiKeyCurrentKid,
   apiKeyDummyDigest as __apiKeyDummyDigest,
+  apiKeyLiveKids as __apiKeyLiveKids,
+  apiKeyNow as __apiKeyNow,
   apiKeyFirstDigest as __apiKeyFirstDigest,
   apiKeyPresented as __apiKeyPresented,
   apiKeyCredentialOf as __apiKeyCredentialOf,

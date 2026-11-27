@@ -25,10 +25,6 @@ pub const DEFAULT_PREFIX: &str = "bk";
 /// The keys an `ApiKey` actor's config admits.
 const KEYS: &[&str] = &["secret", "previous", "prefix", "header", "ttl"];
 
-/// The keys this slice reads. `previous` and `ttl` arrive with expiry and rotation (track §14,
-/// slice 3), and until then are refused rather than read and ignored.
-const KEYS_NOW: &[&str] = &["secret", "prefix", "header"];
-
 /// The marker the generated agents' documentation begins with, so the checker can tell them from
 /// an author's declaration of the same (reserved) name.
 pub const GENERATED_MARKER: &str = "Generated for the `ApiKey` actor";
@@ -51,6 +47,12 @@ pub struct ApiKeySeam {
     pub header: Option<String>,
     /// The identity type the key store answers.
     pub identity_type: String,
+    /// #3939 (slice 3, §7): the environment variable holding the pepper being rotated out, read
+    /// for verification only; `None` when the actor names none.
+    pub previous: Option<String>,
+    /// #3939 (slice 3): how long a minted key is valid, in milliseconds; `None`, keys do not
+    /// expire.
+    pub ttl_ms: Option<i64>,
 }
 
 impl ApiKeySeam {
@@ -66,6 +68,11 @@ impl ApiKeySeam {
 /// The name of the agent holding one identity's keys, keyed by the random handle (D1 B).
 pub fn keys_agent_name(actor: &str) -> String {
     format!("{actor}Keys")
+}
+
+/// #3939 (slice 3): the name of the record `<Actor>Keys.verify` answers for an admitted key.
+pub fn key_check_type_name(actor: &str) -> String {
+    format!("{actor}KeyCheck")
 }
 
 /// The name of the agent mapping an identity to its handle, used only by the members (D1 B).
@@ -105,6 +112,13 @@ pub fn api_key_seam_of(actor: &ActorDecl, binder: Option<String>) -> Option<ApiK
             .and_then(|a| a.value.as_str())
             .map(str::to_string),
         identity_type: id.name.clone(),
+        previous: actor
+            .scheme_arg("previous")
+            .and_then(|a| a.value.as_str())
+            .map(str::to_string),
+        ttl_ms: actor
+            .scheme_arg("ttl")
+            .and_then(|a| a.value.as_duration_millis()),
     })
 }
 
@@ -120,6 +134,16 @@ pub fn api_key_seam_for(
     }
     let actor = actors.get(&by.primary().name)?;
     api_key_seam_of(actor, by.binder.as_ref().map(|b| b.name.clone()))
+}
+
+/// #3939 (slice 3): whether a `by` clause names a single local `ApiKey` actor with a `ttl`, whose
+/// keys `by Expired` can present expired.
+pub fn by_clause_is_expiring_api_key(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    !by.is_sum()
+        && actors
+            .get(&by.primary().name)
+            .and_then(|a| api_key_seam_of(a, None))
+            .is_some_and(|s| s.ttl_ms.is_some())
 }
 
 /// Whether a `by` clause names a single local `ApiKey` actor.
@@ -171,6 +195,7 @@ pub(crate) fn check_api_key_actor(
     check_keys(actor, errors);
     check_secret(actor, auth, table, errors);
     check_prefix(actor, table, errors);
+    check_previous_and_ttl(actor, errors);
     check_header(actor, errors);
     check_reserved_names(actor, table, errors);
     match &actor.identity {
@@ -189,7 +214,7 @@ fn bad_arg(span: Span, key: &str, want: &str) -> CompileError {
         format!("an `ApiKey` actor's `{key}` must be {want}"),
     )
     .with_note(
-        "write `auth = ApiKey(secret = \"<ENV_NAME>\")`; the optional keys are `prefix` (default `bk`) and `header` (default `Authorization: Bearer`)",
+        "write `auth = ApiKey(secret = \"<ENV_NAME>\")`; the optional keys are `previous` (the pepper being rotated out), `prefix` (default `bk`), `header` (default `Authorization: Bearer`) and `ttl` (default: keys do not expire)",
     )
 }
 
@@ -226,18 +251,7 @@ fn check_keys(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
                     arg.key.span,
                     format!("unknown `ApiKey` config key `{key}`"),
                 )
-                .with_note("the keys are `secret`, `prefix` and `header`"),
-            );
-        } else if !KEYS_NOW.contains(&key) {
-            errors.push(
-                CompileError::new(
-                    "bynk.actor.api_key_unknown_key",
-                    arg.key.span,
-                    format!("the `ApiKey` config key `{key}` is not supported yet"),
-                )
-                .with_note(
-                    "key expiry (`ttl`) and pepper rotation (`previous`) arrive in a later release; until then a key does not expire, and the pepper is rotated only by revoking every key",
-                ),
+                .with_note("the keys are `secret`, `previous`, `prefix`, `header` and `ttl`"),
             );
         }
     }
@@ -295,6 +309,42 @@ fn check_secret(
                     "a pepper hashes one actor's keys only: a variable shared with another scheme would let that scheme's credentials be checked against it; give each actor its own variable",
                 ),
             );
+        }
+    }
+}
+
+/// #3939 (slice 3): `previous` names another environment variable than `secret`, and `ttl` is a
+/// positive whole number of seconds. Sharing `previous` with another actor is
+/// `bynk.actor.api_key_secret_shared`, reported from that actor's `secret`.
+fn check_previous_and_ttl(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
+    if let Some(arg) = actor.scheme_arg("previous") {
+        match arg.value.as_str() {
+            None => errors.push(bad_arg(
+                arg.span,
+                "previous",
+                "an env binding name, as a string",
+            )),
+            Some(p) if actor.scheme_arg("secret").and_then(|s| s.value.as_str()) == Some(p) => {
+                errors.push(bad_arg(
+                    arg.span,
+                    "previous",
+                    "another variable than `secret`: it holds the pepper being rotated out",
+                ));
+            }
+            Some(_) => {}
+        }
+    }
+    if let Some(arg) = actor.scheme_arg("ttl") {
+        let ok = arg
+            .value
+            .as_duration_millis()
+            .is_some_and(|ms| ms > 0 && ms % 1000 == 0);
+        if !ok {
+            errors.push(bad_arg(
+                arg.span,
+                "ttl",
+                "a positive whole number of seconds, such as `90.days`",
+            ));
         }
     }
 }
@@ -391,13 +441,18 @@ pub(crate) const WEBSOCKET_NOTE: &str = "a WebSocket upgrade does not ask the ke
 /// generated agent is the author's.
 fn check_reserved_names(actor: &ActorDecl, table: &UnitTable, errors: &mut Vec<CompileError>) {
     let owner = &actor.name.name;
-    for reserved in [keys_agent_name(owner), key_owner_agent_name(owner)] {
+    for reserved in [
+        keys_agent_name(owner),
+        key_owner_agent_name(owner),
+        key_check_type_name(owner),
+    ] {
         let taken: Option<Span> = if let Some(agent) = table.agents.get(&reserved) {
             (!is_generated_agent(agent)).then_some(agent.name.span)
         } else {
             table
                 .types
                 .get(&reserved)
+                .filter(|t| !is_generated_doc(t.documentation.as_ref()))
                 .map(|t| t.name.span)
                 .or_else(|| table.fns.get(&reserved).map(|f| f.name.ident().span))
                 .or_else(|| table.services.get(&reserved).map(|s| s.name.span))
@@ -414,9 +469,10 @@ fn check_reserved_names(actor: &ActorDecl, table: &UnitTable, errors: &mut Vec<C
                 ),
             )
             .with_note(format!(
-                "an `ApiKey` actor's keys live in generated agents named `{}` and `{}`: rename this declaration",
+                "an `ApiKey` actor's keys live in generated agents named `{}` and `{}`, with a generated type `{}`: rename this declaration",
                 keys_agent_name(owner),
-                key_owner_agent_name(owner)
+                key_owner_agent_name(owner),
+                key_check_type_name(owner)
             )),
         );
     }
@@ -434,10 +490,12 @@ pub fn in_generated_agent(span: Span, items: &[bynk_syntax::ast::CommonsItem]) -
 
 /// Whether `agent` is one the compiler generated for an `ApiKey` actor.
 pub fn is_generated_agent(agent: &bynk_syntax::ast::AgentDecl) -> bool {
-    agent
-        .documentation
-        .as_ref()
-        .is_some_and(|d| d.as_str().trim_start().starts_with(GENERATED_MARKER))
+    is_generated_doc(agent.documentation.as_ref())
+}
+
+/// Whether a declaration's documentation marks it as generated for an `ApiKey` actor.
+fn is_generated_doc(doc: Option<&bynk_syntax::ast::Doc>) -> bool {
+    doc.is_some_and(|d| d.as_str().trim_start().starts_with(GENERATED_MARKER))
 }
 
 /// #3939 (D3 F, track §12): `bynk.actor.api_key_unlimited`, a warning on an HTTP route an `ApiKey`
@@ -493,10 +551,10 @@ pub(crate) fn expired_needs_ttl(span: Span) -> CompileError {
     CompileError::new(
         "bynk.test.expired_needs_bearer_route",
         span,
-        "`by Expired` sends an expired key, but this route's `ApiKey` actor's keys do not expire",
+        "`by Expired` sends an expired key, but this route's `ApiKey` actor declares no `ttl`, so its keys do not expire",
     )
     .with_note(
-        "an `ApiKey` actor has no `ttl` yet; test its seam with `by Nobody`, `by Malformed`, `by Unknown` or `by Forged`",
+        "give the actor a `ttl` (`ttl = 90.days`) to test expiry; without one, test its seam with `by Nobody`, `by Malformed`, `by Unknown`, `by Forged` or `by Revoked`",
     )
 }
 
@@ -526,7 +584,7 @@ pub fn remote_unsupported_api_key(
                 b @ (BadCredential::Malformed | BadCredential::Unknown),
             )) => Some(format!("drives `by {}`", b.name())),
             crate::checker::Callee::Principal(CallSitePrincipal::BadCredential(
-                b @ (BadCredential::Forged | BadCredential::Revoked),
+                b @ (BadCredential::Forged | BadCredential::Revoked | BadCredential::Expired),
             )) if calls_api_key_route => Some(format!(
                 "drives `by {}` at a route an `ApiKey` actor guards",
                 b.name()

@@ -54,6 +54,94 @@ suite acme.api as system {
 		let after <- api.GET("/me") by Client("acct-30")
 		expect after is Unauthorized
 	}
+	// #3939 (slice 3, §10) / §13 expiry: a key past its `ttl` is refused like any other, after the
+	// same record compare a forged key gets (the driver checks the count).
+	case "an expired key is refused after the record compare" {
+		let r <- api.GET("/me") by Expired
+		expect r is Rejected(Unauthorized)
+	}
+	// §9: a minted key's expiry is the actor's `ttl` after its creation.
+	case "a minted key expires its ttl after it was created" {
+		let r <- api.POST("/accounts/:id/keys", "acct-50", NewKey { label: "ci" }) by Visitor
+		match r {
+			Created(s) => expect s.expires == Some(s.created + 90.days),
+			_ => expect false,
+		}
+	}
+	// §13 expiry: the same key is admitted before its `ttl` ends and refused after.
+	case "a key is refused once its ttl has passed" {
+		let before <- api.GET("/me") by Client("acct-51")
+		expect before is Ok("acct-51")
+		advance Clock by 91.days
+		let after <- api.GET("/me") by Client("acct-51")
+		expect after is Unauthorized
+	}
+	// §16 Q7: last use is recorded on admission, at most once an hour.
+	case "last use is recorded at most once an hour" {
+		let missing: Option[Instant] = None
+		let first <- api.GET("/me") by Client("acct-52")
+		expect first is Ok("acct-52")
+		let seen <- api.GET("/accounts/:id/keys", "acct-52") by Visitor
+		let t0 = match seen {
+			Ok([k]) => k.lastUsed,
+			_ => missing,
+		}
+		expect t0 is Some(_)
+		advance Clock by 30.minutes
+		let again <- api.GET("/me") by Client("acct-52")
+		expect again is Ok("acct-52")
+		let still <- api.GET("/accounts/:id/keys", "acct-52") by Visitor
+		let t1 = match still {
+			Ok([k]) => k.lastUsed,
+			_ => missing,
+		}
+		expect t1 == t0
+		advance Clock by 31.minutes
+		let later <- api.GET("/me") by Client("acct-52")
+		expect later is Ok("acct-52")
+		let moved <- api.GET("/accounts/:id/keys", "acct-52") by Visitor
+		let t2 = match moved {
+			Ok([k]) => k.lastUsed,
+			_ => missing,
+		}
+		expect t2 != t0
+		expect t2 is Some(_)
+	}
+	// §9 / §7: `sweep` removes expired keys (and says how many), and with no `previous` set none remain
+	// under it.
+	case "sweep removes expired keys and counts none under previous" {
+		let _ <- api.POST("/accounts/:id/keys", "acct-53", NewKey { label: "a" }) by Visitor
+		let kept <- api.POST("/accounts/:id/sweep", "acct-53") by Visitor
+		let keptCounts = match kept {
+			Ok(s) => [s.expired, s.retired, s.previous],
+			_ => [-1],
+		}
+		expect keptCounts == [0, 0, 0]
+		let one <- api.GET("/accounts/:id/keys", "acct-53") by Visitor
+		let n = match one {
+			Ok(keys) => keys.length(),
+			_ => 0,
+		}
+		expect n == 1
+		advance Clock by 91.days
+		let swept <- api.POST("/accounts/:id/sweep", "acct-53") by Visitor
+		let sweptCounts = match swept {
+			Ok(s) => [s.expired, s.retired, s.previous],
+			_ => [-1],
+		}
+		expect sweptCounts == [1, 0, 0]
+		let none <- api.GET("/accounts/:id/keys", "acct-53") by Visitor
+		expect none is Ok([])
+	}
+	// §7: with no rotation under way, every listed key is under the current pepper.
+	case "a listed key is under the current pepper" {
+		let _ <- api.POST("/accounts/:id/keys", "acct-54", NewKey { label: "a" }) by Visitor
+		let listed <- api.GET("/accounts/:id/keys", "acct-54") by Visitor
+		match listed {
+			Ok([k]) => expect k.pepper is Current,
+			_ => expect false,
+		}
+	}
 	// §12: `key: identity` counts each verified key holder on its own.
 	case "a verified key holder over the identity limit is refused with 429" {
 		let a <- api.GET("/usage") by Client("acct-40")

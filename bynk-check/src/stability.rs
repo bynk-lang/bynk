@@ -480,7 +480,9 @@ mod tests {
             "ApiKeyId",
             "ApiKeyInfo",
             "ApiKeyLabel",
+            "ApiKeyPepper",
             "ApiKeySecret",
+            "ApiKeySweep",
             "ApiKeyValue",
             "TooManyKeys",
         ] {

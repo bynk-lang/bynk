@@ -62,6 +62,8 @@ pub(in crate::emitter) fn lower_api_key_mint(
                 req("kid"),
                 ident("__label"),
                 ident("__now"),
+                req("until"),
+                req("live"),
                 num_lit(bynk_project::api_key_agents::KEY_CAP),
                 deps_node.clone(),
             ],
@@ -81,6 +83,7 @@ pub(in crate::emitter) fn lower_api_key_mint(
             ident("__now"),
             num_lit(bynk_project::api_key_agents::KEY_CAP),
             store,
+            mint_options(&seam),
         ],
     );
     Some(call(
@@ -144,34 +147,59 @@ pub(in crate::emitter) fn lower_api_key_member(
     let owner = cx.agent_construct_node(&owner_agent, ident("__sub"));
     let prefix = str_lit(crate::emitter::escape_ts_string(&seam.prefix));
     let body = match member {
-        "list" => {
+        "list" | "sweep" => {
             cx.record_agent_call(&owner_agent, "current");
-            cx.record_agent_call(&keys_agent, "labelsOf");
-            cx.record_agent_call(&keys_agent, "createdOf");
-            let read = |cx: &mut LowerCtx, op: &str| {
-                let store = cx.agent_construct_node(&keys_agent, ident("__h"));
-                arrow_with(
-                    vec![TsParam::new("__h".to_string(), None)],
-                    false,
-                    method_call(store, op, vec![deps_node.clone()]),
-                )
+            let ops: &[&str] = if member == "list" {
+                &[
+                    "expire",
+                    "labelsOf",
+                    "createdOf",
+                    "expiresOf",
+                    "usedOf",
+                    "kidsOf",
+                    "knownOf",
+                    "knownAtOf",
+                ]
+            } else {
+                &["sweep"]
             };
-            let list_ty = match cx.commons().expr_ty(e.id).as_deref() {
-                Some(bynk_check::checker::Ty::Effect(inner)) => *inner,
-                _ => return None,
-            };
-            let list_ts = super::super::ts_types::ts_ty_to_ts_type(list_ty, cx.ty_render());
-            let labels = read(cx, "labelsOf");
-            let created = read(cx, "createdOf");
-            call(
-                crate::ts_build::type_app(ident("__apiKeyList"), vec![list_ts]),
+            for op in ops {
+                cx.record_agent_call(&keys_agent, op);
+            }
+            let store = arrow_with(
+                vec![TsParam::new("__h".to_string(), None)],
+                false,
+                cx.agent_construct_node(&keys_agent, ident("__h")),
+            );
+            let now = await_expr(call(
+                crate::ts_build::member(crate::ts_build::member(deps_node.clone(), "Clock"), "now"),
+                vec![],
+            ));
+            let live = await_expr(call(
+                ident("__apiKeyLiveKidsOf"),
                 vec![
-                    prefix,
-                    await_expr(method_call(owner, "current", vec![deps_node.clone()])),
-                    labels,
-                    created,
+                    deps_node.clone(),
+                    str_lit(crate::emitter::escape_ts_string(actor)),
+                    pepper_names(&seam),
                 ],
-            )
+            ));
+            let handle = await_expr(method_call(owner, "current", vec![deps_node.clone()]));
+            if member == "list" {
+                let list_ty = match cx.commons().expr_ty(e.id).as_deref() {
+                    Some(bynk_check::checker::Ty::Effect(inner)) => *inner,
+                    _ => return None,
+                };
+                let list_ts = super::super::ts_types::ts_ty_to_ts_type(list_ty, cx.ty_render());
+                call(
+                    crate::ts_build::type_app(ident("__apiKeyList"), vec![list_ts]),
+                    vec![prefix, handle, now, live, store, deps_node.clone()],
+                )
+            } else {
+                call(
+                    ident("__apiKeySweep"),
+                    vec![handle, now, live, store, deps_node.clone()],
+                )
+            }
         }
         "revoke" => {
             cx.record_agent_call(&owner_agent, "revoke");
@@ -217,4 +245,28 @@ pub(in crate::emitter) fn lower_api_key_member(
         )),
         vec![identity],
     ))
+}
+
+/// #3939 (slice 3): `{ ttlMs, previous }`, what `__mintApiKey` reads beyond the pepper: the key's
+/// lifetime, and the `previous` variable's name when the actor rotates.
+pub(crate) fn mint_options(seam: &bynk_check::api_key::ApiKeySeam) -> TsExpr {
+    let esc = crate::emitter::escape_ts_string;
+    let mut entries = vec![(
+        "ttlMs".to_string(),
+        seam.ttl_ms.map_or_else(crate::ts_build::null_lit, num_lit),
+    )];
+    if let Some(previous) = &seam.previous {
+        entries.push(("previous".to_string(), str_lit(esc(previous))));
+    }
+    TsExpr::object(entries)
+}
+
+/// `{ secret: "<NAME>", previous: "<NAME>" }`: the actor's pepper variables, for a fault message.
+fn pepper_names(seam: &bynk_check::api_key::ApiKeySeam) -> TsExpr {
+    let esc = crate::emitter::escape_ts_string;
+    let mut entries = vec![("secret".to_string(), str_lit(esc(&seam.secret)))];
+    if let Some(previous) = &seam.previous {
+        entries.push(("previous".to_string(), str_lit(esc(previous))));
+    }
+    TsExpr::object(entries)
 }

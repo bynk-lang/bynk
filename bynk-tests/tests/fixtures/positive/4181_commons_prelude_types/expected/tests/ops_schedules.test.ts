@@ -14,11 +14,13 @@ async function test_a_canonical_id_is_accepted() {
   try {
     const deps = {};
     const { Nightly, echo, parseId } = __ns_ops_schedules;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -68,11 +70,13 @@ async function test_a_malformed_id_is_refused() {
   try {
     const deps = {};
     const { Nightly, echo, parseId } = __ns_ops_schedules;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;

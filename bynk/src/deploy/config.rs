@@ -438,6 +438,10 @@ pub(crate) struct SessionKey {
     /// without it is a signing key, as every older manifest's is).
     #[serde(default)]
     pub(crate) kind: SessionKeyKind,
+    /// #3939 (slice 3): a pepper's declared `previous` variable, when the actor names one. A pepper
+    /// `deploy` mints cannot be moved into it, so the plan says rotation needs a supplied pepper.
+    #[serde(default)]
+    pub(crate) previous: Option<String>,
 }
 
 /// #3939: a `SignedCookie` actor's signing key, or an `ApiKey` actor's pepper. Both are minted when
@@ -1320,6 +1324,7 @@ pub(crate) mod tests {
                     actor: actor.to_string(),
                     binding: binding.to_string(),
                     kind: SessionKeyKind::Cookie,
+                    previous: None,
                 })
                 .collect();
             self
@@ -1331,6 +1336,7 @@ pub(crate) mod tests {
                     actor: actor.to_string(),
                     binding: binding.to_string(),
                     kind: SessionKeyKind::Pepper,
+                    previous: None,
                 }));
             self
         }

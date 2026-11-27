@@ -5194,9 +5194,10 @@ fn wire_outcome(outcome: TyId, ctx: &Ctx) -> TyId {
 pub(super) const OPEN_SUM_NOTE: &str = "this actor sum admits an open member (`Visitor`): a request with a missing or bad credential resolves as it, so the seam never answers `401`";
 
 /// #3939: `by Malformed` and `by Unknown` are an `ApiKey` seam's own refusals, refused on any
-/// other route; and an `ApiKey` key does not expire until `ttl` (slice 3), so `by Expired` is
-/// refused on an `ApiKey` route. `by Revoked` is admitted on one (slice 2): the driver mints a key,
-/// revokes it and presents it. Whether `bad` is one of these (each reported here).
+/// other route; and an `ApiKey` key expires only under the actor's `ttl`, so `by Expired` is
+/// refused on an `ApiKey` route whose actor has no `ttl`. `by Revoked` is admitted on one (slice 2):
+/// the driver mints a key, revokes it and presents it; `by Expired` on one with a `ttl` (slice 3).
+/// Whether `bad` is one of these (each reported here).
 fn check_api_key_principal(
     bad: BadCredential,
     by: Option<&bynk_syntax::ast::ByClause>,
@@ -5215,7 +5216,13 @@ fn check_api_key_principal(
             true
         }
         BadCredential::Expired if api_key => {
-            ctx.errors.push(crate::api_key::expired_needs_ttl(span));
+            // #3939 (slice 3): an actor with a `ttl` has expiring keys; one without has none.
+            let expiring = by.is_some_and(|by| {
+                crate::api_key::by_clause_is_expiring_api_key(by, &ctx.test_actors)
+            });
+            if !expiring {
+                ctx.errors.push(crate::api_key::expired_needs_ttl(span));
+            }
             true
         }
         BadCredential::Revoked => api_key,

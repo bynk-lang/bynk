@@ -29,11 +29,13 @@ class __Stub_Pages {
   }
 
   async exchange(sent: __ns_bynk.UpstreamRequest): globalThis.Promise<Result<__ns_bynk.Forwarded, __ns_bynk.UpstreamError>> {
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -123,11 +125,13 @@ class __Stub_Pages {
   }
 
   async forward(request: __ns_bynk.InboundRequest, path: string): globalThis.Promise<Result<__ns_bynk.Forwarded, __ns_bynk.UpstreamError>> {
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -188,11 +192,13 @@ async function test_D20__the_method__the_URL_and_no_body_reach_the_exchange() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("D20: the method, the URL and no body reach the exchange"), { Pages: ["exchange", "forward"], Upstream: ["exchange", "forward"] }, __obs);
     const { api, proxy } = __ns_demo;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -247,11 +253,13 @@ async function test__8_credential_leakage_to_the_upstream__no_inbound_cookie_or_
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("§8 credential leakage to the upstream: no inbound cookie or authorization is sent"), { Pages: ["exchange", "forward"], Upstream: ["exchange", "forward"] }, __obs);
     const { api, proxy } = __ns_demo;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -305,11 +313,13 @@ async function test__8_credential_leakage_from_the_upstream__Set_Cookie__proxy_a
   try {
     const deps = __makeTestDeps("§8 credential leakage from the upstream: Set-Cookie, proxy-authenticate, hop-by-hop and its HSTS never pass");
     const { api, proxy } = __ns_demo;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -372,11 +382,13 @@ async function test__8_SSRF_into_the_upstream_s_own_private_paths_via_____a_doub
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("§8 SSRF into the upstream's own private paths via ..: a double-encoded dot segment is InvalidPath, exchange called 0 times"), { Pages: ["exchange", "forward"], Upstream: ["exchange", "forward"] }, __obs);
     const { api, proxy } = __ns_demo;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -428,11 +440,13 @@ async function test__8_SSRF_into_the_upstream_s_own_private_paths__a_decoded_CR_
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("§8 SSRF into the upstream's own private paths: a decoded CR LF (header injection) is InvalidPath, exchange called 0 times"), { Pages: ["exchange", "forward"], Upstream: ["exchange", "forward"] }, __obs);
     const { api, proxy } = __ns_demo;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -484,11 +498,13 @@ async function test__8_SSRF__protocol_relative___a_path_never_changes_the_host()
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("§8 SSRF (protocol-relative): a path never changes the host"), { Pages: ["exchange", "forward"], Upstream: ["exchange", "forward"] }, __obs);
     const { api, proxy } = __ns_demo;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -543,11 +559,13 @@ async function test_D20__HEAD_and_OPTIONS_are_addressed_on_an_ANY_route_and_forw
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("D20: HEAD and OPTIONS are addressed on an ANY route and forwarded as sent"), { Pages: ["exchange", "forward"], Upstream: ["exchange", "forward"] }, __obs);
     const { api, proxy } = __ns_demo;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -605,11 +623,13 @@ async function test_D19__a_stubbed_timeout_is_the_handler_s_504() {
   try {
     const deps = __makeTestDeps("D19: a stubbed timeout is the handler's 504");
     const { api, proxy } = __ns_demo;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -660,11 +680,13 @@ async function test_D20__stubbing_forward_replaces_the_policy__and_nothing_is_ex
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("D20: stubbing forward replaces the policy, and nothing is exchanged"), { Pages: ["exchange", "forward"], Upstream: ["exchange", "forward"] }, __obs);
     const { api, proxy } = __ns_demo;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -715,11 +737,13 @@ async function test_D5__an_ordinary_route_keeps_its_own_address() {
   try {
     const deps = __makeTestDeps();
     const { api, proxy } = __ns_demo;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;

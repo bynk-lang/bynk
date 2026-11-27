@@ -48,10 +48,18 @@ pub fn with_api_key_agents(source: &str, units: &[SourceUnit]) -> Option<String>
             let key_owner = format!("{owner}KeyOwner");
             // The two are one store: when the author takes either name, neither is generated, so
             // the checker reports the declaration once rather than a cascade through the other.
-            if is_taken(&ctx.items, &keys) || is_taken(&ctx.items, &key_owner) {
+            if is_taken(&ctx.items, &keys)
+                || is_taken(&ctx.items, &key_owner)
+                || is_taken(&ctx.items, &format!("{owner}KeyCheck"))
+            {
                 continue;
             }
-            text.push_str(&keys_agent_text(owner, &keys, &identity));
+            text.push_str(&keys_agent_text(
+                owner,
+                &keys,
+                &identity,
+                &format!("{owner}KeyCheck"),
+            ));
             text.push_str(&key_owner_agent_text(owner, &key_owner, &keys, &identity));
         }
         if text.is_empty() {
@@ -93,11 +101,15 @@ fn api_key_identity(actor: &ActorDecl) -> Option<String> {
     }
 }
 
-/// `<Actor>Keys`. `verify` answers the identity a key was minted for, or `None`; `insert` answers
-/// 0 (stored), 1 (the identity holds the most keys it may) or 2 (the store is retired).
-fn keys_agent_text(actor: &str, agent: &str, identity: &str) -> String {
+/// `<Actor>Keys`. `verify` only reads: it answers `Some(<Actor>KeyCheck { identity, touch })` for
+/// an admitted key, else `None`, and the seam calls `touch` (last use, re-hash, live `kid`s) only on
+/// success when `touch` is true. `insert` answers 0 (stored), 1 (the identity holds the most keys it
+/// may) or 2 (the store is retired).
+fn keys_agent_text(actor: &str, agent: &str, identity: &str, check: &str) -> String {
     format!(
-        "\n---\n{GENERATED_MARKER} `{actor}`: one identity's keys, addressed by the random handle in each key's id.\n---\n\
+        "\n---\n{GENERATED_MARKER} `{actor}`: what `{agent}.verify` answers for an admitted key, its identity and whether `touch` must record its use, re-hash it or note the `kid`s now live.\n---\n\
+type {check} = {{ identity: {identity}, touch: Bool }}\n\
+\n---\n{GENERATED_MARKER} `{actor}`: one identity's keys, addressed by the random handle in each key's id.\n---\n\
 agent {agent} {{\n\
 \tkey handle: String\n\
 \n\
@@ -107,11 +119,17 @@ agent {agent} {{\n\
 \tstore kids: Map[String, String]\n\
 \tstore labels: Map[String, String]\n\
 \tstore created: Map[String, Int]\n\
+\tstore expires: Map[String, Int]\n\
+\tstore used: Map[String, Int]\n\
 \tstore scopes: Map[String, Set[String]]\n\
+\tstore known: Cell[List[String]] = []\n\
+\tstore knownAt: Cell[Int] = 0\n\
 \n\
-\ton call verify(keyNo: String, presented: Map[String, Bytes], first: Bytes, dummy: Bytes) -> Effect[Option[{identity}]]{{\n\
+\ton call verify(keyNo: String, presented: Map[String, Bytes], first: Bytes, current: String, dummy: Bytes, now: Int) -> Effect[Option[{check}]] {{\n\
 \t\tlet stored <- digests.get(keyNo)\n\
 \t\tlet kid <- kids.get(keyNo)\n\
+\t\tlet until <- expires.get(keyNo)\n\
+\t\tlet seen <- used.get(keyNo)\n\
 \t\tlet nothing: Option[Bytes] = None\n\
 \t\tlet candidate = match kid {{\n\
 \t\t\tSome(k) => presented.get(k),\n\
@@ -132,29 +150,99 @@ agent {agent} {{\n\
 \t\t\tSome(_) => candidate.isSome(),\n\
 \t\t\tNone => false,\n\
 \t\t}}\n\
+\t\tlet live = match until {{\n\
+\t\t\tSome(t) => now < t,\n\
+\t\t\tNone => true,\n\
+\t\t}}\n\
 \t\tlet same <- ApiKey.equal(expected, actual)\n\
-\t\tlet who = owner\n\
-\t\tif same && real && !retired {{\n\
-\t\t\tEffect.pure(who)\n\
-\t\t}} else {{\n\
-\t\t\tEffect.pure(None)\n\
+\t\tlet rotated = match kid {{\n\
+\t\t\tSome(k) => k != current,\n\
+\t\t\tNone => false,\n\
+\t\t}}\n\
+\t\tlet stale = match seen {{\n\
+\t\t\tSome(t) => now - t >= 3600000,\n\
+\t\t\tNone => true,\n\
+\t\t}}\n\
+\t\tlet moved = presented.keys() != known\n\
+\t\tlet admitted = same && real && live && !retired\n\
+\t\tlet nobody: Option[{check}] = None\n\
+\t\tmatch owner {{\n\
+\t\t\tSome(who) => if admitted {{\n\
+\t\t\t\tEffect.pure(Some({check} {{ identity: who, touch: rotated || stale || moved }}))\n\
+\t\t\t}} else {{\n\
+\t\t\t\tEffect.pure(nobody)\n\
+\t\t\t}},\n\
+\t\t\tNone => Effect.pure(nobody),\n\
 \t\t}}\n\
 \t}}\n\
 \n\
-\ton call insert(identity: {identity}, keyNo: String, digest: Bytes, kid: String, label: String, now: Int, cap: Int) -> Effect[Int] {{\n\
-\t\tlet n <- digests.size()\n\
+\ton call touch(keyNo: String, current: String, first: Bytes, live: List[String], now: Int) -> Effect[Bool] {{\n\
+\t\tlet held <- digests.contains(keyNo)\n\
+\t\tif held && !retired {{\n\
+\t\t\tlet kid <- kids.get(keyNo)\n\
+\t\t\tlet rotated = match kid {{\n\
+\t\t\t\tSome(k) => k != current,\n\
+\t\t\t\tNone => false,\n\
+\t\t\t}}\n\
+\t\t\tlet _ <- if rotated {{\n\
+\t\t\t\tlet _ <- digests.put(keyNo, first)\n\
+\t\t\t\tkids.put(keyNo, current)\n\
+\t\t\t}} else {{\n\
+\t\t\t\tEffect.pure(())\n\
+\t\t\t}}\n\
+\t\t\tlet seen <- used.get(keyNo)\n\
+\t\t\tlet stale = match seen {{\n\
+\t\t\t\tSome(t) => now - t >= 3600000,\n\
+\t\t\t\tNone => true,\n\
+\t\t\t}}\n\
+\t\t\tlet _ <- if stale {{\n\
+\t\t\t\tused.put(keyNo, now)\n\
+\t\t\t}} else {{\n\
+\t\t\t\tEffect.pure(())\n\
+\t\t\t}}\n\
+\t\t\tif live != known {{\n\
+\t\t\t\tknown := live\n\
+\t\t\t\tknownAt := now\n\
+\t\t\t\tEffect.pure(true)\n\
+\t\t\t}} else {{\n\
+\t\t\t\tEffect.pure(true)\n\
+\t\t\t}}\n\
+\t\t}} else {{\n\
+\t\t\tEffect.pure(false)\n\
+\t\t}}\n\
+\t}}\n\
+\n\
+\ton call insert(identity: {identity}, keyNo: String, digest: Bytes, kid: String, label: String, now: Int, until: Option[Int], live: List[String], cap: Int) -> Effect[Int] {{\n\
 \t\tif retired {{\n\
 \t\t\tEffect.pure(2)\n\
-\t\t}} else if n >= cap {{\n\
-\t\t\tEffect.pure(1)\n\
 \t\t}} else {{\n\
-\t\t\towner := Some(identity)\n\
-\t\t\tlet _ <- digests.put(keyNo, digest)\n\
-\t\t\tlet _ <- kids.put(keyNo, kid)\n\
-\t\t\tlet _ <- labels.put(keyNo, label)\n\
-\t\t\tlet _ <- created.put(keyNo, now)\n\
-\t\t\tlet _ <- scopes.put(keyNo, Set.of([]))\n\
-\t\t\tEffect.pure(0)\n\
+\t\t\tknown := live\n\
+\t\t\tknownAt := now\n\
+\t\t\tlet es <- expires.entries.collect()\n\
+\t\t\tlet dead = es.filter((e) => e.value <= now).map((e) => e.key)\n\
+\t\t\tlet _ <- dead.forEach((k: String) => digests.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => kids.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => labels.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => created.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => expires.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => used.remove(k))\n\
+\t\t\tlet _ <- dead.forEach((k: String) => scopes.remove(k))\n\
+\t\t\tlet n <- digests.size()\n\
+\t\t\tif n >= cap {{\n\
+\t\t\t\tEffect.pure(1)\n\
+\t\t\t}} else {{\n\
+\t\t\t\towner := Some(identity)\n\
+\t\t\t\tlet _ <- digests.put(keyNo, digest)\n\
+\t\t\t\tlet _ <- kids.put(keyNo, kid)\n\
+\t\t\t\tlet _ <- labels.put(keyNo, label)\n\
+\t\t\t\tlet _ <- created.put(keyNo, now)\n\
+\t\t\t\tlet _ <- match until {{\n\
+\t\t\t\t\tSome(t) => expires.put(keyNo, t),\n\
+\t\t\t\t\tNone => Effect.pure(()),\n\
+\t\t\t\t}}\n\
+\t\t\t\tlet _ <- scopes.put(keyNo, Set.of([]))\n\
+\t\t\t\tEffect.pure(0)\n\
+\t\t\t}}\n\
 \t\t}}\n\
 \t}}\n\
 \n\
@@ -168,6 +256,62 @@ agent {agent} {{\n\
 \t\tEffect.pure(Map.of(es))\n\
 \t}}\n\
 \n\
+\ton call expiresOf() -> Effect[Map[String, Int]] {{\n\
+\t\tlet es <- expires.entries.collect()\n\
+\t\tEffect.pure(Map.of(es))\n\
+\t}}\n\
+\n\
+\ton call usedOf() -> Effect[Map[String, Int]] {{\n\
+\t\tlet es <- used.entries.collect()\n\
+\t\tEffect.pure(Map.of(es))\n\
+\t}}\n\
+\n\
+\ton call kidsOf() -> Effect[Map[String, String]] {{\n\
+\t\tlet es <- kids.entries.collect()\n\
+\t\tEffect.pure(Map.of(es))\n\
+\t}}\n\
+\n\
+\ton call expire(now: Int) -> Effect[Int] {{\n\
+\t\tlet es <- expires.entries.collect()\n\
+\t\tlet ended = es.filter((e) => e.value <= now).map((e) => e.key)\n\
+\t\tlet _ <- ended.forEach((k: String) => digests.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => kids.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => labels.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => created.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => expires.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => used.remove(k))\n\
+\t\tlet _ <- ended.forEach((k: String) => scopes.remove(k))\n\
+\t\tEffect.pure(ended.length())\n\
+\t}}\n\
+\n\
+\ton call knownOf() -> Effect[List[String]] {{\n\
+\t\tEffect.pure(known)\n\
+\t}}\n\
+\n\
+\ton call knownAtOf() -> Effect[Int] {{\n\
+\t\tEffect.pure(knownAt)\n\
+\t}}\n\
+\n\
+\ton call sweep(now: Int, live: List[String], current: String) -> Effect[List[Int]] {{\n\
+\t\tlet ks <- kids.entries.collect()\n\
+\t\tlet es <- expires.entries.collect()\n\
+\t\tlet ended = es.filter((e) => e.value <= now).map((e) => e.key)\n\
+\t\tlet unkeyed = ks.filter((e) => !live.any((l: String) => l == e.value)).map((e) => e.key)\n\
+\t\tlet orphaned = unkeyed.filter((k: String) => !ended.any((x: String) => x == k))\n\
+\t\tlet dead = ended.concat(orphaned)\n\
+\t\tlet _ <- dead.forEach((k: String) => digests.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => kids.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => labels.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => created.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => expires.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => used.remove(k))\n\
+\t\tlet _ <- dead.forEach((k: String) => scopes.remove(k))\n\
+\t\tknown := live\n\
+\t\tknownAt := now\n\
+\t\tlet left <- kids.values.collect()\n\
+\t\tEffect.pure([ended.length(), orphaned.length(), left.filter((k: String) => k != current).length()])\n\
+\t}}\n\
+\n\
 \ton call revoke(keyNo: String) -> Effect[Bool] {{\n\
 \t\tlet held <- digests.contains(keyNo)\n\
 \t\tif held && !retired {{\n\
@@ -175,6 +319,8 @@ agent {agent} {{\n\
 \t\t\tlet _ <- kids.remove(keyNo)\n\
 \t\t\tlet _ <- labels.remove(keyNo)\n\
 \t\t\tlet _ <- created.remove(keyNo)\n\
+\t\t\tlet _ <- expires.remove(keyNo)\n\
+\t\t\tlet _ <- used.remove(keyNo)\n\
 \t\t\tlet _ <- scopes.remove(keyNo)\n\
 \t\t\tEffect.pure(true)\n\
 \t\t}} else {{\n\
@@ -189,6 +335,8 @@ agent {agent} {{\n\
 \t\tlet _ <- ks.forEach((k: String) => kids.remove(k))\n\
 \t\tlet _ <- ks.forEach((k: String) => labels.remove(k))\n\
 \t\tlet _ <- ks.forEach((k: String) => created.remove(k))\n\
+\t\tlet _ <- ks.forEach((k: String) => expires.remove(k))\n\
+\t\tlet _ <- ks.forEach((k: String) => used.remove(k))\n\
 \t\tlet _ <- ks.forEach((k: String) => scopes.remove(k))\n\
 \t\tretired := true\n\
 \t\tEffect.pure(n)\n\
@@ -208,17 +356,17 @@ agent {agent} {{\n\
 \n\
 \tstore handle: Cell[Option[String]] = None\n\
 \n\
-\ton call mint(fresh: String, keyNo: String, digest: Bytes, kid: String, label: String, now: Int, cap: Int) -> Effect[Result[String, Int]] {{\n\
+\ton call mint(fresh: String, keyNo: String, digest: Bytes, kid: String, label: String, now: Int, until: Option[Int], live: List[String], cap: Int) -> Effect[Result[String, Int]] {{\n\
 \t\tlet current = match handle {{\n\
 \t\t\tSome(h) => h,\n\
 \t\t\tNone => fresh,\n\
 \t\t}}\n\
-\t\tlet r <- {keys}(current).insert(self.identity, keyNo, digest, kid, label, now, cap)\n\
+\t\tlet r <- {keys}(current).insert(self.identity, keyNo, digest, kid, label, now, until, live, cap)\n\
 \t\tif r == 0 {{\n\
 \t\t\thandle := Some(current)\n\
 \t\t\tEffect.pure(Ok(current))\n\
 \t\t}} else if r == 2 {{\n\
-\t\t\tlet again <- {keys}(fresh).insert(self.identity, keyNo, digest, kid, label, now, cap)\n\
+\t\t\tlet again <- {keys}(fresh).insert(self.identity, keyNo, digest, kid, label, now, until, live, cap)\n\
 \t\t\thandle := Some(fresh)\n\
 \t\t\tif again == 0 {{\n\
 \t\t\t\tEffect.pure(Ok(fresh))\n\

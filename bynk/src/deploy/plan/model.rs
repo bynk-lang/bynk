@@ -279,6 +279,11 @@ struct PlanSecret {
     /// the rule, not presence, which it cannot observe offline.
     #[serde(skip_serializing_if = "Option::is_none")]
     on_missing: Option<&'static str>,
+    /// #3939 (slice 3): a managed pepper whose actor declares `previous`: the variable named, which
+    /// a pepper `deploy` minted can never fill, since nobody holds its value. Rotation needs a
+    /// supplied pepper.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rotation_needs_supplied_pepper: Option<String>,
 }
 
 /// One context's secret lines: the wanted secrets as the run will attempt them (presence is not
@@ -304,6 +309,7 @@ fn plan_secrets(
             origin: want.origin,
             action: attempt,
             on_missing: None,
+            rotation_needs_supplied_pepper: None,
         })
         .collect();
     for key in session_keys {
@@ -321,6 +327,7 @@ fn plan_secrets(
             origin: Origin::Managed,
             action,
             on_missing,
+            rotation_needs_supplied_pepper: key.previous.clone().filter(|_| pepper),
         });
     }
     out
@@ -812,6 +819,12 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                             .map(|_| "; minted only if missing")
                             .unwrap_or_default()
                     ));
+                    if let Some(previous) = &secret.rotation_needs_supplied_pepper {
+                        out.push_str(&format!(
+                            "note {}: rotation needs a supplied pepper; `previous` names `{previous}`, but nobody holds the value of a pepper `bynk deploy` minted, so it cannot be moved there. Supply the pepper yourself (`{}` in the environment or `--secrets-file`) from the first deploy; supplying one later replaces a minted pepper and ends every key issued under it\n",
+                            secret.name, secret.name
+                        ));
+                    }
                 }
                 out.push_str(&format!("{} {}\n", context.action, context.worker));
             }

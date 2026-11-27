@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
+import { __bynkEq } from "../../__bynk_runtime/equality.js";
 import { __bynkMapOf } from "../../__bynk_runtime/keys.js";
 import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
@@ -13,13 +14,13 @@ import { __attachLazy } from "../../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __decodeAgentKey } from "../../__bynk_runtime/agent.js";
-import { __apiKeyEqual, __apiKeyList, __apiKeyPeppersOf, __apiKeyRevoke, __mintApiKey, __newApiKeyHandle } from "../../__bynk_runtime/apikey.js";
+import { __apiKeyEqual, __apiKeyList, __apiKeyLiveKidsOf, __apiKeyPeppersOf, __apiKeyRevoke, __apiKeySweep, __mintApiKey, __newApiKeyHandle } from "../../__bynk_runtime/apikey.js";
 
-import { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, TooManyKeys } from "../../bynk.js";
+import { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeySweep, TooManyKeys } from "../../bynk.js";
 
 import * as bynk from "../../bynk.js";
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
-import { __serialise_ApiKeyId, __deserialise_ApiKeyId, __serialise_ApiKeyInfo, __deserialise_ApiKeyInfo, __serialise_ApiKeyLabel, __deserialise_ApiKeyLabel, __serialise_ApiKeySecret, __deserialise_ApiKeySecret, __serialise_ApiKeyValue, __deserialise_ApiKeyValue } from "../../bynk.js";
+import { __serialise_ApiKeyId, __deserialise_ApiKeyId, __serialise_ApiKeyInfo, __deserialise_ApiKeyInfo, __serialise_ApiKeyLabel, __deserialise_ApiKeyLabel, __serialise_ApiKeyPepper, __deserialise_ApiKeyPepper, __serialise_ApiKeySecret, __deserialise_ApiKeySecret, __serialise_ApiKeySweep, __deserialise_ApiKeySweep, __serialise_ApiKeyValue, __deserialise_ApiKeyValue } from "../../bynk.js";
 
 export { type ApiKeyId };
 
@@ -44,6 +45,17 @@ export interface NewKey {
 export const NewKey = {
 };
 
+/**
+ * Generated for the `ApiKey` actor `Client`: what `ClientKeys.verify` answers for an admitted key, its identity and whether `touch` must record its use, re-hash it or note the `kid`s now live.
+ */
+export interface ClientKeyCheck {
+  readonly identity: AccountId;
+  readonly touch: boolean;
+}
+
+export const ClientKeyCheck = {
+};
+
 export type PerIp = bynk_cloudflare.RateLimit;
 
 export const __PerIpToken: symbol = globalThis.Symbol("PerIp");
@@ -66,7 +78,7 @@ export const api = {
     return HttpResult.NoContent;
   },
   async http_POST_accounts_Param_id_keys(id: AccountId, body: NewKey, deps: { Clock: bynk.Clock; env: { ACCOUNTS: __DurableObjectNamespace; CLIENT_KEY_OWNER: __DurableObjectNamespace; CLIENT_KEYS: __DurableObjectNamespace } }): globalThis.Promise<HttpResult<ApiKeySecret>> {
-    const r = await (async (__sub: AccountId, __label: string, __now: number) => __mintApiKey<Result<ApiKeySecret, TooManyKeys>>(__apiKeyPeppersOf(deps, "Client"), "CLIENT_KEY_PEPPER", "acme", __label, __now, 100, async (__req) => __makeClientKeyOwner(__sub, deps.env).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, __label, __now, 100, deps)))(id, body.label, await deps.Clock.now());
+    const r = await (async (__sub: AccountId, __label: string, __now: number) => __mintApiKey<Result<ApiKeySecret, TooManyKeys>>(__apiKeyPeppersOf(deps, "Client"), "CLIENT_KEY_PEPPER", "acme", __label, __now, 100, async (__req) => __makeClientKeyOwner(__sub, deps.env).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, __label, __now, __req.until, __req.live, 100, deps), { ttlMs: 7776000000, previous: "CLIENT_KEY_PEPPER_PREV" }))(id, body.label, await deps.Clock.now());
     switch (r.tag) {
       case "Ok": {
         const key = r.value;
@@ -79,12 +91,16 @@ export const api = {
     throw new globalThis.Error("non-exhaustive match");
   },
   async http_GET_accounts_Param_id_keys(id: AccountId, deps: { Clock: bynk.Clock; env: { ACCOUNTS: __DurableObjectNamespace; CLIENT_KEY_OWNER: __DurableObjectNamespace; CLIENT_KEYS: __DurableObjectNamespace } }): globalThis.Promise<HttpResult<readonly ApiKeyInfo[]>> {
-    const keys = await (async (__sub: AccountId) => __apiKeyList<readonly ApiKeyInfo[]>("acme", await __makeClientKeyOwner(__sub, deps.env).current(deps), (__h) => __makeClientKeys(__h, deps.env).labelsOf(deps), (__h) => __makeClientKeys(__h, deps.env).createdOf(deps)))(id);
+    const keys = await (async (__sub: AccountId) => __apiKeyList<readonly ApiKeyInfo[]>("acme", await __makeClientKeyOwner(__sub, deps.env).current(deps), await deps.Clock.now(), await __apiKeyLiveKidsOf(deps, "Client", { secret: "CLIENT_KEY_PEPPER", previous: "CLIENT_KEY_PEPPER_PREV" }), (__h) => __makeClientKeys(__h, deps.env), deps))(id);
     return HttpResult.Ok(keys);
   },
   async http_DELETE_accounts_Param_id_keys_Param_key(id: AccountId, key: ApiKeyId, deps: { env: { ACCOUNTS: __DurableObjectNamespace; CLIENT_KEY_OWNER: __DurableObjectNamespace; CLIENT_KEYS: __DurableObjectNamespace } }): globalThis.Promise<HttpResult<void>> {
     const gone = await (async (__sub: AccountId) => __apiKeyRevoke("acme", key, (__h, __k) => __makeClientKeyOwner(__sub, deps.env).revoke(__h, __k, deps)))(id);
     return (gone ? HttpResult.NoContent : HttpResult.NotFound);
+  },
+  async http_POST_accounts_Param_id_sweep(id: AccountId, deps: { Clock: bynk.Clock; env: { ACCOUNTS: __DurableObjectNamespace; CLIENT_KEY_OWNER: __DurableObjectNamespace; CLIENT_KEYS: __DurableObjectNamespace } }): globalThis.Promise<HttpResult<ApiKeySweep>> {
+    const n = await (async (__sub: AccountId) => __apiKeySweep(await __makeClientKeyOwner(__sub, deps.env).current(deps), await deps.Clock.now(), await __apiKeyLiveKidsOf(deps, "Client", { secret: "CLIENT_KEY_PEPPER", previous: "CLIENT_KEY_PEPPER_PREV" }), (__h) => __makeClientKeys(__h, deps.env), deps))(id);
+    return HttpResult.Ok(n);
   },
   async http_POST_accounts_Param_id_close(id: AccountId, deps: { env: { ACCOUNTS: __DurableObjectNamespace; CLIENT_KEY_OWNER: __DurableObjectNamespace; CLIENT_KEYS: __DurableObjectNamespace } }): globalThis.Promise<HttpResult<number>> {
     const n = await __makeAccounts(id, deps.env).close(deps);
@@ -178,17 +194,21 @@ export function __makeAccounts(key: AccountId, env?: { ACCOUNTS?: __DurableObjec
 export interface ClientKeysState {
   readonly owner: Option<AccountId>;
   readonly retired: boolean;
+  readonly known: readonly string[];
+  readonly knownAt: number;
   readonly digests: __StoreMap<globalThis.Uint8Array>;
   readonly kids: __StoreMap<string>;
   readonly labels: __StoreMap<string>;
   readonly created: __StoreMap<number>;
+  readonly expires: __StoreMap<number>;
+  readonly used: __StoreMap<number>;
   readonly scopes: __StoreMap<ReadonlySet<string>>;
 }
 
 const __ClientKeysRegistry = new __StateRegistry();
-function __zeroOfClientKeysState(): ClientKeysState { return { owner: None, retired: false, digests: new __StoreMap<globalThis.Uint8Array>(), kids: new __StoreMap<string>(), labels: new __StoreMap<string>(), created: new __StoreMap<number>(), scopes: new __StoreMap<ReadonlySet<string>>() }; }
+function __zeroOfClientKeysState(): ClientKeysState { return { owner: None, retired: false, known: [], knownAt: 0, digests: new __StoreMap<globalThis.Uint8Array>(), kids: new __StoreMap<string>(), labels: new __StoreMap<string>(), created: new __StoreMap<number>(), expires: new __StoreMap<number>(), used: new __StoreMap<number>(), scopes: new __StoreMap<ReadonlySet<string>>() }; }
 
-const __entryFieldsOfClientKeys = [{ name: "digests", kind: "map" }, { name: "kids", kind: "map" }, { name: "labels", kind: "map" }, { name: "created", kind: "map" }, { name: "scopes", kind: "map" }] as const;
+const __entryFieldsOfClientKeys = [{ name: "digests", kind: "map" }, { name: "kids", kind: "map" }, { name: "labels", kind: "map" }, { name: "created", kind: "map" }, { name: "expires", kind: "map" }, { name: "used", kind: "map" }, { name: "scopes", kind: "map" }] as const;
 
 function __rehydrateClientKeysState(s: ClientKeysState, stored: ClientKeysState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "owner")) {
@@ -200,6 +220,16 @@ function __rehydrateClientKeysState(s: ClientKeysState, stored: ClientKeysState)
     const __r = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "retired", expected: "boolean", actual: typeof __v } as __BoundaryError))((s.retired as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).retired = __r.value as unknown as (typeof s)["retired"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "known")) {
+    const __r = __deserialise_List_String((s.known as unknown as __JsonValue), "known");
+    if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).known = __r.value as unknown as (typeof s)["known"];
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "knownAt")) {
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "knownAt", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "knownAt", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.knownAt as unknown as __JsonValue));
+    if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error);
+    (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).knownAt = __r.value as unknown as (typeof s)["knownAt"];
   }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "digests")) {
     for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).digests as object)) {
@@ -253,6 +283,32 @@ function __rehydrateClientKeysState(s: ClientKeysState, stored: ClientKeysState)
       if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error);
     }
   }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "expires")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).expires as object)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "expires", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "expires", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).expires as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).expires as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "expires")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).expires as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "expires", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error);
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "used")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).used as object)) {
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "used", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "used", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).used as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).used as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "used")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).used as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "used", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error);
+    }
+  }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "scopes")) {
     for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).scopes as never)) {
       const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "scopes", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
@@ -281,6 +337,14 @@ function __hydrateClientKeysState(s: ClientKeysState, stored: ClientKeysState): 
     __fillMap(__z.created, __r["created"] as never);
     __w.created = __z.created;
   }
+  if (globalThis.Object.hasOwn(__r, "expires")) {
+    __fillMap(__z.expires, __r["expires"] as never);
+    __w.expires = __z.expires;
+  }
+  if (globalThis.Object.hasOwn(__r, "used")) {
+    __fillMap(__z.used, __r["used"] as never);
+    __w.used = __z.used;
+  }
   if (globalThis.Object.hasOwn(__r, "scopes")) {
     __fillMap(__z.scopes, __r["scopes"] as never);
     __w.scopes = __z.scopes;
@@ -288,10 +352,10 @@ function __hydrateClientKeysState(s: ClientKeysState, stored: ClientKeysState): 
 }
 
 function __encodeClientKeysState(s: ClientKeysState): globalThis.Record<string, unknown> {
-  return { ...s, owner: __serialise_Option_AccountId(s.owner), retired: s.retired as __JsonValue, digests: __wireMap(s.digests, (__v) => __bynkBytesToBase64(__v) as __JsonValue), kids: __wireMap(s.kids, (__v) => __v as __JsonValue), labels: __wireMap(s.labels, (__v) => __v as __JsonValue), created: __wireMap(s.created, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)), scopes: __wireMap(s.scopes) };
+  return { ...s, owner: __serialise_Option_AccountId(s.owner), retired: s.retired as __JsonValue, known: __serialise_List_String(s.known), knownAt: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(s.knownAt), digests: __wireMap(s.digests, (__v) => __bynkBytesToBase64(__v) as __JsonValue), kids: __wireMap(s.kids, (__v) => __v as __JsonValue), labels: __wireMap(s.labels, (__v) => __v as __JsonValue), created: __wireMap(s.created, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)), expires: __wireMap(s.expires, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)), used: __wireMap(s.used, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)), scopes: __wireMap(s.scopes) };
 }
 
-const __lazyFieldsOfClientKeys = [{ name: "digests", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "digests", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "digests", expected: "base64 string", actual: typeof __v } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as globalThis.Uint8Array; return __bynkBytesToBase64(__v) as __JsonValue; }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "digests", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }, { name: "kids", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "kids", expected: "string", actual: typeof __v } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as string; return __v as __JsonValue; }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "kids", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }, { name: "labels", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "labels", expected: "string", actual: typeof __v } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as string; return __v as __JsonValue; }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "labels", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }, { name: "created", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "created", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "created", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "created", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }, { name: "scopes", kind: "map", checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "scopes", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }] as const;
+const __lazyFieldsOfClientKeys = [{ name: "digests", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "digests", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "digests", expected: "base64 string", actual: typeof __v } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as globalThis.Uint8Array; return __bynkBytesToBase64(__v) as __JsonValue; }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "digests", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }, { name: "kids", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "kids", expected: "string", actual: typeof __v } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as string; return __v as __JsonValue; }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "kids", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }, { name: "labels", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "labels", expected: "string", actual: typeof __v } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as string; return __v as __JsonValue; }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "labels", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }, { name: "created", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "created", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "created", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "created", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }, { name: "expires", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "expires", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "expires", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "expires", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }, { name: "used", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "used", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "used", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "used", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }, { name: "scopes", kind: "map", checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "scopes", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("ClientKeys", __r.error); } }] as const;
 
 export class ClientKeys {
   state: __DurableObjectState;
@@ -320,7 +384,7 @@ export class ClientKeys {
     await __commitStored(this, this.state.storage, __encodeClientKeysState(s), __entryFieldsOfClientKeys, s);
   }
 
-  async verify(keyNo: string, presented: ReadonlyMap<string, globalThis.Uint8Array>, first: globalThis.Uint8Array, dummy: globalThis.Uint8Array, deps: {}): globalThis.Promise<Option<AccountId>> {
+  async verify(keyNo: string, presented: ReadonlyMap<string, globalThis.Uint8Array>, first: globalThis.Uint8Array, current: string, dummy: globalThis.Uint8Array, now: number, deps: {}): globalThis.Promise<Option<ClientKeyCheck>> {
     const __state = await this.loadState();
     const stored = await (async () => {
       const __k = String(keyNo);
@@ -329,6 +393,14 @@ export class ClientKeys {
     const kid = await (async () => {
       const __k = String(keyNo);
       return __bynkThen(__state.kids.has(__k), (__h) => __h ? __bynkThen(__state.kids.get(__k), (__v) => Some(__v!)) : None);
+    })();
+    const until = await (async () => {
+      const __k = String(keyNo);
+      return __bynkThen(__state.expires.has(__k), (__h) => __h ? __bynkThen(__state.expires.get(__k), (__v) => Some(__v!)) : None);
+    })();
+    const seen = await (async () => {
+      const __k = String(keyNo);
+      return __bynkThen(__state.used.has(__k), (__h) => __h ? __bynkThen(__state.used.get(__k), (__v) => Some(__v!)) : None);
     })();
     const nothing: Option<globalThis.Uint8Array> = None;
     const candidate = ((__d) => {
@@ -388,39 +460,231 @@ export class ClientKeys {
       }
       throw new globalThis.Error("non-exhaustive match");
     })(stored);
+    const live = ((__d) => {
+      switch (__d.tag) {
+        case "Some": {
+          const t = __d.value;
+          return now < t;
+        }
+        case "None": {
+          return true;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(until);
     const same = await __apiKeyEqual(expected, actual);
-    const who = __state.owner;
-    return (same && real && !__state.retired ? who : None);
+    const rotated = ((__d) => {
+      switch (__d.tag) {
+        case "Some": {
+          const k = __d.value;
+          return k !== current;
+        }
+        case "None": {
+          return false;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(kid);
+    const stale = ((__d) => {
+      switch (__d.tag) {
+        case "Some": {
+          const t = __d.value;
+          return now - t >= 3600000;
+        }
+        case "None": {
+          return true;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(seen);
+    const moved = !__bynkEq([...presented.keys()], __state.known);
+    const admitted = same && real && live && !__state.retired;
+    const nobody: Option<ClientKeyCheck> = None;
+    switch (__state.owner.tag) {
+      case "Some": {
+        const who = __state.owner.value;
+        return (admitted ? Some({ identity: who, touch: rotated || stale || moved }) : nobody);
+      }
+      case "None": {
+        return nobody;
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
   }
 
-  async insert(identity: AccountId, keyNo: string, digest: globalThis.Uint8Array, kid: string, label: string, now: number, cap: number, deps: {}): globalThis.Promise<number> {
+  async touch(keyNo: string, current: string, first: globalThis.Uint8Array, live: readonly string[], now: number, deps: {}): globalThis.Promise<boolean> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
-      const n = await __state.digests.size();
+      const held = await __state.digests.has(String(keyNo));
+      if (held && !__state.retired) {
+        const kid = await (async () => {
+          const __k = String(keyNo);
+          return __bynkThen(__state.kids.has(__k), (__h) => __h ? __bynkThen(__state.kids.get(__k), (__v) => Some(__v!)) : None);
+        })();
+        const rotated = ((__d) => {
+          switch (__d.tag) {
+            case "Some": {
+              const k = __d.value;
+              return k !== current;
+            }
+            case "None": {
+              return false;
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(kid);
+        const __r1 = await await (async () => {
+          if (rotated) {
+            const __r0 = await (async () => {
+              await __state.digests.put(String(keyNo), first);
+              return undefined;
+            })();
+            return (async () => {
+              await __state.kids.put(String(keyNo), current);
+              return undefined;
+            })();
+          } else {
+            return globalThis.Promise.resolve(undefined);
+          }
+        })();
+        const seen = await (async () => {
+          const __k = String(keyNo);
+          return __bynkThen(__state.used.has(__k), (__h) => __h ? __bynkThen(__state.used.get(__k), (__v) => Some(__v!)) : None);
+        })();
+        const stale = ((__d) => {
+          switch (__d.tag) {
+            case "Some": {
+              const t = __d.value;
+              return now - t >= 3600000;
+            }
+            case "None": {
+              return true;
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(seen);
+        const __r2 = await (stale ? (async () => {
+          await __state.used.put(String(keyNo), now);
+          return undefined;
+        })() : globalThis.Promise.resolve(undefined));
+        if (!__bynkEq(live, __state.known)) {
+          __state.known = live;
+          __state.knownAt = now;
+          return true;
+        } else {
+          return true;
+        }
+      } else {
+        return false;
+      }
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+
+  async insert(identity: AccountId, keyNo: string, digest: globalThis.Uint8Array, kid: string, label: string, now: number, until: Option<number>, live: readonly string[], cap: number, deps: {}): globalThis.Promise<number> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
       if (__state.retired) {
         return 2;
       } else {
+        __state.known = live;
+        __state.knownAt = now;
+        const es = await __bynkThen(((() => __bynkThen(__state.expires.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
+        const dead = ((es).filter((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.value <= now)(__x))).map((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.key)(__x));
+        const __r0 = await (async (__xs: readonly string[]) => {
+          for (const __x of __xs) {
+            await (async (k: string) => (async () => {
+              await __state.digests.remove(String(k));
+              return undefined;
+            })())(__x);
+          }
+        })(dead);
+        const __r1 = await (async (__xs: readonly string[]) => {
+          for (const __x of __xs) {
+            await (async (k: string) => (async () => {
+              await __state.kids.remove(String(k));
+              return undefined;
+            })())(__x);
+          }
+        })(dead);
+        const __r2 = await (async (__xs: readonly string[]) => {
+          for (const __x of __xs) {
+            await (async (k: string) => (async () => {
+              await __state.labels.remove(String(k));
+              return undefined;
+            })())(__x);
+          }
+        })(dead);
+        const __r3 = await (async (__xs: readonly string[]) => {
+          for (const __x of __xs) {
+            await (async (k: string) => (async () => {
+              await __state.created.remove(String(k));
+              return undefined;
+            })())(__x);
+          }
+        })(dead);
+        const __r4 = await (async (__xs: readonly string[]) => {
+          for (const __x of __xs) {
+            await (async (k: string) => (async () => {
+              await __state.expires.remove(String(k));
+              return undefined;
+            })())(__x);
+          }
+        })(dead);
+        const __r5 = await (async (__xs: readonly string[]) => {
+          for (const __x of __xs) {
+            await (async (k: string) => (async () => {
+              await __state.used.remove(String(k));
+              return undefined;
+            })())(__x);
+          }
+        })(dead);
+        const __r6 = await (async (__xs: readonly string[]) => {
+          for (const __x of __xs) {
+            await (async (k: string) => (async () => {
+              await __state.scopes.remove(String(k));
+              return undefined;
+            })())(__x);
+          }
+        })(dead);
+        const n = await __state.digests.size();
         if (n >= cap) {
           return 1;
         } else {
           __state.owner = Some(identity);
-          const __r0 = await (async () => {
+          const __r7 = await (async () => {
             await __state.digests.put(String(keyNo), digest);
             return undefined;
           })();
-          const __r1 = await (async () => {
+          const __r8 = await (async () => {
             await __state.kids.put(String(keyNo), kid);
             return undefined;
           })();
-          const __r2 = await (async () => {
+          const __r9 = await (async () => {
             await __state.labels.put(String(keyNo), label);
             return undefined;
           })();
-          const __r3 = await (async () => {
+          const __r10 = await (async () => {
             await __state.created.put(String(keyNo), now);
             return undefined;
           })();
-          const __r4 = await (async () => {
+          const __r11 = await ((__d) => {
+            switch (__d.tag) {
+              case "Some": {
+                const t = __d.value;
+                return (async () => {
+                  await __state.expires.put(String(keyNo), t);
+                  return undefined;
+                })();
+              }
+              case "None": {
+                return globalThis.Promise.resolve(undefined);
+              }
+            }
+            throw new globalThis.Error("non-exhaustive match");
+          })(until);
+          const __r12 = await (async () => {
             await __state.scopes.put(String(keyNo), new globalThis.Set<string>([]));
             return undefined;
           })();
@@ -442,6 +706,175 @@ export class ClientKeys {
     const __state = await this.loadState();
     const es = await __bynkThen(((() => __bynkThen(__state.created.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
     return __bynkMapOf(es);
+  }
+
+  async expiresOf(deps: {}): globalThis.Promise<ReadonlyMap<string, number>> {
+    const __state = await this.loadState();
+    const es = await __bynkThen(((() => __bynkThen(__state.expires.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
+    return __bynkMapOf(es);
+  }
+
+  async usedOf(deps: {}): globalThis.Promise<ReadonlyMap<string, number>> {
+    const __state = await this.loadState();
+    const es = await __bynkThen(((() => __bynkThen(__state.used.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
+    return __bynkMapOf(es);
+  }
+
+  async kidsOf(deps: {}): globalThis.Promise<ReadonlyMap<string, string>> {
+    const __state = await this.loadState();
+    const es = await __bynkThen(((() => __bynkThen(__state.kids.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
+    return __bynkMapOf(es);
+  }
+
+  async expire(now: number, deps: {}): globalThis.Promise<number> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const es = await __bynkThen(((() => __bynkThen(__state.expires.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
+      const ended = ((es).filter((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.value <= now)(__x))).map((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.key)(__x));
+      const __r0 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.digests.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ended);
+      const __r1 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.kids.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ended);
+      const __r2 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.labels.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ended);
+      const __r3 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.created.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ended);
+      const __r4 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.expires.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ended);
+      const __r5 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.used.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ended);
+      const __r6 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.scopes.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ended);
+      return (ended).length;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+
+  async knownOf(deps: {}): globalThis.Promise<readonly string[]> {
+    const __state = await this.loadState();
+    return __state.known;
+  }
+
+  async knownAtOf(deps: {}): globalThis.Promise<number> {
+    const __state = await this.loadState();
+    return __state.knownAt;
+  }
+
+  async sweep(now: number, live: readonly string[], current: string, deps: {}): globalThis.Promise<readonly number[]> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const ks = await __bynkThen(((() => __bynkThen(__state.kids.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
+      const es = await __bynkThen(((() => __bynkThen(__state.expires.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
+      const ended = ((es).filter((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.value <= now)(__x))).map((__x: { readonly key: string; readonly value: number }) => ((e: { readonly key: string; readonly value: number }) => e.key)(__x));
+      const unkeyed = ((ks).filter((__x: { readonly key: string; readonly value: string }) => ((e: { readonly key: string; readonly value: string }) => !(live).some((__x: string) => ((l: string) => l === e.value)(__x)))(__x))).map((__x: { readonly key: string; readonly value: string }) => ((e: { readonly key: string; readonly value: string }) => e.key)(__x));
+      const orphaned = (unkeyed).filter((__x: string) => ((k: string) => !(ended).some((__x: string) => ((x: string) => x === k)(__x)))(__x));
+      const dead = [...ended, ...orphaned];
+      const __r0 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.digests.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(dead);
+      const __r1 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.kids.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(dead);
+      const __r2 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.labels.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(dead);
+      const __r3 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.created.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(dead);
+      const __r4 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.expires.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(dead);
+      const __r5 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.used.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(dead);
+      const __r6 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.scopes.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(dead);
+      __state.known = live;
+      __state.knownAt = now;
+      const left = await __bynkThen(((() => __state.kids.values()))(), (__q) => __q);
+      return [(ended).length, (orphaned).length, ((left).filter((__x: string) => ((k: string) => k !== current)(__x))).length];
+    })();
+    await this.commitState(__state);
+    return __result;
   }
 
   async revoke(keyNo: string, deps: {}): globalThis.Promise<boolean> {
@@ -466,6 +899,14 @@ export class ClientKeys {
           return undefined;
         })();
         const __r4 = await (async () => {
+          await __state.expires.remove(String(keyNo));
+          return undefined;
+        })();
+        const __r5 = await (async () => {
+          await __state.used.remove(String(keyNo));
+          return undefined;
+        })();
+        const __r6 = await (async () => {
           await __state.scopes.remove(String(keyNo));
           return undefined;
         })();
@@ -518,6 +959,22 @@ export class ClientKeys {
       const __r4 = await (async (__xs: readonly string[]) => {
         for (const __x of __xs) {
           await (async (k: string) => (async () => {
+            await __state.expires.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ks);
+      const __r5 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.used.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ks);
+      const __r6 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
             await __state.scopes.remove(String(k));
             return undefined;
           })())(__x);
@@ -543,10 +1000,18 @@ export class ClientKeys {
 }
 
 const __ClientKeysWire: __AgentWire = {
-  verify: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: __serialise_Map_String_Bytes, dec: __deserialise_Map_String_Bytes }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: __serialise_Option_AccountId, dec: __deserialise_Option_AccountId } },
-  insert: { args: [{ enc: __serialise_AccountId, dec: __deserialise_AccountId }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
+  verify: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: __serialise_Map_String_Bytes, dec: __deserialise_Map_String_Bytes }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }], result: { enc: __serialise_Option_ClientKeyCheck, dec: __deserialise_Option_ClientKeyCheck } },
+  touch: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: __serialise_List_String, dec: __deserialise_List_String }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }], result: { enc: (__v: boolean) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j) } },
+  insert: { args: [{ enc: __serialise_AccountId, dec: __deserialise_AccountId }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }, { enc: __serialise_Option_Int, dec: __deserialise_Option_Int }, { enc: __serialise_List_String, dec: __deserialise_List_String }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
   labelsOf: { args: [], result: { enc: __serialise_Map_String_String, dec: __deserialise_Map_String_String } },
   createdOf: { args: [], result: { enc: __serialise_Map_String_Int, dec: __deserialise_Map_String_Int } },
+  expiresOf: { args: [], result: { enc: __serialise_Map_String_Int, dec: __deserialise_Map_String_Int } },
+  usedOf: { args: [], result: { enc: __serialise_Map_String_Int, dec: __deserialise_Map_String_Int } },
+  kidsOf: { args: [], result: { enc: __serialise_Map_String_String, dec: __deserialise_Map_String_String } },
+  expire: { args: [{ enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
+  knownOf: { args: [], result: { enc: __serialise_List_String, dec: __deserialise_List_String } },
+  knownAtOf: { args: [], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
+  sweep: { args: [{ enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }, { enc: __serialise_List_String, dec: __deserialise_List_String }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: __serialise_List_Int, dec: __deserialise_List_Int } },
   revoke: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: (__v: boolean) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j) } },
   clear: { args: [], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
 };
@@ -604,7 +1069,7 @@ export class ClientKeyOwner {
     await __commitStored(this, this.state.storage, __encodeClientKeyOwnerState(s), __entryFieldsOfClientKeyOwner, s);
   }
 
-  async mint(fresh: string, keyNo: string, digest: globalThis.Uint8Array, kid: string, label: string, now: number, cap: number, deps: { env: { ACCOUNTS: __DurableObjectNamespace; CLIENT_KEY_OWNER: __DurableObjectNamespace; CLIENT_KEYS: __DurableObjectNamespace } }): globalThis.Promise<Result<string, number>> {
+  async mint(fresh: string, keyNo: string, digest: globalThis.Uint8Array, kid: string, label: string, now: number, until: Option<number>, live: readonly string[], cap: number, deps: { env: { ACCOUNTS: __DurableObjectNamespace; CLIENT_KEY_OWNER: __DurableObjectNamespace; CLIENT_KEYS: __DurableObjectNamespace } }): globalThis.Promise<Result<string, number>> {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const current = ((__d) => {
@@ -619,13 +1084,13 @@ export class ClientKeyOwner {
         }
         throw new globalThis.Error("non-exhaustive match");
       })(__state.handle);
-      const r = await __makeClientKeys(current, deps.env).insert(this.__key, keyNo, digest, kid, label, now, cap, deps);
+      const r = await __makeClientKeys(current, deps.env).insert(this.__key, keyNo, digest, kid, label, now, until, live, cap, deps);
       if (r === 0) {
         __state.handle = Some(current);
         return Ok(current);
       } else {
         if (r === 2) {
-          const again = await __makeClientKeys(fresh, deps.env).insert(this.__key, keyNo, digest, kid, label, now, cap, deps);
+          const again = await __makeClientKeys(fresh, deps.env).insert(this.__key, keyNo, digest, kid, label, now, until, live, cap, deps);
           __state.handle = Some(fresh);
           return (again === 0 ? Ok(fresh) : Err(again));
         } else {
@@ -694,7 +1159,7 @@ export class ClientKeyOwner {
 }
 
 const __ClientKeyOwnerWire: __AgentWire = {
-  mint: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }], result: { enc: __serialise_Result_String_Int, dec: __deserialise_Result_String_Int } },
+  mint: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }, { enc: __serialise_Option_Int, dec: __deserialise_Option_Int }, { enc: __serialise_List_String, dec: __deserialise_List_String }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }], result: { enc: __serialise_Result_String_Int, dec: __deserialise_Result_String_Int } },
   current: { args: [], result: { enc: __serialise_Option_String, dec: __deserialise_Option_String } },
   revoke: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: (__v: boolean) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j) } },
   revokeAll: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
@@ -729,6 +1194,28 @@ export function __deserialise_AccountId(json: __JsonValue, path: string = "$"): 
   return Ok(validated.value as AccountId);
 }
 
+export function __serialise_ClientKeyCheck(value: ClientKeyCheck): __JsonValue {
+  return {
+    identity: __serialise_AccountId(value.identity),
+    touch: value.touch as __JsonValue,
+  };
+}
+
+export function __deserialise_ClientKeyCheck(json: __JsonValue, path: string = "$"): Result<ClientKeyCheck, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_identity = __deserialise_AccountId(obj["identity"], `${path}.identity`);
+  if (__r_identity.tag === "Err") return __r_identity;
+  const __identity = __r_identity.value;
+  if (typeof obj["touch"] !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.touch`, expected: "boolean", actual: typeof obj["touch"] });
+  }
+  const __touch = obj["touch"];
+  return Ok({ identity: __identity, touch: __touch } as ClientKeyCheck);
+}
+
 export function __serialise_NewKey(value: NewKey): __JsonValue {
   return {
     label: __serialise_ApiKeyLabel(value.label),
@@ -747,7 +1234,7 @@ export function __deserialise_NewKey(json: __JsonValue, path: string = "$"): Res
 }
 
 
-export { __serialise_ApiKeyId, __deserialise_ApiKeyId, __serialise_ApiKeyInfo, __deserialise_ApiKeyInfo, __serialise_ApiKeyLabel, __deserialise_ApiKeyLabel, __serialise_ApiKeySecret, __deserialise_ApiKeySecret, __serialise_ApiKeyValue, __deserialise_ApiKeyValue };
+export { __serialise_ApiKeyId, __deserialise_ApiKeyId, __serialise_ApiKeyInfo, __deserialise_ApiKeyInfo, __serialise_ApiKeyLabel, __deserialise_ApiKeyLabel, __serialise_ApiKeyPepper, __deserialise_ApiKeyPepper, __serialise_ApiKeySecret, __deserialise_ApiKeySecret, __serialise_ApiKeySweep, __deserialise_ApiKeySweep, __serialise_ApiKeyValue, __deserialise_ApiKeyValue };
 
 export function __serialise_List_ApiKeyInfo(value: readonly ApiKeyInfo[]): __JsonValue {
   return value.map((v) => __serialise_ApiKeyInfo(v));
@@ -872,6 +1359,70 @@ export function __deserialise_Set_String(json: __JsonValue, path: string = "$"):
   return Ok(out);
 }
 
+export function __serialise_List_String(value: readonly string[]): __JsonValue {
+  return value.map((v) => v as __JsonValue);
+}
+
+export function __deserialise_List_String(json: __JsonValue, path: string = "$"): Result<readonly string[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: string[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    if (typeof item !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
+    }
+    const __el = item;
+    out.push(__el as string);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Option_Int(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isSafeInteger(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Int(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Int(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Int(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
 export function __serialise_Result_String_Int(value: Result<string, number>): __JsonValue {
   if (value.tag === "Ok") return { kind: "Ok", value: value.value as __JsonValue };
   return { kind: "Err", error: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.error) };
@@ -942,6 +1493,46 @@ export function __deserialise_Map_String_Bytes(json: __JsonValue, path: string =
     out.set(__k as string, __v as globalThis.Uint8Array);
   }
   return Ok(out);
+}
+
+export function __serialise_Option_ClientKeyCheck(value: Option<ClientKeyCheck>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_ClientKeyCheck(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_ClientKeyCheck(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_ClientKeyCheck(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_ClientKeyCheck(json: __JsonValue, path: string = "$"): Result<Option<ClientKeyCheck>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<ClientKeyCheck>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<ClientKeyCheck>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_ClientKeyCheck(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as ClientKeyCheck) as Option<ClientKeyCheck>);
+    }
+  }
+  const __b = __option_value_ClientKeyCheck(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as ClientKeyCheck) as Option<ClientKeyCheck>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }
 
 export function __serialise_Map_String_String(value: ReadonlyMap<string, string>): __JsonValue {
@@ -1021,6 +1612,29 @@ export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "
     }
     const __v = entryV;
     out.set(__k as string, __v as number);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_Int(value: readonly number[]): __JsonValue {
+  return value.map((v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(v));
+}
+
+export function __deserialise_List_Int(json: __JsonValue, path: string = "$"): Result<readonly number[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: number[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    if (typeof item !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
+    }
+    if (!globalThis.Number.isSafeInteger(item)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: globalThis.Number.isInteger(item) ? "integer outside the safe range" : "non-integer number" });
+    }
+    const __el = item;
+    out.push(__el as number);
   }
   return Ok(out);
 }

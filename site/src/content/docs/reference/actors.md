@@ -277,7 +277,7 @@ verification seam, so no handler writes any of it.
 
 ```bynk,fragment
 actor Client {
-	auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"),
+	auth = ApiKey(secret = "CLIENT_KEY_PEPPER", previous = "CLIENT_KEY_PEPPER_PREV", prefix = "acme", ttl = 90.days),
 	identity = AccountId
 }
 ```
@@ -287,10 +287,10 @@ actor Client {
 | `secret` | The environment variable holding the **pepper**, the key every stored hash is made with. Required. `bynk deploy` mints it when unset, as it mints a `SignedCookie` key, but never replaces a set one, even under `--force` (see [the deployed pepper](#the-deployed-pepper)) |
 | `prefix` | The key's leading tag, 2 to 16 lower-case letters and digits, starting with a letter. Default `bk`. Each `ApiKey` actor in a context needs its own (`bynk.actor.api_key_prefix_shared`) |
 | `header` | A header to read the key from, such as `x-api-key`. Absent, the key is read from `Authorization: Bearer <key>` |
+| `previous` | The environment variable holding the pepper being rotated out, read for verification only (see [rotating the pepper](#rotating-the-pepper)). Optional, and unset outside a rotation |
+| `ttl` | How long a minted key is valid, a positive whole number of seconds such as `90.days`. Absent, keys do not expire |
 
-The config keys are a closed set (`bynk.actor.api_key_unknown_key`). `ttl` (key expiry) and
-`previous` (pepper rotation) are reserved for a later release and are refused until then, so a key
-does not expire yet and the pepper cannot be rotated without ending every key. The identity is a
+The config keys are a closed set (`bynk.actor.api_key_unknown_key`). The identity is a
 context-owned, string-constructible type. The pepper's variable may not be another actor's `secret`
 or `previous` (`bynk.actor.api_key_secret_shared`). The scheme, its types and its warning are
 experimental: list the types in `[unstable] allow`.
@@ -302,8 +302,8 @@ experimental: list the types in `[unstable] allow`.
 - **Unset:** it mints one (32 random bytes, base64url).
 - **Already set:** it keeps it. **`--force` does not replace it.** `--force` replaces a
   `SignedCookie` signing key, but a set pepper is kept, and the deploy says so, because a new
-  pepper ends every key issued under the old one: each stored hash was made with it. With
-  `previous` refused until a later release, there is no way back.
+  pepper ends every key issued under the old one: each stored hash was made with it. To change
+  it without ending every key, [rotate it](#rotating-the-pepper).
 - **Supplied:** a value you set for the variable in the environment or in `--secrets-file` replaces
   the pepper, whether or not one is set. Do this only to end every key on purpose: once the new
   pepper is set, **every key issued before is refused**, and each holder needs a new one. A supplied
@@ -316,6 +316,50 @@ signs in, so it cannot see whether the pepper is set; it states the rule instead
 
 Each environment (`--env`) holds its own pepper and its own key store, so a key works only in the
 environment that issued it.
+
+### Rotating the pepper
+
+**A pepper `bynk deploy` minted cannot be rotated**, because nobody holds its value: Cloudflare never
+returns a secret, so the old value cannot be moved into `previous`. To keep the option to rotate,
+supply your own pepper (in the environment or `--secrets-file`) from the first deploy, and keep a
+record of it. When an actor declares `previous` and its pepper is managed, the plan says so (`note
+CLIENT_KEY_PEPPER: rotation needs a supplied pepper; …`). Supplying a pepper later replaces the
+minted one and ends every key issued under it.
+
+To rotate a pepper you supplied:
+
+1. **Deploy with both.** Supply the new value as `secret` and the old one as `previous` (for
+   example `CLIENT_KEY_PEPPER=<new>` and `CLIENT_KEY_PEPPER_PREV=<old>` in `--secrets-file`). The
+   seam hashes a presented key under both, and the store compares the hash its record names. A key
+   admitted under `previous` is re-hashed under `secret` in the same request, and `list` shows each
+   key's `pepper`: `Current` once re-hashed, `Previous` until then.
+2. **Wait, and sweep.** Once the deploy has fully rolled out and you have confirmed the new config,
+   `Client.sweep(identity)` removes the identity's expired keys and its keys under neither pepper,
+   and answers an `ApiKeySweep`: `expired` and `retired`, the counts it removed, and `previous`, how
+   many still remain under `previous`, the keys that would stop working if you dropped it now. Sum
+   `previous` over your identities to decide when to drop. **Do not sweep mid-rollout**: a Worker
+   still on the old config sees every key already re-hashed under the new pepper as under neither,
+   and its sweep would delete those keys. A mistyped `previous` has the same effect, so check that
+   keys still verify before you sweep.
+3. **Drop `previous`.** Remove the variable (`wrangler secret delete CLIENT_KEY_PEPPER_PREV`) and
+   deploy. **Every key not used since the rotation began stops working**: its hash was made with the
+   old pepper, and a stored hash cannot be re-keyed without the secret, which is never stored. Such a
+   key gets the ordinary `401`, after the same work as any other refused key, and `list` shows it as
+   `Retired` until a `sweep` removes it. `mint` never removes a `Retired` key, so it counts towards
+   the 100-key limit until a sweep.
+
+### Expiry and last use
+
+With a `ttl`, a key's `expires` is its creation time plus the `ttl`. The seam compares the presented
+key first and checks expiry after, so an expired key gets the same `401` after the same work as a
+forged one. `mint` and `list` remove expired keys, and they no longer count towards the 100-key
+limit; a `Retired` key still counts until a `sweep` ([rotating the pepper](#rotating-the-pepper)). Without a `ttl` a key never expires: review `list` from time to time, or revoke keys you no
+longer recognise.
+
+An admitted key's last use is recorded **at most once an hour**, which is enough to spot a stale key.
+The check itself only reads: a refused key never writes to the store, and an admitted one writes
+only when its last use is an hour old or it is being re-hashed during a rotation, in a second call
+after the first.
 
 ### The key
 
@@ -343,11 +387,13 @@ The service stores only `HMAC-SHA-256(pepper, secret)`, in two agents the compil
 names after the actor:
 
 - **`<Actor>Keys`**, keyed by the handle in each key's id, holds one identity's keys: the hash, the
-  pepper it was made under, the label and when it was created. It is the only agent a request asks.
+  pepper it was made under, the label, when it was created, when it expires and when it was last
+  used. It is the only agent a request asks.
 - **`<Actor>KeyOwner`**, keyed by the identity, holds that identity's handle. Only `mint` uses it.
 
 They are ordinary agents in the schema lock and the deploy migration. Their names are reserved in the
-context (`bynk.actor.api_key_agent_name_reserved`). The pepper never reaches either: the seam and
+context (`bynk.actor.api_key_agent_name_reserved`), with the record `<Actor>KeyCheck` the check
+answers. The pepper never reaches either: the seam and
 `mint` compute the hash and send it, so a copy of the agents' storage is useless without the Worker's
 secrets. One identity holds at most 100 keys.
 
@@ -361,9 +407,10 @@ Before the handler runs, the seam:
    `401` **with no lookup**;
 3. computes the hash under the pepper. A missing or short pepper faults the request, naming the
    variable and never its value;
-4. asks `<Actor>Keys(handle)`, which compares the hash in constant time against the record's. A key
-   number its store never held, or a handle no store holds, is compared against a fixed dummy hash,
-   so the work is the same as for a wrong secret;
+4. asks `<Actor>Keys(handle)`, which compares the hash in constant time against the record's (under
+   `previous` too while it is set). A key number its store never held, a handle no store holds, or
+   a record under neither pepper is compared against a fixed dummy hash, so the work is the same as
+   for a wrong secret. An expired key is refused after the compare;
 5. mints the identity through the identity type's `of`;
 6. runs the handler. The key's header is hidden from the handler's `headers: RequestHeaders`, and a
    typed `headers` field that reads it is `bynk.http.headers_field_consumed`.
@@ -382,8 +429,8 @@ key rather than sharing one at a high rate.
 public), and each one costs a key-store request. A route an `ApiKey` actor guards should carry
 `@rateLimit(Limiter, key: clientIp)`, which is asked before authentication; one that does not is
 the warning `bynk.actor.api_key_unlimited`. A service rate-limited at its edge can leave the
-warning. A `key: identity` limit does not help, because a fabricated key never verifies, and it is
-not yet available on an `ApiKey` route.
+warning. A `key: identity` limit counts a verified key holder, but does not help here, because a
+fabricated key never verifies, so it never reaches the limiter.
 
 An `ApiKey` actor is HTTP only: on a WebSocket `on open` it is `bynk.actor.scheme_not_admissible`,
 because the upgrade does not ask the key store, so a removed key would keep its socket. It is not
@@ -426,14 +473,18 @@ service console from http {
 | `list(identity)` | `Effect[List[ApiKeyInfo]]` | Needs `given Clock`. Each key's id, label, creation time, expiry and last use; never a secret or a digest. In a service handler or an agent's handler |
 | `revoke(identity, id)` | `Effect[Bool]` | `false` when the key is not that identity's, or is already gone, and then nothing changes. In a service handler or an agent's handler |
 | `revokeAll(identity)` | `Effect[Int]` | The number of keys revoked. One commit empties the identity's keys, then the identity takes a new key store, so every old key is refused. In a service handler or an agent's handler |
+| `sweep(identity)` | `Effect[ApiKeySweep]` | Needs `given Clock`. Removes the identity's expired keys and keys under neither pepper, and answers `{ expired, retired, previous }`: the counts removed, and how many remain under `previous` ([rotating the pepper](#rotating-the-pepper)). Run it only once a rotation deploy has fully rolled out. Only in a service handler, where the pepper is (`bynk.actor.api_key_mint_outside_handler`) |
 
 `list`, `revoke` and `revokeAll` need no pepper, only calls to the generated key store, so an
-agent's handler can call them too (an account-closure workflow can call `revokeAll`). A provider or
+agent's handler can call them too (an account-closure workflow can call `revokeAll`). In an agent's
+handler, `list` reads each key's `pepper` against the peppers the store last saw (at its last mint,
+sweep or admitted key), and says when in `pepperAsOf`, so during a rotation it can lag until that
+identity's next request; call `list` through a service when the current answer matters. A provider or
 a function cannot (`bynk.actor.api_key_member_in_provider`). Revoking deletes the key's record, so
 the seam then refuses it exactly as it refuses a key that was never minted.
 
 - **`ApiKeySecret`** is `{ id: ApiKeyId, key: ApiKeyValue, label: ApiKeyLabel, created: Instant,
-  expires: Option[Instant] }`. `expires` is `None`: keys do not expire yet.
+  expires: Option[Instant] }`. `expires` is `None` when the actor has no `ttl`.
 - **`ApiKeyValue`** is the key itself, a third secret kind beside `Secret` and `Authorization`: it has
   no string form, is not `Eq`, a `Key` or `Codable`, and cannot be stored, sent or interpolated
   (`bynk.types.secret_at_boundary`). Anywhere it would be printed it renders as `<secret>`. Its one
@@ -443,8 +494,14 @@ the seam then refuses it exactly as it refuses a key that was never minted.
 - **`ApiKeyId`** is public and string-constructible, so it can be a path parameter.
 - **`ApiKeyLabel`** is 1 to 64 characters, none of them a control character.
 - **`ApiKeyInfo`** is `{ id: ApiKeyId, label: ApiKeyLabel, created: Instant, expires:
-  Option[Instant], lastUsed: Option[Instant] }`. `expires` and `lastUsed` are `None`: keys do not
-  expire, and last use is not recorded, yet.
+  Option[Instant], lastUsed: Option[Instant], pepper: ApiKeyPepper, pepperAsOf: Instant }`.
+  `expires` is `None` without a `ttl`; `lastUsed` is `None` for a key never admitted. `pepperAsOf` is
+  when `pepper` was true: now in a service handler, and in an agent's handler when the store last saw
+  the live peppers.
+- **`ApiKeyPepper`** is `Current`, `Previous` or `Retired`: which pepper a key is hashed under
+  ([rotating the pepper](#rotating-the-pepper)).
+- **`ApiKeySweep`** is `{ expired: Int, retired: Int, previous: Int }`: the expired and `Retired`
+  keys a `sweep` removed, and the keys still under `previous`.
 
 A key is a bearer credential: anyone holding it is the client. Nothing stops a handler from writing
 the minted key somewhere unsafe before it returns it; the types make that hard, not impossible.

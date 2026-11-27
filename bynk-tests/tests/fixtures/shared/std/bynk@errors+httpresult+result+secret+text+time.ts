@@ -102,7 +102,8 @@ export const ApiKeyLabel = {
 /**
  * A key an `ApiKey` actor's `mint` has just made. `key` is the key itself,
  * shown this once: the service stores only a peppered hash of it. `id` names it
- * from now on. `expires` is `None`: keys do not expire yet.
+ * from now on. `expires` is when it stops working (the actor's `ttl` after
+ * `created`), or `None` when the actor has no `ttl`.
  */
 export interface ApiKeySecret {
   readonly id: ApiKeyId;
@@ -117,8 +118,13 @@ export const ApiKeySecret = {
 
 /**
  * One of an identity's keys, as an `ApiKey` actor's `list` answers it: never the
- * key itself or its hash. `id` names it, for `revoke`. `expires` and `lastUsed`
- * are `None`: keys do not expire, and their use is not recorded, yet.
+ * key itself or its hash. `id` names it, for `revoke`. `expires` is `None` when
+ * the actor has no `ttl`. `lastUsed` is when it was last admitted, to the hour,
+ * or `None` if it never was. `pepper` says which pepper it is hashed under, as
+ * of `pepperAsOf`: the time of the call in a service handler, which holds the
+ * pepper, and in an agent's handler, which does not, when the key store last
+ * saw the live peppers (its last mint, sweep or admitted key). During a
+ * rotation an agent's view can lag; a service handler's is current.
  */
 export interface ApiKeyInfo {
   readonly id: ApiKeyId;
@@ -126,9 +132,43 @@ export interface ApiKeyInfo {
   readonly created: number;
   readonly expires: Option<number>;
   readonly lastUsed: Option<number>;
+  readonly pepper: ApiKeyPepper;
+  readonly pepperAsOf: number;
 }
 
 export const ApiKeyInfo = {
+};
+
+/**
+ * Which pepper a listed key is hashed under. `Current`: the actor's `secret`.
+ * `Previous`: the pepper being rotated out, so the key stops working when
+ * `previous` is dropped, unless it is used before then (a key admitted under
+ * `previous` is re-hashed under `secret`). `Retired`: neither, so the key is
+ * refused, and `mint` or `sweep` removes it.
+ */
+export type ApiKeyPepper =
+    { readonly tag: "Current" }
+  | { readonly tag: "Previous" }
+  | { readonly tag: "Retired" };
+
+export const ApiKeyPepper = {
+  Current: { tag: "Current" } as ApiKeyPepper,
+  Previous: { tag: "Previous" } as ApiKeyPepper,
+  Retired: { tag: "Retired" } as ApiKeyPepper,
+};
+
+/**
+ * What an `ApiKey` actor's `sweep` did for one identity: how many expired keys
+ * it removed, how many keys under neither pepper (`Retired`) it removed, and how
+ * many keys are still under `previous`, which dropping it now would end.
+ */
+export interface ApiKeySweep {
+  readonly expired: number;
+  readonly retired: number;
+  readonly previous: number;
+}
+
+export const ApiKeySweep = {
 };
 
 /**

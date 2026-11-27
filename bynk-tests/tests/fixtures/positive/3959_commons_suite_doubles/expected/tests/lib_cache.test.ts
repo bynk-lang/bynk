@@ -53,11 +53,13 @@ class __Stub_Kv {
 
   async get(key: string): globalThis.Promise<Option<string>> {
     const { copy, remember } = __ns_lib_cache;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -425,11 +427,13 @@ async function test_another_suite_of_the_commons_names_the_shared_instance() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Archive: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Logger: ["debug", "error", "info", "log", "warn"] }, __obs);
     const { copy, remember } = __ns_lib_cache;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -575,11 +579,13 @@ async function test_the_kind_double_is_bound__stubbed_and_observed() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("the kind double is bound, stubbed and observed"), { Archive: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Logger: ["debug", "error", "info", "log", "warn"] }, __obs);
     const { copy, remember } = __ns_lib_cache;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -729,11 +735,13 @@ async function test_a_suite_local_instance_is_a_second__distinct_double() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Archive: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Logger: ["debug", "error", "info", "log", "warn"] }, __obs);
     const { copy, remember } = __ns_lib_cache;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
@@ -887,11 +895,13 @@ async function test_a_given_suite_helper_seeds_the_kind_double() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Archive: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Logger: ["debug", "error", "info", "log", "warn"] }, __obs);
     const { copy, remember } = __ns_lib_cache;
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeyPepper, ApiKeySecret, ApiKeySweep, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeyPepper = __ns_bynk.ApiKeyPepper;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeySweep = __ns_bynk.ApiKeySweep;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;

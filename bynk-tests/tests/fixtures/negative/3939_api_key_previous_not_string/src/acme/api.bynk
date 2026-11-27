@@ -1,0 +1,6 @@
+context acme.api
+
+type AccountId = String where NonEmpty
+
+// #3939 (slice 3): `previous` names an environment variable, so it is a string.
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", previous = 5), identity = AccountId }
