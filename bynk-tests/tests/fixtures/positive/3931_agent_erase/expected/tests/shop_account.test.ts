@@ -28,7 +28,7 @@ async function test_close_deletes_the_instance__which_then_reads_as_a_fresh_key(
     const { Account, AccountClosed, Order, __makeAccount } = __ns_shop_account;
     type AccountClosed = __ns_shop_account.AccountClosed;
     type Order = __ns_shop_account.Order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -46,9 +46,12 @@ async function test_close_deletes_the_instance__which_then_reads_as_a_fresh_key(
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -59,6 +62,7 @@ async function test_close_deletes_the_instance__which_then_reads_as_a_fresh_key(
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await __makeAccount("a").open("a@b.c", deps);
     const __r1 = await __makeAccount("a").close(deps);
@@ -81,7 +85,7 @@ async function test_a_Map_s_entries_and_its_indexed_postings_are_gone() {
     const { Account, AccountClosed, Order, __makeAccount } = __ns_shop_account;
     type AccountClosed = __ns_shop_account.AccountClosed;
     type Order = __ns_shop_account.Order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -99,9 +103,12 @@ async function test_a_Map_s_entries_and_its_indexed_postings_are_gone() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -112,6 +119,7 @@ async function test_a_Map_s_entries_and_its_indexed_postings_are_gone() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await __makeAccount("a").open("a@b.c", deps);
     const before = await __makeAccount("a").openOrders(deps);
@@ -138,7 +146,7 @@ async function test_only_the_erased_key_goes() {
     const { Account, AccountClosed, Order, __makeAccount } = __ns_shop_account;
     type AccountClosed = __ns_shop_account.AccountClosed;
     type Order = __ns_shop_account.Order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -156,9 +164,12 @@ async function test_only_the_erased_key_goes() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -169,6 +180,7 @@ async function test_only_the_erased_key_goes() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await __makeAccount("a").open("a@b.c", deps);
     const __r1 = await __makeAccount("b").open("b@b.c", deps);
@@ -192,7 +204,7 @@ async function test_a_handler_that_faults_after_erase___erased_nothing() {
     const { Account, AccountClosed, Order, __makeAccount } = __ns_shop_account;
     type AccountClosed = __ns_shop_account.AccountClosed;
     type Order = __ns_shop_account.Order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -210,9 +222,12 @@ async function test_a_handler_that_faults_after_erase___erased_nothing() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -223,6 +238,7 @@ async function test_a_handler_that_faults_after_erase___erased_nothing() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await __makeAccount("a").open("a@b.c", deps);
     const r = await __callAgentOutcome(__makeAccount("a").closeOrFault(true, deps), "Account.closeOrFault");
@@ -245,7 +261,7 @@ async function test_the_instance_can_be_erased_and_reopened() {
     const { Account, AccountClosed, Order, __makeAccount } = __ns_shop_account;
     type AccountClosed = __ns_shop_account.AccountClosed;
     type Order = __ns_shop_account.Order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -263,9 +279,12 @@ async function test_the_instance_can_be_erased_and_reopened() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -276,6 +295,7 @@ async function test_the_instance_can_be_erased_and_reopened() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await __makeAccount("a").open("first", deps);
     const __r1 = await __makeAccount("a").close(deps);
@@ -299,7 +319,7 @@ async function test_a_write_before_erase___is_discarded_with_the_rest() {
     const { Account, AccountClosed, Order, __makeAccount } = __ns_shop_account;
     type AccountClosed = __ns_shop_account.AccountClosed;
     type Order = __ns_shop_account.Order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -317,9 +337,12 @@ async function test_a_write_before_erase___is_discarded_with_the_rest() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -330,6 +353,7 @@ async function test_a_write_before_erase___is_discarded_with_the_rest() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await __makeAccount("a").open("kept?", deps);
     const __r1 = await __makeAccount("a").writeThenErase(deps);
@@ -353,7 +377,7 @@ async function test_an_event_emitted_alongside_the_erase_is_released() {
     const { Account, AccountClosed, Order, __makeAccount } = __ns_shop_account;
     type AccountClosed = __ns_shop_account.AccountClosed;
     type Order = __ns_shop_account.Order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -371,9 +395,12 @@ async function test_an_event_emitted_alongside_the_erase_is_released() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -384,6 +411,7 @@ async function test_an_event_emitted_alongside_the_erase_is_released() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await __makeAccount("a").open("a@b.c", deps);
     const __r1 = await __makeAccount("a").close(deps);
