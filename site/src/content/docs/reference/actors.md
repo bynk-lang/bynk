@@ -309,6 +309,11 @@ experimental: list the types in `[unstable] allow`.
   pepper is set, **every key issued before is refused**, and each holder needs a new one. A supplied
   value must be unpadded base64url of at least 32 bytes.
 
+The plan shows which: `secret set CLIENT_KEY_PEPPER (managed)` on a Worker's first deploy, `secret
+keep CLIENT_KEY_PEPPER (managed; minted only if missing)` on every redeploy, `--force` included, and
+`secret set CLIENT_KEY_PEPPER (supplied)` when you supply a value. The plan runs before `deploy`
+signs in, so it cannot see whether the pepper is set; it states the rule instead.
+
 Each environment (`--env`) holds its own pepper and its own key store, so a key works only in the
 environment that issued it.
 
@@ -400,12 +405,32 @@ service console from http {
 			Err(_) => Conflict("too many keys"),
 		}
 	}
+
+	@rateLimit(PerIp, key: clientIp)
+	on GET("/keys") () -> Effect[HttpResult[List[ApiKeyInfo]]] by u: User given Clock {
+		let keys <- Client.list(u.identity)
+		Ok(keys)
+	}
+
+	@rateLimit(PerIp, key: clientIp)
+	on DELETE("/keys/:id") (id: ApiKeyId) -> Effect[HttpResult[()]] by u: User {
+		let gone <- Client.revoke(u.identity, id)
+		if gone { NoContent } else { NotFound }
+	}
 }
 ```
 
 | Member | Type | Notes |
 |---|---|---|
 | `mint(identity, label)` | `Effect[Result[ApiKeySecret, TooManyKeys]]` | Needs `given Clock`. Only in a service handler, where the pepper is (`bynk.actor.api_key_mint_outside_handler`). `TooManyKeys` when the identity already holds 100 |
+| `list(identity)` | `Effect[List[ApiKeyInfo]]` | Needs `given Clock`. Each key's id, label, creation time, expiry and last use; never a secret or a digest. In a service handler or an agent's handler |
+| `revoke(identity, id)` | `Effect[Bool]` | `false` when the key is not that identity's, or is already gone, and then nothing changes. In a service handler or an agent's handler |
+| `revokeAll(identity)` | `Effect[Int]` | The number of keys revoked. One commit empties the identity's keys, then the identity takes a new key store, so every old key is refused. In a service handler or an agent's handler |
+
+`list`, `revoke` and `revokeAll` need no pepper, only calls to the generated key store, so an
+agent's handler can call them too (an account-closure workflow can call `revokeAll`). A provider or
+a function cannot (`bynk.actor.api_key_member_in_provider`). Revoking deletes the key's record, so
+the seam then refuses it exactly as it refuses a key that was never minted.
 
 - **`ApiKeySecret`** is `{ id: ApiKeyId, key: ApiKeyValue, label: ApiKeyLabel, created: Instant,
   expires: Option[Instant] }`. `expires` is `None`: keys do not expire yet.
@@ -417,10 +442,12 @@ service console from http {
   field that holds an `ApiKeySecret`, and every other handler parameter or result, is refused.
 - **`ApiKeyId`** is public and string-constructible, so it can be a path parameter.
 - **`ApiKeyLabel`** is 1 to 64 characters, none of them a control character.
+- **`ApiKeyInfo`** is `{ id: ApiKeyId, label: ApiKeyLabel, created: Instant, expires:
+  Option[Instant], lastUsed: Option[Instant] }`. `expires` and `lastUsed` are `None`: keys do not
+  expire, and last use is not recorded, yet.
 
 A key is a bearer credential: anyone holding it is the client. Nothing stops a handler from writing
 the minted key somewhere unsafe before it returns it; the types make that hard, not impossible.
-Listing and revoking keys arrive in a later release.
 
 ## Reading claims
 
