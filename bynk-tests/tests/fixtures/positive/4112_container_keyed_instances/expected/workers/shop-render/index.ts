@@ -3,7 +3,7 @@
 
 import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
 import { type __JsonValue, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -51,8 +51,8 @@ export default {
             const __r_tenant = handlers.TenantId.of(__raw_tenant);
             if (__r_tenant.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "RefinementViolation", path: "path.tenant", violation: __r_tenant.error })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const tenant = __r_tenant.value;
-            const result = await surface.http_GET_render_Param_tenant(tenant);
-            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop.render\""]), __security_api);
+            const result = await surface.http_GET_render_Param_tenant(request, tenant);
+            const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"shop.render\""])), __security_api);
             return method === "HEAD" ? __headResponse(__response) : __response;
           }
         }
@@ -67,8 +67,8 @@ export default {
             const __r_tenant = handlers.TenantId.of(__raw_tenant);
             if (__r_tenant.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "RefinementViolation", path: "path.tenant", violation: __r_tenant.error })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const tenant = __r_tenant.value;
-            const result = await surface.http_GET_thumb_Param_tenant(tenant);
-            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop.render\""]), __security_api);
+            const result = await surface.http_GET_thumb_Param_tenant(request, tenant);
+            const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"shop.render\""])), __security_api);
             return method === "HEAD" ? __headResponse(__response) : __response;
           }
         }

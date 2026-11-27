@@ -2435,8 +2435,11 @@ so the limits on a name above (1 to 256 bytes, no control character) still apply
 to it. A refined type limits what a name looks like, not how many there are: a
 route anyone can call that takes a `TenantId` still lets a caller send any
 `TenantId`, so pair a key with an authenticated actor, a `RateLimit`, or a closed
-set (an enum's names as the key). A keyed instance is not warned about, because
-the key's construction is where the names are bounded.
+set (a `match` over an enum that builds the key). A keyed instance is not warned
+about, because the key's construction is where the author bounds the names; that
+is the author's claim, and `bynk check` does not verify it, so a key on a route
+anyone can call, with nothing else limiting how many names are sent, bounds only
+their shape.
 
 A running container costs money. See Cloudflare's
 [Containers pricing](https://developers.cloudflare.com/containers/pricing/) and

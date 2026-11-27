@@ -28,7 +28,7 @@ export type Renderer = bynk_cloudflare.Container;
 export const __RendererToken: symbol = globalThis.Symbol("Renderer");
 
 export const api = {
-  async http_GET_render_Param_tenant(tenant: TenantId, deps: { Renderer: Renderer }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_render_Param_tenant(tenant: TenantId, deps: { Renderer: Renderer; identity: TenantId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     const req = { method: Method.Get, url: "http://renderer/render", contentType: { tag: "None" as const }, authorization: { tag: "None" as const }, headers: new globalThis.Map(), body: { tag: "None" as const } };
     const res = await deps.Renderer.send(tenant, req);
     if (res.tag === "Ok") {
@@ -43,7 +43,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
-  async http_GET_thumb_Param_tenant(tenant: TenantId, deps: { Renderer: Renderer }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_thumb_Param_tenant(tenant: TenantId, deps: { Renderer: Renderer; identity: TenantId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     const req = { method: Method.Get, url: "http://renderer/thumb", contentType: { tag: "None" as const }, authorization: { tag: "None" as const }, headers: new globalThis.Map(), body: { tag: "None" as const } };
     const res = await deps.Renderer.receiveBytes(tenant, req);
     switch (res.tag) {

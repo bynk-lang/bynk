@@ -31,6 +31,12 @@ consumes bynk.cloudflare { Container, ContainerError }
 capability Renderer = Container @build("containers/renderer") @port(8080) @sleepAfter(5.minutes) @instanceType("standard-1")
 ```
 
+Add `@instances(by: TenantId)` to make the instance's names a type of your own: `send`
+(and `receiveBytes` and `sendBytes`) then take a `TenantId` where they take a
+`String`, so a bare string cannot name one by accident (see
+[Call it](#call-it)). `TenantId` is a refined or opaque type over `String` declared in
+the context.
+
 `@build` is the project-relative directory that holds the `Dockerfile`, and
 `@port` the port the server listens on. `bynk check` refuses a `@build` that leaves
 the project (`bynk.container.build_path`) or holds no `Dockerfile`
@@ -75,7 +81,16 @@ caller can only reach their own. Do not take it from the request instead, such a
 a path parameter on a route anyone can call: every distinct name starts another
 container on your account, so any caller could start as many as they like, and
 `bynk check` warns (`bynk.container.unbounded_instances`). Names appear in
-Cloudflare's dashboards and logs, so never put a credential in one. A name that is empty, over 256 bytes or
+Cloudflare's dashboards and logs, so never put a credential in one.
+
+With `@instances(by: TenantId)`, the first argument is a `TenantId` rather than a
+`String`: build one with `TenantId.of(...)` (or take it from the route as a typed
+path parameter), and a bare string is a type error. A key limits what a name looks
+like, not how many there are, so keep the authenticated actor (or a `RateLimit`)
+too: `bynk check` does not warn about a keyed instance, because the key's
+construction is where you bound the names, and it does not check that you did.
+
+A name that is empty, over 256 bytes or
 holds a control character faults the call. The first call to an instance waits for
 the container to start, which takes noticeable time.
 
