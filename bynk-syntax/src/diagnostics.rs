@@ -8058,6 +8058,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`.",
     ),
     d(
+        "bynk.cloudflare.credentials_missing",
+        "A command that reads the Cloudflare account needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and one or both are not set, so it stopped before reading anything. With `--format json`, `bynk revert` writes `{\"error\": {\"code\", \"missing\", \"message\"}}` to stdout, `missing` naming each variable that is unset; the message says what the token needs.",
+    ),
+    d(
         "bynk.cloudflare.edge_cache_duplicate",
         "A context declares a second `EdgeCache` instance; the edge cache is one setting for the whole Worker.",
     ),
