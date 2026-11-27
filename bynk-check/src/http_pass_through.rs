@@ -392,7 +392,7 @@ pub(crate) fn held_at_boundary(
 /// #3752 (slice 3a): `bynk.http.pass_through_not_emitted`, for the `on ANY` route
 /// `path` a build reaches. The driver reports it once the program checks clean;
 /// slice 3b, which builds the route, retires it.
-pub fn not_emitted_error(path: &str, span: bynk_syntax::Span) -> CompileError {
+pub fn not_emitted_error(path: &str, span: bynk_syntax::span::Span) -> CompileError {
     CompileError::new(
         "bynk.http.pass_through_not_emitted",
         span,
