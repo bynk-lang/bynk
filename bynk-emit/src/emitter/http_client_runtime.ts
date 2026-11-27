@@ -138,6 +138,12 @@ export interface ClientOptions {
    * A server-side call has no preflight and can turn it on freely.
    */
   readonly sendContract?: boolean;
+  /**
+   * The `WebSocket` constructor a `connect` opens. Default: the global one (browsers, Workers, Node 22+).
+   * Pass another to add what the standard one cannot, such as a Node client's `Cookie` and `Origin`
+   * headers.
+   */
+  readonly webSocket?: typeof globalThis.WebSocket;
 }
 
 /**
@@ -356,7 +362,7 @@ export function __fileName(part: globalThis.Blob): string {
 }
 
 /** A value that broke a boundary on its way out, as the `Invalid` failure it is. */
-function __invalid(e: unknown): CallFailure {
+export function __invalid(e: unknown): CallFailure {
   if (e instanceof __Refusal) return { kind: "Invalid", error: e.boundary };
   const details = e instanceof globalThis.Error ? e.message : globalThis.String(e);
   return {

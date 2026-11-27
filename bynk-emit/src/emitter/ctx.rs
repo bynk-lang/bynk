@@ -104,6 +104,25 @@ impl<'a> UnitFacts<'a> {
         TyRender::new(commons.tys(), self.spellings)
     }
 
+    /// #3807: whether `name` is a `uses`d commons type this context rebrands (`Expr` is
+    /// `__CommonsExpr & { __ctxBrand?: "<context>" }` in each context that names it), so
+    /// another context's value of it is not assignable to this one's. `false` outside a
+    /// context, which rebrands nothing.
+    pub(crate) fn rebrands_commons_type(
+        &self,
+        types: &HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+        name: &str,
+    ) -> bool {
+        self.project.is_some_and(|p| {
+            p.unit_kind == bynk_project::UnitKind::Context
+                && bynk_check::resolver::compute_is_uses_commons_type(
+                    &p.imported_from_kind,
+                    types,
+                    name,
+                )
+        })
+    }
+
     /// No unit behind the lowering (a test or contract scaffold): faults name
     /// `offset N`, and no type is respelled.
     pub(crate) fn detached() -> Self {

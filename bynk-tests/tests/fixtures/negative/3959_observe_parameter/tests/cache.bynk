@@ -1,0 +1,9 @@
+---
+#3959, track §9: `expect … called` names a capability, never a parameter
+(`bynk.observe.not_a_seam`, note added; pinned in `integration::diagnostic_hints`).
+---
+suite lib.cache
+
+case "c" {
+	expect Store.put called
+}

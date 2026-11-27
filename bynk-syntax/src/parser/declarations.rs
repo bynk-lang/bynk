@@ -702,6 +702,42 @@ impl<'a> Parser<'a> {
             trailing_comments,
         })
     }
+    /// The error for an item a suite body cannot hold: recovered (skipping
+    /// to the next item) in recovery mode, returned otherwise.
+    fn suite_item_error(&mut self, brace: bool) -> Result<(), CompileError> {
+        let t = match self.peek() {
+            Some(t) => t,
+            None => {
+                return Err(CompileError::new(
+                    "bynk.parse.unexpected_eof",
+                    self.eof_span(),
+                    "expected `}` to close the test body, found end of file",
+                ));
+            }
+        };
+        let note = if brace {
+            "the body of a suite contains zero or more `uses`, `stub`, `env`, `fixture`, `type`, `const`, `fn`, `case`, or `property` declarations"
+        } else {
+            "in fragment-form suites, the body is a sequence of `uses`, `stub`, `env`, `fixture`, `type`, `const`, `fn`, `case`, or `property` declarations to end of file"
+        };
+        let err = CompileError::new(
+            "bynk.parse.expected_item",
+            t.span,
+            format!(
+                "expected `uses`, `stub`, `env`, `fixture`, `type`, `const`, `fn`, `case \"name\"`, or `property \"name\"` declaration, found {}",
+                t.kind.describe()
+            ),
+        )
+        .with_note(note);
+        if self.recover_mode {
+            self.recovered_errors.push(err);
+            self.bump();
+            self.recover_to_top_item();
+        } else {
+            return Err(err);
+        }
+        Ok(())
+    }
 
     /// #3536: a `consumes` clause of a suite file. In a fragment-form suite it
     /// must precede every other member (`late`).
@@ -761,6 +797,7 @@ impl<'a> Parser<'a> {
         let mut suite_types = Vec::new();
         let mut suite_consts = Vec::new();
         let mut fixtures = Vec::new();
+        let mut suite_capabilities = Vec::new();
         // Cover the header (`test <target>`) so the unit span stays valid even
         // when every item is dropped by error recovery. Only consulted in
         // fragment form (see `parse_commons_body`).
@@ -964,39 +1001,23 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
-                _ => {
-                    let t = match self.peek() {
-                        Some(t) => t,
-                        None => {
-                            return Err(CompileError::new(
-                                "bynk.parse.unexpected_eof",
-                                self.eof_span(),
-                                "expected `}` to close the test body, found end of file",
-                            ));
+                // #3959: a suite-local capability instance, `capability Archive = Kv`.
+                Some(TokenKind::Capability) => {
+                    let next_span = self.peek().unwrap().span;
+                    let doc = self.finalize_doc(item_doc, next_span, &mut leading);
+                    match self.parse_capability_decl() {
+                        Ok(mut c) => {
+                            c.documentation = doc;
+                            c.trivia.leading = leading;
+                            c.trivia.trailing = self.take_trailing_trivia();
+                            last_span = c.span;
+                            suite_capabilities.push(c);
+                            seen_non_uses = true;
                         }
-                    };
-                    let note = if brace {
-                        "the body of a suite contains zero or more `uses`, `stub`, `env`, `fixture`, `type`, `const`, `fn`, `case`, or `property` declarations"
-                    } else {
-                        "in fragment-form suites, the body is a sequence of `uses`, `stub`, `env`, `fixture`, `type`, `const`, `fn`, `case`, or `property` declarations to end of file"
-                    };
-                    let err = CompileError::new(
-                        "bynk.parse.expected_item",
-                        t.span,
-                        format!(
-                            "expected `uses`, `stub`, `env`, `fixture`, `type`, `const`, `fn`, `case \"name\"`, or `property \"name\"` declaration, found {}",
-                            t.kind.describe()
-                        ),
-                    )
-                    .with_note(note);
-                    if self.recover_mode {
-                        self.recovered_errors.push(err);
-                        self.bump();
-                        self.recover_to_top_item();
-                    } else {
-                        return Err(err);
+                        Err(e) => self.handle_item_err(e)?,
                     }
                 }
+                _ => self.suite_item_error(brace)?,
             }
         }
         let mut trailing_comments = trailing_comments;
@@ -1021,6 +1042,7 @@ impl<'a> Parser<'a> {
             fns,
             types: suite_types,
             consts: suite_consts,
+            capabilities: suite_capabilities,
             fixtures,
             tier,
             form: if brace {

@@ -392,7 +392,9 @@ boundary types, inline pure helpers and `uses`, external providers, and
 {{#grammar _test_body_item}}
 
 The declarations allowed in a `suite` block, including `stub` and `env` clauses and
-`case`s.
+`case`s. A commons suite may also declare a suite-local capability instance,
+`capability Archive = Kv`: a second double of a kind its commons selects (see
+[Capability parameters](/reference/capabilities/#capability-parameters)).
 
 ### qualified_name {#rule-qualified_name}
 
