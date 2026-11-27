@@ -14,12 +14,17 @@ use std::collections::BTreeMap;
 
 use super::config::Resources;
 use super::ledger::DeployLock;
+use super::move_sets::{PlannedSet, move_sets, place};
 use super::plan::{DeployOptions, Entry, GroupNames};
 
 /// The refusal of an agent move (#3562) and the codes the JSON plan gives its siblings (#3797).
 pub(crate) const AGENT_MOVE_REFUSED: &str = "bynk.deploy.agent_move_refused";
 const AGENT_STARTS_FRESH: &str = "bynk.deploy.agent_starts_fresh";
 const ACCEPT_FRESH_AGENT_UNUSED: &str = "bynk.deploy.accept_fresh_agent_unused";
+/// #3565: a `--move-agent` name that matches no move of the run, and the window warning of a
+/// planned move set.
+const MOVE_AGENT_UNUSED: &str = "bynk.deploy.move_agent_unused";
+const AGENT_MOVE_WINDOW: &str = "bynk.deploy.agent_move_window";
 
 /// One context with agent state that the plan would put on another script.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +41,9 @@ pub(crate) struct AgentMove {
     /// The same Worker (key) now has another script (a group renamed in place): Cloudflare cannot
     /// rename a script, and the ledger would keep no record of the script left holding the data.
     pub(crate) renamed_in_place: bool,
+    /// #3565: the old classes of the class tombstones the context carries (a `replaces`, a
+    /// `removed agent`). A supported move of such a context is refused in v1 (`tombstones`).
+    pub(crate) tombstones: Vec<String>,
 }
 
 /// The moves of the Workers this run deploys (`order`): each context that hosts agents whose
@@ -65,6 +73,11 @@ pub(crate) fn agent_moves(
                 classes: classes.clone(),
                 old_script_built: built_scripts.contains(&from_script),
                 renamed_in_place: from_worker == *worker,
+                tombstones: resources[worker]
+                    .agent_tombstones
+                    .get(context)
+                    .cloned()
+                    .unwrap_or_default(),
                 from_worker,
                 from_script,
                 to_worker: worker.clone(),
@@ -86,11 +99,23 @@ fn is_named(context: &str, accepted: &[String]) -> bool {
 ///
 /// #3797: each as an entry of the JSON plan's `refusals` (`reason` says which way it is refused;
 /// only a move not yet named carries the flag that would let it through).
+#[cfg(test)]
 pub(crate) fn refusals(moves: &[AgentMove], accepted: &[String]) -> Vec<Entry> {
+    move_refusals(moves, accepted, &[])
+}
+
+/// [`refusals`], with the contexts `--move-agent` names (#3565): a move named there is refused by
+/// its set ([`set_refusals`]), unless `--accept-fresh-agent` names it too (`both`); a move named
+/// in neither is refused as before, with `--move-agent` as the flag that lets it through.
+fn move_refusals(moves: &[AgentMove], accepted: &[String], moving: &[String]) -> Vec<Entry> {
     let named = |m: &AgentMove| is_named(&m.context, accepted);
+    let moved = |m: &AgentMove| is_named(&m.context, moving);
     moves
         .iter()
         .filter_map(|m| {
+            if moved(m) && !named(m) {
+                return None;
+            }
             let what = format!(
                 "context `{}` hosts {} and would move from Worker script `{}` to `{}`; an agent's state belongs to its script, so it would start empty there and the old data would stay behind",
                 m.context,
@@ -98,12 +123,20 @@ pub(crate) fn refusals(moves: &[AgentMove], accepted: &[String]) -> Vec<Entry> {
                 m.from_script,
                 m.to_script
             );
-            let (reason, message) = if !named(m) {
+            let (reason, message) = if moved(m) {
+                (
+                    "both",
+                    format!(
+                        "{what}, and both `--move-agent {c}` and `--accept-fresh-agent {c}` name it: a move keeps the state and a fresh start discards it, so name one.",
+                        c = m.context
+                    ),
+                )
+            } else if !named(m) {
                 (
                     "not_accepted",
                     format!(
-                        "{what}.\n  Keep `{}` on `{}`, or, if its state may be discarded, start it fresh with `--accept-fresh-agent {}`.",
-                        m.context, m.from_script, m.context
+                        "{what}.\n  Keep `{}` on `{}`, move it with its state with `--move-agent {}`, or, if its state may be discarded, start it fresh with `--accept-fresh-agent {}`.",
+                        m.context, m.from_script, m.context, m.context
                     ),
                 )
             } else if m.renamed_in_place {
@@ -131,7 +164,7 @@ pub(crate) fn refusals(moves: &[AgentMove], accepted: &[String]) -> Vec<Entry> {
                 .with("from", m.from_script.as_str())
                 .with("to", m.to_script.as_str());
             Some(if reason == "not_accepted" {
-                entry.overridden_by(format!("--accept-fresh-agent {}", m.context))
+                entry.overridden_by(format!("--move-agent {}", m.context))
             } else {
                 entry
             })
@@ -214,12 +247,14 @@ pub(crate) fn record_fresh_moves(
 }
 
 /// What the agent-move check of a run found (#3562, #3797): the moves, and the refusals and
-/// warnings it has to say.
+/// warnings it has to say. #3565: the move sets `--move-agent` names, as the plan lists them,
+/// when the run plans them.
 #[derive(Debug)]
 pub(crate) struct AgentGate {
     pub(crate) moves: Vec<AgentMove>,
     pub(crate) refusals: Vec<Entry>,
     pub(crate) warnings: Vec<Entry>,
+    pub(crate) planned: Vec<PlannedSet>,
 }
 
 impl AgentGate {
@@ -243,6 +278,20 @@ impl AgentGate {
     }
 }
 
+/// What a run knows that the move sets are checked against (#3565).
+pub(crate) struct MoveCx<'a> {
+    pub(crate) resources: &'a BTreeMap<String, Resources>,
+    pub(crate) order: &'a [String],
+    /// Each Worker of the build that declares `routes` or `custom_domains`, with the key it
+    /// declares (D12: a move of such a Worker's set is refused in v1).
+    pub(crate) attached: &'a BTreeMap<String, &'static str>,
+    /// A `--worker` or `--context` run, which deploys only part of the project.
+    pub(crate) partial: bool,
+    pub(crate) dry_run: bool,
+    /// Each Worker's script, for the plan's names.
+    pub(crate) script: &'a dyn Fn(&str) -> String,
+}
+
 /// The moves of this run, and what they need said: [`gate`] over [`agent_moves`].
 pub(crate) fn checked_agent_moves(
     lock: &DeployLock,
@@ -250,21 +299,33 @@ pub(crate) fn checked_agent_moves(
     resources: &BTreeMap<String, Resources>,
     order: &[String],
     groups: &GroupNames,
+    attached: &BTreeMap<String, &'static str>,
 ) -> AgentGate {
     let moves = agent_moves(lock, &opts.environment, resources, order, groups);
-    let (refusals, warnings) = gate(&moves, &opts.accept_fresh_agent);
-    AgentGate {
-        moves,
-        refusals,
-        warnings,
-    }
+    let script = |w: &str| groups.script(w);
+    let cx = MoveCx {
+        resources,
+        order,
+        attached,
+        partial: opts.context.is_some(),
+        dry_run: opts.dry_run,
+        script: &script,
+    };
+    gate(moves, &opts.accept_fresh_agent, &opts.move_agent, &cx)
 }
 
-/// What the moves of this run need said: every refusal, and every `--accept-fresh-agent` name that
-/// matches no move (an error, as the flag is never a blanket), and a warning for each accepted move.
-pub(crate) fn gate(moves: &[AgentMove], accepted: &[String]) -> (Vec<Entry>, Vec<Entry>) {
-    let mut refusals = refusals(moves, accepted);
-    for name in unused_accepts(moves, accepted) {
+/// What the moves of this run need said: every refusal, every `--accept-fresh-agent` or
+/// `--move-agent` name that matches no move (an error, as neither flag is ever a blanket), a
+/// warning for each accepted move, and, for the move sets `--move-agent` names, their refusals
+/// or, when none, their plan and the window's warning.
+pub(crate) fn gate(
+    moves: Vec<AgentMove>,
+    accepted: &[String],
+    moving: &[String],
+    cx: &MoveCx<'_>,
+) -> AgentGate {
+    let mut refusals = move_refusals(&moves, accepted, moving);
+    for name in unused_accepts(&moves, accepted) {
         refusals.push(
             Entry::new(
                 ACCEPT_FRESH_AGENT_UNUSED,
@@ -275,14 +336,240 @@ pub(crate) fn gate(moves: &[AgentMove], accepted: &[String]) -> (Vec<Entry>, Vec
             .with("name", name),
         );
     }
+    for name in unused_accepts(&moves, moving) {
+        refusals.push(
+            Entry::new(
+                MOVE_AGENT_UNUSED,
+                format!(
+                    "`--move-agent {name}` names no context that would move with agent state in this run"
+                ),
+            )
+            .with("name", name),
+        );
+    }
+    let moved: Vec<AgentMove> = moves
+        .iter()
+        .filter(|m| is_named(&m.context, moving) && !is_named(&m.context, accepted))
+        .cloned()
+        .collect();
+    let (set_refused, planned) = plan_sets(&moved, cx);
+    refusals.extend(set_refused);
     // Warnings say what a run goes ahead with, so a refused run has none: its refusals are the
     // whole story, as on stderr. (A move that is refused is said by its refusal, not as though it
     // were happening.)
     if !refusals.is_empty() {
-        return (refusals, Vec::new());
+        return AgentGate {
+            moves,
+            refusals,
+            warnings: Vec::new(),
+            planned: Vec::new(),
+        };
     }
-    let warnings = moves.iter().map(fresh_warning).collect();
-    (refusals, warnings)
+    let mut warnings: Vec<Entry> = moves
+        .iter()
+        .filter(|m| is_named(&m.context, accepted))
+        .map(fresh_warning)
+        .collect();
+    warnings.extend(planned.iter().map(window_warning));
+    AgentGate {
+        moves,
+        refusals,
+        warnings,
+        planned,
+    }
+}
+
+/// The move sets of `moved` (the moves `--move-agent` names), checked: each set's refusals; or,
+/// when it has none, the sets as the plan lists them, placed in the order (§3.2). Outside
+/// `--dry-run` a supported set is still refused (`apply_not_yet`): this release plans moves, it
+/// does not apply them.
+fn plan_sets(moved: &[AgentMove], cx: &MoveCx<'_>) -> (Vec<Entry>, Vec<PlannedSet>) {
+    if moved.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+    let sets = move_sets(moved);
+    let mut refused = Vec::new();
+    for set in &sets {
+        refused.extend(set_refusals(set, cx));
+    }
+    if !refused.is_empty() {
+        return (refused, Vec::new());
+    }
+    let placement = match place(&sets, cx.order, cx.resources) {
+        Ok(placement) => placement,
+        Err(cycle) => {
+            let entry = Entry::new(
+                AGENT_MOVE_REFUSED,
+                format!(
+                    "the agent moves of this run cannot be placed in the upload order: {}. A move set's receivers are pushed first, then the Workers that call them, then its sources and its receivers again, and this run's bindings need another order; split the move across two deploys.",
+                    cycle.join(" → ")
+                ),
+            )
+            .with("reason", "order")
+            .with("cycle", cycle);
+            return (vec![entry], Vec::new());
+        }
+    };
+    let planned: Vec<PlannedSet> = sets
+        .iter()
+        .zip(&placement.callers)
+        .map(|(set, callers)| PlannedSet::of(set, callers, cx.script))
+        .collect();
+    if !cx.dry_run {
+        let refused = planned
+            .iter()
+            .map(|p| {
+                let contexts: Vec<String> = p.moves.iter().map(|m| m.context.clone()).collect();
+                Entry::new(
+                    AGENT_MOVE_REFUSED,
+                    format!(
+                        "{} would move with {} state; this release plans such a move but does not apply it yet. See the plan with `--dry-run`; applying it comes with a later release.",
+                        contexts_phrase(&contexts),
+                        if contexts.len() == 1 { "its" } else { "their" }
+                    ),
+                )
+                .with("reason", "apply_not_yet")
+                .with("contexts", contexts)
+            })
+            .collect();
+        return (refused, Vec::new());
+    }
+    (Vec::new(), planned)
+}
+
+/// Why one move set `--move-agent` names cannot be moved (D9, D12, the tombstones ruling).
+fn set_refusals(set: &super::move_sets::MoveSet, cx: &MoveCx<'_>) -> Vec<Entry> {
+    let mut refused = Vec::new();
+    let entry = |reason: &str, message: String, m: &AgentMove| {
+        Entry::new(AGENT_MOVE_REFUSED, message)
+            .with("reason", reason)
+            .with("context", m.context.as_str())
+            .with("agents", m.classes.clone())
+            .with("from", m.from_script.as_str())
+            .with("to", m.to_script.as_str())
+    };
+    for m in &set.moves {
+        if m.renamed_in_place {
+            refused.push(entry(
+                "renamed_in_place",
+                format!(
+                    "context `{}` would move from Worker script `{}` to `{}` because its Worker is renamed in place: the old script would keep no ledger record once the move closed, so renaming a group that hosts agents is not supported; change its key as well, or keep its `name`.",
+                    m.context, m.from_script, m.to_script
+                ),
+                m,
+            ));
+        }
+        if !m.tombstones.is_empty() {
+            refused.push(
+                entry(
+                    "tombstones",
+                    format!(
+                        "context `{}` carries class tombstones ({}): where they belong once its agents move from `{}` to `{}` is not settled, so moving a context that carries them is not supported yet. Deploy the rename or removal where the context is first, then move it once the tombstones are gone.",
+                        m.context,
+                        m.tombstones
+                            .iter()
+                            .map(|t| format!("`{t}`"))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                        m.from_script,
+                        m.to_script
+                    ),
+                    m,
+                )
+                .with("tombstones", m.tombstones.clone()),
+            );
+        }
+    }
+    let contexts: Vec<String> = set.moves.iter().map(|m| m.context.clone()).collect();
+    let set_entry = |reason: &str, message: String| {
+        Entry::new(AGENT_MOVE_REFUSED, message)
+            .with("reason", reason)
+            .with("contexts", contexts.clone())
+    };
+    if let Some(script) = set.chained() {
+        refused.push(
+            set_entry(
+                "chained",
+                format!(
+                    "Worker script `{script}` would both give up and receive agent state in this run ({}); a Worker cannot be a source and a receiver of one move. Give one of the groups a new key, or make the change in two deploys.",
+                    contexts_phrase(&contexts)
+                ),
+            )
+            .with("script", script),
+        );
+    }
+    let workers = set.built_workers(cx.resources);
+    if cx.partial {
+        let left_out: Vec<String> = workers
+            .iter()
+            .filter(|w| !cx.order.contains(w))
+            .map(|w| (cx.script)(w))
+            .collect();
+        if !left_out.is_empty() {
+            refused.push(
+                set_entry(
+                    "partial_selection",
+                    format!(
+                        "the move of {} pushes {}, which this `--worker`/`--context` run leaves out; a move set is pushed as one, so run the whole project.",
+                        contexts_phrase(&contexts),
+                        left_out
+                            .iter()
+                            .map(|w| format!("`{w}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                )
+                .with("workers", left_out),
+            );
+        }
+    }
+    for w in &workers {
+        if let Some(key) = cx.attached.get(w) {
+            refused.push(
+                set_entry(
+                    "routes",
+                    format!(
+                        "Worker `{}` declares `{key}` in `[deploy.workers.{w}]`, and moving {} with its routes or custom domains is not supported yet: a domain attaches to one Worker at a time, and this release cannot hand it over behind the move.",
+                        (cx.script)(w),
+                        contexts_phrase(&contexts)
+                    ),
+                )
+                .with("worker", (cx.script)(w))
+                .with("key", *key),
+            );
+        }
+    }
+    refused
+}
+
+/// The window warning of one planned move set (D11).
+fn window_warning(set: &PlannedSet) -> Entry {
+    let contexts: Vec<String> = set.moves.iter().map(|m| m.context.clone()).collect();
+    Entry::new(
+        AGENT_MOVE_WINDOW,
+        format!(
+            "moving {} keeps its agents' state, but from the commit on {} until {} goes live again, calls to the moving contexts fail: a window of about one push (about 4 seconds measured).",
+            contexts_phrase(&contexts),
+            set.commit.join(", "),
+            set.go_live.join(", ")
+        ),
+    )
+    .with("contexts", contexts)
+    .with("commit", set.commit.clone())
+    .with("go_live", set.go_live.clone())
+}
+
+fn contexts_phrase(contexts: &[String]) -> String {
+    match contexts {
+        [one] => format!("context `{one}`"),
+        many => format!(
+            "contexts {}",
+            many.iter()
+                .map(|c| format!("`{c}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
 }
 
 #[cfg(test)]

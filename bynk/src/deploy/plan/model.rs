@@ -86,6 +86,10 @@ pub(crate) struct Plan<'a> {
     /// there is any.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     shared_with_default: Vec<super::shared::SharedWithDefault>,
+    /// #3565: each agent move set `--move-agent` names, as a `--dry-run` plans it: its moves and
+    /// the Workers each phase pushes. Present only when there is one.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    moves: Vec<crate::deploy::move_sets::PlannedSet>,
 }
 
 #[derive(Debug, Serialize)]
@@ -762,6 +766,13 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
             if plan.order.len() > 1 {
                 out.push_str(&format!("order {}\n", plan.order.join(" → ")));
             }
+            // #3565: each agent move set, with its phases, after the order it is placed in.
+            for (n, set) in plan.moves.iter().enumerate() {
+                for line in set.lines(n + 1) {
+                    out.push_str(&line);
+                    out.push('\n');
+                }
+            }
             // #3943: advisory, after the plan it qualifies.
             for shared in &plan.shared_with_default {
                 out.push_str(&shared.line(plan.environment));
@@ -943,6 +954,12 @@ impl<'a> Plan<'a> {
         self
     }
 
+    /// #3565: the agent move sets the run plans, listed in the plan.
+    pub(crate) fn with_moves(mut self, moves: Vec<crate::deploy::move_sets::PlannedSet>) -> Self {
+        self.moves = moves;
+        self
+    }
+
     /// #3943: what the environment takes from `default`, listed after the plan.
     pub(crate) fn with_shared(mut self, shared: Vec<super::shared::SharedWithDefault>) -> Self {
         self.shared_with_default = shared;
@@ -999,6 +1016,7 @@ pub(crate) fn derive_plan<'a>(
         warnings: Vec::new(),
         account_notes: Vec::new(),
         shared_with_default: Vec::new(),
+        moves: Vec::new(),
         shown_orphans: orphans.as_named_in(environment),
         orphans,
         order: order
