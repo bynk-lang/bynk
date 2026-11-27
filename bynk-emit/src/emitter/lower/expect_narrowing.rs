@@ -57,12 +57,12 @@ struct Keys {
 /// What a comparison `lv <op> rv` of a read against a literal narrows. A boolean narrows whichever
 /// way the test goes, but `a == 7` narrows `a` to `7` only when it holds, and `a != 7` only when
 /// it does not (a number or a string minus one literal is as wide as before).
-fn leaf_keys(equality: bool, lv: &bynk_ts::TsExpr, rv: &bynk_ts::TsExpr) -> Keys {
+fn leaf_keys(is_eq: bool, lv: &bynk_ts::TsExpr, rv: &bynk_ts::TsExpr) -> Keys {
     let mut keys = Keys::default();
     let Some((key, base, _)) = narrowing_target(lv, rv) else {
         return keys;
     };
-    let (narrowed, other) = if equality {
+    let (narrowed, other) = if is_eq {
         (&mut keys.when_true, &mut keys.when_false)
     } else {
         (&mut keys.when_false, &mut keys.when_true)
@@ -113,15 +113,15 @@ pub(in crate::emitter) fn widen_narrowed(
 }
 
 /// #3775: after the `expect` comparison `lv <op> rv` passes, its read is narrowed. Call it once the
-/// comparison is lowered, which is what widens a read an earlier one narrowed.
+/// comparison is lowered, which is what widens a read an earlier one narrowed. `is_eq` is true for
+/// `==` and false for `!=` (a `!=` that passes narrows a boolean only).
 pub(in crate::emitter) fn record_narrowing(
-    equality: bool,
+    is_eq: bool,
     lv: &bynk_ts::TsExpr,
     rv: &bynk_ts::TsExpr,
     cx: &mut LowerCtx,
 ) {
-    cx.narrowed_reads
-        .extend(leaf_keys(equality, lv, rv).when_true);
+    cx.narrowed_reads.extend(leaf_keys(is_eq, lv, rv).when_true);
 }
 
 /// A condition with the comparisons of a conjunction or disjunction widened left to right, and
@@ -272,4 +272,35 @@ pub(in crate::emitter) fn enter_arms(
 /// Restore what [`enter_arms`] returned.
 pub(in crate::emitter) fn leave_arms(outer: HashSet<String>, cx: &mut LowerCtx) {
     cx.narrowed_reads = outer;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ts_build::{bool_lit, ident, num_lit, str_lit};
+
+    #[test]
+    fn a_comparison_narrows_the_branch_where_typescript_narrows() {
+        // `a == 7` narrows `a` to `7` while it holds; `a != 7` leaves a number as wide as it was.
+        let eq = leaf_keys(true, &ident("a"), &num_lit(7));
+        assert!(eq.when_true.contains("a") && eq.when_false.is_empty());
+        let ne = leaf_keys(false, &ident("a"), &num_lit(7));
+        assert!(ne.when_true.is_empty() && ne.when_false.contains("a"));
+        let s = leaf_keys(true, &str_lit("x"), &ident("s"));
+        assert!(s.when_true.contains("s") && s.when_false.is_empty());
+    }
+
+    #[test]
+    fn a_boolean_comparison_narrows_both_ways() {
+        for is_eq in [true, false] {
+            let keys = leaf_keys(is_eq, &ident("b"), &bool_lit(false));
+            assert!(keys.when_true.contains("b") && keys.when_false.contains("b"));
+        }
+    }
+
+    #[test]
+    fn a_comparison_of_two_reads_narrows_nothing() {
+        let keys = leaf_keys(true, &ident("a"), &ident("b"));
+        assert!(keys.when_true.is_empty() && keys.when_false.is_empty());
+    }
 }

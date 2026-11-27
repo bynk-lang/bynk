@@ -1039,12 +1039,14 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 // Lowering the comparison widens a read an earlier one narrowed (#3775); this one
                 // is recorded only afterwards, so it does not widen itself.
                 let cond = build_value_bin_op(*op, l, vec![lv.clone(), rv.clone()], cx);
-                super::lower::expect_narrowing::record_narrowing(
-                    *op == BinOp::Eq || *op == BinOp::NotEq,
-                    &lv,
-                    &rv,
-                    cx,
-                );
+                if matches!(op, BinOp::Eq | BinOp::NotEq) {
+                    super::lower::expect_narrowing::record_narrowing(
+                        *op == BinOp::Eq,
+                        &lv,
+                        &rv,
+                        cx,
+                    );
+                }
                 // #2622: an operand that holds a `Decimal` prints through the
                 // decimal-aware show, since `JSON.stringify` throws on a `bigint`.
                 let decimal = cx

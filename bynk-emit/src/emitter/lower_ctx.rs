@@ -62,8 +62,9 @@ pub(crate) struct LowerCtx<'a> {
     /// #3981: whether a statement-form `expect … is P(x)` declares `x` for the statements after
     /// it: a case body, not a `property` body (mirrors the checker's `expect_is_bindings`).
     pub(crate) expect_is_bindings: bool,
-    /// #3775: the reads an earlier `expect <read> == <literal>` left narrowed to that literal in
-    /// TypeScript, so a later comparison widens them (`lower_stmt::narrowing_proof`).
+    /// #3775, #4520: reads TypeScript has narrowed to a literal here (an earlier `expect`, or an
+    /// enclosing `if` condition or literal `match` arm, scoped to it); a comparison of one is widened
+    /// to its base type (`expect_narrowing::widen_narrowed`), so it is not TS2367.
     pub(crate) narrowed_reads: HashSet<String>,
     /// #2024: identifiers the generated scaffold around this body already
     /// binds in the body's own JS scope — a test runner's `deps`, `__obs`, and
