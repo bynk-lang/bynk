@@ -7311,6 +7311,53 @@ fn close_imported<S: ScopeTables + ?Sized>(
     hidden
 }
 
+/// #4626: the scopes the defaults of this unit's imported and consumed records are read in.
+///
+/// A record's field default names its type in the declaring unit's scope (`Cookie`'s
+/// `sameSite: SameSite = Lax` means `bynk`'s `SameSite`), but a unit that declares its own type of
+/// the same name shadows the imported one in the composed table, so a default read there finds the
+/// wrong declaration and no value. For each such record with a default, this holds the declaring unit's own types
+/// (its own, then its `uses`), which the emitter reads the defaults in.
+pub fn default_scopes(
+    name: &str,
+    unit_info: &BTreeMap<String, UnitInfo>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    consumed: &HashMap<String, ConsumedType>,
+    imported_from: &HashMap<String, String>,
+) -> HashMap<String, Arc<HashMap<String, Arc<TypeDecl>>>> {
+    let mut out = HashMap::new();
+    let mut by_owner: HashMap<&str, Arc<HashMap<String, Arc<TypeDecl>>>> = HashMap::new();
+    for (type_name, decl) in types {
+        let TypeBody::Record(r) = &decl.body else {
+            continue;
+        };
+        let owner = match (imported_from.get(type_name), consumed.get(type_name)) {
+            (Some(o), _) => o.as_str(),
+            (None, Some(c)) => c.owning_context.as_str(),
+            (None, None) => continue,
+        };
+        if owner == name || !unit_info.contains_key(owner) {
+            continue;
+        }
+        // A default reaches names through `Option`, `List`, generic arguments, sum
+        // payloads and a nested record's own defaults, so no shallower test is
+        // sound: any foreign record with a default is read in its owner's scope.
+        if !r.fields.iter().any(|f| f.init.is_some()) {
+            continue;
+        }
+        let scope = by_owner
+            .entry(owner)
+            .or_insert_with(|| {
+                Arc::new(crate::symbols::combined_types_for_unit_info(
+                    owner, unit_info,
+                ))
+            })
+            .clone();
+        out.insert(type_name.clone(), scope);
+    }
+    out
+}
+
 /// What [`close_reachable_types`] finds beyond the unit's composed table.
 #[derive(Debug, Clone, Default)]
 pub struct ReachedTypes {

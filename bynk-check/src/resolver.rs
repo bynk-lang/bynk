@@ -234,6 +234,12 @@ pub struct ResolvedCommons {
     /// whose free functions may declare capability parameters and shared
     /// capabilities. Set with [`ResolvedCommons::with_is_commons`].
     pub(crate) is_commons: bool,
+    /// #4626: for an imported or consumed record whose defaulted fields name a type this unit
+    /// shadows with its own, the types as the declaring unit sees them, which its defaults are
+    /// read in (`Cookie`'s `sameSite = Lax` is `bynk`'s `SameSite`, not the unit's). Keyed by the
+    /// record's name; empty when nothing is shadowed, which is almost every unit. Set with
+    /// [`ResolvedCommons::with_default_scopes`].
+    pub(crate) default_scopes: HashMap<String, Arc<HashMap<String, Arc<TypeDecl>>>>,
     /// #911: what the checker needs to know about message bundles for this unit's bodies (see
     /// [`crate::symbols::MessageScope`]). Set with [`ResolvedCommons::with_message_scope`].
     pub(crate) message_scope: crate::symbols::MessageScope,
@@ -553,7 +559,26 @@ impl ResolvedCommons {
             stability: Default::default(),
             is_commons: false,
             message_scope: Default::default(),
+            default_scopes: HashMap::new(),
         }
+    }
+
+    /// #4626: record the scopes an imported record's defaults are read in
+    /// ([`crate::project_model::default_scopes`]).
+    pub fn with_default_scopes(
+        mut self,
+        scopes: HashMap<String, Arc<HashMap<String, Arc<TypeDecl>>>>,
+    ) -> Self {
+        self.default_scopes = scopes;
+        self
+    }
+
+    /// #4626: the types the defaults of record `type_name` are read in: the declaring unit's
+    /// where this unit shadows a type they name, else this unit's own.
+    pub fn default_scope(&self, type_name: &str) -> &HashMap<String, Arc<TypeDecl>> {
+        self.default_scopes
+            .get(type_name)
+            .map_or(&self.types, |scope| &**scope)
     }
 
     /// #911: record this unit's [`crate::symbols::MessageScope`]. A builder, so a construction
@@ -1079,6 +1104,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             is_commons: false,
             // Single-file mode has no bundle to check a literal code against.
             message_scope: Default::default(),
+            default_scopes: HashMap::new(),
         };
         (resolved, errors)
     }

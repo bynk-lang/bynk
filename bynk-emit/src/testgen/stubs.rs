@@ -1041,6 +1041,7 @@ pub(super) fn synthetic_typed_commons_for_target(
         unselected_types: Default::default(),
         stability: Default::default(),
         exec_plan: table_plan,
+        default_scopes: HashMap::new(),
     }
 }
 
