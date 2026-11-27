@@ -131,9 +131,11 @@ fn label(flag: Bool) -> String {
 ```
 
 Literal patterns match by value — an integer (which may be negative, `-1 => …`),
-a string, or a boolean. They are `match`-only: to test a single value elsewhere,
-use `==`. A refined type (`type Code = Int where …`) is matched against the same
-literals as its base.
+a string, a boolean, or a `Decimal` (`20.0d`, which also matches `20d` and
+`20.00d`). They are `match`-only: to test a single value elsewhere, use `==`. A
+refined type (`type Code = Int where …`) is matched against the same literals as
+its base. A `Float` is never matched against a literal: floating-point equality is
+exact and `NaN` never equals itself (`bynk.types.float_literal_pattern`).
 
 ## Guard a primitive pattern with `where`
 
