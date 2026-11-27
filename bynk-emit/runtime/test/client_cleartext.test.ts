@@ -181,3 +181,26 @@ test("a Service Binding call is not checked: it never reaches the network, whate
   );
   assert.deepEqual(r.sent, []);
 });
+
+test("the error prints neither a userinfo password nor a query value", async () => {
+  const r = recorder();
+  const options: ClientOptions = {
+    baseUrl: "http://alice:hunter2@api.example.com:8080/v1",
+    fetch: r.fetch,
+    headers: bearer,
+  };
+  await assert.rejects(
+    () => __call(options, undefined, route, () => Ok({ query: "?api_key=sekret-value&x=1" })),
+    (e: unknown) => {
+      assert.ok(e instanceof CleartextCredential);
+      for (const secret of ["hunter2", "alice", "sekret-value", "api_key", "s3cret-token"]) {
+        assert.ok(!e.message.includes(secret), `the message does not print ${secret}: ${e.message}`);
+        assert.ok(!e.url.includes(secret), `the url property does not hold ${secret}: ${e.url}`);
+      }
+      assert.equal(e.url, "http://api.example.com:8080/v1/things", "scheme, host, port and path are kept");
+      assert.match(e.message, /http:\/\/api\.example\.com:8080\/v1\/things/);
+      return true;
+    },
+  );
+  assert.deepEqual(r.sent, []);
+});

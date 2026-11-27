@@ -451,3 +451,20 @@ test("a page's own origin is checked when there is no baseUrl", async () => {
     else Object.defineProperty(globalThis, "location", had);
   }
 });
+
+test("the WebSocket refusal prints neither a userinfo password nor the route parameters", () => {
+  FakeSocket.made = [];
+  assert.throws(
+    () => __webSocket(at("ws://alice:hunter2@api.example.com/socket"), spec(), () => Ok({ params: { room: "secret-room" } }), { bearer: "tok" }, undefined),
+    (e: unknown) => {
+      assert.ok(e instanceof CleartextCredential);
+      for (const secret of ["hunter2", "alice", "secret-room", "room="]) {
+        assert.ok(!e.message.includes(secret), `the message does not print ${secret}: ${e.message}`);
+        assert.ok(!e.url.includes(secret), `the url property does not hold ${secret}`);
+      }
+      assert.equal(e.url, "ws://api.example.com/socket" + "/");
+      return true;
+    },
+  );
+  assert.deepEqual(FakeSocket.made, []);
+});
