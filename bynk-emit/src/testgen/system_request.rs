@@ -10,6 +10,29 @@ use bynk_ts::{TsBinaryOp, TsExpr, TsObjectEntry, TsParam, TsStmt, TsType, TsType
 /// A list of request-init (or header) object entries.
 pub(super) type Entries = Vec<TsObjectEntry>;
 
+/// #3936, #3825: the `Sec-Fetch-Site: same-origin` a driver sends by default, as a browser's own page would:
+/// where a sum has a cookie member, or the handler issues a session, whose route checks the request for
+/// login CSRF. Otherwise `csrf_default`, the lone cookie route's own.
+pub(super) fn default_csrf(
+    csrf_default: Entries,
+    sum: &Option<super::system_sum::SumAuth>,
+    (h, actors): (
+        &bynk_syntax::ast::Handler,
+        &std::collections::HashMap<String, bynk_syntax::ast::ActorDecl>,
+    ),
+) -> Entries {
+    let cookie_arm = sum.as_ref().is_some_and(|s| {
+        s.members
+            .iter()
+            .any(|(_, c)| matches!(c, super::system_sum::SumCredential::Cookie(_)))
+    });
+    if cookie_arm || !bynk_check::actors::issued_cookie_actors(h, actors).is_empty() {
+        vec![header("sec-fetch-site", str_lit("same-origin"))]
+    } else {
+        csrf_default
+    }
+}
+
 /// `"key": value`: a request header, whose key is quoted as the request writes it.
 pub(super) fn header(key: &str, value: TsExpr) -> TsObjectEntry {
     TsObjectEntry::prop(format!("{key:?}"), value)
@@ -70,7 +93,8 @@ pub(super) fn request_init(method: &str, headers: Entries, body: Entries) -> TsE
 }
 
 /// The request URL `https://test<path><query>`: each `:name` segment of `path` is that
-/// parameter's value, and `query` (a query string expression, or none) follows the path.
+/// parameter's value, a final `*name` rest its value as written, and `query` (a query
+/// string expression, or none) follows the path.
 pub(super) fn request_url(path: &str, query: Option<TsExpr>) -> TsExpr {
     request_url_with(path, query, |name| ident(crate::emitter::ts_ident(name)))
 }
@@ -86,8 +110,19 @@ pub(super) fn request_url_with(
     let mut exprs: Vec<TsExpr> = Vec::new();
     let mut current = String::from("https://test");
     let mut any = false;
-    for seg in path.split('/').filter(|x| !x.is_empty()) {
+    let rest = bynk_check::http_rest::rest_name(path);
+    let segs: Vec<&str> = path.split('/').filter(|x| !x.is_empty()).collect();
+    for (i, seg) in segs.iter().enumerate() {
         any = true;
+        // #3752 (D6): a final `*name` rest is the case's value as written, which starts
+        // with `/` unless empty (`files.GET("/files/*key", "/a/b.png")`).
+        if i + 1 == segs.len()
+            && let Some(name) = rest
+        {
+            parts.push(std::mem::take(&mut current));
+            exprs.push(param(name));
+            continue;
+        }
         current.push('/');
         if let Some(name) = seg.strip_prefix(':') {
             parts.push(std::mem::take(&mut current));

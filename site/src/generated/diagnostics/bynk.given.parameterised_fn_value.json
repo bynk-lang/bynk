@@ -1,0 +1,12 @@
+{
+  "blurb": "A function with capability parameters (`given Store: Kv`) has its parameters bound at every call, inside the argument list. Named as a value, as in `keys.forEach(evict)`, it would leave them unchosen, and a binding is never inferred. Write a lambda that binds them instead, `(k) => evict(k, given Inner = Store)`: it says which instance each call uses, where review sees it. A function with only shared capabilities, or none, may still be named as a value.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.parameterised_fn_value",
+  "constructs": [
+    "call"
+  ],
+  "example": "fn evict(key: String) -> Effect[()] given Inner: Kv { … }\n\nfn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {\n\tkeys.forEach(evict)                              // ✗ `Inner` is unbound\n}\n\nfn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {\n\tkeys.forEach((k) => evict(k, given Inner = Store))   // ✓ a lambda that binds\n}",
+  "severity": "error",
+  "summary": "A function with capability parameters is named as a value; a lambda that binds them takes its place."
+}

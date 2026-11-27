@@ -104,6 +104,8 @@ pub(crate) fn validate_rate_limits(table: &UnitTable, errors: &mut Vec<CompileEr
     let agent_handlers = table.agents.values().flat_map(|a| a.handlers.iter());
     for handler in service_handlers.chain(agent_handlers) {
         validate_handler(handler, table, errors);
+        // #3939 (D3 F): the flooding defence of an `ApiKey` route is on by default.
+        errors.extend(crate::api_key::unlimited_warning(handler, table));
     }
 }
 

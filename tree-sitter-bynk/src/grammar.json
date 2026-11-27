@@ -7159,6 +7159,10 @@
         {
           "type": "STRING",
           "value": "SignedCookie"
+        },
+        {
+          "type": "STRING",
+          "value": "ApiKey"
         }
       ]
     },
@@ -10074,6 +10078,48 @@
             {
               "type": "SYMBOL",
               "name": "number_literal"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "-"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "decimal_literal"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "-"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "float_literal"
             }
           ]
         },

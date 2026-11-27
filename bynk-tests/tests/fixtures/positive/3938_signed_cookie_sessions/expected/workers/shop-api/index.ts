@@ -91,7 +91,7 @@ export default {
         {
           if (method === "POST" && __matchPath("/login", path) !== null) {
             __route = "POST /login";
-            const result = await surface.http_POST_login();
+            const result = await surface.http_POST_login(request);
             return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /login" }), request, ["Bynk realm=\"shop.api\""]), __cors_api, request.headers.get("origin")), __security_api);
           }
         }

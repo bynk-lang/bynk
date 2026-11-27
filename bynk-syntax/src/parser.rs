@@ -4240,6 +4240,36 @@ mod tests {
         assert_eq!(sub.flat_binder().map(|n| n.name.as_str()), Some("o"));
     }
 
+    /// #3973: a `Decimal` literal pattern is kept in its normal form, so equal values are equal
+    /// patterns whatever scale was written; its text keeps the scale for the formatter.
+    #[test]
+    fn decimal_literal_patterns_are_equal_by_value() {
+        let literal = |pat: &str| {
+            let b = body_block(&format!("match d {{\n  {pat} => 1\n  _ => 2\n}}"));
+            let ExprKind::Match { arms, .. } = &b.tail.kind else {
+                panic!("{pat:?}: expected a match tail");
+            };
+            let Pattern::Literal { value, text, .. } = arms[0].pattern.clone() else {
+                panic!("{pat:?}: expected a literal pattern");
+            };
+            (value, text)
+        };
+        let (a, a_text) = literal("20.0d");
+        let (b, _) = literal("20d");
+        let (c, _) = literal("20.00d");
+        assert_eq!(a, b);
+        assert_eq!(b, c);
+        assert_eq!(a_text.as_deref(), Some("20.0d"));
+        assert_ne!(literal("20.5d").0, a);
+        assert_eq!(literal("-1.50d").0, literal("-1.5d").0);
+        assert_eq!(literal("0.00d").0, literal("0d").0);
+        assert_eq!(literal("-1.5d").0.describe(), "-1.5d");
+        assert_eq!(literal("0.05d").0.describe(), "0.05d");
+        // A `Float` literal parses; refusing it is the checker's.
+        assert!(matches!(literal("0.1").0, LiteralValue::Float(_)));
+        assert!(matches!(literal("-0.1").0, LiteralValue::Float(t) if t == "-0.1"));
+    }
+
     #[test]
     fn a_refutable_record_let_without_else_names_the_refutable_field() {
         for (body, field) in [

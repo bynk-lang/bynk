@@ -2283,6 +2283,9 @@ fn check_by_clause_contracts(
                     _ if contract.scheme == Scheme::Foreign => {
                         "a `Foreign` actor is admitted only on an `on call` handler or a queue consumer's `on message`"
                     }
+                    ServiceProtocol::WebSocket { .. } if contract.scheme == Scheme::ApiKey => {
+                        crate::api_key::WEBSOCKET_NOTE
+                    }
                     ServiceProtocol::Http => {
                         "public HTTP routes take an anonymous actor — write `by v: Visitor`"
                     }
@@ -2290,6 +2293,12 @@ fn check_by_clause_contracts(
                 }),
             );
         }
+        errors.extend(crate::api_key::by_member_refusal(
+            protocol,
+            by,
+            contract.scheme,
+            actor_ref.span,
+        ));
         // #3904: a WebSocket actor sum takes `None` and `Bearer` members; a cookie or an OIDC token is
         // a single actor (it needs the `Origin` check or the `bynk.oidc` pair, not the sum's first-wins).
         if matches!(protocol, ServiceProtocol::WebSocket { .. })
@@ -3700,6 +3709,10 @@ fn check_actor_contracts(
             Some(Scheme::SignedCookie) => {
                 check_signed_cookie_actor(actor, auth, table, &resolved.types, errors);
             }
+            // #3939: an API key actor.
+            Some(Scheme::ApiKey) => {
+                crate::api_key::check_api_key_actor(actor, auth, table, resolved, errors);
+            }
             Some(_) => {}
         }
         // A declared identity must be a context-ownable (sealed) type — either
@@ -3809,7 +3822,7 @@ fn check_unreachable_routes(table: &UnitTable, errors: &mut Vec<CompileError>) {
             ),
         )
         .with_note(
-            "at the first segment where two routes differ, a literal segment beats a `:name` one; remove this route, or make it match a path the others do not",
+            "at the first segment where two routes differ, a literal segment beats a `:name` one, and a `:name` beats a `*name` rest; remove this route, or make it match a path the others do not",
         );
         for c in covering {
             err = err.with_label(
@@ -3883,6 +3896,7 @@ fn check_service_decls(
     }
 
     check_unreachable_routes(table, errors);
+    crate::http_rest::check_rest_routes(table, &typed.stability, errors);
 
     // v0.140 (ADR 0163): validate handler-position annotations (`@cache`) across
     // every handler — services and agents — so a misplaced annotation is caught
@@ -5466,6 +5480,7 @@ fn validate_service_cors(service: &ServiceDecl, table: &UnitTable, errors: &mut 
     }
     check_ws_cookie_origins(service, table, errors);
     warn_cross_site_cookie_without_credentials(service, errors);
+    warn_issue_on_safe_method(service, table, errors);
 }
 
 /// #3904 (`bynk.ws.cookie_needs_origins`): a `from websocket` service whose `on open` authenticates a
@@ -5549,6 +5564,45 @@ fn check_ws_cookie_origins(
                 "a browser sends the cookie on a cross-site upgrade by itself and a WebSocket is not covered by CORS, so the upgrade is refused with `403` unless its `Origin` is exactly one of these origins; a wildcard would admit every site",
             ),
         );
+    }
+}
+
+/// #3825 (`bynk.actor.signed_cookie_issue_on_safe_method`, a warning): a `GET` that issues a session. A
+/// state-changing route that issues one is checked for login CSRF by fetch metadata and the service's
+/// `cors` origins, which a `GET` is outside of (a link click, a prefetch, an `<img>` all send one), so a
+/// sign-in done as a `GET` is unprotected. Steer the author to `POST`.
+fn warn_issue_on_safe_method(
+    service: &ServiceDecl,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    for handler in &service.handlers {
+        if !matches!(
+            handler.kind,
+            HandlerKind::Http {
+                method: bynk_syntax::ast::HttpMethod::Get,
+                ..
+            }
+        ) {
+            continue;
+        }
+        // A `GET` guarded by a `SignedCookie` actor (a sliding session that re-issues its caller's own
+        // identity) has nothing to plant: the caller already has the session.
+        if crate::actors::signed_cookie_seam_for(handler, &table.actors).is_some() {
+            continue;
+        }
+        for actor in crate::actors::issued_cookie_actors(handler, &table.actors) {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.signed_cookie_issue_on_safe_method",
+                    handler.span,
+                    format!("this `GET` route issues a `{actor}` session, so it is not checked for login CSRF"),
+                )
+                .with_note(
+                    "a route that issues a session and is not a `GET` is refused when its request is cross-site (by fetch metadata, then `Origin` against the service's `cors` origins); a `GET` is outside that check, so a hostile page can make a signed-out visitor's browser sign in as someone else. Issue the session from a `POST`",
+                ),
+            );
+        }
     }
 }
 
@@ -6643,8 +6697,9 @@ fn check_rejected_handlers(table: &UnitTable, errors: &mut Vec<CompileError>) {
 }
 
 /// #3753: `*`, `{` and `}` are reserved in a route segment, literal or
-/// `:name`, so a rest-segment form (#3752) can be added later without changing
-/// what an existing route means. Reports the segment's first reserved
+/// `:name`, so a route form can be added later without changing what an
+/// existing route means. #3752 spent `*` on a final `*name` rest, which the
+/// caller reads before asking here. Reports the segment's first reserved
 /// character, once, and returns whether it found one, so the caller skips the
 /// segment rather than also reporting a parameter named `key*`.
 fn reserved_route_char(
@@ -6662,7 +6717,9 @@ fn reserved_route_char(
             handler.span,
             format!("`{ch}` in the route `{path}` is reserved for a future route form"),
         )
-        .with_note(if seg.starts_with(':') {
+        .with_note(if ch == '*' {
+            "a rest segment is `*` and then a name, and only as the route's whole last segment (`/files/*key`)".to_string()
+        } else if seg.starts_with(':') {
             format!("drop `{ch}` from the parameter's name: a `:name` segment already takes any value, so check it in the handler")
         } else {
             format!("to match a literal `{ch}`, take the segment as a `:name` parameter and check it in the handler")
@@ -6743,7 +6800,20 @@ fn validate_http_handler(
     // #3753: a refused route has no reliable parameter list, so its handler
     // parameters are not also reported as unbound (`extra_param`).
     let mut refused = false;
-    for seg in path.split('/').filter(|s| !s.is_empty()) {
+    let segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    for (i, seg) in segs.iter().copied().enumerate() {
+        // #3752 (D2): a final `*name` is a rest, bound like a parameter; a final
+        // bare `*` is `bynk.http.rest_unnamed` (`crate::http_rest`).
+        if i + 1 == segs.len() {
+            if let Some(name) = crate::http_rest::rest_name(seg) {
+                path_param_names.push(name);
+                continue;
+            }
+            if crate::http_rest::is_unnamed_rest(seg) {
+                refused = true;
+                continue;
+            }
+        }
         if reserved_route_char(seg, path, handler, errors) {
             refused = true;
             continue;
@@ -6766,7 +6836,14 @@ fn validate_http_handler(
             errors.push(CompileError::new(
                 "bynk.http.unbound_path_param",
                 handler.span,
-                format!("path parameter `:{name}` has no matching handler parameter `{name}`",),
+                format!(
+                    "path parameter `{}{name}` has no matching handler parameter `{name}`",
+                    if crate::http_rest::rest_name(path) == Some(name) {
+                        "*"
+                    } else {
+                        ":"
+                    },
+                ),
             ));
         }
     }
@@ -6868,7 +6945,9 @@ fn validate_http_handler(
         }
         // #3910: a path parameter reads as a typed `query` field does, minus `Option`
         // and `List` (a segment is always present and single-valued).
-        if is_path && !is_query_leaf(&p.type_ref, types) {
+        // #3752: a rest's type is `bynk.http.rest_param_type`'s concern.
+        let is_rest = is_path && crate::http_rest::rest_name(path) == Some(p.name.name.as_str());
+        if is_path && !is_rest && !is_query_leaf(&p.type_ref, types) {
             errors.push(
                 CompileError::new(
                     "bynk.http.path_param_not_stringy",
@@ -7770,7 +7849,7 @@ fn secret_at_boundary_error(span: Span, name: &str, what: &str) -> CompileError 
     )
 }
 
-/// #4111: which of `bynk`'s two secret-carrying opaque types a declaration is.
+/// #4111: which of `bynk`'s secret-carrying opaque types a declaration is (#3939 adds the third).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecretKind {
     /// `Secret`: a value from the platform's secret store, read with `reveal` and `matches`.
@@ -7778,6 +7857,9 @@ pub enum SecretKind {
     /// `Authorization`: a header credential built from a `Secret` (`bearer`, `basic`), which
     /// `Fetch` reveals when it sends and which has no reader of its own.
     Authorization,
+    /// #3939 (D2 D): `ApiKeyValue`, the key an `ApiKey` actor's `mint` answers. It has no reader:
+    /// its one way out is a handler returning the `ApiKeySecret` that `mint` answered.
+    ApiKeyValue,
 }
 
 /// #4111: the secret-carrying `bynk` type a declaration is, found by where it is declared and
@@ -7796,6 +7878,8 @@ pub fn secret_kind(decl: &TypeDecl) -> Option<SecretKind> {
         Some(SecretKind::Secret)
     } else if text.contains("type Authorization =") {
         Some(SecretKind::Authorization)
+    } else if text.contains("type ApiKeyValue =") {
+        Some(SecretKind::ApiKeyValue)
     } else {
         None
     }
@@ -8636,7 +8720,7 @@ fn validate_queue_handler(
 
 /// True when `r` resolves to `String`, a refined-base `String`, or an
 /// opaque-base `String`. v0.9 path parameter requirement.
-fn is_string_constructible(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+pub(crate) fn is_string_constructible(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     match r {
         TypeRef::Base(BaseType::String, _) => true,
         TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
@@ -8978,6 +9062,17 @@ pub fn reject_fn_types(
         // it would leak the value into storage, a wire body or a log. A capability
         // operation is where one is returned (`Secrets.get`), in-process, so its signature
         // is exempt.
+        // #3939 (D2 D): an `ApiKeyValue`, or a record or sum that holds one (the `ApiKeySecret` that
+        // `mint` answers), would carry the key into storage, a wire body or a log. Its one exit is an
+        // HTTP handler returning it (`api_key::reject_http_result`), which never reaches here.
+        TypeRef::Named(id)
+            if what != CAPABILITY_SIGNATURE
+                && crate::api_key::carries_api_key_value(&id.name, types) =>
+        {
+            errors.push(crate::api_key::key_at_boundary_error(
+                id.span, &id.name, what,
+            ));
+        }
         TypeRef::Named(id) if what != CAPABILITY_SIGNATURE && is_secret_type(&id.name, types) => {
             errors.push(secret_at_boundary_error(id.span, &id.name, what));
         }
@@ -9470,11 +9565,11 @@ service Api from http {
 mod secret_kind_tests {
     use super::*;
 
-    /// #4111: `secret_kind` finds `Secret` and `Authorization` by their declaration, so any other
+    /// #4111, #3939: `secret_kind` finds `Secret`, `Authorization` and `ApiKeyValue` by their declaration, so any other
     /// opaque type added to `bynk` would be neither restricted nor emitted as a secret. This pins
     /// the set: adding an opaque type to `bynk.bynk` fails here, pointing at `secret_kind`.
     #[test]
-    fn bynk_declares_exactly_two_opaque_types_and_secret_kind_names_each() {
+    fn bynk_declares_exactly_three_opaque_types_and_secret_kind_names_each() {
         let opaque: Vec<(&str, Option<SecretKind>)> = crate::checker::std_type_decls()
             .iter()
             .filter(|t| matches!(t.body, bynk_syntax::ast::TypeBody::Opaque { .. }))
@@ -9484,13 +9579,14 @@ mod secret_kind_tests {
         names.sort_unstable();
         assert_eq!(
             names,
-            ["Authorization", "Secret"],
+            ["ApiKeyValue", "Authorization", "Secret"],
             "`bynk` declares an opaque type that `secret_kind` does not know: decide whether it is \
              secret-carrying, and extend `secret_kind` and this test"
         );
         for (name, kind) in opaque {
             let want = match name {
                 "Secret" => SecretKind::Secret,
+                "ApiKeyValue" => SecretKind::ApiKeyValue,
                 _ => SecretKind::Authorization,
             };
             assert_eq!(kind, Some(want), "{name}");

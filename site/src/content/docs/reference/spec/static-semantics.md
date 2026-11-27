@@ -1689,7 +1689,11 @@ the caller's own `given` (`bynk.given.missing_for_call`) whose kind is exactly `
 (`bynk.given.binding_kind_mismatch`): a derived instance of `K`, the bare `K` where
 `K` allows a bare use, or the caller's own parameter bounded by `K`. It counts as used
 by the caller. A binding is never inferred or defaulted. The callee's shared
-capabilities follow the inclusion rule above. The machine-applicable fix of
+capabilities follow the inclusion rule above. In a commons body the right-hand side
+is necessarily one of the function's own parameters (forwarding). A function with
+capability parameters MUST NOT be named as a value
+(`bynk.given.parameterised_fn_value`); a lambda that binds takes its place. The
+machine-applicable fix of
 `bynk.given.binding_missing` is offered only when the caller holds exactly one
 candidate.
 
@@ -1954,6 +1958,20 @@ In `[p₁, …, pₙ]` and `[p₁, …, pₙ, ..]` / `[p₁, …, pₙ, ..rest]`
 - After `is`, the names bound by a list pattern in scope are its elements that
   are bare names and the named rest, like a variant's flat payload bindings.
 
+**Decimal and Float literal patterns** (#3973, [§4.7.7](/reference/spec/syntactic-grammar/#477-literal_pattern)).
+
+- A `Decimal` literal pattern (`20d`, `20.0d`, `-1.5d`) MUST match a `Decimal`
+  scrutinee, or a refinement of one, and matches by value: `20d`, `20.0d` and
+  `20.00d` are one pattern, as `==` treats them.
+- Like a `String` literal, a `Decimal` literal never completes its type: a `match`
+  over `Decimal` literals needs a `_` arm or a name (`bynk.types.non_exhaustive_match`).
+- An arm whose literal is equal by value to an earlier unguarded arm's (`20d` after
+  `20.0d`) is `bynk.types.unreachable_arm`.
+- A `Float` literal MUST NOT be a pattern, at any depth: floating-point equality is
+  exact and `NaN` never equals itself (`bynk.types.float_literal_pattern`, at the
+  literal). A `Float` is not otherwise a `match` scrutinee.
+- A refined pattern (`_ where …`) is not offered for a `Decimal`.
+
 **Range patterns** (patterns track, slice 5, #2699, [§4.7.13](/reference/spec/syntactic-grammar/#4713-int_range)).
 In `lo..hi`, `lo..` and `..hi`:
 
@@ -2102,8 +2120,13 @@ An HTTP handler MUST return `Effect[HttpResult[T]]`
 (`bynk.http.return_not_effect_http_result`); its route MUST be well-formed and
 unique, MUST NOT use the reserved `/_bynk/` prefix
 (`bynk.http.invalid_path`, `bynk.http.duplicate_route`, `bynk.http.reserved_prefix`),
-MUST NOT contain `*`, `{` or `}` in any segment, which are reserved for a future
-route form (`bynk.http.reserved_route_syntax`),
+MUST NOT contain `{` or `}` in any segment, or `*` other than as a final `*name`
+rest segment, which are reserved for a future route form
+(`bynk.http.reserved_route_syntax`, `bynk.http.rest_unnamed`); a rest segment (#3752,
+experimental) MUST bind a `String` parameter of its name (`bynk.http.rest_param_type`),
+to which the router MUST bind the rest of the path as received, still percent-encoded;
+no two HTTP handlers of a context may share an emitted name
+(`bynk.http.handler_name_collision`);
 and each `:name` segment MUST bind to a parameter of a type a typed `query` field takes, less
 `Option` and `List` (#3910): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or
 opaque type over one of those

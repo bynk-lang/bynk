@@ -120,7 +120,7 @@ capability_parameter ::= identifier ":" identifier
 capability_bindings ::= "given" capability_binding ("," capability_binding)*
 capability_binding ::= identifier "=" qualified_name
 actor_decl ::= "actor" identifier ("{" "auth" "=" scheme scheme_config? ("," "identity" "=" type_ref)? "}" | "=" identifier "where" expression)
-scheme ::= "None" | "Internal" | "Bearer" | "Signature" | "Oidc" | "Foreign" | "SignedCookie"
+scheme ::= "None" | "Internal" | "Bearer" | "Signature" | "Oidc" | "Foreign" | "SignedCookie" | "ApiKey"
 scheme_config ::= "(" scheme_arg ("," scheme_arg)* ")"
 scheme_duration ::= number_literal "." identifier
 scheme_arg ::= identifier "=" (string_literal | number_literal | scheme_duration | identifier | boolean_literal)
@@ -175,7 +175,7 @@ or_pattern ::= pattern "|" pattern
 paren_pattern ::= "(" pattern ")"
 wildcard_pattern ::= "_"
 int_range ::= "-"? number_literal ".." ("-"? number_literal)? | ".." "-"? number_literal
-literal_pattern ::= "-"? number_literal | string_literal | boolean_literal
+literal_pattern ::= "-"? number_literal | "-"? decimal_literal | "-"? float_literal | string_literal | boolean_literal
 variant_pattern ::= (identifier ".")? identifier ("(" (pattern_binding ("," pattern_binding)*)? ","? ")")?
 pattern_binding ::= named_binding | pattern
 named_binding ::= identifier ":" pattern

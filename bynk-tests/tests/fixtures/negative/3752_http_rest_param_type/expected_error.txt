@@ -1,0 +1,2 @@
+bynk.http.rest_param_type
+the rest parameter `key` must be typed `String`

@@ -1527,9 +1527,10 @@ module.exports = grammar({
       ),
     // The closed, compiler-known scheme set. `None`/`Internal` are zero-crypto;
     // `Bearer` (JWT/HS256), `Signature` (HMAC over the body), and `Oidc`
-    // (JWKS/RS256+ES256) are compiler-generated verifiers.
+    // (JWKS/RS256+ES256) are compiler-generated verifiers. #3939: `ApiKey` verifies an opaque
+    // key against the digests its generated agents store.
     scheme: () =>
-      choice("None", "Internal", "Bearer", "Signature", "Oidc", "Foreign", "SignedCookie"),
+      choice("None", "Internal", "Bearer", "Signature", "Oidc", "Foreign", "SignedCookie", "ApiKey"),
     // v0.51: the keyed-args scheme config — `(key = value, …)`. Values are
     // string or integer literals; the checker validates which keys each scheme
     // admits (Bearer: secret; Signature: secret/header/timestamp/tolerance).
@@ -2153,10 +2154,14 @@ module.exports = grammar({
       );
     },
     // v0.130 §2.3.4: a literal pattern — an integer (optionally negated), a
-    // string, or a boolean. A closed set (ADR 0001); no `Float`, no `()`.
+    // string, or a boolean (ADR 0001), and a `Decimal` or `Float` literal (#3973); no `()`.
     literal_pattern: ($) =>
       choice(
         seq(optional("-"), $.number_literal),
+        // #3973: a `Decimal` literal matches by value; a `Float` literal parses so the checker
+        // can say why it is refused (`bynk.types.float_literal_pattern`).
+        seq(optional("-"), $.decimal_literal),
+        seq(optional("-"), $.float_literal),
         $.string_literal,
         $.boolean_literal,
       ),

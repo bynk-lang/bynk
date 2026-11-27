@@ -11,10 +11,11 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use super::api::{CloudflareApi, PushCall, PushRun, VectorizeOp};
+use super::api::{CloudflareApi, PushCall, PushRun};
 use super::error::{CloudflareError, WranglerError};
 use super::paging::{MissingTotal, Numbered, Page};
 use super::process::Wrangler;
+use super::rest::vectorize::IndexConfig;
 use super::rest::{self, Purpose, Request, Rest};
 
 /// The account, over both transports.
@@ -80,6 +81,17 @@ fn bucket_name(name: &str) -> Result<(), CloudflareError> {
     } else {
         Err(CloudflareError::Other(format!(
             "`{name}` is not a valid R2 bucket name, so nothing was sent"
+        )))
+    }
+}
+
+/// `name`, refused unless it can be a Vectorize index name, before it reaches a request path.
+fn index_name(name: &str) -> Result<(), CloudflareError> {
+    if rest::vectorize::is_index_name(name) {
+        Ok(())
+    } else {
+        Err(CloudflareError::Other(format!(
+            "`{name}` is not a valid Vectorize index name, so nothing was sent"
         )))
     }
 }
@@ -204,8 +216,76 @@ impl CloudflareApi for Account<'_> {
         }
     }
 
-    fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {
-        self.wrangler.vectorize(op)
+    /// Followed while a page is full, which, with no paging documented, is one request; never
+    /// past [`rest::vectorize::MAX_PAGES`], and not past a page that brings no name not already
+    /// listed (an endpoint that ignored `?page=N` would repeat its first).
+    fn vectorize_names(&self) -> Result<Vec<String>, CloudflareError> {
+        let mut names: Vec<String> = Vec::new();
+        let rule = Numbered {
+            cap: Some(rest::vectorize::MAX_PAGES),
+            missing_total: MissingTotal::WhileFull,
+            stop_on_empty: false,
+        };
+        rule.follow(|page| -> Result<Page, CloudflareError> {
+            let request = rest::vectorize::list_page(page);
+            let body = self.send(Purpose::Vectorize, &request)?;
+            let (listed, entries) = rest::vectorize::listed(&body)
+                .ok_or_else(|| unreadable(&request, "list of index names"))?;
+            let fresh: Vec<String> = listed.into_iter().filter(|n| !names.contains(n)).collect();
+            let repeated = fresh.is_empty();
+            names.extend(fresh);
+            Ok(Page::of(&body, entries).done_if(repeated))
+        })?;
+        Ok(names)
+    }
+
+    fn vectorize_config(&self, name: &str) -> Result<IndexConfig, CloudflareError> {
+        index_name(name)?;
+        let request = rest::vectorize::get(name);
+        let body = self.send(Purpose::Vectorize, &request)?;
+        rest::vectorize::config(&body).ok_or_else(|| unreadable(&request, "dimensions and metric"))
+    }
+
+    fn vectorize_create(
+        &self,
+        name: &str,
+        dimensions: i64,
+        metric: &str,
+    ) -> Result<(), CloudflareError> {
+        index_name(name)?;
+        self.send(
+            Purpose::Vectorize,
+            &rest::vectorize::create(name, dimensions, metric),
+        )
+        .map(drop)
+    }
+
+    fn vectorize_metadata_indexes(&self, name: &str) -> Result<Vec<String>, CloudflareError> {
+        index_name(name)?;
+        let request = rest::vectorize::metadata_list(name);
+        let body = self.send(Purpose::Vectorize, &request)?;
+        rest::vectorize::metadata(&body)
+            .ok_or_else(|| unreadable(&request, "list of metadata indexes"))
+    }
+
+    fn vectorize_create_metadata_index(
+        &self,
+        name: &str,
+        property: &str,
+        ty: &str,
+    ) -> Result<(), CloudflareError> {
+        index_name(name)?;
+        self.send(
+            Purpose::Vectorize,
+            &rest::vectorize::metadata_create(name, property, ty),
+        )
+        .map(drop)
+    }
+
+    fn vectorize_delete(&self, name: &str) -> Result<(), CloudflareError> {
+        index_name(name)?;
+        self.send(Purpose::Vectorize, &rest::vectorize::delete(name))
+            .map(drop)
     }
 
     fn push(&self, call: PushCall<'_>) -> Result<PushRun, WranglerError> {
@@ -442,6 +522,51 @@ mod tests {
             r#"{"success":true,"result":[{"name":"shop-db-old","uuid":"u"}],"result_info":{"page":1,"per_page":100,"count":1}}"#,
         )]);
         assert_eq!(account(base, &root).d1_find("shop-db").unwrap(), None);
+    }
+
+    /// #4568 review: the index listing is followed while pages are full, and stops at a page
+    /// that brings no new name, so an endpoint that ignored `?page=N` is asked twice, not forever.
+    #[test]
+    fn the_index_listing_follows_full_pages_and_stops_on_a_repeat() {
+        let page = |from: usize, to: usize| -> &'static str {
+            Box::leak(
+                format!(
+                    r#"{{"success":true,"result":[{}],"result_info":{{"per_page":2}}}}"#,
+                    (from..to)
+                        .map(|i| format!(r#"{{"name":"ix-{i}"}}"#))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+                .into_boxed_str(),
+            )
+        };
+        let root = std::env::temp_dir();
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, page(0, 2)),
+            (200, page(2, 4)),
+            (200, page(4, 5)),
+        ]));
+        let (base, seen) = answering_in_turn(answers);
+        assert_eq!(
+            account(base, &root).vectorize_names().unwrap(),
+            ["ix-0", "ix-1", "ix-2", "ix-3", "ix-4"]
+        );
+        assert_eq!(
+            seen.join().unwrap(),
+            [
+                "GET /accounts/acct/vectorize/v2/indexes?page=1",
+                "GET /accounts/acct/vectorize/v2/indexes?page=2",
+                "GET /accounts/acct/vectorize/v2/indexes?page=3",
+            ]
+        );
+        let answers: &'static [(u16, &'static str)] =
+            Box::leak(Box::new([(200, page(0, 2)), (200, page(0, 2))]));
+        let (base, seen) = answering_in_turn(answers);
+        assert_eq!(
+            account(base, &root).vectorize_names().unwrap(),
+            ["ix-0", "ix-1"]
+        );
+        assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
     }
 
     /// 1D.4b: the account answers for its own bucket; a 404 is a bucket it does not hold, and

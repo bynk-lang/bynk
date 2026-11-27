@@ -1,0 +1,9 @@
+[project]
+name = "parameterised-fn-value"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[unstable]
+allow = ["bynk.given.parameters"]

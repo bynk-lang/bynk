@@ -147,11 +147,13 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
     },
     // Hyperdrive H1 (#3318): `postgres.ts` is the driver seam of `Postgres`,
     // handed to the binding by a Worker's compose, so only a Worker with a
-    // `Postgres` instance carries the package. 4.0.0, the newest 4.x that was
-    // 14 days old when #3529 moved it from 3.4.5 (the version ADR 0799 A measured).
+    // `Postgres` instance carries the package. 4.1.1, published 2026-11-11 and
+    // 14 days old on 2026-11-25 (#3549): the newest 4.x that was, and the release
+    // that fixes the Hyperdrive hang 4.1.0 introduced. #3529 moved it from 3.4.5
+    // (the version ADR 0799 A measured) to 4.0.0.
     FirstPartyNpm {
         package: "postgres",
-        version: "4.0.0",
+        version: "4.1.1",
         runtime_module: "postgres",
         reached_by: Reach::CapabilityInstance("Postgres"),
     },
@@ -1592,7 +1594,33 @@ pub fn stability_of(path: &str) -> Option<Stability> {
 /// spelt under `bynk`, as `[unstable] allow` names it, and counts as a
 /// first-party item ([`names_first_party_item`]) and an experimental one
 /// ([`experimental_items`]).
-pub const BUILTIN_EXPERIMENTAL: &[&str] = &["bynk.RequestHeaders.entries", "bynk.given.parameters"];
+pub const BUILTIN_EXPERIMENTAL: &[&str] = &[
+    "bynk.RequestHeaders.entries",
+    "bynk.actor.ApiKey",
+    "bynk.given.parameters",
+    "bynk.http.rest",
+];
+
+/// #3939 (the API keys track, §17): first-party items admitted by another item's gate, as
+/// `(item, gate)`. The `ApiKey` scheme's types are reachable only through an `ApiKey` actor, so
+/// the scheme, its types and its members are one feature behind `bynk.actor.ApiKey`, promoted as
+/// a unit.
+pub const BUILTIN_GATED: &[(&str, &str)] = &[
+    ("bynk.ApiKeyId", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeyLabel", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeySecret", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeyValue", "bynk.actor.ApiKey"),
+    ("bynk.TooManyKeys", "bynk.actor.ApiKey"),
+];
+
+/// The `[unstable] allow` name that admits `path`: its gate, when [`BUILTIN_GATED`] gives one, else
+/// the path itself.
+pub fn gate_of(path: &str) -> &str {
+    BUILTIN_GATED
+        .iter()
+        .find(|(item, _)| covers(item, path))
+        .map_or(path, |(_, gate)| gate)
+}
 
 /// [`stability_of`] over a given table.
 pub fn stability_of_in(units: &[Unit], path: &str) -> Option<Stability> {
@@ -1745,6 +1773,26 @@ pub fn names_first_party_item_in(units: &[Unit], path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// #3939 (D3 B): every `bynk.crypto` binding compares through the runtime's one constant-time
+    /// function, the one the `ApiKey` key store calls (`apiKeyEqual`), rather than a copy.
+    #[test]
+    fn every_crypto_binding_shares_the_runtime_constant_time_comparison() {
+        for (name, src) in [
+            ("cloudflare", CRYPTO_CLOUDFLARE_BINDING),
+            ("node", CRYPTO_NODE_BINDING),
+            ("browser", CRYPTO_BROWSER_BINDING),
+        ] {
+            assert!(
+                src.contains("return constantTimeEqualBytes(a, b, platformTimingSafeEqual());"),
+                "the {name} binding must call the runtime's `constantTimeEqualBytes`"
+            );
+            assert!(
+                !src.contains("s.verify(\"HMAC\", key, mac"),
+                "the {name} binding must not carry its own double-HMAC copy"
+            );
+        }
+    }
+
     #[test]
     fn first_party_pins_are_exact() {
         for d in super::FIRST_PARTY_NPM {
@@ -2237,8 +2285,12 @@ mod tests {
                 "bynk.crypto",
                 // #3752 (D12): a method of a built-in type.
                 "bynk.RequestHeaders.entries",
+                // #3939: the `ApiKey` scheme, with its types and members behind it.
+                "bynk.actor.ApiKey",
                 // #3959: capability parameters, a language form with no unit.
-                "bynk.given.parameters"
+                "bynk.given.parameters",
+                // #3752 (D2): the rest segment, a route form.
+                "bynk.http.rest"
             ]
         );
         let extensible: Vec<(&str, &str)> = UNITS

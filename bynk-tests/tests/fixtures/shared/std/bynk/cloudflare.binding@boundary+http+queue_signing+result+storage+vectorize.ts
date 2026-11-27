@@ -1690,6 +1690,85 @@ export class WorkersAi implements Ai {
     return Ok(sseEvents(reply.value));
   }
 
+  // #4100: `generate`, streamed. The same request as `generate`, asked to stream, and the events
+  // reduced to the text each added. A refusal before the first event is the `Err`, as for
+  // `runStream`; what a later event is, is `deltas`'s to say.
+  async generateStream(model: string, request: GenerateRequest): Promise<Result<AsyncIterable<string>, AiError>> {
+    const body = WorkersAi.chatBody("generateStream", model, request);
+    const reply = await this.call(model, { ...body, stream: true });
+    if (reply.tag === "Err") return reply;
+    if (!(reply.value instanceof ReadableStream)) {
+      return Err({ tag: "AiFailed", message: "the model did not return a stream; generateStream needs a model that streams" });
+    }
+    return Ok(WorkersAi.deltas(sseEvents(reply.value)));
+  }
+
+  // The text deltas of a chat model's events, as an iterator that forwards `return()` at once (a
+  // generator would queue it behind a read that is waiting for the next event, as `sseEvents`
+  // explains). An event that is a fault ends the model's stream too.
+  private static deltas(events: AsyncIterable<string>): AsyncIterableIterator<string> {
+    const inner = events[Symbol.asyncIterator]();
+    const done = { done: true as const, value: undefined };
+    return {
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+      async next() {
+        for (;;) {
+          const r = await inner.next();
+          if (r.done) return done;
+          let text: string | undefined;
+          try {
+            text = WorkersAi.deltaOf(r.value);
+          } catch (e) {
+            await inner.return?.().catch(() => {});
+            throw e;
+          }
+          if (text !== undefined) return { done: false, value: text };
+        }
+      },
+      async return() {
+        await inner.return?.();
+        return done;
+      },
+    };
+  }
+
+  // What one event adds: its `response`, or `choices[0].delta.content`; `undefined` for a known
+  // event with no text (a `usage` report, a role-only or finishing `choices` delta, an empty or
+  // `null` `response`). Any other event is a fault naming its top-level keys, never its values,
+  // which may echo what a user wrote.
+  private static deltaOf(raw: string): string | undefined {
+    let event: unknown;
+    try {
+      event = JSON.parse(raw);
+    } catch {
+      throw new Error("bynk.cloudflare.Ai.generateStream: an event is not JSON");
+    }
+    if (event === null || typeof event !== "object" || Array.isArray(event)) {
+      throw new Error("bynk.cloudflare.Ai.generateStream: an event is not a JSON object");
+    }
+    const e = event as Record<string, unknown>;
+    // `response` wins when it has text; an empty or `null` one falls through to `choices`, as some
+    // models send both shapes, so no text is dropped.
+    if (typeof e.response === "string" && e.response !== "") return e.response;
+    const emptyResponse = e.response === null || e.response === "";
+    const choice = Array.isArray(e.choices) ? (e.choices[0] as { delta?: unknown } | null | undefined) : undefined;
+    if (choice !== undefined && choice !== null && typeof choice === "object" && choice.delta !== null && typeof choice.delta === "object") {
+      const content = (choice.delta as { content?: unknown }).content;
+      if (typeof content === "string" && content !== "") return content;
+      if (typeof content === "string" || content === undefined || content === null) return undefined;
+    }
+    if (emptyResponse) return undefined;
+    const keys = Object.keys(e);
+    // A `usage` report: bare, with the padding field `p`, or the OpenAI-style final chunk
+    // (`choices: []` with `usage`).
+    if (keys.includes("usage") && (!Array.isArray(e.choices) || e.choices.length === 0)) return undefined;
+    throw new Error(
+      `bynk.cloudflare.Ai.generateStream: an event has no text and is not a known non-text one (keys: ${keys.sort().join(", ") || "none"})`,
+    );
+  }
+
   private static badReply(what: string): Result<never, AiError> {
     return Err({ tag: "BadReply", message: what });
   }

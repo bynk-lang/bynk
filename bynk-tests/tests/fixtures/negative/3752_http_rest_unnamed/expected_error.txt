@@ -1,0 +1,2 @@
+bynk.http.rest_unnamed
+the rest segment in the route `/files/*` has no name

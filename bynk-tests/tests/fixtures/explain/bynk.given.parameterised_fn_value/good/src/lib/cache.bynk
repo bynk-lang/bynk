@@ -1,0 +1,11 @@
+commons lib.cache
+
+consumes bynk.cloudflare { Kv }
+
+fn evict(key: String) -> Effect[()] given Inner: Kv {
+	Inner.delete(key)
+}
+
+fn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {
+	keys.forEach((k) => evict(k, given Inner = Store))
+}

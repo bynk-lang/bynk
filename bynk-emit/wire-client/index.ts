@@ -160,6 +160,44 @@ export function __bynkBytesFromBase64Url(s: string): Option<Uint8Array> {
   return decoded;
 }
 
+// #3939: the one constant-time comparison of two byte strings. `bynk.crypto`'s `Crypto.equal` (and
+// its password check) and the `ApiKey` key store both call it, so there is one implementation.
+// `native` is the platform's own constant-time primitive where there is one (`crypto.subtle.
+// timingSafeEqual` on Workers, `node:crypto`'s `timingSafeEqual` on Node); without it, both values
+// are HMACed under a fresh random key and compared with `subtle.verify`, whose comparison is
+// constant time. The length is not a secret, so unequal lengths are unequal at once.
+export type TimingSafeEqual = (a: Uint8Array, b: Uint8Array) => boolean;
+
+export async function constantTimeEqualBytes(
+  a: Uint8Array,
+  b: Uint8Array,
+  native: TimingSafeEqual | undefined,
+): Promise<boolean> {
+  if (a.length !== b.length) {
+    return false;
+  }
+  if (native) {
+    return native(a, b);
+  }
+  const s = globalThis.crypto.subtle;
+  const key = await s.generateKey({ name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+  const mac = await s.sign("HMAC", key, a as BufferSource);
+  return s.verify("HMAC", key, mac, b as BufferSource);
+}
+
+// The platform's constant-time primitive, where the running platform has one: Workers' `crypto.
+// subtle.timingSafeEqual`, else Node's `node:crypto` (through `process.getBuiltinModule`, so no
+// import of a Node module), else none, and `constantTimeEqualBytes` uses the double HMAC.
+export function platformTimingSafeEqualBytes(): TimingSafeEqual | undefined {
+  const s = (globalThis as { crypto?: { subtle?: { timingSafeEqual?: (a: BufferSource, b: BufferSource) => boolean } } })
+    .crypto?.subtle;
+  const workers = s?.timingSafeEqual;
+  if (workers) return (a, b) => workers.call(s, a as BufferSource, b as BufferSource);
+  const proc = (globalThis as { process?: { getBuiltinModule?: (id: string) => unknown } }).process;
+  const node = proc?.getBuiltinModule?.("node:crypto") as { timingSafeEqual?: TimingSafeEqual } | undefined;
+  return node?.timingSafeEqual ? (a, b) => node.timingSafeEqual!(a, b) : undefined;
+}
+
 // #2622: the `Decimal` primitive runtime. A `Decimal` is an exact base-10
 // number: an arbitrary-precision integer `coefficient` (a `bigint`) and a
 // non-negative integer `scale`, the value being `coefficient / 10^scale`. It is
@@ -1539,6 +1577,13 @@ export const MAX_BODY_BYTES = 1048576;
 export const SIGNING_SCHEME = "BYNK-CALL-1";
 export const EDGE_FROM_PREFIX = "BYNK_CALL_FROM_";
 export const EDGE_TO_PREFIX = "BYNK_CALL_TO_";
+// #4526: a callee's second verification slot for an edge, and the markers that retire a slot. A
+// rotation puts the new key in the slot the live one is not in (the old key is never read back:
+// Cloudflare returns no secret's value), and marks the old slot with the instant, in whole seconds
+// since the epoch, after which it is not verified under.
+export const EDGE_FROM_SLOT2_PREFIX = "BYNK_CALL_FROM2_";
+export const EDGE_UNTIL_PREFIX = "BYNK_CALL_UNTIL_";
+export const EDGE_UNTIL_SLOT2_PREFIX = "BYNK_CALL_UNTIL2_";
 
 // A context name an edge key can be derived from: dot-separated segments of
 // lowercase letters and digits, starting with a letter, with single
@@ -1561,6 +1606,33 @@ export function edgeKeyOf(env: unknown, prefix: string, context: string): string
   if (suffix === undefined || typeof env !== "object" || env === null) return undefined;
   const value = (env as Record<string, unknown>)[prefix + suffix];
   return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+// #4526: every key a callee verifies a call from `context` under, the live key first. Each of the
+// two slots counts when it holds a key and either carries no retirement marker (the live one) or its
+// marker is an instant not yet reached. A marker that is not a plain whole number refuses its slot, so
+// a garbled marker fails closed; and the instant is read here, at the moment of verifying, so a slot
+// stops being accepted when its window ends whether or not another deploy ever runs.
+export function edgeVerifyKeysOf(env: unknown, context: string, nowSeconds: number = Date.now() / 1000): string[] {
+  const suffix = edgeSuffix(context);
+  if (suffix === undefined || typeof env !== "object" || env === null) return [];
+  const vars = env as Record<string, unknown>;
+  const live: string[] = [];
+  const retiring: string[] = [];
+  for (const [fromPrefix, untilPrefix] of [
+    [EDGE_FROM_PREFIX, EDGE_UNTIL_PREFIX],
+    [EDGE_FROM_SLOT2_PREFIX, EDGE_UNTIL_SLOT2_PREFIX],
+  ] as const) {
+    const key = vars[fromPrefix + suffix];
+    if (typeof key !== "string" || key === "") continue;
+    const until = vars[untilPrefix + suffix];
+    if (until === undefined) {
+      live.push(key);
+    } else if (typeof until === "string" && /^[0-9]{1,15}$/.test(until) && nowSeconds < Number(until)) {
+      retiring.push(key);
+    }
+  }
+  return [...live, ...retiring];
 }
 
 // I3 (#1971): a foreign caller's secret, by its declared name, from `env`.
@@ -1712,8 +1784,9 @@ export async function verifyCall(
   if (bytes === undefined) return new Response("Payload Too Large", { status: 413 });
   const refused = new Response("Unauthorized", { status: 401 });
   const caller = request.headers.get(CALLER_HEADER) ?? "";
-  const key = Object.hasOwn(foreign, caller) ? foreignKeyOf(env, foreign[caller]) : edgeKeyOf(env, EDGE_FROM_PREFIX, caller);
-  if (key === undefined) return refused;
+  const foreignKey = Object.hasOwn(foreign, caller) ? foreignKeyOf(env, foreign[caller]) : undefined;
+  const keys = Object.hasOwn(foreign, caller) ? (foreignKey === undefined ? [] : [foreignKey]) : edgeVerifyKeysOf(env, caller);
+  if (keys.length === 0) return refused;
   const timestamp = request.headers.get(TIMESTAMP_HEADER) ?? "";
   if (!TIMESTAMP_SHAPE.test(timestamp)) return refused;
   if (Math.abs(Date.now() / 1000 - Number(timestamp)) > SIGNATURE_WINDOW_SECONDS) return refused;
@@ -1731,12 +1804,14 @@ export async function verifyCall(
     timestamp,
     bodyDigest: await sha256Hex(bytes),
   };
-  const ok = await crypto.subtle.verify(
-    "HMAC",
-    await hmacKey(key, "verify"),
-    sig,
-    new TextEncoder().encode(signingInput(fields)),
-  );
+  const input = new TextEncoder().encode(signingInput(fields));
+  let ok = false;
+  for (const key of keys) {
+    if (await crypto.subtle.verify("HMAC", await hmacKey(key, "verify"), sig, input)) {
+      ok = true;
+      break;
+    }
+  }
   if (!ok) return refused;
   // #3895: only a request that proved its caller is read for a trace.
   admitTrace(request);

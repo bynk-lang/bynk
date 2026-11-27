@@ -980,6 +980,17 @@ impl DerivedInstance {
             })
     }
 
+    /// The type named by a `Container`'s `@instances(by: …)` (#4112), if it carries one.
+    pub fn instance_key(&self) -> Option<&str> {
+        self.options
+            .iter()
+            .find(|(o, _)| o == crate::firstparty::CONTAINER_INSTANCES_OPTION)
+            .and_then(|(_, v)| match v {
+                OptionValue::Type(name) => Some(name.as_str()),
+                _ => None,
+            })
+    }
+
     /// The value of list option `name` (a list of string literals), or empty
     /// when the instance does not carry it.
     pub fn list(&self, name: &str) -> &[String] {

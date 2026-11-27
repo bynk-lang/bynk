@@ -1,0 +1,9 @@
+context acme.api
+
+
+type AccountId = String where NonEmpty
+
+type RobotId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER"), identity = AccountId }
+actor Robot { auth = ApiKey(secret = "ROBOT_KEY_PEPPER", prefix = "rbt"), identity = RobotId }

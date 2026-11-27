@@ -881,9 +881,16 @@ pub(crate) fn require_callee_given(
     if given_fn_refusal(callee, true).is_some() {
         return;
     }
-    // #3959: a commons function's capability parameters are bound at the call.
-    if let Some(site) = site {
-        super::cap_bindings::check_call_bindings(name, callee, site, ctx);
+    // #3959: a commons function's capability parameters are bound at the call,
+    // so one cannot be named as a value (track Q8).
+    match site {
+        Some(site) => super::cap_bindings::check_call_bindings(name, callee, site, ctx),
+        None if callee.given.iter().any(|g| g.is_parameter()) => {
+            ctx.errors
+                .push(super::cap_bindings::parameterised_fn_value(name, callee));
+            return;
+        }
+        None => {}
     }
     let mut missing: Vec<String> = Vec::new();
     for c in callee.given.iter().filter(|c| !c.is_parameter()) {
@@ -4647,6 +4654,9 @@ fn check_test_service_address(
         // Type the route-pattern string as an ordinary string; check the rest.
         let _ = type_of(&args[0], None, ctx);
         let mut positional = &args[1..];
+        // #3752: a literal rest is one the router could bind, so it means the
+        // same at every tier.
+        crate::http_rest::check_rest_arguments(path, &params, positional, ctx.errors);
         // #2910: a route that declares no `headers:` parameter may still be
         // sent request headers: a trailing `RequestHeaders` argument. A route
         // that declares one fills it with the argument already, so a further

@@ -781,11 +781,13 @@ access to the kinds listed. Without the variables, the plan stays the ledger's
 and a note says so. A listing that fails is a warning, never a failure.
 
 **Credentials for account resources.** The push runs through wrangler, so
-`wrangler login` is enough for it. Creating or deleting a KV namespace, and
-creating an R2 bucket or a D1 database, goes through Cloudflare's API, as
-Hyperdrive and the linked kinds already do. That needs `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID`, the token with "Workers KV Storage: Edit", "Workers R2
-Storage: Edit" or "D1: Edit" for the kinds it touches. When a step needs them,
+`wrangler login` is enough for it. Creating or deleting a KV namespace, creating
+an R2 bucket or a D1 database, and every Vectorize call, go through Cloudflare's
+API, as Hyperdrive and the linked kinds already do. That needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with "Workers KV
+Storage: Edit", "Workers R2 Storage: Edit", "D1: Edit" or "Vectorize: Edit" for
+the kinds it touches. A project with a `Vectorize` needs them on every deploy,
+because each deploy checks its indexes. When a step needs them,
 `deploy` checks for both after the plan and before the confirmation, and
 refuses, with nothing created, naming the missing variable and the permission.
 A run that needs nothing asks nothing: a redeploy whose namespaces, buckets and
@@ -1956,6 +1958,81 @@ It needs `CLOUDFLARE_API_TOKEN` (with Workers Scripts and D1 read access) and
 `CLOUDFLARE_ACCOUNT_ID`. A version can be reverted only if the `bynk` that
 deployed it recorded its deploy facts; for any earlier version, redeploy its
 tag. A refusal exits non-zero and changes nothing.
+
+**The JSON plan.** With `--format json`, `revert` writes the plan as one JSON document to
+stdout, before it asks to confirm (and instead of the confirmation with `--dry-run`):
+
+```json
+{
+  "version": 1,
+  "environment": "default",
+  "workers": [
+    {
+      "worker": "shop", "script": "shop",
+      "live_version": "v2", "target_version": "v1",
+      "checks": [
+        { "check": "contracts", "subject": "shop", "verdict": "ok",
+          "detail": "no skew against the other live Workers" }
+      ],
+      "ok": true,
+      "lock_changes": true
+    }
+  ],
+  "ok": true,
+  "notes": []
+}
+```
+
+`workers` is in the order they would be reverted. A worker's `ok` is `true` when none of its
+`checks` refused, and the top-level `ok` is `true` when every worker's is. The run exits non-zero
+when `ok` is `false`. `lock_changes` says whether the revert changes the Worker's entry in
+`bynk.deploy.lock`, and `notes` are lines to read before confirming. Each check is
+`{"check", "subject", "verdict", "detail"}`, and a refusal adds `code`, the registered
+`bynk.revert.*` code, so a script matches on it. `verdict` is one of two words:
+
+| `verdict` | Meaning |
+|---|---|
+| `ok` | The check found nothing that makes the rollback unsafe. It has no `code`. |
+| `refused` | The check found something, `detail` says what, and `code` names it. The worker's `ok` is `false`. |
+
+| `check` | What it looks at | Refusal `code` |
+|---|---|---|
+| `facts` | The deploy facts recorded on the live version and the target. | [`bynk.revert.facts_missing`](/reference/diagnostics/bynk.revert.facts_missing/) |
+| `history` | Placing the live version and the target in the Worker's deployment history. | [`bynk.revert.history_unplaceable`](/reference/diagnostics/bynk.revert.history_unplaceable/) |
+| `members` | A `[deploy.workers.<key>]` group holding the same contexts in both versions. | [`bynk.revert.membership_changed`](/reference/diagnostics/bynk.revert.membership_changed/) |
+| `contracts` | Contract hashes against the other live Workers, as if every selected Worker were reverted. | [`bynk.revert.contract_skew`](/reference/diagnostics/bynk.revert.contract_skew/) |
+| `ids` | Each bound resource being the one `bynk.deploy.lock` records. | [`bynk.revert.id_unrecorded`](/reference/diagnostics/bynk.revert.id_unrecorded/) |
+| `secrets` | A secret changed since the target was live. | [`bynk.revert.secret_changed`](/reference/diagnostics/bynk.revert.secret_changed/) |
+| `d1` | D1 migrations applied after the target was built. | [`bynk.revert.database_schema_ahead`](/reference/diagnostics/bynk.revert.database_schema_ahead/) |
+| `agent` | The agent schema version the target writes against stored instances. | [`bynk.revert.agent_schema_older`](/reference/diagnostics/bynk.revert.agent_schema_older/) |
+| `layout` | The agent storage layout the target writes. | [`bynk.revert.layout_older`](/reference/diagnostics/bynk.revert.layout_older/) |
+| `classes` | The Durable Object classes of the live version and the target. | [`bynk.revert.class_changed`](/reference/diagnostics/bynk.revert.class_changed/) |
+| `container` | A container class the rollback restores. | none: it only passes, with a `warning:` in `detail` that running instances keep the image they started with. |
+
+A check can appear for each binding or class it looks at, so a worker can have several of the
+same `check`; match on `code`, not on position.
+
+**Missing credentials.** A revert reads the account, so it stops when `CLOUDFLARE_API_TOKEN` or
+`CLOUDFLARE_ACCOUNT_ID` is unset, once it has checked its own arguments and read `bynk.deploy.lock`.
+With `--format json` it writes this to stdout, beside the `bynk: error:` line on stderr, and exits
+non-zero:
+
+```json
+{
+  "error": {
+    "code": "bynk.cloudflare.credentials_missing",
+    "missing": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
+    "message": "set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to revert: …"
+  }
+}
+```
+
+`missing` names only the variables that are unset, and the `message` says what the token needs.
+An `error` document replaces the plan, so a client reads `error` first. **Only this failure is a
+structured document.** Every other failure of a revert (`--to` without `--context`, a
+`bynk.deploy.lock` that does not read or records no deployed Worker, a `--context` or `--worker`
+that is not recorded) is the `bynk: error:` line on stderr, a non-zero exit and an empty stdout, and
+the other commands that read the account say the same on stderr.
 
 ---
 

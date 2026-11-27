@@ -104,6 +104,56 @@ impl Explain {
 /// project trees `bad/` and `good/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.actor.api_key_agent_name_reserved",
+        blurb: "An `ApiKey` actor's keys live in two agents the compiler generates and names after it: `<Actor>Keys`, which holds one identity's keys and is the only agent a request asks, and `<Actor>KeyOwner`, which maps an identity to its key store. Their names are reserved in the declaring context, so an author's agent, type, function, service, actor or capability with one of them is refused. Rename it.",
+        example: "agent ClientKeys {   // ✗ the name of `Client`'s generated key store\n    key id: String\n}\n\nagent ClientLedger {   // ✓\n    key id: String\n}",
+    },
+    Explain {
+        code: "bynk.actor.api_key_bad_arg",
+        blurb: "Each `ApiKey` key takes one kind of value. `secret` names the environment variable holding the pepper, as a string. `prefix` is 2 to 16 lower-case letters and digits starting with a letter, and every key starts with it. `header` is an HTTP header name to read the key from; omit it to read `Authorization: Bearer <key>`, and it cannot be `Authorization`, `Cookie`, `Host`, `Content-Length` or `Content-Type`. A key given twice is refused too, since the first would win quietly.",
+        example: "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"Acme\"), identity = AccountId }   // ✗ upper case\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"acme\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_identity_not_string_constructible",
+        blurb: "An `ApiKey` actor's key store answers the identity a key was minted for as a string, and the seam mints it through the identity type's `of` before the handler runs. So the identity must be a context-owned type built from a `String`: a refined or opaque `String`.",
+        example: "type Account = { id: Int }\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = Account }     // ✗ a record\n\ntype AccountId = String where NonEmpty\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_internal",
+        blurb: "`ApiKey` names an actor scheme, not a value, so a program has no `ApiKey` members to call. The key store the compiler generates for an `ApiKey` actor compares digests with an internal constant-time comparison, the same one `bynk.crypto`'s `Crypto.equal` uses, which only that generated code can reach. To compare a secret in your own code, use `Secret.matches` or `Crypto.equal`.",
+        example: "let same <- ApiKey.equal(a, b)   // ✗ internal to the generated key store\n\nlet same <- Crypto.equal(a, b)   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_mint_outside_handler",
+        blurb: "`Actor.mint(identity, label)` hashes the new key under the pepper, and the pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's. So `mint` is legal only in a service handler. Mint the key there and return it; a provider or agent gets what it needs from the handler.",
+        example: "agent Accounts {\n    key id: AccountId\n}\n\non call open(label: ApiKeyLabel) -> Effect[()] given Clock {\n    let _ <- Client.mint(self.id, label)   // ✗ in an agent\n}\n\non POST(\"/accounts/:id/keys\") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {\n    let r <- Client.mint(id, body.label)   // ✓ in a service handler\n}",
+    },
+    Explain {
+        code: "bynk.actor.api_key_missing_secret",
+        blurb: "An `ApiKey` actor stores each key as an HMAC keyed with a pepper, an environment secret the store never sees, so the compiler needs to know which variable holds it. Name it: `ApiKey(secret = \"CLIENT_KEY_PEPPER\")`. The string is the variable's name, never the pepper; `bynk deploy` mints a pepper when the variable is unset.",
+        example: "actor Client { auth = ApiKey, identity = AccountId }                                // ✗ no pepper named\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_prefix_shared",
+        blurb: "Every key an `ApiKey` actor mints starts with its `prefix`, which makes a leaked key recognisable and, in an actor sum, tells the seam which actor a key is for without a lookup. Two `ApiKey` actors in one context with the same prefix (the default is `bk`) make their keys indistinguishable, so give each its own.",
+        example: "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }\nactor Robot { auth = ApiKey(secret = \"ROBOT_KEY_PEPPER\"), identity = RobotId }   // ✗ both `bk`\n\nactor Robot { auth = ApiKey(secret = \"ROBOT_KEY_PEPPER\", prefix = \"rbt\"), identity = RobotId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_secret_shared",
+        blurb: "An `ApiKey` actor's pepper hashes its own keys only. A variable that is also another actor's `secret` or `previous` would be one key doing two jobs, so a credential of one scheme could be checked against the other. Give each actor its own variable.",
+        example: "actor User { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }\nactor Client { auth = ApiKey(secret = \"AUTH_SECRET\"), identity = AccountId }          // ✗ shared\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_unknown_key",
+        blurb: "An `ApiKey` actor's config keys are a closed set: `secret`, `prefix` and `header`. Any other key is refused rather than ignored, because an ignored key is a rule you believed you had written. `ttl` (key expiry) and `previous` (pepper rotation) are reserved for a later release and refused until then: a key does not expire yet, and changing the pepper ends every key.",
+        example: "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefx = \"acme\"), identity = AccountId }   // ✗ misspelt\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"acme\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_unlimited",
+        blurb: "A well-formed key is cheap to fabricate (its checksum is public), and each one the seam parses costs a key-store request. A route guarded by an `ApiKey` actor should therefore limit requests by client address before it authenticates, with `@rateLimit(Limiter, key: clientIp)`. This is a warning, not an error, so a service rate-limited at its edge still builds. A `key: identity` limit does not help here, because a fabricated key never verifies and so never reaches it.",
+        example: "on GET(\"/orders\") () -> Effect[HttpResult[List[Order]]] by c: Client { … }   // ⚠ no limit before authentication\n\n@rateLimit(PerIp, key: clientIp)\non GET(\"/orders\") () -> Effect[HttpResult[List[Order]]] by c: Client { … }   // ✓",
+    },
+    Explain {
         code: "bynk.actor.bearer_bad_arg",
         blurb: "A `Bearer` actor's `issuer`, `audience` and `trustFrom` are non-empty strings: the `iss` and `aud` its tokens must carry, and the name of the environment variable whose JSON `{ \"issuer\", \"audience\" }` replaces them at run time. An empty string or another kind of value is refused. Write the claim as a string, as `issuer = \"web\"`.",
         example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"\"), identity = UserId }      // ✗ an empty issuer\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\"), identity = UserId }   // ✓",
@@ -395,6 +445,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.actor.signed_cookie_issue_needs_clock",
         blurb: "`User.issue(identity)` signs a cookie that expires, so it reads the current time from the `Clock` capability, and a handler's dependencies are always visible in its `given` clause (and a test can stub the clock to know exactly the cookie it gets). Add `consumes bynk { Clock }` to the context and `given Clock` to the handler.",
         example: "let c <- User.issue(body)   // ✗ the handler lists no `given Clock`\n\nlet c <- User.issue(body)   // ✓ with `given Clock` on the handler",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_issue_on_safe_method",
+        blurb: "A route that issues a session cannot be guarded by the actor it issues for: the caller has no session yet. So that route is where login CSRF happens, a hostile page making a signed-out visitor's browser post the attacker's own credential, after which the victim works signed in as the attacker, and `SameSite` does not help because the attacker wants the cookie set. A route that issues a session and is not a `GET` is therefore checked as a guarded route is, before its body: fetch metadata, then `Origin` against the service's `cors` origins. A `GET` is outside that check (a link click, a prefetch and an image all send one), so a sign-in done as a `GET` is unprotected, and this warns. A `GET` guarded by the same actor, which re-issues its caller's own session, is not warned: there is no session to plant. Issue the session from a `POST`.",
+        example: "on GET(\"/login\") (token: String) -> Effect[HttpResult[String]] by v: Visitor given Clock { … }   // ⚠ issues a session from a `GET`\n\non POST(\"/login\") (body: Login) -> Effect[HttpResult[String]] by v: Visitor given Clock { … }   // ✓ checked for login CSRF",
     },
     Explain {
         code: "bynk.actor.signed_cookie_issue_outside_handler",
@@ -2431,6 +2486,11 @@ agent Cart {
         example: "context shop\n\nfn forget(id: String) -> Effect[()] given Store: Kv { … }   // ✗ a context function\n\nfn forget(id: String) -> Effect[()] given Sessions {         // ✓ the instance, by name\n\tSessions.delete(id)\n}",
     },
     Explain {
+        code: "bynk.given.parameterised_fn_value",
+        blurb: "A function with capability parameters (`given Store: Kv`) has its parameters bound at every call, inside the argument list. Named as a value, as in `keys.forEach(evict)`, it would leave them unchosen, and a binding is never inferred. Write a lambda that binds them instead, `(k) => evict(k, given Inner = Store)`: it says which instance each call uses, where review sees it. A function with only shared capabilities, or none, may still be named as a value.",
+        example: "fn evict(key: String) -> Effect[()] given Inner: Kv { … }\n\nfn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {\n\tkeys.forEach(evict)                              // ✗ `Inner` is unbound\n}\n\nfn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {\n\tkeys.forEach((k) => evict(k, given Inner = Store))   // ✓ a lambda that binds\n}",
+    },
+    Explain {
         code: "bynk.given.shared_as_parameter",
         blurb: "A capability parameter exists to choose between instances, so its bound must be a kind with instances (`Kv`, `D1`, `R2`, …). A capability with none (`Clock`, `Random`, `Logger`, `Fetch`, `Secrets`, `Locale`, `Idempotency`, the Cloudflare singletons, `Crypto`) has exactly one per caller, so a binding would add a name and no choice. Name it bare, as a shared capability: `given Logger`.",
         example: "fn note(text: String) -> Effect[()] given L: Logger {   // ✗ there is only one `Logger`\n\tL.info(text)\n}\n\nfn note(text: String) -> Effect[()] given Logger {      // ✓ a shared capability\n\tLogger.info(text)\n}",
@@ -2780,6 +2840,11 @@ agent Cart {
         example: "type Signup = { email: String }\n\n@form(contentType: \"application/x-www-form-urlencoded\")    // ✗ `@form` takes no argument\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }\n\n@form    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.handler_name_collision",
+        blurb: "Each HTTP handler becomes a method on its service, named from its method and route: `http_GET`, then one part per segment, `Param_id` for `:id` and `Rest_key` for `*key`, with every character outside `A-Z`, `a-z` and `0-9` written `_`. That spelling is not one-to-one, so two routes can share a name (`/a-b`, `/a_b` and `/a/b` all give `http_GET_a_b`), and one handler would then answer both paths. Every service of a context is composed into one object, so the names are the context's, and the second such route in a context is refused, whichever services the two are in. Spell one route differently.",
+        example: "on GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a_b\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ both are `http_GET_a_b`\n\non GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/ab\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
         code: "bynk.http.headers_field_consumed",
         blurb: "A route guarded by an actor consumes the credential it carries before the handler runs: `authorization` for a `Bearer` or `Oidc` actor, the signature header for a `Signature` one, and the session cookie out of `cookie` for a `SignedCookie` one. The typed `headers` record is built from what is left, so a field that reads one of them is always absent, and a required field makes every request a `400`. The route compiles but can never succeed, so it is refused. Read the credential through the actor's principal instead, or drop the field. An `Option` or `List` field is allowed, because it is merely always empty, but it draws `bynk.http.headers_field_consumed_optional`.",
         example: "type Auth = { authorization: String }          // ✗ the Bearer actor consumes `authorization`\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }\n\ntype Auth = { accept: String }                 // ✓ a header the actor does not consume\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }",
@@ -2994,8 +3059,18 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.reserved_route_syntax",
-        blurb: "`*`, `{` and `}` are reserved in a route, both in a literal segment and in a `:name` parameter, for a future form that matches the rest of a path. Matched literally, such a segment would quietly change meaning when that form arrives, so it is refused now. To match a literal `*` or brace, take the segment as a `:name` parameter and check its value in the handler. A route that does not start with `/` is `bynk.http.invalid_path`.",
-        example: "on GET(\"/files/*key\") () -> Effect[HttpResult[String]] by v: Visitor { … }             // ✗ `*` is reserved\n\non GET(\"/files/:key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        blurb: "`{` and `}` are reserved in a route, in a literal segment and in a `:name` parameter, for a future in-segment form, and so is `*` everywhere but one place: the start of a route's last segment, where `*name` is a rest segment that matches the rest of the path. Matched literally, a reserved character would quietly change meaning when its form arrives, so it is refused now. To match a literal `*` or brace, take the segment as a `:name` parameter and check its value in the handler. A bare final `*` is `bynk.http.rest_unnamed`; a route that does not start with `/` is `bynk.http.invalid_path`.",
+        example: "on GET(\"/files/*key/raw\") () -> Effect[HttpResult[String]] by v: Visitor { … }        // ✗ a rest is last\n\non GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.rest_param_type",
+        blurb: "A `*name` rest segment binds the rest of the path as it was received: one text value, still percent-encoded, that starts with `/` unless it is empty and keeps empty segments and a trailing slash. Only `String` can hold that faithfully, so the parameter it binds must be typed `String`. Decode it in the handler with `percentDecode()` (which is `None` for a malformed escape), or parse it there. A `:name` parameter may take other types; see `bynk.http.path_param_not_stringy`.",
+        example: "on GET(\"/files/*key\") (key: Int) -> Effect[HttpResult[String]] by v: Visitor { … }      // ✗\n\non GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.rest_unnamed",
+        blurb: "A rest segment, a route's last segment written `*name`, matches the rest of a path and binds it to the handler parameter of that name, as a `:name` segment binds one segment. A bare `*` binds nothing, so it is refused. Name it and take the parameter. A `*` anywhere other than the start of the last segment is `bynk.http.reserved_route_syntax`.",
+        example: "on GET(\"/files/*\") () -> Effect[HttpResult[String]] by v: Visitor { … }                // ✗\n\non GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
         code: "bynk.http.return_not_effect_http_result",
@@ -3049,7 +3124,7 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.unreachable_route",
-        blurb: "A router tries the routes of a method in a fixed order: they are compared segment by segment, left to right, and at the first segment where two differ a literal segment beats a `:name` one. So `GET /users/me` answers `/users/me` and `GET /users/:id` answers every other `/users/<x>`, whichever is written first. Overlap is fine, even intended. But a route is refused when every path it matches is answered first by other routes (of the same method, in this context or, in a worker group, in any member): no request could ever reach it. Parameter names are not part of the shape, so `GET /a/:x` beside `GET /a/:y` leaves the second unreachable. Remove the route, or make it match a path the others do not.",
+        blurb: "A router tries the routes of a method in a fixed order: they are compared segment by segment, left to right, and at the first segment where two differ a literal segment beats a `:name` one, and a `:name` beats a `*name` rest. So `GET /users/me` answers `/users/me` and `GET /users/:id` answers every other `/users/<x>`, whichever is written first. Overlap is fine, even intended. But a route is refused when every path it matches is answered first by other routes (of the same method, in this context or, in a worker group, in any member): no request could ever reach it. Parameter names are not part of the shape, so `GET /a/:x` beside `GET /a/:y` leaves the second unreachable. Remove the route, or make it match a path the others do not.",
         example: "on GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:y\") (y: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `/a/:x` already answers every path it matches\n\non GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓ a literal and a parameter overlap, and each is reachable",
     },
     Explain {
@@ -5667,6 +5742,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   let r <- api.GET(\"/items\") by User(\"ada\")   // ✓",
     },
     Explain {
+        code: "bynk.test.rest_argument",
+        blurb: "A test case addresses a rest route by its pattern and then the rest, which the case gives as the router would bind it: `\"\"`, or text that starts with `/`, as a request carries it. At the `system` tier the rest is sent as written after the prefix, so a rest without its leading `/` would request another path (`/raw/*path` with `\"a/b\"` asks for `/rawa/b`), and the case would mean one thing at one tier and another at the next. So a literal rest is refused when it is neither `\"\"` nor starts with `/`, when it is `\"\"` under a root rest (which always holds at least `/`), or when it holds `?`, `#` or a `.` or `..` segment, which a path never brings to a rest. Write the rest as the request would.",
+        example: "let r <- api.GET(\"/raw/*path\", \"a/b\") by Visitor   // ✗\n\nlet r <- api.GET(\"/raw/*path\", \"/a/b\") by Visitor   // ✓",
+    },
+    Explain {
         code: "bynk.test.revoked_needs_sessions_route",
         blurb: "`by Revoked` sends a cookie for a session that was issued and then \
                 revoked in the session agent, so it needs a route whose seam \
@@ -6276,6 +6356,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.file_at_boundary",
         blurb: "A `File` is one uploaded part of a `@multipart` request, held in memory for the handler that receives it. A record may have a `File` field, alone, in an `Option` or in a `List`, which is how a `@multipart` `body` names its parts. But a `File`, or a record carrying one, is refused as an agent store field or key, an event field, a handler result, or any handler parameter but that `body`. Take the part's `bytes`, and the `filename` and `contentType` you need, in the handler, and keep those.",
         example: "consumes bynk { File }\n\nagent Gallery {\n    key id: String\n    store photo: Cell[Option[File]]     // ✗ an upload is not kept as a `File`\n}\n\nagent Gallery {\n    key id: String\n    store photo: Cell[Option[Bytes]]    // ✓ keep its bytes\n}",
+    },
+    Explain {
+        code: "bynk.types.float_literal_pattern",
+        blurb: "A `Float` cannot be matched against a literal. Floating-point equality is exact and `NaN` never equals itself, so an arm such as `0.1 =>` rarely means what it seems: the value a calculation produces is seldom exactly `0.1`. The same holds for a `Float` field of a record pattern or a payload. A `Float` is not a `match` scrutinee at all, so compare it with `<`, `>=` or a tolerance in an `if`: `if x < 0.5 { … }`. A `Decimal` has none of this trouble: its literal patterns match by value (`20d`, `20.0d` and `20.00d` are one pattern), so a price tier or a VAT rate is written as a `Decimal` literal arm.",
+        example: "fn band(x: Float) -> String {\n    match x {\n        0.1 => \"tenth\"    // ✗ a `Float` can't be matched against a literal\n        _ => \"other\"\n    }\n}\n\nfn band(x: Float) -> String {\n    if x < 0.5 { \"low\" } else { \"other\" }    // ✓ compare instead\n}",
     },
     Explain {
         code: "bynk.types.form_uncodable",
@@ -7465,6 +7550,46 @@ pub fn lookup(code: &str) -> Option<&'static DiagnosticInfo> {
 /// Every diagnostic code the compiler emits, sorted by code.
 pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
+        "bynk.actor.api_key_agent_name_reserved",
+        "An author's declaration takes the name of an agent the compiler generates for an `ApiKey` actor (`<Actor>Keys`, `<Actor>KeyOwner`) (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_bad_arg",
+        "An `ApiKey` config value has the wrong kind, or a key is repeated (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_identity_not_string_constructible",
+        "An `ApiKey` actor's identity is not a string-constructible type (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_internal",
+        "A program names `ApiKey.equal`, the generated key store's internal comparison (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_mint_outside_handler",
+        "`Actor.mint` on an `ApiKey` actor is called outside a service handler, where the pepper is not (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_missing_secret",
+        "An `ApiKey` actor does not name its pepper (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_prefix_shared",
+        "Two `ApiKey` actors in one context share a key prefix (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_secret_shared",
+        "An `ApiKey` actor's pepper is also another actor's secret (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_unknown_key",
+        "An `ApiKey` config has a key outside the closed set, or one not supported yet (#3939).",
+    ),
+    warn(d(
+        "bynk.actor.api_key_unlimited",
+        "A route guarded by an `ApiKey` actor applies no rate limit before authentication (warning, #3939).",
+    )),
+    d(
         "bynk.actor.bearer_bad_arg",
         "A `Bearer` actor's `issuer`, `audience` or `trustFrom` is not a non-empty string (#3821).",
     ),
@@ -7648,6 +7773,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.actor.signed_cookie_issue_needs_clock",
         "`Actor.issue(identity)` on a `SignedCookie` actor is called where the handler does not list `Clock` in `given`.",
     ),
+    warn(d(
+        "bynk.actor.signed_cookie_issue_on_safe_method",
+        "A `GET` route issues a `SignedCookie` session, so it is outside the login-CSRF check a state-changing route gets (warning, #3825).",
+    )),
     d(
         "bynk.actor.signed_cookie_issue_outside_handler",
         "`Actor.issue(identity)` on a `SignedCookie` actor is called outside a service handler (in a provider or an agent).",
@@ -8018,6 +8147,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.cell.self_reference",
         "A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`.",
+    ),
+    d(
+        "bynk.cloudflare.credentials_missing",
+        "A command that reads the Cloudflare account needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and one or both are not set, so it stopped before reading anything. With `--format json`, `bynk revert` writes `{\"error\": {\"code\", \"missing\", \"message\"}}` to stdout, `missing` naming each variable that is unset; the message says what the token needs.",
     ),
     d(
         "bynk.cloudflare.edge_cache_duplicate",
@@ -9018,6 +9151,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["given_clause"],
     ),
     dg(
+        "bynk.given.parameterised_fn_value",
+        "A function with capability parameters is named as a value; a lambda that binds them takes its place.",
+        &["call"],
+    ),
+    dg(
         "bynk.given.shared_as_parameter",
         "A capability with no instances bounds a capability parameter (`given L: Logger`); it is named bare, as a shared capability.",
         &["given_clause"],
@@ -9313,6 +9451,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.form_unknown_arg",
         "A `@form` annotation is given an argument; it takes none.",
     ),
+    dg(
+        "bynk.http.handler_name_collision",
+        "Two HTTP handlers of a context would be emitted under one method name (`/a-b` and `/a_b` are both `http_GET_a_b`).",
+        &["http_handler"],
+    ),
     warn(d(
         "bynk.http.header_question_not_found",
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
@@ -9498,7 +9641,17 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.http.reserved_route_syntax",
-        "A route segment contains `*`, `{` or `}`, which are reserved for a future route form.",
+        "A route segment contains `{` or `}`, or a `*` other than a final `*name` rest, which are reserved for a future route form.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.rest_param_type",
+        "The parameter a route's `*name` rest segment binds is not typed `String`.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.rest_unnamed",
+        "A route's last segment is a bare `*`, a rest segment with no name to bind.",
         &["http_handler"],
     ),
     dg(
@@ -11182,6 +11335,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `system` case runs a cron handler with `svc.schedule(…)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a cron handler.",
         &["case"],
     ),
+    d(
+        "bynk.test.rest_argument",
+        "A test case gives a route's `*name` rest a literal the router could never bind: not `\"\"` or `/…`, `\"\"` under a root rest, or holding `?`, `#` or a dot segment.",
+    ),
     dg(
         "bynk.test.revoked_needs_sessions_route",
         "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it.",
@@ -11558,6 +11715,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.file_at_boundary",
         "A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned.",
+    ),
+    dg(
+        "bynk.types.float_literal_pattern",
+        "A `Float` literal is used as a pattern, at any depth; floating-point equality is exact and `NaN` never equals itself.",
+        &["literal_pattern"],
     ),
     d(
         "bynk.types.form_uncodable",

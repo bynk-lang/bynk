@@ -1,0 +1,10 @@
+{
+  "blurb": "A well-formed key is cheap to fabricate (its checksum is public), and each one the seam parses costs a key-store request. A route guarded by an `ApiKey` actor should therefore limit requests by client address before it authenticates, with `@rateLimit(Limiter, key: clientIp)`. This is a warning, not an error, so a service rate-limited at its edge still builds. A `key: identity` limit does not help here, because a fabricated key never verifies and so never reaches it.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.api_key_unlimited",
+  "constructs": [],
+  "example": "on GET(\"/orders\") () -> Effect[HttpResult[List[Order]]] by c: Client { … }   // ⚠ no limit before authentication\n\n@rateLimit(PerIp, key: clientIp)\non GET(\"/orders\") () -> Effect[HttpResult[List[Order]]] by c: Client { … }   // ✓",
+  "severity": "warning",
+  "summary": "A route guarded by an `ApiKey` actor applies no rate limit before authentication (warning, #3939)."
+}

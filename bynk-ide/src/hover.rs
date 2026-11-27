@@ -218,12 +218,14 @@ fn violates_hover(a: &HoverAnalysis<'_>) -> Option<String> {
     crate::violates::describe_at(text, a.offset, Some(a.snapshots))
 }
 
-/// A bare keyword's one-line doc, or the string of a `@name("…")` / `@discriminator("…")`
-/// annotation (#3975), where the cursor is on no identifier.
+/// A bare keyword's one-line doc, the string of a `@name("…")` / `@discriminator("…")`
+/// annotation (#3975), or a `Decimal` literal pattern (#3973), where the cursor is on no
+/// identifier.
 fn describe_keyword_or_wire_annotation(text: &str, offset: usize) -> Option<String> {
     crate::symbols::describe_keyword_at(text, offset)
         .map(str::to_string)
         .or_else(|| crate::wire_names::describe_wire_annotation_at(text, offset))
+        .or_else(|| crate::decimal_patterns::describe_at(text, offset))
 }
 
 /// The hover Markdown for the cursor, or `None` when no rung resolves it.
@@ -1304,6 +1306,18 @@ mod tests {
             path: None,
             files: None,
         })
+    }
+
+    /// #4100: hovering `Ai.generateStream` shows its signature, as any declared operation.
+    #[test]
+    fn generate_stream_hovers_with_its_signature() {
+        let src = "context demo.m\n\nconsumes bynk.cloudflare { Ai, GenerateRequest }\n\nservice s {\n  on call() -> Effect[()] by Caller given Ai {\n    let a <- Ai.generateStream(\"m\", GenerateRequest { messages: [] })\n    ()\n  }\n}\n";
+        let h = hover_at(src, "generateStream", 0).expect("hovers");
+        assert!(
+            h.contains("generateStream(model: String, request: GenerateRequest)")
+                && h.contains("Stream[String]"),
+            "{h}"
+        );
     }
 
     /// #4536: the built-in `HttpResult` hovers as extensible, as `FetchError` does.
