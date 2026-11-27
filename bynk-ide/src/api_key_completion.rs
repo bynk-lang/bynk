@@ -58,12 +58,26 @@ pub fn members(a: &bynk_syntax::ast::ActorDecl) -> Vec<(&'static str, String)> {
         .identity
         .as_ref()
         .map_or_else(|| "identity".to_string(), crate::symbols::type_ref_str);
-    vec![(
-        "mint",
-        format!(
-            "mint(identity: {identity}, label: ApiKeyLabel) -> Effect[Result[ApiKeySecret, TooManyKeys]]"
+    vec![
+        (
+            "list",
+            format!("list(identity: {identity}) -> Effect[List[ApiKeyInfo]]"),
         ),
-    )]
+        (
+            "mint",
+            format!(
+                "mint(identity: {identity}, label: ApiKeyLabel) -> Effect[Result[ApiKeySecret, TooManyKeys]]"
+            ),
+        ),
+        (
+            "revoke",
+            format!("revoke(identity: {identity}, id: ApiKeyId) -> Effect[Bool]"),
+        ),
+        (
+            "revokeAll",
+            format!("revokeAll(identity: {identity}) -> Effect[Int]"),
+        ),
+    ]
 }
 
 #[cfg(test)]

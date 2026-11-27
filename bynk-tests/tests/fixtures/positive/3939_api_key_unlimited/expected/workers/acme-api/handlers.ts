@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
+import { __bynkMapOf } from "../../__bynk_runtime/keys.js";
 import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
@@ -291,6 +292,104 @@ export class ClientKeys {
     return __result;
   }
 
+  async labelsOf(deps: {}): globalThis.Promise<ReadonlyMap<string, string>> {
+    const __state = await this.loadState();
+    const es = await __bynkThen(((() => __bynkThen(__state.labels.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
+    return __bynkMapOf(es);
+  }
+
+  async createdOf(deps: {}): globalThis.Promise<ReadonlyMap<string, number>> {
+    const __state = await this.loadState();
+    const es = await __bynkThen(((() => __bynkThen(__state.created.entries(), (__es) => __es.map(([__k, __v]) => ({ key: __k, value: __v })))))(), (__q) => __q);
+    return __bynkMapOf(es);
+  }
+
+  async revoke(keyNo: string, deps: {}): globalThis.Promise<boolean> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const held = await __state.digests.has(String(keyNo));
+      if (held && !__state.retired) {
+        const __r0 = await (async () => {
+          await __state.digests.remove(String(keyNo));
+          return undefined;
+        })();
+        const __r1 = await (async () => {
+          await __state.kids.remove(String(keyNo));
+          return undefined;
+        })();
+        const __r2 = await (async () => {
+          await __state.labels.remove(String(keyNo));
+          return undefined;
+        })();
+        const __r3 = await (async () => {
+          await __state.created.remove(String(keyNo));
+          return undefined;
+        })();
+        const __r4 = await (async () => {
+          await __state.scopes.remove(String(keyNo));
+          return undefined;
+        })();
+        return true;
+      } else {
+        return false;
+      }
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+
+  async clear(deps: {}): globalThis.Promise<number> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      const ks = await __bynkThen(((() => __state.digests.keys()))(), (__q) => __q);
+      const n = await __state.digests.size();
+      const __r0 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.digests.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ks);
+      const __r1 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.kids.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ks);
+      const __r2 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.labels.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ks);
+      const __r3 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.created.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ks);
+      const __r4 = await (async (__xs: readonly string[]) => {
+        for (const __x of __xs) {
+          await (async (k: string) => (async () => {
+            await __state.scopes.remove(String(k));
+            return undefined;
+          })())(__x);
+        }
+      })(ks);
+      __state.retired = true;
+      return n;
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+
   async fetch(request: globalThis.Request): globalThis.Promise<globalThis.Response> {
     const url = new globalThis.URL(request.url);
     if (url.pathname.startsWith("/_bynk/agent/")) {
@@ -306,6 +405,10 @@ export class ClientKeys {
 const __ClientKeysWire: __AgentWire = {
   verify: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: __serialise_Map_String_Bytes, dec: __deserialise_Map_String_Bytes }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: __serialise_Option_AccountId, dec: __deserialise_Option_AccountId } },
   insert: { args: [{ enc: __serialise_AccountId, dec: __deserialise_AccountId }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
+  labelsOf: { args: [], result: { enc: __serialise_Map_String_String, dec: __deserialise_Map_String_String } },
+  createdOf: { args: [], result: { enc: __serialise_Map_String_Int, dec: __deserialise_Map_String_Int } },
+  revoke: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: (__v: boolean) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j) } },
+  clear: { args: [], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
 };
 
 export function __makeClientKeys(key: string, env?: { CLIENT_KEYS?: __DurableObjectNamespace }): ClientKeys {
@@ -394,6 +497,48 @@ export class ClientKeyOwner {
     return __result;
   }
 
+  async current(deps: {}): globalThis.Promise<Option<string>> {
+    const __state = await this.loadState();
+    return __state.handle;
+  }
+
+  async revoke(of: string, keyNo: string, deps: { env: { CLIENT_KEY_OWNER: __DurableObjectNamespace; CLIENT_KEYS: __DurableObjectNamespace } }): globalThis.Promise<boolean> {
+    const __state = await this.loadState();
+    const mine = ((__d) => {
+      switch (__d.tag) {
+        case "Some": {
+          const h = __d.value;
+          return h === of;
+        }
+        case "None": {
+          return false;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(__state.handle);
+    return (mine ? __makeClientKeys(of, deps.env).revoke(keyNo, deps) : false);
+  }
+
+  async revokeAll(fresh: string, deps: { env: { CLIENT_KEY_OWNER: __DurableObjectNamespace; CLIENT_KEYS: __DurableObjectNamespace } }): globalThis.Promise<number> {
+    const __state = { ...(await this.loadState()) };
+    const __result = await (async () => {
+      switch (__state.handle.tag) {
+        case "Some": {
+          const h = __state.handle.value;
+          const n = await __makeClientKeys(h, deps.env).clear(deps);
+          __state.handle = Some(fresh);
+          return n;
+        }
+        case "None": {
+          return 0;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })();
+    await this.commitState(__state);
+    return __result;
+  }
+
   async fetch(request: globalThis.Request): globalThis.Promise<globalThis.Response> {
     const url = new globalThis.URL(request.url);
     if (url.pathname.startsWith("/_bynk/agent/")) {
@@ -410,6 +555,9 @@ export class ClientKeyOwner {
 
 const __ClientKeyOwnerWire: __AgentWire = {
   mint: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }, { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }], result: { enc: __serialise_Result_String_Int, dec: __deserialise_Result_String_Int } },
+  current: { args: [], result: { enc: __serialise_Option_String, dec: __deserialise_Option_String } },
+  revoke: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, { enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: (__v: boolean) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j) } },
+  revokeAll: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
 };
 
 export const __ClientKeyOwnerKey = { enc: __serialise_AccountId, dec: __deserialise_AccountId };
@@ -613,6 +761,87 @@ export function __deserialise_Map_String_Bytes(json: __JsonValue, path: string =
     }
     const __v = __b_v.value;
     out.set(__k as string, __v as globalThis.Uint8Array);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Map_String_String(value: ReadonlyMap<string, string>): __JsonValue {
+  const entries: __JsonValue[] = [];
+  for (const [k, v] of value) {
+    entries.push([k as __JsonValue, v as __JsonValue]);
+  }
+  return entries;
+}
+
+export function __deserialise_Map_String_String(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, string>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_String(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out = new globalThis.Map<string, string>();
+  for (let i = 0; i < json.length; i++) {
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    if (typeof entryK !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+    }
+    const __k = entryK;
+    if (out.has(__k as string)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "string", actual: typeof entryV });
+    }
+    const __v = entryV;
+    out.set(__k as string, __v as string);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Map_String_Int(value: ReadonlyMap<string, number>): __JsonValue {
+  const entries: __JsonValue[] = [];
+  for (const [k, v] of value) {
+    entries.push([k as __JsonValue, ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(v)]);
+  }
+  return entries;
+}
+
+export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, number>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_Int(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out = new globalThis.Map<string, number>();
+  for (let i = 0; i < json.length; i++) {
+    const entry = json[i];
+    if (!globalThis.Array.isArray(entry) || entry.length !== 2) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "[key, value] entry", actual: typeof entry });
+    }
+    const entryK = entry[0];
+    const entryV = entry[1];
+    if (typeof entryK !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "string", actual: typeof entryK });
+    }
+    const __k = entryK;
+    if (out.has(__k as string)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][0]`, expected: "a distinct map key", actual: "a duplicate" });
+    }
+    if (typeof entryV !== "number") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
+    }
+    if (!globalThis.Number.isSafeInteger(entryV)) {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: globalThis.Number.isInteger(entryV) ? "integer outside the safe range" : "non-integer number" });
+    }
+    const __v = entryV;
+    out.set(__k as string, __v as number);
   }
   return Ok(out);
 }

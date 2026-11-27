@@ -3,10 +3,12 @@
 
 import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
 import { type __JsonValue, __verifyCall, __faultResponse, __readBodyCapped, __wireRefusal } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyChallenge, __applyCors, __corsPreflightResponse, __privateByDefault, __rateLimitAllows, __rateLimitedResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches, __requestHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyChallenge, __applyCors, __corsPreflightResponse, __privateByDefault, __rateLimitAllows, __rateLimitAllowsKey, __rateLimitedResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches, __requestHeaders } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass, __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
+
+export const Accounts = __serialiseAgentClass(handlers.Accounts);
 
 export const ClientKeyOwner = __serialiseAgentClass(handlers.ClientKeyOwner);
 
@@ -43,7 +45,7 @@ export default {
           }
         }
 
-        if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/session", path) !== null || __matchPath("/auth-header", path) !== null || __matchPath("/me", path) !== null || __matchPath("/accounts/:id/keys", path) !== null)) {
+        if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/session", path) !== null || __matchPath("/auth-header", path) !== null || __matchPath("/me", path) !== null || __matchPath("/usage", path) !== null || __matchPath("/accounts/:id/keys", path) !== null || __matchPath("/accounts/:id/close", path) !== null || __matchPath("/accounts/:id/keys/:key", path) !== null)) {
           return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
         }
         {
@@ -76,6 +78,60 @@ export default {
             const result = await surface.http_GET_me(request);
             const __response = __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"acme.api\""])), __cors_api, request.headers.get("origin")), __security_api);
             return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/usage", path) !== null) {
+            __route = "GET /usage";
+            const __v = await surface.http_GET_usage__verify(request);
+            if (__v.tag === "Err") {
+              const result = __v.error;
+              const __response = __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"acme.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+              return method === "HEAD" ? __headResponse(__response) : __response;
+            }
+            if (!await __rateLimitAllowsKey(env.RATELIMIT_PER_CLIENT, __v.value.key)) {
+              return __applySecurityHeaders(__applyCors(__rateLimitedResponse(60), __cors_api, request.headers.get("origin")), __security_api);
+            }
+            const result = await surface.http_GET_usage(__v.value.principal);
+            const __response = __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"acme.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          const __m = __matchPath("/accounts/:id/keys", path);
+          if ((method === "GET" || method === "HEAD") && __m) {
+            __route = "GET /accounts/:id/keys";
+            if (__m.malformed) {
+              return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+            }
+            if (!await __rateLimitAllows(env.RATELIMIT_PER_IP, request)) {
+              return __applySecurityHeaders(__applyCors(__rateLimitedResponse(60), __cors_api, request.headers.get("origin")), __security_api);
+            }
+            const __raw_id = __m.params["id"];
+            const __r_id = handlers.AccountId.of(__raw_id);
+            if (__r_id.tag === "Err") return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "RefinementViolation", path: "path.id", violation: __r_id.error })), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+            const id = __r_id.value;
+            const result = await surface.http_GET_accounts_Param_id_keys(id);
+            const __response = __applySecurityHeaders(__applyCors(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_List_ApiKeyInfo, { weakEtag: true }), request), request, ["Bynk realm=\"acme.api\""]), __cors_api, request.headers.get("origin")), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          const __m = __matchPath("/accounts/:id/close", path);
+          if (method === "POST" && __m) {
+            __route = "POST /accounts/:id/close";
+            if (__m.malformed) {
+              return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+            }
+            if (!await __rateLimitAllows(env.RATELIMIT_PER_IP, request)) {
+              return __applySecurityHeaders(__applyCors(__rateLimitedResponse(60), __cors_api, request.headers.get("origin")), __security_api);
+            }
+            const __raw_id = __m.params["id"];
+            const __r_id = handlers.AccountId.of(__raw_id);
+            if (__r_id.tag === "Err") return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "RefinementViolation", path: "path.id", violation: __r_id.error })), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+            const id = __r_id.value;
+            const result = await surface.http_POST_accounts_Param_id_close(id);
+            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { notGet: "POST /accounts/:id/close" }), request, ["Bynk realm=\"acme.api\""]), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
@@ -121,9 +177,41 @@ export default {
             return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_ApiKeySecret, { notGet: "POST /accounts/:id/keys" }), request, ["Bynk realm=\"acme.api\""]), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
-        if (__matchPath("/accounts/:id/keys", path) !== null) {
+        {
+          const __m = __matchPath("/accounts/:id/keys/:key", path);
+          if (method === "DELETE" && __m) {
+            __route = "DELETE /accounts/:id/keys/:key";
+            if (__m.malformed) {
+              return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+            }
+            if (!await __rateLimitAllows(env.RATELIMIT_PER_IP, request)) {
+              return __applySecurityHeaders(__applyCors(__rateLimitedResponse(60), __cors_api, request.headers.get("origin")), __security_api);
+            }
+            const __raw_id = __m.params["id"];
+            const __r_id = handlers.AccountId.of(__raw_id);
+            if (__r_id.tag === "Err") return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "RefinementViolation", path: "path.id", violation: __r_id.error })), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+            const id = __r_id.value;
+            const __raw_key = __m.params["key"];
+            const __r_key = handlers.__deserialise_ApiKeyId(__raw_key, "path.key");
+            if (__r_key.tag === "Err") return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_key.error)), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+            const key = __r_key.value;
+            const result = await surface.http_DELETE_accounts_Param_id_keys_Param_key(id, key);
+            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "DELETE /accounts/:id/keys/:key" }), request, ["Bynk realm=\"acme.api\""]), __cors_api, request.headers.get("origin")), __security_api);
+          }
+        }
+        if (__matchPath("/accounts/:id/close", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;
           const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
+        }
+        if (__matchPath("/accounts/:id/keys", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS, POST" } });
+          return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
+        }
+        if (__matchPath("/accounts/:id/keys/:key", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "DELETE, OPTIONS" } });
           return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
         }
         if (__matchPath("/auth-header", path) !== null) {
@@ -139,6 +227,11 @@ export default {
         if (__matchPath("/session", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;
           const __res = new globalThis.Response(null, { status: __status, headers: { allow: "DELETE, OPTIONS" } });
+          return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
+        }
+        if (__matchPath("/usage", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
           return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
         }
         return new globalThis.Response("Not Found", { status: 404 });

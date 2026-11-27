@@ -5,7 +5,7 @@ import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import type { __JsonValue, __BoundaryError, __ServiceBinding } from "../__bynk_runtime/boundary.js";
 import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaders, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import { __makeIntegrationDoNamespace, __makeIntegrationRateLimit } from "../__bynk_runtime/testing/bindings.js";
-import { __apiKeyBadKey, __apiKeyCountCompares, __apiKeyExpectCompares, __apiKeyForTest } from "../__bynk_runtime/apikey.js";
+import { __apiKeyBadKey, __apiKeyCountCompares, __apiKeyExpectCompares, __apiKeyForTest, __apiKeyRevokedForTest } from "../__bynk_runtime/apikey.js";
 import * as __ns_acme_api from "../workers/acme-api/handlers.js";
 import worker___ns_acme_api from "../workers/acme-api/index.js";
 
@@ -18,7 +18,9 @@ function __buildHarness() {
   const env___ns_acme_api: any = {};
   env___ns_acme_api.__bynkClock = __bynkClock;
   env___ns_acme_api.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
+  env___ns_acme_api.RATELIMIT_PER_CLIENT = __makeIntegrationRateLimit(2, 60, () => __bynkClockNow);
   env___ns_acme_api.RATELIMIT_PER_IP = __makeIntegrationRateLimit(1000, 60, () => __bynkClockNow);
+  env___ns_acme_api.ACCOUNTS = __makeIntegrationDoNamespace(__ns_acme_api.Accounts, env___ns_acme_api);
   env___ns_acme_api.CLIENT_KEY_OWNER = __makeIntegrationDoNamespace(__ns_acme_api.ClientKeyOwner, env___ns_acme_api);
   env___ns_acme_api.CLIENT_KEYS = __makeIntegrationDoNamespace(__ns_acme_api.ClientKeys, env___ns_acme_api);
   const rootEnv: any = {};
@@ -74,6 +76,13 @@ async function __sysdrive_keyforged_api_http_GET_me(__extraHeaders: { get(name: 
   const __res = await __h.env.ACME_API.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_keyrevoked_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __key = await __apiKeyRevokedForTest(await __apiKeyForTest(__makeHarness().env___ns_acme_api, "Client", "bynk-test-revoked", { secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["CLIENT_KEY_PEPPER"] ?? "") }, "CLIENT_KEY_PEPPER", "acme", __bynkNow() * 1000, 100, async (__req) => __ns_acme_api.__makeClientKeyOwner("bynk-test-revoked" as never, __makeHarness().env___ns_acme_api).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, "bynk-test", __bynkNow() * 1000, 100, { env: __makeHarness().env___ns_acme_api })), "acme", async (__h, __k) => __ns_acme_api.__makeClientKeyOwner("bynk-test-revoked" as never, __makeHarness().env___ns_acme_api).revoke(__h, __k, { env: __makeHarness().env___ns_acme_api }));
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${__key}` } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_malformed_api_http_GET_me(...__a: Parameters<typeof __sysdrive_keymalformed_api_http_GET_me>) {
   const __before0 = { ...__apiKeyCompares };
   const __out0 = await __sysdrive_keymalformed_api_http_GET_me(...__a);
@@ -94,6 +103,87 @@ async function __sysdrive_forged_api_http_GET_me(...__a: Parameters<typeof __sys
   const __before0 = { ...__apiKeyCompares };
   const __out0 = await __sysdrive_keyforged_api_http_GET_me(...__a);
   __apiKeyExpectCompares(__apiKeyCompares, __before0, { all: 1, dummy: 0 }, "Forged");
+  return __out0;
+}
+async function __sysdrive_revoked_api_http_GET_me(...__a: Parameters<typeof __sysdrive_keyrevoked_api_http_GET_me>) {
+  const __before0 = { ...__apiKeyCompares };
+  const __out0 = await __sysdrive_keyrevoked_api_http_GET_me(...__a);
+  __apiKeyExpectCompares(__apiKeyCompares, __before0, { all: 1, dummy: 1 }, "Revoked");
+  return __out0;
+}
+async function __sysdrive_api_http_GET_usage(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/usage`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __apiKeyForTest(__makeHarness().env___ns_acme_api, "Client", __sub, { secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["CLIENT_KEY_PEPPER"] ?? "") }, "CLIENT_KEY_PEPPER", "acme", __bynkNow() * 1000, 100, async (__req) => __ns_acme_api.__makeClientKeyOwner(__sub as never, __makeHarness().env___ns_acme_api).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, "bynk-test", __bynkNow() * 1000, 100, { env: __makeHarness().env___ns_acme_api }))}` } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_noauth_api_http_GET_usage(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/usage`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_keymalformed_api_http_GET_usage(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __key = __apiKeyBadKey("malformed", await __apiKeyForTest(__makeHarness().env___ns_acme_api, "Client", "bynk-test", { secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["CLIENT_KEY_PEPPER"] ?? "") }, "CLIENT_KEY_PEPPER", "acme", __bynkNow() * 1000, 100, async (__req) => __ns_acme_api.__makeClientKeyOwner("bynk-test" as never, __makeHarness().env___ns_acme_api).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, "bynk-test", __bynkNow() * 1000, 100, { env: __makeHarness().env___ns_acme_api })), "acme");
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/usage`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${__key}` } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_keyunknownkey_api_http_GET_usage(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __key = __apiKeyBadKey("unknownkey", await __apiKeyForTest(__makeHarness().env___ns_acme_api, "Client", "bynk-test", { secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["CLIENT_KEY_PEPPER"] ?? "") }, "CLIENT_KEY_PEPPER", "acme", __bynkNow() * 1000, 100, async (__req) => __ns_acme_api.__makeClientKeyOwner("bynk-test" as never, __makeHarness().env___ns_acme_api).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, "bynk-test", __bynkNow() * 1000, 100, { env: __makeHarness().env___ns_acme_api })), "acme");
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/usage`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${__key}` } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_keyunknownhandle_api_http_GET_usage(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __key = __apiKeyBadKey("unknownhandle", await __apiKeyForTest(__makeHarness().env___ns_acme_api, "Client", "bynk-test", { secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["CLIENT_KEY_PEPPER"] ?? "") }, "CLIENT_KEY_PEPPER", "acme", __bynkNow() * 1000, 100, async (__req) => __ns_acme_api.__makeClientKeyOwner("bynk-test" as never, __makeHarness().env___ns_acme_api).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, "bynk-test", __bynkNow() * 1000, 100, { env: __makeHarness().env___ns_acme_api })), "acme");
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/usage`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${__key}` } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_keyforged_api_http_GET_usage(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __key = __apiKeyBadKey("forged", await __apiKeyForTest(__makeHarness().env___ns_acme_api, "Client", "bynk-test", { secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["CLIENT_KEY_PEPPER"] ?? "") }, "CLIENT_KEY_PEPPER", "acme", __bynkNow() * 1000, 100, async (__req) => __ns_acme_api.__makeClientKeyOwner("bynk-test" as never, __makeHarness().env___ns_acme_api).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, "bynk-test", __bynkNow() * 1000, 100, { env: __makeHarness().env___ns_acme_api })), "acme");
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/usage`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${__key}` } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_keyrevoked_api_http_GET_usage(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __key = await __apiKeyRevokedForTest(await __apiKeyForTest(__makeHarness().env___ns_acme_api, "Client", "bynk-test-revoked", { secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["CLIENT_KEY_PEPPER"] ?? "") }, "CLIENT_KEY_PEPPER", "acme", __bynkNow() * 1000, 100, async (__req) => __ns_acme_api.__makeClientKeyOwner("bynk-test-revoked" as never, __makeHarness().env___ns_acme_api).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, "bynk-test", __bynkNow() * 1000, 100, { env: __makeHarness().env___ns_acme_api })), "acme", async (__h, __k) => __ns_acme_api.__makeClientKeyOwner("bynk-test-revoked" as never, __makeHarness().env___ns_acme_api).revoke(__h, __k, { env: __makeHarness().env___ns_acme_api }));
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/usage`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${__key}` } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_malformed_api_http_GET_usage(...__a: Parameters<typeof __sysdrive_keymalformed_api_http_GET_usage>) {
+  const __before0 = { ...__apiKeyCompares };
+  const __out0 = await __sysdrive_keymalformed_api_http_GET_usage(...__a);
+  __apiKeyExpectCompares(__apiKeyCompares, __before0, { all: 0, dummy: 0 }, "Malformed");
+  return __out0;
+}
+async function __sysdrive_unknown_api_http_GET_usage(...__a: Parameters<typeof __sysdrive_keyunknownkey_api_http_GET_usage>) {
+  const __before0 = { ...__apiKeyCompares };
+  const __out0 = await __sysdrive_keyunknownkey_api_http_GET_usage(...__a);
+  __apiKeyExpectCompares(__apiKeyCompares, __before0, { all: 1, dummy: 1 }, "Unknown");
+  if (__out0.tag !== "Rejected" || __out0.value.tag !== "Unauthorized") return __out0;
+  const __before1 = { ...__apiKeyCompares };
+  const __out1 = await __sysdrive_keyunknownhandle_api_http_GET_usage(...__a);
+  __apiKeyExpectCompares(__apiKeyCompares, __before1, { all: 1, dummy: 1 }, "Unknown");
+  return __out1;
+}
+async function __sysdrive_forged_api_http_GET_usage(...__a: Parameters<typeof __sysdrive_keyforged_api_http_GET_usage>) {
+  const __before0 = { ...__apiKeyCompares };
+  const __out0 = await __sysdrive_keyforged_api_http_GET_usage(...__a);
+  __apiKeyExpectCompares(__apiKeyCompares, __before0, { all: 1, dummy: 0 }, "Forged");
+  return __out0;
+}
+async function __sysdrive_revoked_api_http_GET_usage(...__a: Parameters<typeof __sysdrive_keyrevoked_api_http_GET_usage>) {
+  const __before0 = { ...__apiKeyCompares };
+  const __out0 = await __sysdrive_keyrevoked_api_http_GET_usage(...__a);
+  __apiKeyExpectCompares(__apiKeyCompares, __before0, { all: 1, dummy: 1 }, "Revoked");
   return __out0;
 }
 async function __sysdrive_api_http_GET_auth_header(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, __sub: string) {
@@ -176,6 +266,20 @@ async function __sysdrive_rawkeyforged_api_http_GET_auth_header(headers: { get(n
   const __res = await __h.env.ACME_API.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_keyrevoked_api_http_GET_auth_header(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, __sub: string) {
+  const __key = await __apiKeyRevokedForTest(await __apiKeyForTest(__makeHarness().env___ns_acme_api, "Client", "bynk-test-revoked", { secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["CLIENT_KEY_PEPPER"] ?? "") }, "CLIENT_KEY_PEPPER", "acme", __bynkNow() * 1000, 100, async (__req) => __ns_acme_api.__makeClientKeyOwner("bynk-test-revoked" as never, __makeHarness().env___ns_acme_api).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, "bynk-test", __bynkNow() * 1000, 100, { env: __makeHarness().env___ns_acme_api })), "acme", async (__h, __k) => __ns_acme_api.__makeClientKeyOwner("bynk-test-revoked" as never, __makeHarness().env___ns_acme_api).revoke(__h, __k, { env: __makeHarness().env___ns_acme_api }));
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/auth-header`, { method: "GET", headers: { ...__requestHeaderPairs(headers), "authorization": `Bearer ${__key}` } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawkeyrevoked_api_http_GET_auth_header(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, __sub: string) {
+  const __key = await __apiKeyRevokedForTest(await __apiKeyForTest(__makeHarness().env___ns_acme_api, "Client", "bynk-test-revoked", { secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["CLIENT_KEY_PEPPER"] ?? "") }, "CLIENT_KEY_PEPPER", "acme", __bynkNow() * 1000, 100, async (__req) => __ns_acme_api.__makeClientKeyOwner("bynk-test-revoked" as never, __makeHarness().env___ns_acme_api).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, "bynk-test", __bynkNow() * 1000, 100, { env: __makeHarness().env___ns_acme_api })), "acme", async (__h, __k) => __ns_acme_api.__makeClientKeyOwner("bynk-test-revoked" as never, __makeHarness().env___ns_acme_api).revoke(__h, __k, { env: __makeHarness().env___ns_acme_api }));
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/auth-header`, { method: "GET", headers: { ...__requestHeaderPairs(headers), "authorization": `Bearer ${__key}` } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_malformed_api_http_GET_auth_header(...__a: Parameters<typeof __sysdrive_keymalformed_api_http_GET_auth_header>) {
   const __before0 = { ...__apiKeyCompares };
   const __out0 = await __sysdrive_keymalformed_api_http_GET_auth_header(...__a);
@@ -220,6 +324,18 @@ async function __sysdrive_rawforged_api_http_GET_auth_header(...__a: Parameters<
   __apiKeyExpectCompares(__apiKeyCompares, __before0, { all: 1, dummy: 0 }, "Forged");
   return __out0;
 }
+async function __sysdrive_revoked_api_http_GET_auth_header(...__a: Parameters<typeof __sysdrive_keyrevoked_api_http_GET_auth_header>) {
+  const __before0 = { ...__apiKeyCompares };
+  const __out0 = await __sysdrive_keyrevoked_api_http_GET_auth_header(...__a);
+  __apiKeyExpectCompares(__apiKeyCompares, __before0, { all: 1, dummy: 1 }, "Revoked");
+  return __out0;
+}
+async function __sysdrive_rawrevoked_api_http_GET_auth_header(...__a: Parameters<typeof __sysdrive_rawkeyrevoked_api_http_GET_auth_header>) {
+  const __before0 = { ...__apiKeyCompares };
+  const __out0 = await __sysdrive_rawkeyrevoked_api_http_GET_auth_header(...__a);
+  __apiKeyExpectCompares(__apiKeyCompares, __before0, { all: 1, dummy: 1 }, "Revoked");
+  return __out0;
+}
 async function __sysdrive_api_http_DELETE_session(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/session`, { method: "DELETE", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __apiKeyForTest(__makeHarness().env___ns_acme_api, "Client", __sub, { secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["CLIENT_KEY_PEPPER"] ?? "") }, "CLIENT_KEY_PEPPER", "acme", __bynkNow() * 1000, 100, async (__req) => __ns_acme_api.__makeClientKeyOwner(__sub as never, __makeHarness().env___ns_acme_api).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, "bynk-test", __bynkNow() * 1000, 100, { env: __makeHarness().env___ns_acme_api }))}` } });
@@ -260,6 +376,13 @@ async function __sysdrive_keyforged_api_http_DELETE_session(__extraHeaders: { ge
   const __res = await __h.env.ACME_API.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
+async function __sysdrive_keyrevoked_api_http_DELETE_session(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __key = await __apiKeyRevokedForTest(await __apiKeyForTest(__makeHarness().env___ns_acme_api, "Client", "bynk-test-revoked", { secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["CLIENT_KEY_PEPPER"] ?? "") }, "CLIENT_KEY_PEPPER", "acme", __bynkNow() * 1000, 100, async (__req) => __ns_acme_api.__makeClientKeyOwner("bynk-test-revoked" as never, __makeHarness().env___ns_acme_api).mint(__req.handle, __req.keyNo, __req.digest, __req.kid, "bynk-test", __bynkNow() * 1000, 100, { env: __makeHarness().env___ns_acme_api })), "acme", async (__h, __k) => __ns_acme_api.__makeClientKeyOwner("bynk-test-revoked" as never, __makeHarness().env___ns_acme_api).revoke(__h, __k, { env: __makeHarness().env___ns_acme_api }));
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/session`, { method: "DELETE", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${__key}` } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
+}
 async function __sysdrive_malformed_api_http_DELETE_session(...__a: Parameters<typeof __sysdrive_keymalformed_api_http_DELETE_session>) {
   const __before0 = { ...__apiKeyCompares };
   const __out0 = await __sysdrive_keymalformed_api_http_DELETE_session(...__a);
@@ -282,6 +405,12 @@ async function __sysdrive_forged_api_http_DELETE_session(...__a: Parameters<type
   __apiKeyExpectCompares(__apiKeyCompares, __before0, { all: 1, dummy: 0 }, "Forged");
   return __out0;
 }
+async function __sysdrive_revoked_api_http_DELETE_session(...__a: Parameters<typeof __sysdrive_keyrevoked_api_http_DELETE_session>) {
+  const __before0 = { ...__apiKeyCompares };
+  const __out0 = await __sysdrive_keyrevoked_api_http_DELETE_session(...__a);
+  __apiKeyExpectCompares(__apiKeyCompares, __before0, { all: 1, dummy: 1 }, "Revoked");
+  return __out0;
+}
 async function __sysdrive_api_http_POST_accounts_Param_id_keys(id: any, body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__ns_acme_api.__serialise_NewKey(body));
   const __h = __makeHarness();
@@ -294,6 +423,42 @@ async function __sysdrive_raw_api_http_POST_accounts_Param_id_keys(id: string, b
   const __req = new globalThis.Request(`https://test/accounts/${id}/keys`, { method: "POST", headers: { "content-type": "application/json", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: body });
   const __res = await __h.env.ACME_API.fetch(__req);
   return __responseToHttpOutcome(__res, __ns_acme_api.__deserialise_ApiKeySecret);
+}
+async function __sysdrive_api_http_GET_accounts_Param_id_keys(id: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/accounts/${id}/keys`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToHttpResult(__res, __ns_acme_api.__deserialise_List_ApiKeyInfo);
+}
+async function __sysdrive_raw_api_http_GET_accounts_Param_id_keys(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/accounts/${id}/keys`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToHttpOutcome(__res, __ns_acme_api.__deserialise_List_ApiKeyInfo);
+}
+async function __sysdrive_api_http_DELETE_accounts_Param_id_keys_Param_key(id: any, key: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/accounts/${id}/keys/${key}`, { method: "DELETE", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
+}
+async function __sysdrive_raw_api_http_DELETE_accounts_Param_id_keys_Param_key(id: string, key: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/accounts/${id}/keys/${key}`, { method: "DELETE", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
+}
+async function __sysdrive_api_http_POST_accounts_Param_id_close(id: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/accounts/${id}/close`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_api_http_POST_accounts_Param_id_close(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/accounts/${id}/close`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.ACME_API.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j));
 }
 async function __sysdrive_wrongmethod_api(method: string, path: string) {
   const __h = __makeHarness();
@@ -414,13 +579,92 @@ async function test_a_forged_key_is_refused_after_the_record_compare() {
   }
 }
 
+async function test_a_revoked_key_is_refused_after_the_dummy_compare() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_revoked_api_http_GET_me(undefined, "");
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:45:10", 1891, 1918, "expect r is Rejected(Unauthorized)", "r", () => __bynkShow(r)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_revokeAll_refuses_the_identity_s_old_key_on_the_next_request() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const before = await __sysdrive_api_http_GET_me(undefined, ("acct-30" as any));
+    if (!(((__c: boolean) => __c)(before.tag === "Ok" && before.value === "acct-30"))) { throw __bynkExpectFailure("tests/api.bynk:51:10", 2234, 2257, "expect before is Ok(\"acct-30\")", "before", () => __bynkShow(before)); }
+    const closed = await __sysdrive_api_http_POST_accounts_Param_id_close(("acct-30" as any), undefined, "");
+    if (!(((__c: boolean) => __c)(closed.tag === "Ok" && closed.value === 1))) { throw __bynkExpectFailure("tests/api.bynk:53:10", 2337, 2352, "expect closed is Ok(1)", "closed", () => __bynkShow(closed)); }
+    const after = await __sysdrive_api_http_GET_me(undefined, ("acct-30" as any));
+    if (!(((__c: boolean) => __c)(after.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:55:10", 2413, 2434, "expect after is Unauthorized", "after", () => __bynkShow(after)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_verified_key_holder_over_the_identity_limit_is_refused_with_429() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const a = await __sysdrive_api_http_GET_usage(undefined, ("acct-40" as any));
+    const b = await __sysdrive_api_http_GET_usage(undefined, ("acct-40" as any));
+    const c = await __sysdrive_api_http_GET_usage(undefined, ("acct-40" as any));
+    if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "usage for acct-40"))) { throw __bynkExpectFailure("tests/api.bynk:62:10", 2743, 2771, "expect a is Ok(\"usage for acct-40\")", "a", () => __bynkShow(a)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "usage for acct-40"))) { throw __bynkExpectFailure("tests/api.bynk:63:10", 2781, 2809, "expect b is Ok(\"usage for acct-40\")", "b", () => __bynkShow(b)); }
+    if (!(((__c: boolean) => __c)(c.tag === "TooManyRequests"))) { throw __bynkExpectFailure("tests/api.bynk:64:10", 2819, 2842, "expect c is TooManyRequests(_)", "c", () => __bynkShow(c)); }
+    const other = await __sysdrive_api_http_GET_usage(undefined, ("acct-41" as any));
+    if (!(((__c: boolean) => __c)(other.tag === "Ok" && other.value === "usage for acct-41"))) { throw __bynkExpectFailure("tests/api.bynk:66:10", 2906, 2938, "expect other is Ok(\"usage for acct-41\")", "other", () => __bynkShow(other)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_forged_key_never_consumes_the_identity_limit() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const f1 = await __sysdrive_forged_api_http_GET_usage(undefined, "");
+    const f2 = await __sysdrive_forged_api_http_GET_usage(undefined, "");
+    const f3 = await __sysdrive_forged_api_http_GET_usage(undefined, "");
+    if (!(((__c: boolean) => __c)(f3.tag === "Rejected" && f3.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:74:10", 3247, 3275, "expect f3 is Rejected(Unauthorized)", "f3", () => __bynkShow(f3)); }
+    const a = await __sysdrive_api_http_GET_usage(undefined, ("bynk-test" as any));
+    const b = await __sysdrive_api_http_GET_usage(undefined, ("bynk-test" as any));
+    if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "usage for bynk-test"))) { throw __bynkExpectFailure("tests/api.bynk:77:10", 3389, 3419, "expect b is Ok(\"usage for bynk-test\")", "b", () => __bynkShow(b)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 async function test_the_key_s_header_is_hidden_from_the_handler() {
   try {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_auth_header(__requestHeaders([]), ("acct-7" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "none"))) { throw __bynkExpectFailure("tests/api.bynk:44:10", 1817, 1832, "expect r is Ok(\"none\")", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "none"))) { throw __bynkExpectFailure("tests/api.bynk:82:10", 3622, 3637, "expect r is Ok(\"none\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -436,7 +680,127 @@ async function test_a_key_is_minted_for_an_account() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_accounts_Param_id_keys(("acct-9" as any), { label: ("ci" as any) }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Created"))) { throw __bynkExpectFailure("tests/api.bynk:50:10", 2066, 2081, "expect r is Created(_)", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Created"))) { throw __bynkExpectFailure("tests/api.bynk:88:10", 3871, 3886, "expect r is Created(_)", "r", () => __bynkShow(r)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_minted_key_is_listed_by_its_id_and_label() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const minted = await __sysdrive_api_http_POST_accounts_Param_id_keys(("acct-20" as any), { label: ("ci" as any) }, undefined, "");
+    void (await (async (__d) => {
+      switch (__d.tag) {
+        case "Created": {
+          const s = __d.value;
+          const listed = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-20" as any), undefined, "");
+          if (listed.tag === "Ok" && listed.value.length === 1) {
+            const k = listed.value[0];
+            if (!(k.id === s.id)) { throw __bynkExpectFailure("tests/api.bynk:99:14", 4253, 4265, "expect k.id == s.id\n  expected: k.id == s.id\n  actual:   " + __bynkShow((k.id)) + " == " + __bynkShow((s.id))); }
+            if (!(k.label === s.label)) { throw __bynkExpectFailure("tests/api.bynk:100:14", 4279, 4297, "expect k.label == s.label\n  expected: k.label == s.label\n  actual:   " + __bynkShow((k.label)) + " == " + __bynkShow((s.label))); }
+            if (!(k.created === s.created)) { throw __bynkExpectFailure("tests/api.bynk:101:14", 4311, 4333, "expect k.created == s.created\n  expected: k.created == s.created\n  actual:   " + __bynkShow((k.created)) + " == " + __bynkShow((s.created))); }
+            return undefined;
+          }
+          return __bynkExpect((false), "tests/api.bynk:103:18", 4358, 4363, "expect false (in the `_` arm of `match listed`)", "listed", () => __bynkShow(listed));
+        }
+        default: {
+          return __bynkExpect((false), "tests/api.bynk:106:16", 4391, 4396, "expect false (in the `_` arm of `match minted`)", "minted", () => __bynkShow(__d));
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(minted));
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_revoking_another_identity_s_key_is_refused_and_leaves_it() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const minted = await __sysdrive_api_http_POST_accounts_Param_id_keys(("acct-21" as any), { label: ("ci" as any) }, undefined, "");
+    void (await (async (__d) => {
+      switch (__d.tag) {
+        case "Created": {
+          const s = __d.value;
+          const other = await __sysdrive_api_http_DELETE_accounts_Param_id_keys_Param_key(("acct-22" as any), s.id, undefined, "");
+          if (!(((__c: boolean) => __c)(other.tag === "NotFound"))) { throw __bynkExpectFailure("tests/api.bynk:115:12", 4791, 4808, "expect other is NotFound", "other", () => __bynkShow(other)); }
+          const listed = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-21" as any), undefined, "");
+          const n = ((__d) => {
+            switch (__d.tag) {
+              case "Ok": {
+                const keys = __d.value;
+                return (keys).length;
+              }
+              default: {
+                return 0;
+              }
+            }
+            throw new globalThis.Error("non-exhaustive match");
+          })(listed);
+          if (!(n === 1)) { throw __bynkExpectFailure("tests/api.bynk:121:12", 4968, 4974, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
+          const own = await __sysdrive_api_http_DELETE_accounts_Param_id_keys_Param_key(("acct-21" as any), s.id, undefined, "");
+          if (!(((__c: boolean) => __c)(own.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:123:12", 5067, 5083, "expect own is NoContent", "own", () => __bynkShow(own)); }
+          const again = await __sysdrive_api_http_DELETE_accounts_Param_id_keys_Param_key(("acct-21" as any), s.id, undefined, "");
+          if (!(((__c: boolean) => __c)(again.tag === "NotFound"))) { throw __bynkExpectFailure("tests/api.bynk:125:12", 5178, 5195, "expect again is NotFound", "again", () => __bynkShow(again)); }
+          const left = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-21" as any), undefined, "");
+          if (!(((__c: boolean) => __c)(left.tag === "Ok" && left.value.length === 0))) { throw __bynkExpectFailure("tests/api.bynk:127:12", 5275, 5289, "expect left is Ok([])", "left", () => __bynkShow(left)); }
+          return undefined;
+        }
+        default: {
+          return __bynkExpect((false), "tests/api.bynk:129:16", 5310, 5315, "expect false (in the `_` arm of `match minted`)", "minted", () => __bynkShow(__d));
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(minted));
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_revokeAll_empties_the_identity_s_keys__and_a_later_key_still_works() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const __r0 = await __sysdrive_api_http_POST_accounts_Param_id_keys(("acct-23" as any), { label: ("a" as any) }, undefined, "");
+    const __r1 = await __sysdrive_api_http_POST_accounts_Param_id_keys(("acct-23" as any), { label: ("b" as any) }, undefined, "");
+    const closed = await __sysdrive_api_http_POST_accounts_Param_id_close(("acct-23" as any), undefined, "");
+    if (!(((__c: boolean) => __c)(closed.tag === "Ok" && closed.value === 2))) { throw __bynkExpectFailure("tests/api.bynk:138:10", 5770, 5785, "expect closed is Ok(2)", "closed", () => __bynkShow(closed)); }
+    const empty = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-23" as any), undefined, "");
+    if (!(((__c: boolean) => __c)(empty.tag === "Ok" && empty.value.length === 0))) { throw __bynkExpectFailure("tests/api.bynk:140:10", 5862, 5877, "expect empty is Ok([])", "empty", () => __bynkShow(empty)); }
+    const fresh = await __sysdrive_api_http_POST_accounts_Param_id_keys(("acct-23" as any), { label: ("c" as any) }, undefined, "");
+    if (!(((__c: boolean) => __c)(fresh.tag === "Created"))) { throw __bynkExpectFailure("tests/api.bynk:142:10", 5978, 5997, "expect fresh is Created(_)", "fresh", () => __bynkShow(fresh)); }
+    const one = await __sysdrive_api_http_GET_accounts_Param_id_keys(("acct-23" as any), undefined, "");
+    const n = ((__d) => {
+      switch (__d.tag) {
+        case "Ok": {
+          const keys = __d.value;
+          return (keys).length;
+        }
+        default: {
+          return 0;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(one);
+    if (!(n === 1)) { throw __bynkExpectFailure("tests/api.bynk:148:10", 6139, 6145, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -448,7 +812,7 @@ async function test_a_key_is_minted_for_an_account() {
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a minted key is admitted and its identity minted", "another identity's key mints that identity", "a route without a binder still verifies", "no key is refused", "a malformed key is refused before any lookup", "an unknown key is refused after the dummy compare", "a forged key is refused after the record compare", "the key's header is hidden from the handler", "a key is minted for an account"];
+export const __bynkCases: readonly string[] = ["a minted key is admitted and its identity minted", "another identity's key mints that identity", "a route without a binder still verifies", "no key is refused", "a malformed key is refused before any lookup", "an unknown key is refused after the dummy compare", "a forged key is refused after the record compare", "a revoked key is refused after the dummy compare", "revokeAll refuses the identity's old key on the next request", "a verified key holder over the identity limit is refused with 429", "a forged key never consumes the identity limit", "the key's header is hidden from the handler", "a key is minted for an account", "a minted key is listed by its id and label", "revoking another identity's key is refused and leaves it", "revokeAll empties the identity's keys, and a later key still works"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -495,6 +859,30 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
     results.push(r);
     if (onCase) onCase(r);
   }
+  if (want("a revoked key is refused after the dummy compare")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a revoked key is refused after the dummy compare", ...(await test_a_revoked_key_is_refused_after_the_dummy_compare()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("revokeAll refuses the identity's old key on the next request")) {
+    const started = __bynkCaseNow();
+    const r = { name: "revokeAll refuses the identity's old key on the next request", ...(await test_revokeAll_refuses_the_identity_s_old_key_on_the_next_request()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a verified key holder over the identity limit is refused with 429")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a verified key holder over the identity limit is refused with 429", ...(await test_a_verified_key_holder_over_the_identity_limit_is_refused_with_429()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a forged key never consumes the identity limit")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a forged key never consumes the identity limit", ...(await test_a_forged_key_never_consumes_the_identity_limit()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   if (want("the key's header is hidden from the handler")) {
     const started = __bynkCaseNow();
     const r = { name: "the key's header is hidden from the handler", ...(await test_the_key_s_header_is_hidden_from_the_handler()), durationMs: __bynkCaseSince(started) };
@@ -504,6 +892,24 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a key is minted for an account")) {
     const started = __bynkCaseNow();
     const r = { name: "a key is minted for an account", ...(await test_a_key_is_minted_for_an_account()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a minted key is listed by its id and label")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a minted key is listed by its id and label", ...(await test_a_minted_key_is_listed_by_its_id_and_label()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("revoking another identity's key is refused and leaves it")) {
+    const started = __bynkCaseNow();
+    const r = { name: "revoking another identity's key is refused and leaves it", ...(await test_revoking_another_identity_s_key_is_refused_and_leaves_it()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("revokeAll empties the identity's keys, and a later key still works")) {
+    const started = __bynkCaseNow();
+    const r = { name: "revokeAll empties the identity's keys, and a later key still works", ...(await test_revokeAll_empties_the_identity_s_keys__and_a_later_key_still_works()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

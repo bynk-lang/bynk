@@ -118,6 +118,22 @@ export const ApiKeySecret = {
 };
 
 /**
+ * One of an identity's keys, as an `ApiKey` actor's `list` answers it: never the
+ * key itself or its hash. `id` names it, for `revoke`. `expires` and `lastUsed`
+ * are `None`: keys do not expire, and their use is not recorded, yet.
+ */
+export interface ApiKeyInfo {
+  readonly id: ApiKeyId;
+  readonly label: ApiKeyLabel;
+  readonly created: number;
+  readonly expires: Option<number>;
+  readonly lastUsed: Option<number>;
+}
+
+export const ApiKeyInfo = {
+};
+
+/**
  * The refusal of `mint` when the identity already holds the most live keys it
  * may (`limit`, 100).
  */
@@ -865,6 +881,44 @@ export function __deserialise_ApiKeyId(json: __JsonValue, path: string = "$"): R
     return Err({ kind: "RefinementViolation", path, violation: validated.error });
   }
   return Ok(validated.value as ApiKeyId);
+}
+
+export function __serialise_ApiKeyInfo(value: ApiKeyInfo): __JsonValue {
+  return {
+    id: __serialise_ApiKeyId(value.id),
+    label: __serialise_ApiKeyLabel(value.label),
+    created: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.created),
+    expires: __serialise_Option_Instant(value.expires),
+    lastUsed: __serialise_Option_Instant(value.lastUsed),
+  };
+}
+
+export function __deserialise_ApiKeyInfo(json: __JsonValue, path: string = "$"): Result<ApiKeyInfo, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_id = __deserialise_ApiKeyId(obj["id"], `${path}.id`);
+  if (__r_id.tag === "Err") return __r_id;
+  const __id = __r_id.value;
+  const __r_label = __deserialise_ApiKeyLabel(obj["label"], `${path}.label`);
+  if (__r_label.tag === "Err") return __r_label;
+  const __label = __r_label.value;
+  const __created$ms = __bynkInstantFromWire(obj["created"]);
+  if (typeof __created$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.created`, expected: "number", actual: typeof __created$ms });
+  }
+  if (!globalThis.Number.isSafeInteger(__created$ms)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.created`, expected: "safe integer", actual: globalThis.Number.isInteger(__created$ms) ? "integer outside the safe range" : "non-integer number" });
+  }
+  const __created = __created$ms;
+  const __r_expires = __deserialise_Option_Instant(obj["expires"], `${path}.expires`);
+  if (__r_expires.tag === "Err") return __r_expires;
+  const __expires = __r_expires.value;
+  const __r_lastUsed = __deserialise_Option_Instant(obj["lastUsed"], `${path}.lastUsed`);
+  if (__r_lastUsed.tag === "Err") return __r_lastUsed;
+  const __lastUsed = __r_lastUsed.value;
+  return Ok({ id: __id, label: __label, created: __created, expires: __expires, lastUsed: __lastUsed } as ApiKeyInfo);
 }
 
 export function __serialise_ApiKeyLabel(value: ApiKeyLabel): __JsonValue {
