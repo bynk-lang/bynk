@@ -1362,6 +1362,25 @@ pub const EXPLANATIONS: &[Explain] = &[
                   out = \"dist\"       # ✓ inside it",
     },
     Explain {
+        code: "bynk.container.unbounded_instances",
+        blurb: "`Container.send` starts, or reuses, one container for each distinct instance name, \
+                and a running container costs money. A name built from a request's own input on a \
+                route whose caller is not authenticated (`by Visitor`) lets anyone start as many \
+                containers as they have values to send, with nothing limiting how many. The check \
+                follows the handler's parameters, and the locals bound from them, into the instance \
+                argument; a name that comes from a constant, from the authenticated identity or from \
+                a closed set (an enum's names) does not warn, and neither does one passed through a \
+                function, which is where a set is bounded and is not followed. Serve the route `by` \
+                an authenticated actor, or choose the name from a fixed set. A refined type limits \
+                the shape of a name, not how many there are, so pair a keyed instance with an \
+                authenticated actor or a `RateLimit`. A later release is expected to let an \
+                instance declare a typed key that bounds its names, and a name from such a key \
+                will then not warn; that is not available yet.",
+        example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\n\
+                  service api from http {\n    on GET(\"/render/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {\n        let res <- Renderer.send(\"tenant-\\(tenant)\", req)   // ⚠ any caller picks the instance\n        …\n    }\n}\n\n\
+                  service api from http {\n    on GET(\"/render\") () -> Effect[HttpResult[String]] by m: Member given Renderer {\n        let res <- Renderer.send(m.identity, req)       // ✓ the authenticated identity chooses\n        …\n    }\n}",
+    },
+    Explain {
         code: "bynk.context.consumes_cycle",
         blurb: "Contexts may not form a circle of `consumes` clauses, whether directly or \
                 through others. `bynk deploy` takes the order in which to upload the Workers \
@@ -8129,6 +8148,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.container.output_outside_project",
         "A build with a `Container` is written to an output directory outside the project, so `wrangler` cannot reach the container's Dockerfile from the Worker's output directory by a relative path inside the project.",
     ),
+    warn(d(
+        "bynk.container.unbounded_instances",
+        "A `Container` instance name is built from a request's own input on a route whose caller is not authenticated, so any caller can start as many containers as they have values to send (warning).",
+    )),
     d(
         "bynk.context.consumes_cycle",
         "Contexts form a `consumes` dependency cycle.",

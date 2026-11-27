@@ -1,0 +1,9 @@
+[project]
+name = "container-bounded-instances"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[unstable]
+allow = ["bynk.cloudflare.Container"]
