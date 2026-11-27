@@ -159,8 +159,14 @@ async function test_a_handler_s_events_are_delivered_together() {
     if (!(__bynkEq(plain, Some("seen")))) { throw __bynkExpectFailure("tests/pub.bynk:44:12", 1345, 1366, "expect plain == Some(\"seen\")\n  expected: plain == Some(\"seen\")\n  actual:   " + __bynkShow((plain)) + " == " + __bynkShow((Some("seen")))); }
     const m = await __callService(deps.env.EV_LEDGER, "read", "map:true" as __JsonValue, __ns_ev_ledger.__deserialise_Option_String, "integration", "46115351d8436217", deps.env, "ev.ledger");
     if (!(__bynkEq(m, Some("seen")))) { throw __bynkExpectFailure("tests/pub.bynk:46:12", 1418, 1435, "expect m == Some(\"seen\")\n  expected: m == Some(\"seen\")\n  actual:   " + __bynkShow((m)) + " == " + __bynkShow((Some("seen")))); }
+    const s = await __callService(deps.env.EV_LEDGER, "read", "set:true" as __JsonValue, __ns_ev_ledger.__deserialise_Option_String, "integration", "46115351d8436217", deps.env, "ev.ledger");
+    if (!(__bynkEq(s, Some("seen")))) { throw __bynkExpectFailure("tests/pub.bynk:48:12", 1487, 1504, "expect s == Some(\"seen\")\n  expected: s == Some(\"seen\")\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((Some("seen")))); }
+    const b = await __callService(deps.env.EV_LEDGER, "read", "bytes:true" as __JsonValue, __ns_ev_ledger.__deserialise_Option_String, "integration", "46115351d8436217", deps.env, "ev.ledger");
+    if (!(__bynkEq(b, Some("seen")))) { throw __bynkExpectFailure("tests/pub.bynk:50:12", 1558, 1575, "expect b == Some(\"seen\")\n  expected: b == Some(\"seen\")\n  actual:   " + __bynkShow((b)) + " == " + __bynkShow((Some("seen")))); }
+    const o = await __callService(deps.env.EV_LEDGER, "read", "option:true" as __JsonValue, __ns_ev_ledger.__deserialise_Option_String, "integration", "46115351d8436217", deps.env, "ev.ledger");
+    if (!(__bynkEq(o, Some("seen")))) { throw __bynkExpectFailure("tests/pub.bynk:52:12", 1630, 1647, "expect o == Some(\"seen\")\n  expected: o == Some(\"seen\")\n  actual:   " + __bynkShow((o)) + " == " + __bynkShow((Some("seen")))); }
     const d = await __callService(deps.env.EV_LEDGER, "read", "decimal:true" as __JsonValue, __ns_ev_ledger.__deserialise_Option_String, "integration", "46115351d8436217", deps.env, "ev.ledger");
-    if (!(__bynkEq(d, Some("seen")))) { throw __bynkExpectFailure("tests/pub.bynk:48:12", 1491, 1508, "expect d == Some(\"seen\")\n  expected: d == Some(\"seen\")\n  actual:   " + __bynkShow((d)) + " == " + __bynkShow((Some("seen")))); }
+    if (!(__bynkEq(d, Some("seen")))) { throw __bynkExpectFailure("tests/pub.bynk:54:12", 1703, 1720, "expect d == Some(\"seen\")\n  expected: d == Some(\"seen\")\n  actual:   " + __bynkShow((d)) + " == " + __bynkShow((Some("seen")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -177,9 +183,9 @@ async function test_a_Decimal_event_does_not_take_a_plain_event_of_the_same_hand
     const deps = __makeHarness();
     const __r0 = await __callService(deps.env.EV_PUB, "fireMixed", "p2" as __JsonValue, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>, "integration", "fc0ba9b4f6050203", deps.env, "ev.pub");
     const plain = await __callService(deps.env.EV_LEDGER, "read", "plain:p2" as __JsonValue, __ns_ev_ledger.__deserialise_Option_String, "integration", "46115351d8436217", deps.env, "ev.ledger");
-    if (!(__bynkEq(plain, Some("seen")))) { throw __bynkExpectFailure("tests/pub.bynk:54:12", 1688, 1709, "expect plain == Some(\"seen\")\n  expected: plain == Some(\"seen\")\n  actual:   " + __bynkShow((plain)) + " == " + __bynkShow((Some("seen")))); }
+    if (!(__bynkEq(plain, Some("seen")))) { throw __bynkExpectFailure("tests/pub.bynk:60:12", 1900, 1921, "expect plain == Some(\"seen\")\n  expected: plain == Some(\"seen\")\n  actual:   " + __bynkShow((plain)) + " == " + __bynkShow((Some("seen")))); }
     const d = await __callService(deps.env.EV_LEDGER, "read", "decimal:true" as __JsonValue, __ns_ev_ledger.__deserialise_Option_String, "integration", "46115351d8436217", deps.env, "ev.ledger");
-    if (!(__bynkEq(d, Some("seen")))) { throw __bynkExpectFailure("tests/pub.bynk:56:12", 1765, 1782, "expect d == Some(\"seen\")\n  expected: d == Some(\"seen\")\n  actual:   " + __bynkShow((d)) + " == " + __bynkShow((Some("seen")))); }
+    if (!(__bynkEq(d, Some("seen")))) { throw __bynkExpectFailure("tests/pub.bynk:62:12", 1977, 1994, "expect d == Some(\"seen\")\n  expected: d == Some(\"seen\")\n  actual:   " + __bynkShow((d)) + " == " + __bynkShow((Some("seen")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

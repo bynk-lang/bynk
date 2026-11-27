@@ -340,9 +340,11 @@ export async function dispatchToEventsFanout(
   // wire form, so this is a defect, not a payload shape) is named in the log and cannot take its
   // siblings from the same handler with it. The body is the batch `JSON.stringify({ events })` writes.
   const encoded: string[] = [];
+  const sent: Array<{ type: string; eventId: string }> = [];
   for (const event of events) {
     try {
       encoded.push(JSON.stringify(event));
+      sent.push({ type: event.type, eventId: event.envelope.eventId });
     } catch (e) {
       console.error("EventsFanout dropped an event that does not encode", {
         type: event.type,
@@ -352,7 +354,6 @@ export async function dispatchToEventsFanout(
     }
   }
   if (encoded.length === 0) return;
-  const sent = events.map((event) => ({ type: event.type, eventId: event.envelope.eventId }));
   // The whole round trip is wrapped, not just the status check: a rejected
   // `stub.fetch` (a network error, the DO throwing) is exactly as much a
   // fan-out transport failure as a non-`ok` response, and by this point

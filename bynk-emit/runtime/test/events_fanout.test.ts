@@ -73,3 +73,15 @@ test("dispatchToEventsFanout: a failed send names the events it carried", async 
     ],
   });
 });
+
+test("dispatchToEventsFanout: a failed send names only the events that were sent", async () => {
+  const { binding } = recorder(500);
+  const logged = await captured(() => dispatchToEventsFanout(binding, [event("A", {}, "e1"), event("Bad", { d: 1n }, "e2"), event("B", {}, "e3")]));
+  assert.equal(logged.length, 2);
+  assert.equal(logged[0]![0], "EventsFanout dropped an event that does not encode");
+  assert.equal(logged[1]![0], "EventsFanout dispatch failed");
+  assert.deepEqual((logged[1]![1] as { events: unknown }).events, [
+    { type: "A", eventId: "e1" },
+    { type: "B", eventId: "e3" },
+  ]);
+});

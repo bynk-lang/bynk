@@ -44,6 +44,12 @@ suite ev.pub as system {
     expect plain == Some("seen")
     let m <- ev.ledger.read("map:true")
     expect m == Some("seen")
+    let s <- ev.ledger.read("set:true")
+    expect s == Some("seen")
+    let b <- ev.ledger.read("bytes:true")
+    expect b == Some("seen")
+    let o <- ev.ledger.read("option:true")
+    expect o == Some("seen")
     let d <- ev.ledger.read("decimal:true")
     expect d == Some("seen")
   }
