@@ -49,9 +49,27 @@ pub(super) fn guard(route: &HttpRoute) -> TsExpr {
     }
 }
 
+/// The CORS preflight branches, one per CORS service, each guarded by
+/// [`guard_preflight`].
+pub(super) fn preflights(
+    cors_services: &[super::http_policy::CorsService],
+    security_services: &[super::http_policy::SecurityService],
+    routes: &[HttpRoute],
+) -> Vec<TsStmt> {
+    cors_services
+        .iter()
+        .map(|cs| {
+            guard_preflight(
+                super::http_policy::cors_preflight(cs, security_services),
+                routes,
+            )
+        })
+        .collect()
+}
+
 /// D10: wraps a CORS preflight so it never answers for a path an `ANY` route
 /// owns. Unchanged when the Worker has no `ANY` route.
-pub(super) fn guard_preflight(preflight: TsStmt, routes: &[HttpRoute]) -> TsStmt {
+fn guard_preflight(preflight: TsStmt, routes: &[HttpRoute]) -> TsStmt {
     let owners: Vec<TsExpr> = routes
         .iter()
         .filter(|r| is_any(r))
