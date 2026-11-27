@@ -5,6 +5,8 @@
 
 | Probe | From | To | Version | PR | Reason |
 |---|---|---|---|---|---|
+| ts_writes | 486 | 488 | v0.806.0 | #4519 | the test double of `Ai` carries one text write, the `generateJson` member that `Ai.generateValue[T]` is lowered over, which is not an operation of `Ai` and so cannot be a stub clause (#4099) |
+| ts_writes | 486 | 488 | v0.800.0 | #4508 | `object_key` quotes a wire name that is not an identifier as a TypeScript string literal, with one `format!` for a control character's escape; the name is data from the declaration, not authored TypeScript text |
 | ts_writes | 481 | 486 | v0.792.0 | #4503 | `checked_callees` in bynk-driver builds a refusal message with `format!`, an error-message line the text-level scanner counts as a TypeScript write (the same one-site over-count the probe documents for struct-field labels); it writes no TypeScript (#4105) |
 | ts_writes | 481 | 486 | v0.791.0 | #4481 | the stored-record rename statement names its `typeof <src>` cast type with `format!`, as the neighbouring emitted names are; no TypeScript text is written |
 | ts_writes | 481 | 486 | v0.785.0 | #4464 | the `writeValue` lowering builds its data point as a TypeScript node and one text write of the `Cap.writeValue` trace-step target, the first typed-point lowering over `write` (#4105) |
