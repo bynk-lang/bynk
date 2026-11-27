@@ -283,13 +283,14 @@ pub(crate) fn apply_vectorize_adoptions(
     project_root: &Path,
     resources: &mut BTreeMap<String, Resources>,
     environment: &str,
-) -> Result<(), ()> {
+) -> Result<Vec<plan::Entry>, plan::Entry> {
     if resources.values().all(|r| r.vectorize_indexes.is_empty()) {
-        return Ok(());
+        return Ok(Vec::new());
     }
     let settings =
         bynk_project::vectorize::try_read_vectorize_deploy(project_root).map_err(|e| {
             emsg!("bynk: error: {e}");
+            plan::refusals::adoption_unreadable("vectorize", &e)
         })?;
     // An entry that names no declared capability would be silently ignored,
     // and the deploy would create a fresh, empty index beside the one the team
@@ -313,18 +314,31 @@ pub(crate) fn apply_vectorize_adoptions(
         let hint = bynk_project::paths::did_you_mean(&wanted, bindings.iter().copied())
             .map(|b| format!("; did you mean the capability whose binding is `{b}`?"))
             .unwrap_or_default();
-        emsg!(
+        let message = format!(
             "bynk: error: `[deploy.vectorize.{capability}]` in bynk.toml names no `Vectorize` capability in this project{hint}; an entry that matches nothing would have the deploy create a new, empty index instead of adopting yours"
         );
-        return Err(());
+        emsg!("{message}");
+        return Err(plan::refusals::adoption_unmatched(
+            "vectorize",
+            capability,
+            &message,
+        ));
     }
+    let mut notes = Vec::new();
     for (capability, entry) in &settings {
         if !entry.index.contains_key(environment) {
             let named: Vec<&str> = entry.index.keys().map(String::as_str).collect();
-            emsg!(
+            let note = format!(
                 "bynk: note: `[deploy.vectorize.{capability}]` adopts an index only for {}; under `{environment}` the deploy creates one",
                 named.join(", ")
             );
+            emsg!("{note}");
+            notes.push(plan::refusals::adoption_partial(
+                "vectorize",
+                capability,
+                environment,
+                &note,
+            ));
         }
     }
     for declared in resources.values_mut() {
@@ -336,7 +350,7 @@ pub(crate) fn apply_vectorize_adoptions(
                 .cloned();
         }
     }
-    Ok(())
+    Ok(notes)
 }
 
 /// An adopted index: it has to exist (the deploy never creates it) and match

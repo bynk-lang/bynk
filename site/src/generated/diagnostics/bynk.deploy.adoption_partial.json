@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.adoption_partial",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "`[deploy.vectorize.<Capability>]` or `[deploy.containers.<Capability>]` in `bynk.toml` adopts an index or image only for some environments, and this environment is not one of them, so the deploy creates (or builds) one (warning)."
+}
