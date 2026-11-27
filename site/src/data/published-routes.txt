@@ -2266,6 +2266,7 @@
 /reference/diagnostics/bynk.test.wrong_issuer_needs_oidc_route/
 /reference/diagnostics/bynk.test.ws_lifecycle_by/
 /reference/diagnostics/bynk.test.ws_needs_in_process/
+/reference/diagnostics/bynk.test.ws_refusal_needs_system/
 /reference/diagnostics/bynk.tier.cross_context_needs_system/
 /reference/diagnostics/bynk.tier.mixed_system_suite/
 /reference/diagnostics/bynk.tier.system_needs_wire/
