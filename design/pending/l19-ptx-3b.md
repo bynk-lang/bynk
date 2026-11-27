@@ -42,7 +42,9 @@ exchange, D15's method and body, and D19.
   binding imports a runtime shape (`emit_abi_shapes`).
   - It refuses a `path` that doesn't start with `/`, holds `?`, `#` or a control character,
     or has a `.` or `..` segment, encoded or not, with `\` read as `/`.
-  - It also refuses a segment whose decoding holds `/` or `\` with a `.` or `..` component.
+  - It also refuses a segment whose decoding holds `/` or `\` with a `.` or `..` component,
+    or a control character. A segment is decoded up to three times, because a middlebox may
+    decode again (`%252e%252e`), and one still encoded after the third is refused.
   - It builds the URL textually and compares its origin with the declared one before
     sending.
   - It sends the method and raw query, and the body for any method but `GET` and `HEAD`,

@@ -421,6 +421,24 @@ fn a_pass_through_route_forwards_to_a_loopback_upstream_on_workerd() {
             );
             check(
                 &mut f,
+                "§8 SSRF into the upstream's own private paths via `..`: a double-encoded `%252e%252e%252fadmin` is refused, nothing sent",
+                send(port, "GET", "/blog/%252e%252e%252fadmin", none, ""),
+                &|a| a.status == 400,
+            );
+            check(
+                &mut f,
+                "§8 SSRF into the upstream's own private paths via `..`: a triple-encoded `%25252e` is refused, nothing sent",
+                send(port, "GET", "/blog/%25252e%25252e/admin", none, ""),
+                &|a| a.status == 400,
+            );
+            check(
+                &mut f,
+                "§8 request smuggling (header and log injection through a decoding upstream): `%0d%0aX-Injected:%201` is refused, nothing sent",
+                send(port, "GET", "/blog/%0d%0aX-Injected:%201", none, ""),
+                &|a| a.status == 400,
+            );
+            check(
+                &mut f,
                 "§8 open redirect via the upstream (D16): an off-host Location passes unchanged and is never followed",
                 send(port, "GET", "/blog/status/302off", none, ""),
                 &|a| {
@@ -448,10 +466,12 @@ fn a_pass_through_route_forwards_to_a_loopback_upstream_on_workerd() {
                     "§8 SSRF: every request reaches the declared origin, got {seen:?}"
                 ));
             }
-            if seen
-                .iter()
-                .any(|s| s.contains("admin") || s.starts_with("PROPFIND") || s.contains("upgrade"))
-            {
+            if seen.iter().any(|s| {
+                s.contains("admin")
+                    || s.contains("Injected")
+                    || s.starts_with("PROPFIND")
+                    || s.contains("upgrade")
+            }) {
                 f.push(format!("a refused request reached the upstream: {seen:?}"));
             }
             if !seen.iter().any(|s| s.starts_with("GET //other.example/x ")) {

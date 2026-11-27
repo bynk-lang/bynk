@@ -81,6 +81,23 @@ test("§8 SSRF into the upstream's own private paths via `..`: dot segments are 
   }
 });
 
+test("§8 SSRF into the upstream's own private paths via `..`: a double- or triple-encoded dot segment is refused", () => {
+  for (const path of ["/%252e%252e/admin", "/%252e%252e%252fadmin", "/a%252F..%252Fb", "/%25252e%25252e/admin", "/%25252e/x"]) {
+    assert.notEqual(upstreamPathProblem(path), null, path);
+  }
+});
+
+test("§8 SSRF: a segment still encoded after three decodings is refused", () => {
+  assert.notEqual(upstreamPathProblem("/%2525252541"), null);
+  assert.equal(upstreamPathProblem("/%252541"), null, "two layers that settle on `A` are fine");
+});
+
+test("§8 request smuggling (header and log injection through a decoding upstream): a decoded control character is refused", () => {
+  for (const path of ["/%0d%0aX-Injected:%201", "/a%00b", "/a%09b", "/a%7Fb", "/%250d%250a"]) {
+    assert.notEqual(upstreamPathProblem(path), null, path);
+  }
+});
+
 test("§8 SSRF: an encoded slash with no dot component is sent as received", () => {
   for (const path of ["/a%2Fb", "/r2/key%2Fwith%2Fslashes.png", "/a..b/.env", "/"]) {
     assert.equal(upstreamPathProblem(path), null, path);

@@ -2819,19 +2819,39 @@ function decodeEscapes(segment: string): string {
 
 const isDot = (part: string): boolean => part === "." || part === "..";
 
+/** How many times a segment is decoded: an upstream, or a cache or framework in
+ *  front of it, may decode a path more than once. */
+const DECODE_ROUNDS = 3;
+
+/** Why one raw `segment` of a path can't be sent, or `null`. It is decoded up to
+ *  [`DECODE_ROUNDS`] times; at every stage it may hold no control character, and
+ *  split on `/` and `\` it may have no `.` or `..` component. A segment still
+ *  changing after the last round is refused: it could decode to anything. */
+function segmentProblem(segment: string): string | null {
+  let current = segment;
+  for (let round = 0; ; round++) {
+    if (/[\u0000-\u001f\u007f]/.test(current)) return "holds a control character once decoded";
+    if (current.split(/[/\\]/).some(isDot)) return "has a `.` or `..` segment";
+    const next = decodeEscapes(current);
+    if (next === current) return null;
+    if (round === DECODE_ROUNDS) return "is still encoded after decoding it three times";
+    current = next;
+  }
+}
+
 /** D13, §8 (SSRF into the upstream's private paths): why `path` can't be sent, or
- *  `null`. It must start with `/` and hold no `?`, `#` or control character; no
- *  segment may be `.` or `..`, encoded or not, with `\` read as `/` as a URL
- *  parser does; and no segment whose decoding holds `/` or `\` may have a `.` or
- *  `..` component (`..%2F..%2Fadmin`, `..%5Cadmin`), which an upstream that
- *  decodes and then normalises would climb out of the mount by. An encoded slash
- *  with no dot component (`a%2Fb`) is sent as received. */
+ *  `null`. It must start with `/` and hold no `?`, `#` or control character. No
+ *  segment, with `\` read as `/` as a URL parser does, may be or decode to a `.`
+ *  or `..` component (`%2e%2e`, `..%2F..%2Fadmin`, `..%5Cadmin`, the double-encoded
+ *  `%252e%252e`) or a control character (`%0d%0a`), however many times an upstream
+ *  or a middlebox decodes it. An encoded slash with no dot component (`a%2Fb`) is
+ *  sent as received. */
 export function upstreamPathProblem(path: string): string | null {
   if (!path.startsWith("/")) return "does not start with `/`";
   if (/[?#\u0000-\u001f\u007f]/.test(path)) return "holds `?`, `#` or a control character";
   for (const segment of path.split(/[/\\]/)) {
-    const decoded = decodeEscapes(segment);
-    if (decoded.split(/[/\\]/).some(isDot)) return "has a `.` or `..` segment";
+    const problem = segmentProblem(segment);
+    if (problem !== null) return problem;
   }
   return null;
 }

@@ -587,8 +587,12 @@ sent, so no `path` can change the host: `//other.example/x` is a path on the ups
 `..` segment (encoded or not, with `\` read as `/`, as a URL parser does) is
 `Err(InvalidPath)`, with nothing sent. So is a segment whose decoding holds `/` or `\` and
 has a `.` or `..` component (`..%2F..%2Fadmin`, `..%5Cadmin`), which an upstream that decodes
-and then normalises would climb out of the mount by. An encoded slash with no dot component
-(`a%2Fb`, an R2 key) is sent as received.
+and then normalises would climb out of the mount by. A segment is checked through three rounds
+of decoding, since a cache or framework in front of an upstream may decode a path again: a
+`.` or `..` component (`%252e%252e`) or a control character (`%0d%0a`, which would let a
+decoding upstream write a header or a log line) at any round is refused, and so is a segment
+still encoded after the third. An encoded slash with no dot component (`a%2Fb`, an R2 key)
+is sent as received.
 
 The method passes, `GET` and `HEAD` without a body; any other method's body streams to the
 upstream unread. A redirect is returned, never followed. A response head that doesn't arrive
