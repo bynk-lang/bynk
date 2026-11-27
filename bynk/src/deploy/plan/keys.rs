@@ -125,7 +125,7 @@ impl ManagedKeys<'_> {
                 let d = decide_session_key(supplied.clone(), presence, opts.force, &mut mint)
                     .map_err(|e| {
                         format!(
-                            "bynk: error: the session key `{binding}` of the `SignedCookie` actor `{actor}` on `{worker}`: {e}\n"
+                            "bynk: error: the key `{binding}` of the actor `{actor}` on `{worker}` (a `SignedCookie` signing key or an `ApiKey` pepper): {e}\n"
                         )
                     })?;
                 decisions.push(((*worker).clone(), d));
