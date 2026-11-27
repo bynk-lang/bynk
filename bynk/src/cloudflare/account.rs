@@ -110,16 +110,73 @@ fn unreadable(request: &Request, missing: &str) -> CloudflareError {
 }
 
 impl CloudflareApi for Account<'_> {
-    fn queue_create(&self, name: &str) -> Result<(), WranglerError> {
-        self.wrangler.queue_create(name)
+    fn queue_create(&self, name: &str) -> Result<(), CloudflareError> {
+        self.send(Purpose::Queues, &rest::queues::create(name))
+            .map(drop)
     }
 
-    fn queue_info(&self, name: &str) -> Result<(), WranglerError> {
-        self.wrangler.queue_info(name)
+    /// Every page until the exact name turns up, to `total_pages` (or while full), never past
+    /// [`rest::queues::MAX_PAGES`] or a page that brings no queue not already seen.
+    fn queue_find(&self, name: &str) -> Result<Option<String>, CloudflareError> {
+        let mut found = None;
+        let mut cut_short = None;
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        let rule = Numbered {
+            cap: Some(rest::queues::MAX_PAGES),
+            missing_total: MissingTotal::WhileFull,
+            stop_on_empty: false,
+        };
+        rule.follow(|page| -> Result<Page, CloudflareError> {
+            let request = rest::queues::list_page(page);
+            let body = self.send(Purpose::Queues, &request)?;
+            let (id, entries) = rest::queues::found(&body, name)
+                .ok_or_else(|| unreadable(&request, "`result` list"))?;
+            let before = seen.len();
+            seen.extend(rest::queues::ids(&body));
+            let repeated = entries > 0 && seen.len() == before;
+            let read = Page::of(&body, entries);
+            let more = read.total_pages.map_or_else(
+                || {
+                    read.per_page
+                        .is_some_and(|per| entries as u64 >= per && entries > 0)
+                },
+                |total| page < total,
+            );
+            // #4582 review: a listing that stops before its end without the name has not said
+            // the queue is absent, and reading it so would let `--prune` forget a live queue.
+            if id.is_none() && more && (repeated || page == rest::queues::MAX_PAGES) {
+                cut_short = Some(if repeated {
+                    format!("page {page} repeated an earlier one")
+                } else {
+                    format!("it did not end within {} pages", rest::queues::MAX_PAGES)
+                });
+            }
+            let done = id.is_some() || repeated;
+            if found.is_none() {
+                found = id;
+            }
+            Ok(read.done_if(done))
+        })?;
+        match (found, cut_short) {
+            (Some(id), _) => Ok(Some(id)),
+            (None, Some(why)) => Err(CloudflareError::Other(format!(
+                "the account's queue listing could not be read to its end ({why}), so whether the queue `{name}` exists is not known"
+            ))),
+            (None, None) => Ok(None),
+        }
     }
 
-    fn queue_delete(&self, name: &str) -> Result<(), WranglerError> {
-        self.wrangler.queue_delete(name)
+    fn queue_delete(&self, name: &str) -> Result<bool, CloudflareError> {
+        let Some(id) = self.queue_find(name)? else {
+            return Ok(false);
+        };
+        if !rest::queues::is_queue_id(&id) {
+            return Err(CloudflareError::Other(format!(
+                "the queue `{name}` has the id `{id}`, which is not a queue id, so nothing was deleted"
+            )));
+        }
+        self.send(Purpose::Queues, &rest::queues::delete(&id))
+            .map(|_| true)
     }
 
     fn kv_create(&self, title: &str) -> Result<String, CloudflareError> {
@@ -567,6 +624,63 @@ mod tests {
             ["ix-0", "ix-1"]
         );
         assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
+    }
+
+    /// 1D.4d: the queues listing is followed while pages are full (when `total_pages` is left out)
+    /// until the exact name turns up, and stops at a page that brings no new queue, so an answer
+    /// that ignored `page=N` is asked twice, not forever; that stop, without the name, is an error,
+    /// not an absent queue (#4582 review).
+    #[test]
+    fn a_queue_is_found_across_full_pages_and_a_repeated_page_ends_the_lookup() {
+        let full = |from: usize| -> &'static str {
+            Box::leak(
+                format!(
+                    r#"{{"success":true,"result":[{}],"result_info":{{"per_page":2}}}}"#,
+                    (from..from + 2)
+                        .map(|i| format!(r#"{{"queue_id":"q{i}","queue_name":"other-{i}"}}"#))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+                .into_boxed_str(),
+            )
+        };
+        let root = std::env::temp_dir();
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, full(0)),
+            (200, full(2)),
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"theone","queue_name":"jobs"}],"result_info":{"per_page":2}}"#,
+            ),
+        ]));
+        let (base, seen) = answering_in_turn(answers);
+        assert_eq!(
+            account(base, &root).queue_find("jobs").unwrap().as_deref(),
+            Some("theone")
+        );
+        assert_eq!(seen.join().unwrap().len(), 3);
+        let answers: &'static [(u16, &'static str)] =
+            Box::leak(Box::new([(200, full(0)), (200, full(0))]));
+        let (base, seen) = answering_in_turn(answers);
+        let said = account(base, &root)
+            .queue_find("jobs")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            said.contains("could not be read to its end (page 2 repeated an earlier one)"),
+            "{said}"
+        );
+        assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
+        // A short last page without the name is the listing's end: the queue is absent.
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, full(0)),
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"q9","queue_name":"other"}],"result_info":{"per_page":2}}"#,
+            ),
+        ]));
+        let (base, _) = answering_in_turn(answers);
+        assert_eq!(account(base, &root).queue_find("jobs").unwrap(), None);
     }
 
     /// 1D.4b: the account answers for its own bucket; a 404 is a bucket it does not hold, and
