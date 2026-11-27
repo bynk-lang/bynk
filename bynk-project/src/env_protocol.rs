@@ -414,15 +414,15 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn the_protocol_has_twenty_keys_and_twenty_four_names_a_reader_spells() {
-        assert_eq!(PROTOCOL.len(), 20);
+    fn the_protocol_has_twenty_three_keys_and_twenty_seven_names_a_reader_spells() {
+        assert_eq!(PROTOCOL.len(), 23);
         // `BYNK_DEV_ACK_` is a family of five fixed members, so the keys come to
-        // 24 names a reader spells. The prefix itself is a token, not a name, and
+        // 27 names a reader spells. The prefix itself is a token, not a name, and
         // `BYNK_CALL_FROM_BYNK__DEV` is derived from its prefix at run time.
         let spelt = all_names()
             .filter(|n| *n != DEV_ACK_PREFIX && *n != CALL_FROM_BYNK_DEV)
             .count();
-        assert_eq!(spelt, 24);
+        assert_eq!(spelt, 27);
     }
 
     #[test]
