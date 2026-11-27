@@ -1,0 +1,2 @@
+bynk.capability.unknown_base `D1` is not a capability this suite's commons selects
+# exact

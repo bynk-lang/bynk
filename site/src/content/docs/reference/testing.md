@@ -25,7 +25,7 @@ the declared handler and checked for arity and argument types:
 | service | address |
 |---|---|
 | `on call` | `svc.call(args)` |
-| `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, a [rest](/reference/http/#rest-segments) as the raw rest of the path, `files.GET("/files/*key", "/a/b.png")`, which is `""` or starts with `/` and holds no `?`, `#` or dot segment (`bynk.test.rest_argument`), then body); a `system` case may add a trailing [`RequestHeaders`](#request-headers) when the route declares no `headers:` |
+| `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, a [rest](/reference/http/#rest-segments) as the raw rest of the path, `files.GET("/files/*key", "/a/b.png")`, which is `""` or starts with `/` and holds no `?`, `#` or dot segment (`bynk.test.rest_argument`), then body); a `system` case may add a trailing [`RequestHeaders`](#request-headers) when the route declares no `headers:`. A [pass-through route](/reference/http/#pass-through-routes) (`on ANY`) can't be addressed yet (`bynk.test.pass_through_address`): its test double arrives in a later release |
 | `from cron` | `svc.schedule("<expr>", at)` — matched to the handler with that schedule; `at` is an `Instant` when the handler declares it |
 | `from queue` | `svc.message(msg)` |
 | `from Events(E)` | `svc.event(e)`, `svc.event(e, env)` — [one delivered event](#event-address) |

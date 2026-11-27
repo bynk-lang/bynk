@@ -52,6 +52,10 @@ use super::runtime_use::RuntimeUse;
 use super::serialisation;
 
 mod route;
+mod websocket;
+
+pub use websocket::WsInput;
+use websocket::WsPlan;
 
 /// #3918: whether `r` is a `GET` that answers `Streaming`, and so also has an `EventSource` form.
 fn has_event_source(r: &RouteInput) -> bool {
@@ -78,6 +82,10 @@ const SURFACE_TYPES: &[&str] = &[
     "Problem",
     "Result",
     "ValidationError",
+    "WsClose",
+    "WsConnectOptions",
+    "WsConnection",
+    "WsReconnect",
 ];
 
 /// The wire shape of the standard `File`, a `@multipart` file part.
@@ -116,6 +124,8 @@ const OPTIONAL_MODULES: [(&str, &str); 5] = [
 ];
 
 const RUNTIME: &str = include_str!("http_client_runtime.ts");
+/// #3906: the WebSocket half, added to a client that has a `from websocket` service.
+const RUNTIME_WS: &str = include_str!("http_client_ws_runtime.ts");
 const RESULT_MODULE: &str = include_str!("../../runtime/src/result.ts");
 const BYTES_MODULE: &str = include_str!("../../runtime/src/bytes.ts");
 const DECIMAL_MODULE: &str = include_str!("../../runtime/src/decimal.ts");
@@ -143,6 +153,8 @@ pub struct ServiceInput {
     /// The type namespace the service's signatures are written in.
     pub types: HashMap<String, Arc<TypeDecl>>,
     pub routes: Vec<RouteInput>,
+    /// #3906: a `from websocket` service, which has a `connect` and no routes.
+    pub ws: Option<WsInput>,
 }
 
 /// One route of a service.
@@ -346,6 +358,11 @@ fn closure_of(input: &HttpClientInput) -> Result<SurfaceClosure, ClientError> {
             }
             roots.extend(r.success.iter().cloned());
         }
+        if let Some(w) = &s.ws {
+            roots.extend(w.params.iter().map(|(_, t)| t.clone()));
+            roots.push(w.in_ty.clone());
+            roots.push(w.out_ty.clone());
+        }
     }
     Ok(surface_closure(&roots, &own_types, SURFACE_TYPES))
 }
@@ -363,6 +380,22 @@ fn viable_routes(input: &HttpClientInput) -> Result<(HttpClientInput, Vec<String
         .zip(&mut kept.services)
     {
         out.routes.clear();
+        if let (Some(w), Some(wp)) = (&s.ws, &sp.ws) {
+            let (convs, holds) = (trial.convs.clone(), trial.holds.clone());
+            if let Err(e) = trial.ws_service(&sp.key, s, w, wp) {
+                (trial.convs, trial.holds) = (convs, holds);
+                out.ws = None;
+                skipped.push(
+                    [
+                        "a `websocket` connection of `",
+                        &s.name,
+                        "`: ",
+                        &e.to_string(),
+                    ]
+                    .concat(),
+                );
+            }
+        }
         for (r, rp) in s.routes.iter().zip(&sp.routes) {
             let (convs, holds) = (trial.convs.clone(), trial.holds.clone());
             match trial.route(&sp.key, r, rp, &s.types) {
@@ -374,7 +407,8 @@ fn viable_routes(input: &HttpClientInput) -> Result<(HttpClientInput, Vec<String
             }
         }
     }
-    kept.services.retain(|s| !s.routes.is_empty());
+    kept.services
+        .retain(|s| !s.routes.is_empty() || s.ws.is_some());
     Ok((kept, skipped))
 }
 
@@ -415,6 +449,8 @@ struct ServicePlan {
     /// The property of the client this service's functions hang from.
     key: String,
     routes: Vec<RoutePlan>,
+    /// #3906: the names of a `from websocket` service's `connect`.
+    ws: Option<WsPlan>,
 }
 
 struct RoutePlan {
@@ -549,7 +585,20 @@ impl Gen {
                     headers,
                 });
             }
-            services.push(ServicePlan { key, routes });
+            let ws = s.ws.as_ref().map(|w| {
+                let stem = pascal(&s.name);
+                let takes_credential = matches!(
+                    w.credential,
+                    bynk_check::actors::WsClientCredential::Bearer { .. }
+                        | bynk_check::actors::WsClientCredential::Oidc
+                );
+                WsPlan {
+                    credentials: takes_credential
+                        .then(|| unique([stem.as_str(), "Credentials"].concat(), &mut taken)),
+                    connection: unique([stem.as_str(), "Connection"].concat(), &mut taken),
+                }
+            });
+            services.push(ServicePlan { key, routes, ws });
         }
         Ok(Plan { services })
     }
@@ -1021,10 +1070,19 @@ impl Gen {
                 methods.push(route.method);
                 methods.extend(route.event_source);
             }
+            if let (Some(w), Some(wp)) = (&s.ws, &sp.ws) {
+                let ws = self.ws_service(&sp.key, s, w, wp)?;
+                glue.push(ws.constant);
+                unions.extend(ws.types);
+                methods.push(ws.method);
+            }
             services.push(TsObjectEntry::prop(
                 property(&sp.key),
                 TsExpr::multiline_object_entries(methods),
             ));
+            if s.routes.is_empty() {
+                continue;
+            }
             let all: Vec<String> = hashes.iter().map(|(_, h)| h.clone()).collect();
             let routes = hashes
                 .iter()
@@ -1361,6 +1419,9 @@ fn runtime_text(scan: &str) -> String {
         }
     }
     chunks.push(RUNTIME);
+    if scan.contains("__webSocket") {
+        chunks.push(RUNTIME_WS);
+    }
     let mut out = String::new();
     for chunk in chunks {
         out.push_str(&strip_imports(chunk));
@@ -1604,6 +1665,7 @@ mod tests {
                 doc: None,
                 types: HashMap::new(),
                 routes,
+                ws: None,
             }],
             compiler_version: "0".to_string(),
         };

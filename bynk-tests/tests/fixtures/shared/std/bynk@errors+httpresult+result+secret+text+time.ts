@@ -590,16 +590,9 @@ export const StreamResponse = {
  * (`bynk.types.inbound_request_at_boundary`), and only a pass-through route
  * takes one (`bynk.http.inbound_request_not_pass_through`).
  */
-export type InboundRequest = string & { readonly __brand: "InboundRequest" };
+export type InboundRequest = { method(): string; headers(): { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }; query(): string } & { readonly __brand: "InboundRequest" };
 
-export const InboundRequest = {
-  of(value: string): Result<InboundRequest, ValidationError> {
-    return Ok(value as InboundRequest);
-  },
-  unsafe(value: string): InboundRequest {
-    return value as InboundRequest;
-  },
-};
+export const InboundRequest = {};
 
 /**
  * An upstream's answer, as `Upstream.forward` returns it (#3752): its status,
@@ -608,16 +601,9 @@ export const InboundRequest = {
  * header that didn't come from the declared origin. `status()` and
  * `header(name)` read it for a handler that decides on them.
  */
-export type Forwarded = string & { readonly __brand: "Forwarded" };
+export type Forwarded = { status(): number; header(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } & { readonly __brand: "Forwarded" };
 
-export const Forwarded = {
-  of(value: string): Result<Forwarded, ValidationError> {
-    return Ok(value as Forwarded);
-  },
-  unsafe(value: string): Forwarded {
-    return value as Forwarded;
-  },
-};
+export const Forwarded = {};
 
 /**
  * What an `on ANY(…)` pass-through route answers (#3752): `Forward(response)`

@@ -235,29 +235,33 @@ fn an_aliased_context_service_runs_across_workers() {
 
     // The first hop (`app` -> `lib`) answers once the Workers are up and the
     // Service Binding has connected, so it doubles as the readiness probe.
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if let Ok((200, body)) = get(app_port, "/flip") {
-            assert_eq!(
-                body, "\"beta\"",
-                "`app` flips `LibCode.Alpha` through `lib` and gets `Beta` back"
-            );
-            break;
-        }
-        if Instant::now() > deadline {
-            let logs = logs();
-            drop(wranglers);
-            let _ = fs::remove_dir_all(&tmp);
-            if skip(&format!(
-                "the first call did not answer within the boot window (likely \
-                 no network to provision {WRANGLER})\n{logs}"
-            )) {
-                return;
+    let flipped = std::cell::RefCell::new(None);
+    if let Err(why) = wrangler::wait_until_all_ready(
+        &[(&logs_paths[0], ports[0]), (&logs_paths[2], ports[2])],
+        (&logs_paths[1], app_port),
+        &|| match get(app_port, "/flip") {
+            Ok((200, body)) => {
+                *flipped.borrow_mut() = Some(body);
+                true
             }
-            unreachable!()
+            _ => false,
+        },
+    ) {
+        let logs = logs();
+        drop(wranglers);
+        let _ = fs::remove_dir_all(&tmp);
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})\n{logs}"
+        )) {
+            return;
         }
-        std::thread::sleep(Duration::from_millis(500));
+        unreachable!()
     }
+    assert_eq!(
+        flipped.into_inner().expect("the probe answered"),
+        "\"beta\"",
+        "`app` flips `LibCode.Alpha` through `lib` and gets `Beta` back"
+    );
 
     // `edge` -> `app`: the contract `edge` expects for `echo` is `app`'s own.
     let deadline = Instant::now() + Duration::from_secs(60);
