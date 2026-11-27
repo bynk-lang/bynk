@@ -57,7 +57,7 @@ pub struct D1SqlSite {
     /// `TEXT`: the numeric affinities hand the value back as a JSON number.
     pub decimals: Vec<String>,
     /// #4046: the row's other columns with a storage convention (see [`Conventions`]).
-    pub conventions: Conventions,
+    pub conventions: Box<Conventions>,
     /// The number of values passed, when the list is a list literal.
     pub passed: Option<usize>,
     /// #3108: for `select`/`firstAs`, the literal's own decoded text and where it
@@ -109,7 +109,7 @@ pub struct D1DecodeSite {
     /// #4200: the row's `Decimal` fields (see [`D1SqlSite::decimals`]).
     pub decimals: Vec<String>,
     /// #4046: see [`D1SqlSite::conventions`].
-    pub conventions: Conventions,
+    pub conventions: Box<Conventions>,
     /// The `decodeSql` call, where a missing column is reported.
     pub span: Span,
 }
@@ -224,7 +224,7 @@ pub(crate) fn record_decode(arg: &Expr, call_span: Span, t: TyId, ctx: &mut Ctx)
         Callee::D1Decode(D1DecodeSite {
             site: link.site,
             decimals: row_base_fields(&name, &ctx.input.types, BaseType::Decimal),
-            conventions: row_conventions(&name, &ctx.input.types),
+            conventions: Box::new(row_conventions(&name, &ctx.input.types)),
             row: name,
             required,
             span: call_span,
@@ -369,7 +369,7 @@ pub(crate) fn check_sql_argument(
                     span: sql.span,
                     row: None,
                     decimals: Vec::new(),
-                    conventions: Conventions::default(),
+                    conventions: Box::default(),
                     passed: literal_list_len(args.get(1), ctx),
                     literal: None,
                     batch: None,
@@ -539,7 +539,7 @@ fn record_batch_sites(cap: &str, list: Option<&Expr>, ctx: &mut Ctx) {
                 span: sql.span,
                 row: None,
                 decimals: Vec::new(),
-                conventions: Conventions::default(),
+                conventions: Box::default(),
                 passed,
                 literal: None,
                 batch: Some(BatchPosition { group, index }),
@@ -1055,7 +1055,7 @@ pub(crate) fn check_typed_read(
                     record.fields.iter().map(|f| f.name.name.clone()).collect(),
                 )),
                 decimals: row_base_fields(row, &ctx.input.types, BaseType::Decimal),
-                conventions: row_conventions(row, &ctx.input.types),
+                conventions: Box::new(row_conventions(row, &ctx.input.types)),
                 passed: literal_list_len(args.get(1), ctx),
                 literal: select_literal,
                 batch: None,

@@ -963,7 +963,6 @@ fn unescape(s: &str) -> Option<(char, usize)> {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
-    use crate::checker::Conventions;
     use crate::d1_migrations::{D1Migrations, MigrationFile};
     use crate::project_model::ErrorSink;
     use rusqlite::Connection;
@@ -1010,7 +1009,7 @@ mod tests {
             span: bynk_syntax::span::Span::default(),
             row: None,
             decimals: Vec::new(),
-            conventions: Conventions::default(),
+            conventions: Box::default(),
             passed: None,
             literal: None,
             batch: None,
@@ -1291,7 +1290,7 @@ mod tests {
     ) -> crate::checker::D1SqlSite {
         crate::checker::D1SqlSite {
             decimals: Vec::new(),
-            conventions: Conventions::default(),
+            conventions: Box::default(),
             cap: "Orders".into(),
             op: "select".into(),
             text: text.into(),
