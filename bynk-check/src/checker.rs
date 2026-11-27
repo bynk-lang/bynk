@@ -1358,9 +1358,20 @@ pub struct TypedCommons {
     /// carry it. Empty until the unit's files are all checked and
     /// [`ExecPlan::extend`](crate::exec_plan::ExecPlan::extend) has run.
     pub exec_plan: Arc<crate::exec_plan::ExecPlan>,
+    /// #4626: where an imported record's defaults are read, when this unit shadows a type they
+    /// name ([`ResolvedCommons::default_scope`]).
+    pub default_scopes: HashMap<String, Arc<HashMap<String, Arc<TypeDecl>>>>,
 }
 
 impl TypedCommons {
+    /// #4626: the types the defaults of record `type_name` are read in: the declaring unit's where
+    /// this unit shadows a type they name, else this unit's own.
+    pub fn default_scope(&self, type_name: &str) -> &HashMap<String, Arc<TypeDecl>> {
+        self.default_scopes
+            .get(type_name)
+            .map_or(&self.types, |scope| &**scope)
+    }
+
     /// A `TypedCommons` with no declarations — a pure-data test fixture, so a
     /// consuming crate's own test exercising only the `TypedCommons`-shaped
     /// part of some function doesn't need to hand-construct a
@@ -1400,6 +1411,7 @@ impl TypedCommons {
             unselected_types: HashSet::new(),
             stability: Default::default(),
             exec_plan: Default::default(),
+            default_scopes: HashMap::new(),
         }
     }
 
@@ -1853,6 +1865,7 @@ pub fn check_record_in(
                 unselected_types: input.unselected_types,
                 stability: input.stability,
                 exec_plan: Default::default(),
+                default_scopes: input.default_scopes,
             }),
             ty_intern,
             typed_despite_errors: None,
@@ -1882,6 +1895,7 @@ pub fn check_record_in(
                 unselected_types: input.unselected_types,
                 stability: input.stability,
                 exec_plan: Default::default(),
+                default_scopes: input.default_scopes,
             }),
             ty_intern,
         }

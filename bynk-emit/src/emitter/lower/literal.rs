@@ -276,7 +276,8 @@ pub(super) fn lower_record_construction(
     // `default_value_node`) so it needs nothing imported into this module. The checker has
     // already required every field without a default, and rejected any default that has no
     // such value. A default is a node (1A.31, #3732), so a record that takes one stays one.
-    let types = &cx.commons().types;
+    // #4626: read in the declaring unit's scope where this unit shadows a type a default names.
+    let types = cx.commons().default_scope(&type_name.name);
     if let Some(decl) = types.get(&type_name.name)
         && let TypeBody::Record(r) = &decl.body
     {

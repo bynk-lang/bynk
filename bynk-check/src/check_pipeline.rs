@@ -790,6 +790,14 @@ pub fn check_file_core(
     .with_consts(crate::consts::compose_unit_consts(name, unit_info))
     // #1925: imports hidden behind a local declaration of another kind.
     .with_shadowed_imports(crate::project_model::shadowed_imports(name, unit_info))
+    // #4626: where an imported record's defaults are read, when this unit shadows a type they name.
+    .with_default_scopes(crate::project_model::default_scopes(
+        name,
+        unit_info,
+        combined_types,
+        consumed_types,
+        imported_from,
+    ))
     // S3 (#1963): which names in scope are a first-party extensible enum,
     // decided here, where the unit's full provenance is known.
     .with_extensible_enums(extensible_names(imported_from))

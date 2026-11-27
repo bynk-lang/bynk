@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "build": "3e33f1a26d0f7a09"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "build": "Svc(\"build\",Ret(Rec(\"Built\",F(\"condition\",Sum(\"R2Condition\",V(\"Maybe\"),V(\"Sure\"))),F(\"cookie\",N(\"Cookie\")),F(\"expiration\",Sum(\"KvExpiration\",V(\"Later\"),V(\"Soon\"))),F(\"fetch\",N(\"FetchOptions\")),F(\"kv\",N(\"KvPut\")),F(\"query\",N(\"QueryOptions\")),F(\"r2\",N(\"R2Put\")),F(\"redirect\",Sum(\"Redirect\",V(\"Ours\"),V(\"Theirs\"))),F(\"sameSite\",Sum(\"SameSite\",V(\"Mine\"),V(\"Yours\"))),F(\"scope\",Sum(\"MetadataScope\",V(\"Own\"),V(\"Shared\"))))))"
+  }
+}
