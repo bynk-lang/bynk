@@ -790,8 +790,9 @@ Storage: Edit", "Workers R2 Storage: Edit", "D1: Edit", "Vectorize: Edit" or
 needs them on every deploy, because each deploy checks its indexes and queues. When a step needs them,
 `deploy` checks for both after the plan and before the confirmation, and
 refuses, with nothing created, naming the missing variable and the permission.
-A run that needs nothing asks nothing: a redeploy whose namespaces, buckets and
-databases are all recorded works with `wrangler login` alone. D1 migrations
+A run that needs nothing asks nothing: a redeploy of a project with no Vectorize
+index and no queue, whose namespaces, buckets and databases are all recorded,
+works with `wrangler login` alone. D1 migrations
 still run through wrangler.
 In that case the check that a recorded namespace still exists on the account is
 skipped, and the plan notes it.

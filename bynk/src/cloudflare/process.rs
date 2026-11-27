@@ -113,6 +113,8 @@ impl<'a> Wrangler<'a> {
         self.run(&op, self.project_root, false)
     }
 
+    /// Run `command` (spawned for `op`) with `stdin` on its stdin and both streams captured.
+    /// `no_pipe` is the text of a stdin that could not be opened.
     fn feed(
         op: &Op<'_>,
         mut command: Command,

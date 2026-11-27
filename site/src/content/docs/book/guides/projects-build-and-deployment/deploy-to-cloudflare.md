@@ -27,7 +27,8 @@ Authenticate first. There are two halves:
   A deploy that needs them and lacks one stops before the confirmation, with
   nothing created, and names the missing variable and the permission. A
   redeploy whose namespaces, buckets and databases are all recorded needs
-  neither. `bynk doctor`
+  neither, unless the project has a Vectorize index or a queue, which are
+  checked on every deploy. `bynk doctor`
   shows a `cloudflare api` row for a project that declares account resources.
 
 Use `--yes` in an automated, non-interactive invocation:
