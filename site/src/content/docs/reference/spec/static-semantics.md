@@ -2127,6 +2127,14 @@ experimental) MUST bind a `String` parameter of its name (`bynk.http.rest_param_
 to which the router MUST bind the rest of the path as received, still percent-encoded;
 no two HTTP handlers of a context may share an emitted name
 (`bynk.http.handler_name_collision`);
+an `on ANY` pass-through route (#3752, experimental) MUST return `Effect[PassThrough]` of
+`bynk` and take only path parameters, a rest, `request: InboundRequest` and `cf`, and no
+other route may return `Effect[PassThrough]` or take an `InboundRequest`
+(`bynk.http.pass_through_signature`, `bynk.http.inbound_request_not_pass_through`); it
+MUST NOT carry `@cache`, and its service MUST NOT declare `cors { }`
+(`bynk.http.cache_on_pass_through`, `bynk.http.cors_with_pass_through`); an
+`InboundRequest` or `Forwarded`, or a type holding one, MUST NOT be stored, sent or
+returned across a boundary (`bynk.types.inbound_request_at_boundary`);
 and each `:name` segment MUST bind to a parameter of a type a typed `query` field takes, less
 `Option` and `List` (#3910): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or
 opaque type over one of those

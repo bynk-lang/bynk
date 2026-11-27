@@ -1,0 +1,12 @@
+{
+  "blurb": "A forwarded response carries the upstream's own `Access-Control-*` headers, and the router passes a preflight to the upstream, so a service's own `cors { }` policy would put two policies on one answer, and both can't be right. A service that declares an `on ANY` pass-through route therefore may not declare `cors { }`. Put the proxy in its own `from http` service, and keep `cors` on the service whose routes the service answers itself.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cors_with_pass_through",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "service proxy from http {\n    cors { origins: [\"https://app.example.com\"] }   // ✗\n    on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }\n}\n\nservice proxy from http {\n    on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✓\n}",
+  "severity": "error",
+  "summary": "A service that declares an `on ANY` pass-through route also declares `cors { }`."
+}

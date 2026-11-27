@@ -38,6 +38,10 @@ use std::time::Duration;
 const REQUIRE_WORKERD: &str = "BYNK_REQUIRE_WORKERD";
 const REQUIRE_DOCKER: &str = "BYNK_REQUIRE_DOCKER";
 
+/// What wrangler logs when it refuses local containers on the host, as wrangler 4.168 prints it
+/// on Windows ("… currently not supported on Windows. You should use WSL instead.", #4579).
+const CONTAINERS_UNSUPPORTED: &str = "Local development with containers is currently not supported";
+
 const SOURCE: &str = "context box.smoke
 
 consumes bynk
@@ -209,10 +213,16 @@ fn run(
     }) {
         let log = read_log(&log_path);
         drop(server);
-        skip(
-            REQUIRE_WORKERD,
-            &format!("{why}\n--- wrangler log ---\n{log}"),
-        );
+        // #4579: wrangler refuses local containers on Windows, whatever Docker says. That is
+        // this test's container precondition, not a workerd boot failure, so it is the Docker
+        // gate's skip. Keyed on wrangler's own message, so a wrangler that supports containers
+        // there makes the test run again.
+        let gate = if log.contains(CONTAINERS_UNSUPPORTED) {
+            REQUIRE_DOCKER
+        } else {
+            REQUIRE_WORKERD
+        };
+        skip(gate, &format!("{why}\n--- wrangler log ---\n{log}"));
         return None;
     }
     let failures = drive(port);

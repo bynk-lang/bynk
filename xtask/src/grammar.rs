@@ -468,10 +468,10 @@ mod tests {
             render_rule(&g, "match_arm").unwrap(),
             "(pattern | refined_pattern) (\"if\" expression)? \"=>\" expression \",\"?"
         );
-        // `http_method` is a plain choice, unchanged.
+        // `http_method` is a plain choice, unchanged (#3752 adds `ANY`).
         assert_eq!(
             render_rule(&g, "http_method").unwrap(),
-            "\"GET\" | \"POST\" | \"PUT\" | \"PATCH\" | \"DELETE\""
+            "\"GET\" | \"POST\" | \"PUT\" | \"PATCH\" | \"DELETE\" | \"ANY\""
         );
         // `http_handler` references `_type_ref` and `block` — display, not raw.
         let http = render_rule(&g, "http_handler").unwrap();

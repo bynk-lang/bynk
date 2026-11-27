@@ -136,6 +136,15 @@ pub(super) fn finish_build(
             ..
         } => {
             let composed = composed.expect("a build with no errors has its compose plan");
+            // #3752 (slice 3a): a pass-through route has no router yet.
+            let pass_through = super::pass_through::not_emitted_errors(&parsed);
+            if !pass_through.is_empty() {
+                return Err(ProjectFailure {
+                    errors: pass_through,
+                    snapshots,
+                    display_root: display_root.to_path_buf(),
+                });
+            }
             // #3477: a container's build paths are written from the output
             // directory, which has to be inside the project.
             let container_root = match worker_bindings::container_root(display_root, out_dir) {
