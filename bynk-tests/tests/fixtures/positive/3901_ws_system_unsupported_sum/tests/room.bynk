@@ -1,0 +1,9 @@
+// #3901: the case fails at `open`, saying the actor is not one a `system` case presents yet. It is not answered
+// by a token for the wrong member: the failure is the driver's own.
+suite room as system {
+  case "an actor sum is not presented yet" {
+    let tc = TestConnection[Frame]()
+    let _ <- mixed.open(tc, "abc") by Member("ann")
+    expect tc.refusedWith() == None
+  }
+}

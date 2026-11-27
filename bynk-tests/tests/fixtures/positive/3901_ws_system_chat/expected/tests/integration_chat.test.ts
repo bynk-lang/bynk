@@ -34,21 +34,21 @@ function __makeHarness() {
 async function __sysdrive_ws_open_ChatGateway(tc: any, roomId: any, __sub: string) {
   const __h = __makeHarness();
   const __token = await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""));
-  return __bynkWsOpen(tc, (__req) => __h.env.CHAT.fetch(__req), { service: "ChatGateway", params: [["roomId", roomId]], protocols: `bynk.bearer, ${__token}`, origin: undefined }, __ns_chat.__deserialise_ServerFrame);
+  return __bynkWsOpen(tc, (__req) => __h.env.CHAT.fetch(__req), { service: "ChatGateway", params: [["roomId", roomId]], protocols: `bynk.bearer, ${__token}` }, __ns_chat.__deserialise_ServerFrame);
 }
 async function __sysdrive_ws_noauth_ChatGateway(tc: any, roomId: any, __sub: string) {
   const __h = __makeHarness();
-  return __bynkWsOpen(tc, (__req) => __h.env.CHAT.fetch(__req), { service: "ChatGateway", params: [["roomId", roomId]], protocols: undefined, origin: undefined }, __ns_chat.__deserialise_ServerFrame);
+  return __bynkWsOpen(tc, (__req) => __h.env.CHAT.fetch(__req), { service: "ChatGateway", params: [["roomId", roomId]], protocols: undefined }, __ns_chat.__deserialise_ServerFrame);
 }
 async function __sysdrive_ws_expired_ChatGateway(tc: any, roomId: any, __sub: string) {
   const __h = __makeHarness();
   const __token = await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")));
-  return __bynkWsOpen(tc, (__req) => __h.env.CHAT.fetch(__req), { service: "ChatGateway", params: [["roomId", roomId]], protocols: `bynk.bearer, ${__token}`, origin: undefined }, __ns_chat.__deserialise_ServerFrame);
+  return __bynkWsOpen(tc, (__req) => __h.env.CHAT.fetch(__req), { service: "ChatGateway", params: [["roomId", roomId]], protocols: `bynk.bearer, ${__token}` }, __ns_chat.__deserialise_ServerFrame);
 }
 async function __sysdrive_ws_forged_ChatGateway(tc: any, roomId: any, __sub: string) {
   const __h = __makeHarness();
   const __token = await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "") + "!"));
-  return __bynkWsOpen(tc, (__req) => __h.env.CHAT.fetch(__req), { service: "ChatGateway", params: [["roomId", roomId]], protocols: `bynk.bearer, ${__token}`, origin: undefined }, __ns_chat.__deserialise_ServerFrame);
+  return __bynkWsOpen(tc, (__req) => __h.env.CHAT.fetch(__req), { service: "ChatGateway", params: [["roomId", roomId]], protocols: `bynk.bearer, ${__token}` }, __ns_chat.__deserialise_ServerFrame);
 }
 async function __sysdrive_ws_message_ChatGateway(tc: any, frame: any) {
   return __bynkWsMessage(tc, "ChatGateway", __ns_chat.__serialise_ClientFrame(frame));

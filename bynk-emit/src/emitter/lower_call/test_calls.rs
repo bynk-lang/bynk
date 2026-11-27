@@ -360,8 +360,15 @@ pub(in crate::emitter) fn lower_system_schedule_call(
 // ---- The `system`-tier WebSocket call ----
 
 /// #3901: whether `service` is a WebSocket service the `system` case in `cx` drives through a real upgrade.
-fn has_system_ws_service(cx: &LowerCtx, service: &str) -> bool {
-    matches!(&cx.mode, crate::emitter::ctx::BodyMode::IntegrationCase { system_jobs, .. } if system_jobs.ws.contains_key(service))
+fn system_ws_service<'a>(
+    cx: &'a LowerCtx,
+    service: &str,
+) -> Option<&'a crate::emitter::ctx::SystemWsService> {
+    if let crate::emitter::ctx::BodyMode::IntegrationCase { system_jobs, .. } = &cx.mode {
+        system_jobs.ws.get(service)
+    } else {
+        None
+    }
 }
 
 /// Lower a `system`-tier WebSocket address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`),
@@ -379,9 +386,10 @@ pub(in crate::emitter) fn lower_system_ws_call(
     let ExprKind::Ident(svc) = &receiver.kind else {
         return None;
     };
-    if cx.is_local(&svc.name) || !has_system_ws_service(cx, &svc.name) {
+    if cx.is_local(&svc.name) {
         return None;
     }
+    let variants = system_ws_service(cx, &svc.name)?.variants.clone();
     let Some(HandlerAddress::Ws(shape)) = test_address(cx, e) else {
         return None;
     };
@@ -393,7 +401,13 @@ pub(in crate::emitter) fn lower_system_ws_call(
     Some(match shape {
         WsAddress::Open => {
             let kind = system_driver(cx, false).kind;
-            let what = if kind.is_empty() { "open" } else { kind };
+            // A principal with no driver of its own (a bad credential on an actor this driver cannot present,
+            // or on a public service) takes the `open` driver, which fails the case saying so or ignores it.
+            let what = if variants.contains(&kind) {
+                kind
+            } else {
+                "open"
+            };
             let mut all = vec![tc];
             all.extend(args[1..].iter().map(|a| pre.lower_node(a, cx)));
             all.push(cx.call_site_identity.clone().unwrap_or_else(|| str_lit("")));

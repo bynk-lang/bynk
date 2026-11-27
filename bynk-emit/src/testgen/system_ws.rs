@@ -127,7 +127,6 @@ pub(super) fn ws_service_drivers(
                     ("service".to_string(), str_lit(sname.to_string())),
                     ("params".to_string(), route.clone()),
                     ("protocols".to_string(), protocols),
-                    ("origin".to_string(), ident("undefined")),
                 ]),
                 decode.clone(),
             ],
@@ -140,7 +139,12 @@ pub(super) fn ws_service_drivers(
         )
     };
 
-    match bynk_check::actors::bearer_seam_for(open, &table.actors) {
+    // A refinement actor needs the claims its predicate checks, and an actor sum a credential per member, which this
+    // driver does not present yet: both fall through to the driver that fails the case saying so.
+    let is_sum = open.by_clause.as_ref().is_some_and(|by| by.is_sum());
+    match bynk_check::actors::bearer_seam_for(open, &table.actors)
+        .filter(|seam| seam.authorization.is_none() && !is_sum)
+    {
         Some(seam) => {
             secret = Some(seam.secret.clone());
             let secret_read = secret_read_of(&seam.secret);
@@ -195,7 +199,11 @@ pub(super) fn ws_service_drivers(
                 service.variants.push(name);
             }
         }
-        None if open.by_clause.as_ref().is_none() || is_public(open, &table.actors) => {
+        None if matches!(
+            bynk_check::actors::ws_client_credential(open, &table.actors),
+            bynk_check::actors::WsClientCredential::None
+        ) =>
+        {
             // A public service: the upgrade offers no credential.
             code.push(async_driver(
                 driver_name("open", sname),
@@ -262,18 +270,6 @@ pub(super) fn ws_service_drivers(
         service,
         secret,
     })
-}
-
-/// Whether the handler's actor is a public one (`auth = None`), whose upgrade offers no credential.
-fn is_public(
-    h: &bynk_syntax::ast::Handler,
-    actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
-) -> bool {
-    h.by_clause
-        .as_ref()
-        .and_then(|by| actors.get(&by.primary().name))
-        .and_then(|a| a.auth.as_ref())
-        .is_some_and(|auth| auth.name == "None")
 }
 
 /// The drivers of every WebSocket service of the target, appended to `routes`, and the secrets their actors

@@ -35,31 +35,31 @@ function __makeHarness() {
 async function __sysdrive_ws_open_lobby(tc: any, room: any, __sub: string) {
   const __h = __makeHarness();
   const __token = await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600, iss: "web", aud: "rooms" }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["ROOM_SECRET"] ?? ""));
-  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: `bynk.bearer, ${__token}`, origin: undefined }, __ns_room.__deserialise_Frame);
+  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: `bynk.bearer, ${__token}` }, __ns_room.__deserialise_Frame);
 }
 async function __sysdrive_ws_noauth_lobby(tc: any, room: any, __sub: string) {
   const __h = __makeHarness();
-  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: undefined, origin: undefined }, __ns_room.__deserialise_Frame);
+  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: undefined }, __ns_room.__deserialise_Frame);
 }
 async function __sysdrive_ws_expired_lobby(tc: any, room: any, __sub: string) {
   const __h = __makeHarness();
   const __token = await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600, iss: "web", aud: "rooms" }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["ROOM_SECRET"] ?? "")));
-  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: `bynk.bearer, ${__token}`, origin: undefined }, __ns_room.__deserialise_Frame);
+  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: `bynk.bearer, ${__token}` }, __ns_room.__deserialise_Frame);
 }
 async function __sysdrive_ws_forged_lobby(tc: any, room: any, __sub: string) {
   const __h = __makeHarness();
   const __token = await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "web", aud: "rooms" }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["ROOM_SECRET"] ?? "") + "!"));
-  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: `bynk.bearer, ${__token}`, origin: undefined }, __ns_room.__deserialise_Frame);
+  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: `bynk.bearer, ${__token}` }, __ns_room.__deserialise_Frame);
 }
 async function __sysdrive_ws_wrongissuer_lobby(tc: any, room: any, __sub: string) {
   const __h = __makeHarness();
   const __token = await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "web-not-the-expected", aud: "rooms" }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["ROOM_SECRET"] ?? "")));
-  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: `bynk.bearer, ${__token}`, origin: undefined }, __ns_room.__deserialise_Frame);
+  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: `bynk.bearer, ${__token}` }, __ns_room.__deserialise_Frame);
 }
 async function __sysdrive_ws_wrongaudience_lobby(tc: any, room: any, __sub: string) {
   const __h = __makeHarness();
   const __token = await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "web", aud: "rooms-not-the-expected" }, (((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["ROOM_SECRET"] ?? "")));
-  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: `bynk.bearer, ${__token}`, origin: undefined }, __ns_room.__deserialise_Frame);
+  return __bynkWsOpen(tc, (__req) => __h.env.ROOM.fetch(__req), { service: "lobby", params: [["room", room]], protocols: `bynk.bearer, ${__token}` }, __ns_room.__deserialise_Frame);
 }
 async function __sysdrive_ws_message_lobby(tc: any, frame: any) {
   return __bynkWsMessage(tc, "lobby", __ns_room.__serialise_Frame(frame));

@@ -156,8 +156,7 @@ suite chat {
 
 In a `suite … as system` the same case runs unchanged, but `open` performs a **real upgrade** through the
 participant's deployable Worker and its Durable Object, as a browser would: the route values in the upgrade
-URL's query string, the credential the actor reads as `Sec-WebSocket-Protocol: bynk.bearer, <token>`, and an
-`Origin` where the actor needs one. So the handshake, the Worker-side authentication, the routing to the
+URL's query string and the credential the actor reads as `Sec-WebSocket-Protocol: bynk.bearer, <token>`. So the handshake, the Worker-side authentication, the routing to the
 object, the socket's attachment and the decoding of every frame are exercised, and `tc.sent()` holds the frames
 the server actually wrote, in the order they arrived, read after the exchange has gone quiet.
 

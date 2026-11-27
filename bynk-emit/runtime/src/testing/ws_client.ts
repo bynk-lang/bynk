@@ -3,9 +3,8 @@ import { installTestWebSocketRuntime, takeWebSocketFaults, webSocketQuiet, type 
 
 // #3901: the client side of a `system` case's WebSocket address. A case's `svc.open(tc, …)` performs a real
 // upgrade through the participant Worker's own `fetch`: the upgrade request a browser would send (the route
-// values in the query string, the credential as the `Sec-WebSocket-Protocol` pair, an `Origin` where the actor
-// needs one), answered with the `101` and the client end of the pair, or refused with the status the Worker
-// gave. `svc.message` and `svc.close` then write on that end, and the server's frames and its close come back
+// values in the query string, the credential as the `Sec-WebSocket-Protocol` pair), answered with the `101` and
+// the client end of the pair, or refused with the status the Worker gave. `svc.message` and `svc.close` then write on that end, and the server's frames and its close come back
 // the same way, into the case's `TestConnection`, which `tc.sent()` and the rest of its reads see.
 //
 // The doubles the Worker's upgrade code needs (`WebSocketPair`, a `101` `Response`, a Durable Object that
@@ -22,7 +21,6 @@ export type __WsUpgrade = {
   params: readonly (readonly [string, unknown])[];
   // `Sec-WebSocket-Protocol` for the upgrade: `bynk.bearer, <token>`, or none.
   protocols: string | undefined;
-  origin: string | undefined;
 };
 
 function __wsHandleOf(tc: object, what: string): __WsHandle {
@@ -59,7 +57,6 @@ export async function __bynkWsOpen<F>(
   for (const [name, value] of upgrade.params) url.searchParams.set(name, globalThis.String(value));
   const headers = new globalThis.Headers({ Upgrade: "websocket" });
   if (upgrade.protocols !== undefined) headers.set("Sec-WebSocket-Protocol", upgrade.protocols);
-  if (upgrade.origin !== undefined) headers.set("Origin", upgrade.origin);
   const response = await fetchUpgrade(new globalThis.Request(url, { headers }));
   if (response.status !== 101) {
     handle.refused = response.status;
