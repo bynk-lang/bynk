@@ -1,0 +1,9 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+service api from http {
+  on ANY("/x/*rest") (rest: String, request: InboundRequest) -> Effect[PassThrough] by Visitor {
+    Respond(NotFound)
+  }
+}

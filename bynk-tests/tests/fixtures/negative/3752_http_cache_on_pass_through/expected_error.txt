@@ -1,0 +1,2 @@
+bynk.http.cache_on_pass_through
+`@cache` can't be put on an `on ANY` route

@@ -1,0 +1,17 @@
+suite calc as unit {
+  case "all" {
+    expect nested(7) == 2
+    expect conj(7) == 2
+    expect flagged(true) == 2
+    expect matched(7) == 2
+    expect strs("x") == 2
+    expect ors(7) == 2
+    expect neg(-1) == 2
+    expect elsed(7) == 2
+    expect blocks(7) == 9
+    expect valued(7) == false
+    expect boolelse(true) == 1
+    expect matchstr("x") == 2
+    expect matchbool(true) == 2
+  }
+}

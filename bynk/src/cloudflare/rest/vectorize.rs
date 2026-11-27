@@ -18,8 +18,9 @@ pub(crate) const INDEXES: &str = "/vectorize/v2/indexes";
 /// The most pages of the index listing read (#4568 review). The reference documents no paging
 /// for it, so the listing is read while pages are full; this bound, and the stop on a page that
 /// brings no new name, keep an endpoint that ignores `?page=N` from being asked forever. A
-/// hundred full pages is far beyond any account the deploy has met: one listed past it reads as
-/// absent, and its create is then refused and reported.
+/// hundred full pages is far beyond any account the deploy has met. A listing stopped by either
+/// before the account says it has ended fails (#4592), so an index past the stop never reads as
+/// absent.
 pub(crate) const MAX_PAGES: u64 = 100;
 
 /// An index's fixed configuration, as the account reports it.

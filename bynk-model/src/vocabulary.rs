@@ -606,6 +606,8 @@ pub enum IrHttpMethod {
     Put,
     Patch,
     Delete,
+    /// #3752 (D7): a pass-through route's `ANY`.
+    Any,
 }
 
 impl IrHttpMethod {
@@ -618,6 +620,7 @@ impl IrHttpMethod {
             IrHttpMethod::Put => "PUT",
             IrHttpMethod::Patch => "PATCH",
             IrHttpMethod::Delete => "DELETE",
+            IrHttpMethod::Any => "ANY",
         }
     }
 
@@ -630,6 +633,7 @@ impl IrHttpMethod {
             "PUT" => Some(IrHttpMethod::Put),
             "PATCH" => Some(IrHttpMethod::Patch),
             "DELETE" => Some(IrHttpMethod::Delete),
+            "ANY" => Some(IrHttpMethod::Any),
             _ => None,
         }
     }
@@ -645,6 +649,7 @@ impl From<bynk_syntax::ast::HttpMethod> for IrHttpMethod {
             HttpMethod::Put => IrHttpMethod::Put,
             HttpMethod::Patch => IrHttpMethod::Patch,
             HttpMethod::Delete => IrHttpMethod::Delete,
+            HttpMethod::Any => IrHttpMethod::Any,
         }
     }
 }

@@ -85,6 +85,7 @@ pub const BYNK_SURFACE_CAPABILITIES: &[&str] = &[
     "Locale",
     "Idempotency",
     "Events",
+    "Upstream",
 ];
 
 /// What reaches a first-party npm dependency (see [`FirstPartyNpm::reached_by`]),
@@ -941,6 +942,16 @@ pub const ANALYTICS_SQL_BINDING_NAME: &str = "CF_ANALYTICS_SQL";
 /// the entry's `ctx` instead.
 pub const EDGE_CACHE_BINDING_PREFIX: &str = "EDGE_CACHE";
 
+/// #3752 (D13): the prefix of an `Upstream` instance's name. It reaches its
+/// origin with `fetch`, so no Worker binding is emitted for it.
+pub const UPSTREAM_BINDING_PREFIX: &str = "UPSTREAM";
+
+/// The origin an `Upstream` instance forwards to (`@origin("https://…")`).
+pub const UPSTREAM_ORIGIN_OPTION: &str = "origin";
+
+/// How long an `Upstream` instance waits for a response head (`@timeout(30.seconds)`).
+pub const UPSTREAM_TIMEOUT_OPTION: &str = "timeout";
+
 /// Whether a first-party item is under the 1.0 promise (track D2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stability {
@@ -1000,9 +1011,28 @@ pub const UNITS: &[Unit] = &[
             "Fetch.receiveStream",
             "Fetch.sendStream",
             "Logger.log",
+            // #3752: the pass-through surface.
+            "Upstream",
+            "InboundRequest",
+            "Forwarded",
+            "PassThrough",
+            "UpstreamError",
         ],
-        extensible: &["FetchError", "Method", "Redirect"],
-        instantiable: &[],
+        extensible: &["FetchError", "Method", "Redirect", "UpstreamError"],
+        // #3752 (D13): an upstream origin a pass-through route forwards to. Its
+        // instances reach the origin with `fetch`, so the binding name is never
+        // emitted as a Worker binding.
+        instantiable: &[Instantiable {
+            capability: "Upstream",
+            binding_prefix: UPSTREAM_BINDING_PREFIX,
+            options: &[
+                (UPSTREAM_ORIGIN_OPTION, OptionKind::Str),
+                (UPSTREAM_TIMEOUT_OPTION, OptionKind::Duration),
+            ],
+            required: &[UPSTREAM_ORIGIN_OPTION],
+            bare: false,
+            linked: false,
+        }],
         singletons: &[],
     },
     Unit {
@@ -1598,6 +1628,7 @@ pub const BUILTIN_EXPERIMENTAL: &[&str] = &[
     "bynk.RequestHeaders.entries",
     "bynk.actor.ApiKey",
     "bynk.given.parameters",
+    "bynk.http.ANY",
     "bynk.http.rest",
 ];
 
@@ -2111,6 +2142,8 @@ mod tests {
         assert_eq!(
             kinds,
             [
+                // #3752: an upstream origin; it is reached with `fetch`, never bound.
+                ("bynk", "Upstream", "UPSTREAM"),
                 ("bynk.cloudflare", "Kv", "KV"),
                 ("bynk.cloudflare", "Service", "SERVICE"),
                 ("bynk.cloudflare", "R2", "R2"),
@@ -2280,6 +2313,11 @@ mod tests {
                 "bynk.Fetch.receiveStream",
                 "bynk.Fetch.sendStream",
                 "bynk.Logger.log",
+                "bynk.Upstream",
+                "bynk.InboundRequest",
+                "bynk.Forwarded",
+                "bynk.PassThrough",
+                "bynk.UpstreamError",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
@@ -2313,6 +2351,8 @@ mod tests {
                 "bynk.actor.ApiKey",
                 // #3959: capability parameters, a language form with no unit.
                 "bynk.given.parameters",
+                // #3752 (D7): the pass-through route form.
+                "bynk.http.ANY",
                 // #3752 (D2): the rest segment, a route form.
                 "bynk.http.rest"
             ]
@@ -2327,6 +2367,7 @@ mod tests {
                 ("bynk", "FetchError"),
                 ("bynk", "Method"),
                 ("bynk", "Redirect"),
+                ("bynk", "UpstreamError"),
                 ("bynk.cloudflare", "R2Condition"),
                 ("bynk.cloudflare", "R2GetIf"),
                 ("bynk.cloudflare", "KvExpiration"),
@@ -2569,16 +2610,16 @@ mod tests {
     #[test]
     fn bynk_surface_capabilities_match_the_adapter() {
         let src = BYNK_ADAPTER_SRC;
-        let line = src
-            .lines()
-            .find(|l| l.trim_start().starts_with("exports capability {"))
+        // The list may span lines once `bynk-fmt` wraps it.
+        let (_, after) = src
+            .split_once("exports capability {")
             .expect("adapter declares `exports capability`");
-        let inner = line
-            .split_once('{')
-            .and_then(|(_, r)| r.split_once('}'))
-            .map(|(names, _)| names)
-            .expect("braced capability list");
-        let declared: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+        let (inner, _) = after.split_once('}').expect("braced capability list");
+        let declared: Vec<&str> = inner
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
         assert_eq!(
             declared, BYNK_SURFACE_CAPABILITIES,
             "BYNK_SURFACE_CAPABILITIES is out of sync with bynk.bynk"

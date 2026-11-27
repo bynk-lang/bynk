@@ -8,6 +8,7 @@ import { __bynkIsCron, __bynkInstantFromWire } from "./__bynk_runtime/time.js";
 import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { HttpResult } from "./__bynk_runtime/httpresult.js";
 
 import { LocaleTag } from "./bynk/locale/types.js";
 
@@ -565,6 +566,81 @@ export const StreamResponse = {
 };
 
 /**
+ * The request an `on ANY(…)` pass-through route received (#3752), as only
+ * `Upstream.forward` sends it on: `method()` (upper case), `headers()` (the
+ * same view a `headers: RequestHeaders` parameter gets, the route's consumed
+ * credential hidden) and `query()` (the raw query string, without `?`). Its
+ * body isn't readable here: `forward` consumes it, once. Like
+ * `RequestHeaders` it is read while the request is handled and never kept: it
+ * can't be a field, cross a boundary or be stored
+ * (`bynk.types.inbound_request_at_boundary`), and only a pass-through route
+ * takes one (`bynk.http.inbound_request_not_pass_through`).
+ */
+export type InboundRequest = string & { readonly __brand: "InboundRequest" };
+
+export const InboundRequest = {
+  of(value: string): Result<InboundRequest, ValidationError> {
+    return Ok(value as InboundRequest);
+  },
+  unsafe(value: string): InboundRequest {
+    return value as InboundRequest;
+  },
+};
+
+/**
+ * An upstream's answer, as `Upstream.forward` returns it (#3752): its status,
+ * headers and streamed body, passed through by `Forward(…)`. There is no
+ * constructor, so a handler can't fabricate one, and it can't carry a status or
+ * header that didn't come from the declared origin. `status()` and
+ * `header(name)` read it for a handler that decides on them.
+ */
+export type Forwarded = string & { readonly __brand: "Forwarded" };
+
+export const Forwarded = {
+  of(value: string): Result<Forwarded, ValidationError> {
+    return Ok(value as Forwarded);
+  },
+  unsafe(value: string): Forwarded {
+    return value as Forwarded;
+  },
+};
+
+/**
+ * What an `on ANY(…)` pass-through route answers (#3752): `Forward(response)`
+ * sends an upstream's answer through, with the router's own `ETag`, `HEAD`,
+ * `OPTIONS`, `405` and CORS behaviour suspended; `Respond(result)` answers
+ * locally with any `HttpResult[()]`, shaped by the router as on an ordinary
+ * route.
+ */
+export type PassThrough =
+    { readonly tag: "Forward"; readonly response: Forwarded }
+  | { readonly tag: "Respond"; readonly result: HttpResult<void> };
+
+export const PassThrough = {
+  Forward: (response: Forwarded): PassThrough => ({ tag: "Forward", response }),
+  Respond: (result: HttpResult<void>): PassThrough => ({ tag: "Respond", result }),
+};
+
+/**
+ * Why `Upstream.forward` sent nothing, or got no answer (#3752). `Timeout` is
+ * no response head within the instance's `@timeout`; `Unreachable` is a
+ * connection that failed; `InvalidPath` is a `path` refused before anything was
+ * sent (not starting with `/`, holding `?`, `#` or a control character, or a
+ * `.` or `..` segment, encoded or not). It may gain variants, so a `match` on it
+ * needs a wildcard.
+ */
+export type UpstreamError =
+    { readonly tag: "Timeout" }
+  | { readonly tag: "Unreachable" }
+  | { readonly tag: "InvalidPath" };
+
+export const UpstreamError = {
+  Timeout: { tag: "Timeout" } as UpstreamError,
+  Unreachable: { tag: "Unreachable" } as UpstreamError,
+  InvalidPath: { tag: "InvalidPath" } as UpstreamError,
+};
+
+/**
  * Runtime metadata carried alongside an event payload (Events track, slice
  * 2; ADR 0293, spine #936), available as an `on event`
  * handler's optional second parameter. `eventId` is minted once per
@@ -682,6 +758,20 @@ export interface Fetch {
 }
 
 export const __FetchToken: symbol = globalThis.Symbol("Fetch");
+
+/**
+ * A declared upstream origin a pass-through route forwards to (#3752):
+ * `capability Pages = Upstream @origin("https://pages.example") @timeout(30.seconds)`.
+ * The origin is a literal or a `String` constant, never a value computed at run
+ * time, so no request can steer the proxy to another host. `forward` builds the
+ * URL textually, the origin then `path` then the raw query, and checks the
+ * result's origin before sending; `path` must start with `/`.
+ */
+export interface Upstream {
+  forward(request: InboundRequest, path: string): globalThis.Promise<Result<Forwarded, UpstreamError>>;
+}
+
+export const __UpstreamToken: symbol = globalThis.Symbol("Upstream");
 
 /**
  * Reads named secrets from the platform's secret store.
@@ -1288,6 +1378,40 @@ export function __deserialise_File(json: __JsonValue, path: string = "$"): Resul
   return Ok({ filename: __filename, contentType: __contentType, bytes: __bytes } as File);
 }
 
+export function __serialise_Forwarded(value: Forwarded): __JsonValue {
+  return value as unknown as string;
+}
+
+export function __deserialise_Forwarded(json: __JsonValue, path: string = "$"): Result<Forwarded, __BoundaryError> {
+  if (typeof json !== "string") {
+    return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
+  }
+  const validated = (typeof (Forwarded as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (Forwarded as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as Forwarded) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as Forwarded);
+}
+
+export function __serialise_InboundRequest(value: InboundRequest): __JsonValue {
+  return value as unknown as string;
+}
+
+export function __deserialise_InboundRequest(json: __JsonValue, path: string = "$"): Result<InboundRequest, __BoundaryError> {
+  if (typeof json !== "string") {
+    return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
+  }
+  const validated = (typeof (InboundRequest as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (InboundRequest as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as InboundRequest) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as InboundRequest);
+}
+
 export function __serialise_LogLevel(value: LogLevel): __JsonValue {
   switch (value.tag) {
     case "Debug":
@@ -1419,6 +1543,39 @@ export function __deserialise_ParOptions(json: __JsonValue, path: string = "$"):
   }
   const __limit = obj["limit"];
   return Ok({ limit: __limit } as ParOptions);
+}
+
+export function __serialise_PassThrough(value: PassThrough): __JsonValue {
+  switch (value.tag) {
+    case "Forward": {
+      return { kind: "Forward", response: __serialise_Forwarded(value.response) };
+    }
+    case "Respond": {
+      return { kind: "Respond", result: value.result as unknown as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_PassThrough(json: __JsonValue, path: string = "$"): Result<PassThrough, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Forward": {
+      const __r_response = __deserialise_Forwarded(obj["response"], `${path}.response`);
+      if (__r_response.tag === "Err") return __r_response;
+      const __response = __r_response.value;
+      return Ok({ tag: "Forward", response: __response } as PassThrough);
+    }
+    case "Respond": {
+      const __result = obj["result"] as unknown as HttpResult<unknown>;
+      return Ok({ tag: "Respond", result: __result } as PassThrough);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
 }
 
 export function __serialise_Redirect(value: Redirect): __JsonValue {
@@ -1729,6 +1886,47 @@ export function __deserialise_TooManyKeys(json: __JsonValue, path: string = "$")
   }
   const __limit = obj["limit"];
   return Ok({ limit: __limit } as TooManyKeys);
+}
+
+export function __serialise_UpstreamError(value: UpstreamError): __JsonValue {
+  switch (value.tag) {
+    case "Timeout":
+      return { kind: "Timeout" };
+    case "Unreachable":
+      return { kind: "Unreachable" };
+    case "InvalidPath":
+      return { kind: "InvalidPath" };
+  }
+}
+
+export function __deserialise_UpstreamError(json: __JsonValue, path: string = "$"): Result<UpstreamError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Timeout":
+        return Ok({ tag: "Timeout" } as UpstreamError);
+      case "Unreachable":
+        return Ok({ tag: "Unreachable" } as UpstreamError);
+      case "InvalidPath":
+        return Ok({ tag: "InvalidPath" } as UpstreamError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Timeout":
+      return Ok({ tag: "Timeout" } as UpstreamError);
+    case "Unreachable":
+      return Ok({ tag: "Unreachable" } as UpstreamError);
+    case "InvalidPath":
+      return Ok({ tag: "InvalidPath" } as UpstreamError);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
 }
 
 export function __serialise_Uuid(value: Uuid): __JsonValue {

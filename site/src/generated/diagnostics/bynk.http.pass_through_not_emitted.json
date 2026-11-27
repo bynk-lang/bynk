@@ -1,0 +1,12 @@
+{
+  "blurb": "An `on ANY` pass-through route type-checks, but its router (the suspended `ETag`, `HEAD`, `OPTIONS` and CORS behaviour) and the `Upstream` exchange arrive in the next increment. Until then a build that would emit one is refused, rather than built without its routes, which would answer `404` where the program says it forwards. `bynk check` accepts the route meanwhile.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.pass_through_not_emitted",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗ for `bynk build` and `bynk test`, until the router lands\n\non GET(\"/blog/*path\") (path: String) -> Effect[HttpResult[String]] by Visitor { … }   // ✓ until then, an ordinary route builds",
+  "severity": "error",
+  "summary": "A build reaches an `on ANY` pass-through route, which this release checks but does not yet build."
+}
