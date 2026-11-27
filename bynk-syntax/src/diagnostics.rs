@@ -2068,9 +2068,19 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Region =\n    | Domestic\n    | International\n    | Refunded(reason: String)\nevent Paid = { id: String, region: Region }\n\nservice onPaid from Events(Paid { region: Region.Refunded, .. }) {   // ✗ `Refunded` carries a `reason`\n\nservice onPaid from Events(Paid { region: Region.Domestic, .. }) {   // ✓ no payload",
     },
     Explain {
+        code: "bynk.event.queue_name_collision",
+        blurb: "On Workers each `from Events` service will receive its events through a queue the compiler creates, named `bynk-ev-` followed by its context and service and a short hash of them, with a matching `bynk-dl-` dead-letter queue. The name has to fit Cloudflare's 63 characters, so the context and service may be cut short and the hash is only 8 hex digits: two different services can, rarely, get the same name, in every environment or only in one with a long name. They would then share a queue, which has one consumer, so one of them would never see its events. The compiler knows every subscriber in the project, so it refuses such a pair and names both. Rename one of the two services.",
+        example: "service notify23278 from Events(Paid) {\n    on event(e: Paid) -> Effect[()] { … }\n}\n\nservice notify24925 from Events(Paid) {   // ✗ its event queue's name would be `notify23278`'s\nservice notifyRefund from Events(Paid) {   // ✓\n    on event(e: Paid) -> Effect[()] { … }\n}",
+    },
+    Explain {
         code: "bynk.event.return_not_effect_unit",
         blurb: "Emission is fire-and-forget: nothing receives a subscriber's result, so an `on event` handler returns `Effect[()]` and anything else is refused. Return `Effect.pure(())` once its work is done, and move a value it computes into an effect the handler performs, such as a write. A handler that does not return an `Effect` at all is `bynk.service.return_not_effect`.",
         example: "service onPaid from Events(Paid) {\n    on event(e: Paid) -> Effect[Int] { … }   // ✗ the result has nowhere to go\n    on event(e: Paid) -> Effect[()] { … }    // ✓\n}",
+    },
+    Explain {
+        code: "bynk.event.unbounded_payload",
+        blurb: "On Workers an event will travel as one Cloudflare Queue message, which holds at most 128 KB, so an emission larger than about 127,000 bytes will fault its handler. Its size is known only at run time, so the compiler cannot check it, but it can point at where large events come from: a `Bytes` field, or a `List`, `Map` or `Set` of records, sums with payloads or other collections, with no refinement such as `MaxLength(n)` that bounds it. A payload of scalars, `String`s and enums does not warn. Store the large value elsewhere (R2 or D1) and send a reference to it; a collection can instead be bounded with `MaxLength(n)`. It is only a warning: a field that is small in practice may stay as it is.",
+        example: "event Uploaded = { name: String, data: Bytes }   // ⚠ `data` has no size bound\n\nevent Uploaded = { name: String, key: String }   // ✓ the bytes are stored in R2 under `key`",
     },
     Explain {
         code: "bynk.event.unknown_annotation",
@@ -8540,8 +8550,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.deploy.agent_move_refused",
-        "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
+        "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Move it with its state with `--move-agent <context>` (planned with `--dry-run` in this release), or start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use. A `reason` says why a named move is refused: `chained`, `partial_selection`, `order`, `routes`, `tombstones`, `renamed_in_place`, `both`, or `apply_not_yet` outside `--dry-run`.",
     ),
+    warn(d(
+        "bynk.deploy.agent_move_window",
+        "A `--move-agent` move keeps its agents' state, but from the commit (the source's push) until the receiver goes live again, calls to the moving contexts fail: a window of about one push. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`, beside the plan's `moves`.",
+    )),
     warn(d(
         "bynk.deploy.agent_starts_fresh",
         "A context that hosts agents moves to a different Worker script and `--accept-fresh-agent <context>` named it, so its agents start with fresh state there and the old state stays in the old script, which is no longer a Worker of the project: do not delete it if the data matters. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`.",
@@ -8617,6 +8631,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.deploy.ledger_unreadable",
         "`bynk deploy` could not read `bynk.deploy.lock`, the ledger of what is deployed, so it stopped before planning: a plan made without it would call everything new. Fix or restore the file (it is plain TOML). With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
+        "bynk.deploy.move_agent_unused",
+        "A `--move-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
     ),
     d(
         "bynk.deploy.multiple_websocket_members",
@@ -8941,6 +8959,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.event.pattern_variant_payload",
         "A `from Events(E { ... })` subscription pattern's variant value names a variant that carries a payload — only nullary variants are admitted, since testing the tag alone would silently ignore the payload.",
     ),
+    d(
+        "bynk.event.queue_name_collision",
+        "Two `from Events` services would get the same compiler-owned event queue name in some environment.",
+    ),
     dg(
         "bynk.event.return_not_effect_unit",
         "An `on event` handler returns an `Effect` of something other than `()`; emission is fire-and-forget, so it returns `Effect[()]`.",
@@ -8950,6 +8972,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.event.schema_version_mismatch",
         "An event's `@schema(N)` annotation disagrees with the version the schema registry computes from the event's build history.",
     ),
+    warn(d(
+        "bynk.event.unbounded_payload",
+        "An `event`'s payload reaches a `Bytes`, or a `List`, `Map` or `Set` of a non-scalar type that no refinement bounds (warning).",
+    )),
     d(
         "bynk.event.unknown_annotation",
         "An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set.",

@@ -2,6 +2,7 @@
 // context rec.provider
 
 import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 
 import { Tree as __CommonsTree } from "../../rec/shapes.js";
 import { __serialise_Tree, __deserialise_Tree } from "../../rec/shapes.js";
@@ -26,7 +27,7 @@ export const gardener = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Planted", payload: { tree: t }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "rec.provider", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Planted", payload: { tree: t }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "rec.provider", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return undefined;
     })();
