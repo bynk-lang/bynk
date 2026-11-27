@@ -253,8 +253,7 @@ pub(crate) fn mint_options(seam: &bynk_check::api_key::ApiKeySeam) -> TsExpr {
     let esc = crate::emitter::escape_ts_string;
     let mut entries = vec![(
         "ttlMs".to_string(),
-        seam.ttl_ms
-            .map_or_else(crate::ts_build::null_lit, |ms| num_lit(ms)),
+        seam.ttl_ms.map_or_else(crate::ts_build::null_lit, num_lit),
     )];
     if let Some(previous) = &seam.previous {
         entries.push(("previous".to_string(), str_lit(esc(previous))));

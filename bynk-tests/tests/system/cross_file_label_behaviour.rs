@@ -139,7 +139,7 @@ fn missing_url_project(tag: &str) -> Scratch {
         "[project]\nname = \"demo\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
-    let padding: String = (1..=300)
+    let padding: String = (1..=400)
         .map(|i| format!("// padding line {i}\n"))
         .collect();
     let web = format!(
@@ -185,7 +185,7 @@ fn assert_firstparty_label_in_its_own_source(subcommand: &str) {
     let (primary, primary_body) = parts[0];
     let (stdlib, stdlib_body) = parts[1];
     assert!(
-        primary.ends_with("src/app/web.bynk:308:27"),
+        primary.ends_with("src/app/web.bynk:408:27"),
         "got:\n{report}"
     );
     assert!(
