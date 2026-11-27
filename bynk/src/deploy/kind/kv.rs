@@ -649,11 +649,26 @@ pub(crate) fn kv_namespace_noun(worker: &str, binding: &str) -> String {
     }
 }
 
+/// Whether this run's KV steps call the account (#4056 Decision E): a namespace in `cx.order`
+/// with no recorded id, which is created, or, under `--prune`, an orphan with a recorded id,
+/// which is deleted. The drift read is not counted: without credentials it is skipped, with a
+/// plan note, and the ledger trusted, as a failed read always was. A redeploy with every
+/// namespace recorded therefore needs no API token.
+pub(crate) fn kv_calls_the_account(cx: &ProjectCx<'_>, orphans: &[OrphanKv], prune: bool) -> bool {
+    let ledger = cx.ledger;
+    let creates = cx.order.iter().any(|worker| {
+        kv_bindings(&cx.resources[worker])
+            .any(|binding| ledger.recorded::<Kv>(worker, binding).is_none())
+    });
+    creates
+        || (prune
+            && orphans
+                .iter()
+                .any(|kv| ledger.recorded::<Kv>(&kv.worker, kv.binding()).is_some()))
+}
+
 pub(crate) fn create_kv(api: &dyn CloudflareApi, name: &str) -> Result<String, CloudflareError> {
-    // The generated worker config still carries the placeholder until the namespace exists, so
-    // the adapter creates from the project root, where wrangler cannot load that incomplete
-    // config.
-    api.kv_create(name).map_err(CloudflareError::from)
+    api.kv_create(name)
 }
 
 /// Every KV namespace id currently on the account — slice 5, DECISION B.
@@ -664,57 +679,37 @@ pub(crate) fn create_kv(api: &dyn CloudflareApi, name: &str) -> Result<String, C
 /// calls this once, before the per-context loop, and threads the result
 /// through — see `Lives::kv` ([`Kv`]'s `live`).
 ///
-/// `None` means "could not ask" (no wrangler, network/auth failure, or an
-/// unparseable response) — read the same way [`list_secrets`]'s `None` is:
+/// `None` means "could not ask" (no credentials, a network or auth failure, or
+/// an unreadable answer) — read the same way [`list_secrets`]'s `None` is:
 /// the caller falls back to trusting whatever the ledger already says, rather
-/// than blocking every deploy on this call succeeding.
-///
-/// **Completeness (review, #840):** Cloudflare's list-namespaces endpoint is
-/// itself paginated, but `wrangler`'s `listKVNamespaces` (`workers-sdk`
-/// `packages/wrangler/src/kv/helpers.ts`) loops `page`/`per_page` until a
-/// short page comes back, aggregating every page before this command prints
-/// — confirmed against wrangler's own source, not assumed. A truncated
-/// response is not a live risk on the CLI path this calls.
+/// than blocking every deploy on this call succeeding. Since 1D.4a (#4056) the
+/// listing is Cloudflare's REST API, every page read (`CloudflareApi::kv_list`).
 pub(crate) fn live_kv_namespace_ids(api: &dyn CloudflareApi) -> Option<BTreeSet<String>> {
-    // No `--format json`: unlike `secret list`/`queues`, this command has no
-    // such flag at all — confirmed against wrangler 4.103 (`Unknown argument:
-    // format`, exit 1). Its *default* output is already a raw JSON array, so
-    // this is not a missing-flag gap, just a different default per command.
-    parse_kv_namespace_ids(&api.kv_list().ok()?)
-}
-
-/// The ids in `wrangler kv namespace list`'s (default, already-JSON) output —
-/// the same structural shape [`parse_secret_list`] reads, `"id"` instead of
-/// `"name"`.
-fn parse_kv_namespace_ids(stdout: &str) -> Option<BTreeSet<String>> {
-    let parsed: serde_json::Value = serde_json::from_str(stdout).ok()?;
-    Some(
-        parsed
-            .as_array()?
-            .iter()
-            .filter_map(|entry| entry.get("id")?.as_str().map(str::to_owned))
-            .collect(),
-    )
+    api.kv_list().ok()
 }
 
 /// Delete a KV namespace by id — `--prune`'s one KV-side mutation.
 ///
-/// `--skip-confirmation`: wrangler's own prompt is redundant with
-/// [`confirm_prune`], which already named every resource about to go and
-/// asked once for the whole batch: a second, per-resource prompt would be
-/// noise, not safety. Idempotent against a namespace already gone (matched
-/// by [`crate::cloudflare::WranglerError::already_gone`]) — confirmed empirically (#839):
-/// Cloudflare answers a not-found delete with an error, never silent success,
-/// so this driver-side match is what makes re-running `--prune` safe.
+/// [`confirm_prune`] already named every resource about to go and asked once
+/// for the whole batch. Idempotent against a namespace already gone:
+/// Cloudflare answers a not-found delete with an error carrying code 10013,
+/// never silent success (confirmed against a real account, #839), so this
+/// reading of the code is what makes re-running `--prune` safe.
 pub(crate) fn delete_kv_namespace(
     api: &dyn CloudflareApi,
     id: &str,
 ) -> Result<(), CloudflareError> {
     match api.kv_delete(id) {
         Ok(()) => Ok(()),
-        Err(e) if e.already_gone() => Ok(()),
-        Err(e) => Err(e.into()),
+        Err(e) if already_deleted(&e) => Ok(()),
+        Err(e) => Err(e),
     }
+}
+
+/// Whether a delete failed only because the namespace is already gone: Cloudflare's code 10013.
+fn already_deleted(e: &CloudflareError) -> bool {
+    e.rest()
+        .is_some_and(|e| e.has_code(crate::cloudflare::rest::kv::NOT_FOUND))
 }
 
 #[cfg(test)]
@@ -743,25 +738,36 @@ mod tests {
         assert!(!should_trust_recorded_kv(None, None));
     }
 
-    /// A failed `kv namespace delete` that only says the namespace is gone.
-    fn kv_namespace_already_deleted(stderr: &str) -> bool {
-        crate::cloudflare::fake::failed(&crate::cloudflare::Op::KvDelete { id: "i" }, "", stderr)
-            .already_gone()
-    }
-
+    /// A delete answered with code 10013 is done; any other failure is not.
     #[test]
-    fn kv_namespace_already_deleted_matches_the_confirmed_error_shape() {
-        // Confirmed empirically against a real account (#839): `namespace not
-        // found [code: 10013]`. The code is matched, not just the prose — the
-        // more durable half if Cloudflare ever reword the message.
-        assert!(kv_namespace_already_deleted(
-            "✘ [ERROR] A request to the Cloudflare API (...) failed.\n  namespace not found [code: 10013]"
-        ));
-        assert!(kv_namespace_already_deleted("code: 10013"));
-        assert!(!kv_namespace_already_deleted(
-            "✘ [ERROR] Authentication error [10000]"
-        ));
-        assert!(!kv_namespace_already_deleted(""));
+    fn a_namespace_already_gone_is_read_by_its_code() {
+        use crate::cloudflare::RestError;
+        let path = "/storage/kv/namespaces/i";
+        let gone = RestError::answered(
+            "DELETE",
+            path,
+            404,
+            r#"[{"code":10013,"message":"delete namespace: 'namespace not found'"}]"#,
+        );
+        assert!(already_deleted(&gone.into()));
+        let denied = RestError::answered(
+            "DELETE",
+            path,
+            403,
+            r#"[{"code":10000,"message":"Authentication error"}]"#,
+        );
+        assert!(!already_deleted(&denied.into()));
+        // The prose alone is not the code.
+        let prose = RestError::answered(
+            "DELETE",
+            path,
+            404,
+            r#"[{"message":"namespace not found"}]"#,
+        );
+        assert!(!already_deleted(&prose.into()));
+        assert!(!already_deleted(&CloudflareError::Other(
+            "code: 10013".into()
+        )));
     }
 
     #[test]
@@ -991,12 +997,125 @@ mod tests {
         assert_eq!(kind_unrecordable_in_ci(&cx), Kv::unrecordable_in_ci(&cx));
     }
 
+    /// #4056 Decision E: credentials are asked for only when a step will call the account.
+    #[test]
+    fn the_account_is_called_to_create_an_unrecorded_namespace_or_prune_a_recorded_orphan() {
+        let lock = lock_of(&[
+            ("default", "shop", "KV", "bare"),
+            ("default", "gone", "KV", "old"),
+        ]);
+        let resources = project(vec![
+            ("shop", Resources::default().needs_kv()),
+            (
+                "shop-cart",
+                Resources::default().kv_instances(&["KV_SESSIONS"]),
+            ),
+        ]);
+        let order =
+            |workers: &[&str]| -> Vec<String> { workers.iter().map(|w| w.to_string()).collect() };
+        let calls = |order: &[String], orphans: &[OrphanKv], prune: bool| {
+            kv_calls_the_account(
+                &ProjectCx {
+                    ledger: LedgerView::of(&lock, "default"),
+                    resources: &resources,
+                    order,
+                },
+                orphans,
+                prune,
+            )
+        };
+        let recorded = order(&["shop"]);
+        let both = order(&["shop", "shop-cart"]);
+        assert!(
+            !calls(&recorded, &[], false),
+            "everything recorded: no call"
+        );
+        assert!(calls(&both, &[], false), "`KV_SESSIONS` is created");
+        let orphan = |worker: &str| OrphanKv {
+            worker: worker.to_string(),
+            binding: None,
+        };
+        assert!(
+            calls(&recorded, &[orphan("gone")], true),
+            "a recorded orphan is deleted"
+        );
+        assert!(
+            !calls(&recorded, &[orphan("gone")], false),
+            "only under --prune"
+        );
+        assert!(
+            !calls(&recorded, &[orphan("never")], true),
+            "an orphan with no id is left alone"
+        );
+        // Another environment's records are not this run's.
+        let staging = ProjectCx {
+            ledger: LedgerView::of(&lock, "staging"),
+            resources: &resources,
+            order: &recorded,
+        };
+        assert!(kv_calls_the_account(&staging, &[], false));
+    }
+
+    /// #4056 Decision E: a create or a `--prune` delete without credentials is refused before
+    /// anything changes, in the kind's words; a run that calls nothing never asks.
+    #[test]
+    fn the_pre_flight_refuses_a_create_or_prune_without_credentials() {
+        use crate::cloudflare::CloudflareError;
+        use crate::cloudflare::rest::Purpose;
+        let lock = lock_of(&[
+            ("default", "shop", "KV", "bare"),
+            ("default", "gone", "KV", "old"),
+        ]);
+        let resources = project(vec![
+            ("shop", Resources::default().needs_kv()),
+            (
+                "shop-cart",
+                Resources::default().kv_instances(&["KV_SESSIONS"]),
+            ),
+        ]);
+        let asked = std::cell::RefCell::new(Vec::new());
+        let missing = |purpose: Purpose| {
+            asked.borrow_mut().push(purpose);
+            Err(CloudflareError::Credentials(format!(
+                "set CLOUDFLARE_ACCOUNT_ID to {}: {} and the account it belongs to",
+                purpose.doing(),
+                purpose.needs()
+            )))
+        };
+        let run = |order: &[&str], orphans: &[OrphanKv], prune: bool| {
+            let order: Vec<String> = order.iter().map(|w| w.to_string()).collect();
+            let project = ProjectCx {
+                ledger: LedgerView::of(&lock, "default"),
+                resources: &resources,
+                order: &order,
+            };
+            crate::deploy::gates::resource_credentials(&project, orphans, &[], prune, missing)
+        };
+        let create = run(&["shop", "shop-cart"], &[], false).unwrap_err();
+        assert_eq!(
+            create,
+            "set CLOUDFLARE_ACCOUNT_ID to create or delete the account's KV namespaces: an API token with \"Workers KV Storage: Edit\" (a `wrangler login` session is not enough: the deploy calls Cloudflare's API directly) and the account it belongs to"
+        );
+        let orphan = OrphanKv {
+            worker: "gone".into(),
+            binding: None,
+        };
+        assert!(run(&["shop"], std::slice::from_ref(&orphan), true).is_err());
+        assert_eq!(asked.borrow().as_slice(), [Purpose::Kv, Purpose::Kv]);
+        // Everything recorded, no prune: the credentials are never asked for.
+        assert_eq!(run(&["shop"], std::slice::from_ref(&orphan), false), Ok(()));
+        assert_eq!(asked.borrow().len(), 2);
+    }
+
     #[test]
     fn a_trusted_recorded_namespace_is_bound_without_a_record_or_an_account_call() {
         let lock = lock_of(&[("default", "shop", "KV", "bare")]);
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let tools = Tools {
-            api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+            api: &crate::cloudflare::Account::new(Wrangler::new(
+                &provenance,
+                Path::new("/nonexistent"),
+            )),
             project_root: Path::new("/nonexistent"),
         };
         let resources = project(vec![("shop", Resources::default().needs_kv())]);
@@ -1038,7 +1157,10 @@ mod tests {
                 lock: &lock,
                 live: None,
                 tools: Tools {
-                    api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+                    api: &crate::cloudflare::Account::new(Wrangler::new(
+                        &provenance,
+                        Path::new("/nonexistent"),
+                    )),
                     project_root: Path::new("/nonexistent"),
                 },
             },

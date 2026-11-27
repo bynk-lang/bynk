@@ -115,7 +115,10 @@ cron_handler ::= "on" "schedule" "(" (string_literal | identifier) ")" "(" (para
 queue_handler ::= "on" "message" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 ws_open_handler ::= "on" "open" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 ws_close_handler ::= "on" "close" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
-given_clause ::= "given" qualified_name ("," qualified_name)*
+given_clause ::= "given" (qualified_name | capability_parameter) ("," (qualified_name | capability_parameter))*
+capability_parameter ::= identifier ":" identifier
+capability_bindings ::= "given" capability_binding ("," capability_binding)*
+capability_binding ::= identifier "=" qualified_name
 actor_decl ::= "actor" identifier ("{" "auth" "=" scheme scheme_config? ("," "identity" "=" type_ref)? "}" | "=" identifier "where" expression)
 scheme ::= "None" | "Internal" | "Bearer" | "Signature" | "Oidc" | "Foreign" | "SignedCookie"
 scheme_config ::= "(" scheme_arg ("," scheme_arg)* ")"
@@ -133,8 +136,9 @@ block ::= "{" statement* expression? "}"
 statement ::= let_stmt | effect_let_stmt | let_else_stmt | do_stmt | assign_stmt | advance_stmt | par_stmt | expect_expr
 let_stmt ::= "let" binding_name (":" type_ref)? "=" expression
 effect_let_stmt ::= "let" binding_name (":" type_ref)? "<-" expression call_site_actor?
-let_else_stmt ::= "let" (let_pattern | let_or_pattern) ("=" | "<-") expression call_site_actor? "else" (block | let_else_match) | "let" (record_pattern | let_paren_record_pattern) ("=" | "<-") expression call_site_actor? ("else" (block | let_else_match))?
+let_else_stmt ::= "let" (let_pattern | let_or_pattern | let_as_pattern) ("=" | "<-") expression call_site_actor? "else" (block | let_else_match) | "let" (record_pattern | let_paren_record_pattern) ("=" | "<-") expression call_site_actor? ("else" (block | let_else_match))?
 let_paren_record_pattern ::= "(" record_pattern ")"
+let_as_pattern ::= let_pattern "as" identifier
 let_pattern ::= int_range | literal_pattern | paren_pattern | list_pattern | let_variant_pattern
 let_or_pattern ::= (let_pattern | record_pattern) "|" pattern
 let_variant_pattern ::= identifier "." identifier ("(" (pattern_binding ("," pattern_binding)*)? ","? ")")? | identifier "(" (pattern_binding ("," pattern_binding)*)? ","? ")"
@@ -157,19 +161,21 @@ if_expr ::= "if" expression block ("else" (if_expr | block))?
 match_expr ::= "match" expression "{" match_arm* "}"
 match_arm ::= (pattern | refined_pattern) ("if" expression)? "=>" expression ","?
 refined_pattern ::= wildcard_pattern "where" refinement
-pattern ::= wildcard_pattern | int_range | literal_pattern | variant_pattern | record_pattern | list_pattern | or_pattern | paren_pattern
+pattern ::= wildcard_pattern | int_range | literal_pattern | variant_pattern | record_pattern | list_pattern | or_pattern | as_pattern | paren_pattern
+as_pattern ::= pattern "as" identifier
 record_pattern ::= identifier "{" (record_pattern_field ",")* ".." "}"
 list_pattern ::= "[" (pattern ",")* (pattern | list_rest ","?)? "]"
 list_rest ::= ".." identifier?
 record_pattern_field ::= identifier ":" pattern | identifier
-is_base_pattern ::= wildcard_pattern | literal_pattern | variant_pattern | list_pattern | paren_pattern
+is_base_pattern ::= wildcard_pattern | literal_pattern | variant_pattern | list_pattern | paren_pattern | is_as_pattern
+is_as_pattern ::= is_base_pattern "as" identifier
 is_pattern ::= is_base_pattern | is_or_pattern
 is_or_pattern ::= is_pattern "|" is_base_pattern
 or_pattern ::= pattern "|" pattern
 paren_pattern ::= "(" pattern ")"
 wildcard_pattern ::= "_"
 int_range ::= "-"? number_literal ".." ("-"? number_literal)? | ".." "-"? number_literal
-literal_pattern ::= "-"? number_literal | string_literal | boolean_literal
+literal_pattern ::= "-"? number_literal | "-"? decimal_literal | "-"? float_literal | string_literal | boolean_literal
 variant_pattern ::= (identifier ".")? identifier ("(" (pattern_binding ("," pattern_binding)*)? ","? ")")?
 pattern_binding ::= named_binding | pattern
 named_binding ::= identifier ":" pattern
@@ -179,13 +185,15 @@ unary_expr ::= ("!" | "-") expression
 primary ::= lambda_expr | paren_expr | method_call | field_access | call | record_construction | record_spread | question_expr | ok_expr | err_expr | some_expr | none_expr | effect_pure_expr | val_expr | wire_expr | trace_expr | list_literal | block | number_literal | float_literal | decimal_literal | string_literal | boolean_literal | unit_literal | self_expr | identifier | contextual_identifier
 contextual_identifier ::= "trace" | "advance" | "par" | "by"
 lambda_expr ::= "(" (lambda_param ("," lambda_param)*)? ")" "=>" (expression | block)
-lambda_param ::= (identifier | contextual_identifier | "_") (":" type_ref)? | lambda_record_pattern
+lambda_param ::= (identifier | contextual_identifier | "_") (":" type_ref)? | lambda_record_pattern | lambda_as_pattern
+lambda_as_pattern ::= lambda_record_pattern "as" identifier
 lambda_record_pattern ::= identifier "{" (lambda_record_field ",")* ".." "}"
 lambda_record_field ::= identifier ":" (identifier | wildcard_pattern | lambda_record_pattern) | identifier
 paren_expr ::= "(" expression ")"
 method_call ::= primary "." identifier (type_app_open type_ref ("," type_ref)* "]")? "(" (expression ("," expression)*)? ","? ")"
 field_access ::= primary "." identifier
-call ::= (identifier | contextual_identifier) "(" (expression ("," expression)*)? ","? ")" | (identifier | contextual_identifier) type_app_open type_ref ("," type_ref)* "]" "(" (expression ("," expression)*)? ","? ")"
+call ::= (identifier | contextual_identifier) "(" call_arguments? ")" | (identifier | contextual_identifier) type_app_open type_ref ("," type_ref)* "]" "(" call_arguments? ")"
+call_arguments ::= expression ("," expression)* ("," | "," capability_bindings)? | capability_bindings
 list_literal ::= "[" (expression ("," expression)* ","?)? "]"
 record_construction ::= (identifier | qualified_type_ref) "{" (field_init ("," field_init)*)? ","? "}"
 field_init ::= identifier ":" expression | identifier

@@ -853,28 +853,31 @@ mod tests {
     fn provision_fake() -> crate::cloudflare::fake::Recording {
         use crate::cloudflare::Op;
         use crate::cloudflare::fake::{Recording, failed};
-        Recording::new(|op| match op {
-            Op::D1MigrationsApply { binding, .. } if binding.starts_with("D1_BROKEN") => {
-                Err(failed(op, "", "✘ [ERROR] Migration 0001_bad.sql failed\n"))
-            }
-            Op::D1Create { name, .. } if name.contains("taken") => Err(failed(
-                op,
-                "",
-                "✘ [ERROR] A database with that name already exists\n",
-            )),
-            Op::D1Create { name, .. } => {
-                Ok(format!("0d1d0000-0000-4000-8000-00000000000{}", name.len()))
-            }
-            Op::D1List => Ok(
-                "[{\"uuid\": \"adadadad-0000-4000-8000-000000000000\", \"name\": \"api-taken\"}]\n"
-                    .into(),
-            ),
-            _ if op.line().contains("--json") => {
-                Err(failed(op, "", "✘ [ERROR] Unknown argument: json\n"))
-            }
-            Op::KvCreate { .. } => Ok("minted-id".into()),
-            Op::KvList => Ok("[[kv_namespaces]]\nbinding = \"t\"\nid = \"minted-id\"\n".into()),
-            _ => Ok(String::new()),
+        Recording::new(|op| -> Result<String, crate::cloudflare::CloudflareError> {
+            Ok(match op {
+                Op::D1MigrationsApply { binding, .. } if binding.starts_with("D1_BROKEN") => {
+                    return Err(failed(op, "", "✘ [ERROR] Migration 0001_bad.sql failed\n").into());
+                }
+                Op::D1Create { name, .. } if name.contains("taken") => {
+                    return Err(crate::cloudflare::RestError::answered(
+                        "POST",
+                        "/d1/database",
+                        400,
+                        "[]",
+                    )
+                    .into());
+                }
+                Op::D1Create { name, .. } => {
+                    format!("0d1d0000-0000-4000-8000-00000000000{}", name.len())
+                }
+                Op::D1List => "adadadad-0000-4000-8000-000000000000".into(),
+                _ if op.line().contains("--json") => {
+                    return Err(failed(op, "", "✘ [ERROR] Unknown argument: json\n").into());
+                }
+                Op::KvCreate { .. } => "minted-id".into(),
+                Op::KvList => "[[kv_namespaces]]\nbinding = \"t\"\nid = \"minted-id\"\n".into(),
+                _ => String::new(),
+            })
         })
     }
 
@@ -986,6 +989,8 @@ mod tests {
                     source: &source,
                     force: false,
                     edge_keys: &edge_keys,
+                    expired: &std::collections::BTreeMap::new(),
+                    cleaned: &std::cell::RefCell::new(std::collections::BTreeSet::new()),
                     foreign_keys: &foreign_keys,
                     foreign_secrets: &foreign_secrets,
                     listed: &listed,
@@ -1666,7 +1671,7 @@ mod tests {
                     log = log.display(),
                     seen = seen.display(),
                 );
-                scripted = Wrangler::scripted(&script, &root);
+                scripted = crate::cloudflare::Account::new(Wrangler::scripted(&script, &root));
                 &scripted
             }
             Tail::Ok | Tail::Fails => &recording,
@@ -1712,6 +1717,8 @@ mod tests {
                     source: &source,
                     force: false,
                     edge_keys: &edge_keys,
+                    expired: &std::collections::BTreeMap::new(),
+                    cleaned: &std::cell::RefCell::new(std::collections::BTreeSet::new()),
                     foreign_keys: &foreign_keys,
                     foreign_secrets: &foreign_secrets,
                     listed: &listed,

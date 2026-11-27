@@ -11,8 +11,24 @@ bynk deploy
 
 The first deploy checks Node and Wrangler, compiles the project, shows what it
 will create, checks your Wrangler authentication, asks for confirmation, then
-provisions each context's resources and deploys its Worker. Authenticate first
-with `wrangler login` or `CLOUDFLARE_API_TOKEN`.
+provisions each context's resources and deploys its Worker.
+
+Authenticate first. There are two halves:
+
+- **The push** runs through Wrangler, so `wrangler login` (or
+  `CLOUDFLARE_API_TOKEN`) is enough for it.
+- **The account's resources** are created, checked and deleted through
+  Cloudflare's API, which needs both `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID`. A `wrangler login` session is not enough, and the
+  token needs the permission of each kind it touches; the sections below name
+  them. Today that is KV, R2, D1 and Vectorize, along with Hyperdrive and the
+  linked kinds.
+
+  A deploy that needs them and lacks one stops before the confirmation, with
+  nothing created, and names the missing variable and the permission. A
+  redeploy whose namespaces, buckets and databases are all recorded needs
+  neither. `bynk doctor`
+  shows a `cloudflare api` row for a project that declares account resources.
 
 Use `--yes` in an automated, non-interactive invocation:
 
@@ -446,14 +462,38 @@ an edge must hold the same key, and Cloudflare won't give one back, so:
   fresh key and sets it on **both** ends. Calls along that edge can fail for the
   moment between one end taking the new key and the other.
 - A redeploy where both ends hold the key leaves it alone. `--force` rotates the
-  key of every edge the run deploys both ends of.
+  key of every edge the run deploys both ends of, and so does redeploying a
+  Worker after it was deleted.
+- **A rotation keeps the key it replaces working for 15 days.** The consumer holds
+  an edge's key in one of two slots (`BYNK_CALL_FROM_<CALLER>` and
+  `BYNK_CALL_FROM2_<CALLER>`). A rotation puts the new key in the slot the live
+  one is not in, then marks the old slot with the instant it stops verifying
+  (`BYNK_CALL_UNTIL_<CALLER>` or `BYNK_CALL_UNTIL2_<CALLER>`, whole seconds since
+  the Unix epoch). The consumer is deployed before its producer, so no message is
+  signed under a key the consumer cannot verify. A signed message waits in a queue
+  for up to 14 days and is verified when it is delivered, so a message signed
+  under the old key before the rotation is still admitted, and a `Producer`
+  refinement does not lose it. The consumer checks the instant itself, so the old
+  key stops working on schedule even if no later deploy runs; the next deploy
+  past it deletes the old slot and its marker, and the plan says so. Cloudflare
+  never returns a key's value, so the old key is never copied: it stays where it
+  is. A second rotation inside the window is not planned: the edge is left as it is, and a warning says so, because replacing either key could overwrite the one a producer still signs with. Rotate again after the window ends, or revoke.
+- **If the old key leaked, do not wait it out.** `bynk deploy --revoke-previous-edge-key
+  <context>` (repeatable) re-keys every edge key on that context at once and
+  deletes the old key, so it stops verifying immediately. A message still in a
+  queue that was signed under it is then refused, not handled. It needs both
+  Workers of each edge in the run, and a revoke that cannot be applied stops the
+  deploy rather than leaving the key working.
 - `--context NAME` can't mint a key for an edge whose other end it doesn't
   deploy. If such an edge lacks its key, the deploy stops before pushing
   anything and asks for a whole-project deploy.
 
 If a deploy that is rotating keys stops partway, the two ends of an edge can
 hold different keys, and a plain rerun keeps both. The deploy names those edges
-when it stops. Rerun `bynk deploy --force` to set one key on both ends.
+when it stops. Rerun `bynk deploy --force` to set one key on both ends. Until you
+do, calls along the edge keep working while the consumer still accepts the
+previous key, which is 15 days after a rotation, and are refused at once after a
+revoke.
 
 You can't supply an edge key: one in `--secrets-file` is ignored, since spread
 to every context it would break the edges it doesn't belong to. `bynk dev` and
@@ -551,6 +591,13 @@ titled `<worker>-<capability>`. Both get an environment suffix under `--env`
 recorded in `bynk.deploy.lock` under its Worker and its binding, and only ever
 written into the generated `wrangler.toml` immediately before the push.
 
+Creating and deleting a namespace goes through Cloudflare's API, so it needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with "Workers KV
+Storage: Edit". Before each redeploy reuses a recorded namespace, the deploy
+lists the account's namespaces and creates again any that were deleted by hand.
+Without the variables that check is skipped, the ledger is trusted, and the
+plan says so in a note.
+
 Titles are account-wide, so two of a project's namespaces must not share one:
 Worker `shop` with `capability CartSessions` and Worker `shop-cart` with
 `capability Sessions` would both be `shop-cart-sessions`. `bynk deploy` refuses
@@ -570,8 +617,13 @@ deploy shop-cart
 ```
 
 A bucket is named `<worker>-<capability>`, with an environment suffix under
-`--env` (`shop-cart-archives-staging`), and created with
-`wrangler r2 bucket create`, in its `@jurisdiction` when it has one. R2 allows
+`--env` (`shop-cart-archives-staging`), and created through Cloudflare's API,
+in its `@jurisdiction` when it has one. That needs `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`, the token with "Workers R2 Storage: Edit", when a bucket
+is created; a recorded bucket is reused without a call. If the create is refused
+because the name is taken, the deploy asks the account for the bucket by name:
+one this account holds is adopted, and one another account owns stays a
+failure. R2 allows
 3 to 63 lowercase letters, digits and hyphens, not starting or ending with a
 hyphen. A derived name outside that is refused at plan time, naming the
 instance, as is a name two instances would share. R2 bucket names are treated
@@ -603,11 +655,16 @@ vectorize create shop-cart-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes c
 ```
 
 An index is named `<worker>-<capability>`, with an environment suffix under
-`--env`, and made with `wrangler vectorize create` in the dimensions and metric the
+`--env`, and made through Cloudflare's API in the dimensions and metric the
 declaration states. Cloudflare takes 1 to 64 bytes of lowercase letters, digits,
 hyphens and underscores, starting with a letter; a name the environment suffix
 would push past that, or two instances would share, is an error naming the
 instance.
+
+Every deploy of a project with a `Vectorize` reads its indexes through Cloudflare's API, so
+every such deploy needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with
+"Vectorize: Edit", even when nothing is created; without them it stops before the
+confirmation.
 
 An index's dimensions and metric cannot change once it exists, and recreating it
 would delete every vector in it, so **the deploy never recreates one**. Every
@@ -788,16 +845,19 @@ d1 create shop-cart-orders (D1_ORDERS)
 deploy shop-cart
 ```
 
-The first deploy runs `wrangler d1 create`, records the name and the
-`database_id` Cloudflare minted, in `d1_instances`, before the push (an
-interrupted run never makes a second one), and writes both into the generated
-`[[d1_databases]]` entry. If a database of that name is already on the account,
-deploy adopts it, looking its id up with `wrangler d1 list`. Under `--env` the
-environment gets its own database and id.
+The first deploy creates the database through Cloudflare's API, records the
+name and the `database_id` Cloudflare minted, in `d1_instances`, before the push
+(an interrupted run never makes a second one), and writes both into the
+generated `[[d1_databases]]` entry. Creating one needs `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`, the token with "D1: Edit"; a recorded database is reused
+without a call. If the create is refused and a database of exactly that name is
+already on the account, deploy adopts it, looking its id up by name. Under
+`--env` the environment gets its own database and id. Migrations still run
+through wrangler, so a `wrangler login` session covers them on a redeploy.
 
 A `D1` with `@jurisdiction("eu")` is planned as
 `d1 create shop-cart-orders (D1_ORDERS) in jurisdiction eu` and created with
-`--jurisdiction eu`; the ledger records the jurisdiction beside the id. It is fixed at creation, so a
+that jurisdiction; the ledger records the jurisdiction beside the id. It is fixed at creation, so a
 source that later adds or changes it for a database already in the ledger is refused with an
 explanation, never recreated. A database already on the account but not in the ledger would be adopted,
 and Bynk cannot read back the jurisdiction it was made with, so with `@jurisdiction` the plan notes

@@ -130,6 +130,51 @@ test("matchPath: malformed percent-encoding is reported, not thrown (#3908)", ()
   assert.equal(decodePath("/a/%E0%A4%A"), null);
 });
 
+// #3752 (D3): every row of the track's §5.2, for `/blog/*path`.
+test("matchPath: a rest binds the raw rest of the path (#3752)", () => {
+  const rest = (path: string) => matchPath("/blog/*path", path)?.params.path;
+  assert.equal(rest("/blog"), "");
+  assert.equal(rest("/blog/"), "/");
+  assert.equal(rest("/blog/posts/money/"), "/posts/money/");
+  assert.equal(rest("/blog/posts/money"), "/posts/money");
+  assert.equal(rest("/blog//x"), "//x");
+  assert.equal(rest("/blog/caf%C3%A9"), "/caf%C3%A9");
+  assert.equal(rest("/blog/a%2Fb"), "/a%2Fb");
+  // Empty segments before the rest are insignificant, as for every route.
+  assert.equal(rest("//blog/posts/x"), "/posts/x");
+  // The prefix is matched decoded; another path doesn't match.
+  assert.equal(matchPath("/blog/*path", "/blogs/x"), null);
+  assert.equal(matchPath("/café/*p", "/caf%C3%A9/x")?.params.p, "/x");
+});
+
+test("matchPath: a root rest, and parameters before a rest (#3752)", () => {
+  assert.deepEqual(matchPath("/*path", "/"), { params: { path: "/" } });
+  assert.deepEqual(matchPath("/*path", "/a/b"), { params: { path: "/a/b" } });
+  assert.deepEqual(matchPath("/t/:tenant/*key", "/t/a%20b/x/y.png"), {
+    params: { tenant: "a b", key: "/x/y.png" },
+  });
+  assert.equal(matchPath("/t/:tenant/*key", "/t"), null);
+  // `/_bynk/` is never a rest's.
+  assert.equal(matchPath("/*path", "/_bynk/inspect"), null);
+  assert.equal(matchPath("/*path", "//_bynk"), null);
+  assert.equal(matchPath("/:x/*rest", "/_bynk/call/x"), null);
+  assert.deepEqual(matchPath("/*path", "/_bynkish"), { params: { path: "/_bynkish" } });
+});
+
+test("matchPath: a rest is never decoded, but a dot segment in it is malformed (#3752, D4)", () => {
+  // A malformed escape inside the rest is the handler's to judge.
+  assert.deepEqual(matchPath("/files/*key", "/files/%E0%A4%A"), { params: { key: "/%E0%A4%A" } });
+  // One before it is the usual `400 MalformedPath`.
+  const before = matchPath("/f/:d/*key", "/f/%E0%A4%A/x");
+  assert.ok(before !== null && typeof before.malformed === "string");
+  for (const dots of ["/files/..", "/files/a/./b", "/files/%2e%2E/x", "/files/.%2e", "/files/%2e"]) {
+    const m = matchPath("/files/*key", dots);
+    assert.ok(m !== null && typeof m.malformed === "string", dots);
+  }
+  // Dots inside a segment are an ordinary name.
+  assert.deepEqual(matchPath("/files/*key", "/files/a..b/.env"), { params: { key: "/a..b/.env" } });
+});
+
 const id = (v: number): JsonValue => v;
 
 test("httpResultToResponse: 412 and 428 render as problem details with their reason phrase", async () => {
@@ -907,6 +952,33 @@ test("requestHeaders: test lines split at the first colon; others are ignored", 
   assert.deepEqual(h.get("x-url"), { tag: "Some", value: "https://a:1/" });
   assert.deepEqual(requestHeaderPairs(h), { authorization: "Bearer abc", "x-url": "https://a:1/" });
   assert.deepEqual(requestHeaderPairs(requestHeaders([])), {});
+});
+
+// #3752 (D12): every header, by lower-case name, repeats combined, the consumed credential absent.
+test("requestHeaders: entries() lists lower-case names with repeated fields combined", () => {
+  const raw = new Headers();
+  raw.append("X-Tag", "a");
+  raw.append("x-tag", "b");
+  raw.append("Accept", "text/html");
+  const h = requestHeaders(new Request("https://x/", { headers: raw }));
+  assert.deepEqual([...h.entries()], [["accept", "text/html"], ["x-tag", "a, b"]]);
+  assert.deepEqual([...requestHeaders([]).entries()], []);
+});
+
+test("requestHeaders: entries() omits a consumed credential header and cookie", () => {
+  const req = new Request("https://x/", {
+    headers: { authorization: "Bearer t", cookie: "sid=s1; theme=dark", "x-a": "1" },
+  });
+  const h = requestHeaders(req, "sid", ["authorization"]);
+  assert.deepEqual([...h.entries()], [["cookie", "theme=dark"], ["x-a", "1"]]);
+});
+
+test("requestHeaders: repeated Cookie test lines are one cookie-string", () => {
+  const h = requestHeaders(["Cookie: a=1", "cookie: b=2", "X-Tag: a", "X-Tag: b"]);
+  assert.deepEqual(h.get("cookie"), { tag: "Some", value: "a=1; b=2" });
+  assert.deepEqual(h.entries().get("cookie"), "a=1; b=2");
+  assert.deepEqual(h.entries().get("x-tag"), "a, b");
+  assert.deepEqual(requestHeaderPairs(h), { cookie: "a=1; b=2", "x-tag": "a, b" });
 });
 
 test("httpResultToResponse: RawError answers its own status, body and content type", async () => {

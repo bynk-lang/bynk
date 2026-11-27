@@ -286,3 +286,69 @@ test("a message signed under another context's key, or a foreign secret, is not 
   const asLegacy = wire(await legacy({ id: "m-8" }));
   assert.deepEqual(await admitQueueBody(asLegacy, "orders", [], { D1_IDEMPOTENCY: claimDb() }, {}, everyone), { ok: false, reason: "unknown_sender" });
 });
+
+// #4526: a rotation leaves the edge with two keys, the new one in the slot the live one was not in and
+// the old one marked with the instant it stops being verified under. A message signed under the old key
+// before the rotation is admitted until then, and refused (not lost: the consumer reports the refusal)
+// from the instant it passes, whether or not another deploy runs.
+const secretsOf = (over: Record<string, string>) => ({ D1_IDEMPOTENCY: claimDb(), ...over });
+const UNTIL = Math.floor(NOW / 1000) + 3600;
+
+test("a rotation: a message signed under the previous edge key is admitted until its window ends", async () => {
+  const env = secretsOf({
+    BYNK_CALL_FROM_SHOP__ORDERS: "old-secret",
+    BYNK_CALL_UNTIL_SHOP__ORDERS: String(UNTIL),
+    BYNK_CALL_FROM2_SHOP__ORDERS: "new-secret",
+  });
+  const oldSigned = await signQueueMessage("old-secret", { ...parts, id: "old-1" });
+  const newSigned = await signQueueMessage("new-secret", { ...parts, id: "new-1" });
+  const during = queueForeignKeys(env, {}, orders, () => (UNTIL - 1) * 1000)("shop.orders");
+  assert.deepEqual(during, ["new-secret", "old-secret"], "the live key first");
+  const clock = () => NOW;
+  assert.equal(admitted(await admitQueueBody(wire(oldSigned), "orders", [], env, {}, orders, clock)).from, "shop.orders");
+  assert.equal(admitted(await admitQueueBody(wire(newSigned), "orders", [], env, {}, orders, clock)).from, "shop.orders");
+});
+
+test("a rotation: the previous edge key is refused from the instant its window ends, with no deploy in between", async () => {
+  const env = {
+    BYNK_CALL_FROM_SHOP__ORDERS: "old-secret",
+    BYNK_CALL_UNTIL_SHOP__ORDERS: String(UNTIL),
+    BYNK_CALL_FROM2_SHOP__ORDERS: "new-secret",
+  };
+  const at = (seconds: number) => queueForeignKeys(env, {}, orders, () => seconds * 1000)("shop.orders");
+  assert.deepEqual(at(UNTIL - 1), ["new-secret", "old-secret"]);
+  assert.deepEqual(at(UNTIL), ["new-secret"], "the instant itself is past the window");
+  assert.deepEqual(at(UNTIL + 86_400 * 365), ["new-secret"]);
+  // And a message signed under the old key, arriving after, is refused as a bad signature.
+  const late = { ...env, D1_IDEMPOTENCY: claimDb() };
+  const oldSigned = wire(await signQueueMessage("old-secret", { ...parts, id: "old-2" }));
+  assert.deepEqual(await admitQueueBody(oldSigned, "orders", [], late, {}, orders, () => (UNTIL + 1) * 1000), { ok: false, reason: "bad_signature" });
+});
+
+test("a rotation works from either slot: the new key in the first, the old one in the second", () => {
+  const env = {
+    BYNK_CALL_FROM_SHOP__ORDERS: "new-secret",
+    BYNK_CALL_FROM2_SHOP__ORDERS: "old-secret",
+    BYNK_CALL_UNTIL2_SHOP__ORDERS: String(UNTIL),
+  };
+  assert.deepEqual(queueForeignKeys(env, {}, orders, () => 0)("shop.orders"), ["new-secret", "old-secret"]);
+  assert.deepEqual(queueForeignKeys(env, {}, orders, () => UNTIL * 1000)("shop.orders"), ["new-secret"]);
+});
+
+test("a retirement marker that is missing a number, or is garbled, refuses its slot: the check fails closed", () => {
+  for (const marker of ["", "soon", "-1", "12.5", "1e9", " 99999999999", "9".repeat(16), "0x10"]) {
+    const env = { BYNK_CALL_FROM_SHOP__ORDERS: "old-secret", BYNK_CALL_UNTIL_SHOP__ORDERS: marker, BYNK_CALL_FROM2_SHOP__ORDERS: "new-secret" };
+    assert.deepEqual(queueForeignKeys(env, {}, orders, () => 0)("shop.orders"), ["new-secret"], JSON.stringify(marker));
+  }
+  const notAString = { BYNK_CALL_FROM_SHOP__ORDERS: "old-secret", BYNK_CALL_UNTIL_SHOP__ORDERS: 99999999999, BYNK_CALL_FROM2_SHOP__ORDERS: "new-secret" };
+  assert.deepEqual(queueForeignKeys(notAString, {}, orders, () => 0)("shop.orders"), ["new-secret"]);
+});
+
+test("a slot that holds no key, an unmarked second slot, and a name outside the edge domain", () => {
+  const only2 = { BYNK_CALL_FROM2_SHOP__ORDERS: "k2" };
+  assert.deepEqual(queueForeignKeys(only2, {}, orders, () => 0)("shop.orders"), ["k2"]);
+  assert.deepEqual(queueForeignKeys({ BYNK_CALL_FROM_SHOP__ORDERS: "" }, {}, orders, () => 0)("shop.orders"), []);
+  // Markers for a slot with no key admit nothing.
+  assert.deepEqual(queueForeignKeys({ BYNK_CALL_UNTIL_SHOP__ORDERS: String(UNTIL) }, {}, orders, () => 0)("shop.orders"), []);
+  assert.deepEqual(queueForeignKeys(only2, {}, () => true, () => 0)("Shop.Orders"), []);
+});

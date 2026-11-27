@@ -16,13 +16,15 @@ service <Name> from http {
 ```
 
 - **Methods:** `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
-- **Route:** must start with `/`; a `:name` segment is a path parameter.
-- **Reserved characters:** `*`, `{` and `}` are reserved in a route, in any
-  segment and inside a `:name`, for a future form that matches the rest of a
-  path (`bynk.http.reserved_route_syntax`). To match one literally, take the
-  segment as a `:name` parameter and check it in the handler.
+- **Route:** must start with `/`; a `:name` segment is a path parameter, and a
+  final `*name` segment is a [rest segment](#rest-segments) that matches the rest
+  of the path (experimental).
+- **Reserved characters:** `{` and `}` are reserved in a route, in any segment and
+  inside a `:name`, for a future in-segment form, and so is `*` anywhere but the
+  start of the last segment (`bynk.http.reserved_route_syntax`). To match one
+  literally, take the segment as a `:name` parameter and check it in the handler.
 - **Parameters:** each parameter is a path parameter (matching a `:name`
-  segment), the special `body` parameter, or the special
+  segment, or a `*name` rest), the special `body` parameter, or the special
   [`headers`](#request-headers), [`query`](#query-strings), [`cookies`](#cookies) or [`cf`](#request-cf) parameter. A path parameter's type is one a typed [`query`](#query-strings) field takes, less
   `Option` and `List` (`bynk.http.path_param_not_stringy`): a `String`, `Int`, `Bool` or
   `Decimal`, an enum, or a refined or opaque type over one of those; see
@@ -56,7 +58,8 @@ is given, so it gets the `415`.
 ### How a route is chosen {#route-order}
 
 Routes with the same method are compared segment by segment, left to right. At the
-first segment where they differ, a literal segment beats a `:name` segment. So
+first segment where they differ, a literal segment beats a `:name` segment, and a
+`:name` segment beats a [`*name` rest](#rest-segments). So
 `GET /users/me` answers `/users/me`, and `GET /users/:id` answers every other
 `/users/<x>`, whichever is declared first and however the parameter is named:
 
@@ -83,6 +86,13 @@ service api from http {
   of the shape. It is checked within a context, and across the members of a
   [worker group](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/),
   whose contexts share one router.
+- **A rest is the weakest segment.** It matches zero or more segments, and where it
+  matches zero it still loses at the position it starts, so `GET /blog` beats
+  `GET /blog/*path` for `/blog` and, since empty segments don't count, for `/blog/` too.
+  `GET /a/b/*y` beats `GET /a/*x` for `/a/b/c`, and `GET /a/:id` beats `GET /a/*x` for
+  `/a/1` while `/a/1/2` goes to the rest. Two rests at one position (`/a/*x` beside
+  `/a/*y`) leave the second unreachable; `/a/:p` beside `/a/*x` doesn't, because the
+  rest still answers `/a` and `/a/1/2`.
 - **Methods.** A request is matched by method and path. The `Allow` set for a path
   (see [Method semantics](#method-semantics)) is the union over the routes that
   match it, so an overlap can't hide a method.
@@ -122,17 +132,86 @@ on GET("/orders/status/:s") (s: Status) -> Effect[HttpResult[List[Order]]] by v:
 - `bynk client` takes the typed value and writes it as the segment (`String(n)`, the
   variant name), and `bynk openapi` gives the parameter its type, `format` and `enum`.
 
+### Rest segments {#rest-segments}
+
+A route whose last segment is `*name` matches every path that starts with the
+segments before it, however many segments follow, none included. It binds the
+handler parameter `name`, which must be a `String` (`bynk.http.rest_param_type`), to
+the rest of the path **as it was received**: still percent-encoded, starting with
+`/` unless it is empty, with a trailing slash and empty segments kept, and without
+the query. For `on GET("/blog/*path")`:
+
+| Request path | `path` |
+|---|---|
+| `/blog` | `""` |
+| `/blog/` | `"/"` |
+| `/blog/posts/money/` | `"/posts/money/"` |
+| `/blog//x` | `"//x"` |
+| `/blog/caf%C3%A9` | `"/caf%C3%A9"` |
+| `/blog/a%2Fb` | `"/a%2Fb"` |
+
+```bynk,ignore
+consumes bynk.cloudflare { R2 }
+
+capability Files = R2
+
+service files from http {
+	on GET("/files/*key") (key: String) -> Effect[HttpResult[Bytes]] by v: Visitor given Files {
+		match key.percentDecode() {
+			Some(k) => {
+				let got <- Files.get(k.slice(1, k.length()))
+				match got {
+					Some(bytes) => Raw(bytes, "application/octet-stream")
+					None => NotFound
+				}
+			}
+			None => BadRequest("the key is not valid percent-encoding")
+		}
+	}
+}
+```
+
+- **Raw, so nothing is lost.** The router never decodes the rest, so `%2F` and `/`, or
+  `%20` and `+`, stay distinct, and a handler that forwards or looks up the path sees
+  exactly what the client sent. Decode it with `percentDecode()`, which is `None` for a
+  malformed escape. A malformed escape *inside* the rest is the handler's to judge; one in
+  a segment before it is the usual `400 MalformedPath`.
+- **No dot segments.** A request URL is parsed before routing, which resolves `.`, `..`,
+  `%2e` and `%2e%2e`, so the rest never climbs out of its prefix. The router checks again
+  and answers `400 MalformedPath` if one appears (a host that doesn't normalise).
+- **Rules.** The rest is the route's last segment, a whole segment, and named:
+  `/files/*key/raw` and `/files/*key.txt` are `bynk.http.reserved_route_syntax`, and a
+  bare `/files/*` is `bynk.http.rest_unnamed`. Segments before it may be literals or
+  `:name` parameters (`/t/:tenant/*key`).
+- **A root catch-all** `on GET("/*path")` is allowed, and answers what no other route
+  matches. It never answers under `/_bynk/`: the prefixes the runtime serves are
+  dispatched first, and a rest never matches the others.
+- **Method semantics are unchanged.** A rest route keeps `HEAD` from `GET`, `OPTIONS` and
+  `405` with `Allow` (the union over every route that matches the path), the weak `ETag`,
+  CORS and the security headers, like any route.
+- **Leaving it out.** [`bynk client`](/reference/http-client/#routes-left-out) and
+  `bynk openapi` leave a rest route out and name it on stderr: an OpenAPI path parameter
+  can't contain `/`, and a client that sent the rest as one segment would encode its
+  slashes.
+- **Experimental.** A rest segment needs `bynk.http.rest` in `bynk.toml`'s
+  `[unstable] allow`.
+
+A handler's emitted name comes from its route (`http_GET_files_Rest_key` here), and two
+routes of a context whose names would be the same (`/a-b`, `/a_b` and `/a/b`), in one
+service or in two, are `bynk.http.handler_name_collision`.
+
 ## Request headers
 
 A handler that needs the request's headers declares a `headers: RequestHeaders`
 parameter. It may sit anywhere among the parameters; the router passes the
-request's own headers. `RequestHeaders` is a read-only view with three methods:
+request's own headers. `RequestHeaders` is a read-only view with four methods:
 
 | Method | Returns | Reads |
 |---|---|---|
 | `get(name)` | `Option[String]` | any header, by case-insensitive name |
 | `bearer()` | `Option[String]` | the token of an `Authorization: Bearer <token>` header |
 | `clientIp()` | `Option[String]` | the platform's `CF-Connecting-IP` (see below) |
+| `entries()` | `Map[String, String]` | every header, by lower-case name (experimental; see below) |
 
 ```bynk,fragment
 on GET("/whoami") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
@@ -148,12 +227,25 @@ request, overwriting any value the client sent. It is the client's address
 only behind that edge: under `bynk dev`, in tests, or on any other host, the
 caller sets the header, so don't rate-limit or audit by it there.
 
+`entries()` lists every header the view holds, keyed by its lower-case name. A
+field sent more than once arrives once, its values joined with `", "` as `get`
+joins them (RFC 9110 §5.3), and `Cookie` with `"; "`, so no value is lost and no
+list form is needed. It is experimental: using it needs `bynk.RequestHeaders.entries`
+in `[unstable] allow`.
+
+```bynk,ignore
+on GET("/debug/headers") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+  Ok(headers.entries().keys().join(", "))
+}
+```
+
 This is how a service implements an existing API's authentication scheme, one an
 [actor](/reference/actors/) does not describe. Where an actor fits, prefer
 it: the seam verifies the credential before the handler runs.
 
 A route whose `by` actor's seam consumed a credential does not show it in this view. On a `Bearer` or `Oidc`
-route the `Authorization` header is omitted, so `get("authorization")` and `bearer()` are `None`; on a
+route the `Authorization` header is omitted, so `get("authorization")` and `bearer()` are `None`, and
+`entries()` has no `authorization` key; on a
 `Signature` route the signature header is omitted (the body stays readable). A `SignedCookie` route omits its
 session cookie, and on an actor sum every member's credential is omitted. A handler that must forward a token
 downstream can't take it from here. A `by v: Visitor` route consumed nothing, so the example above works.
@@ -388,6 +480,30 @@ emitted as an SSE (`text/event-stream`) body (`Streamed`), a raw
 `201`), the same with the entity tag its `ETag` carries (`RawTagged`), a
 `Stream[Bytes]` body streamed chunk by chunk (`RawStreamed`), or no body at all
 (`None`).
+
+`HttpResult` is **extensible**, like [`FetchError` and
+`Method`](/reference/bynk-capabilities/#extensible-enums): the vocabulary grows
+in 1.x minor releases, so listing every variant it has today is not enough. A
+`match` that covers an `HttpResult`, at top level or inside a `Result` or
+`Option`, needs a wildcard or binding arm, or it is
+`bynk.types.extensible_match_needs_wildcard`:
+
+```bynk
+commons app.status
+
+fn label(r: HttpResult[String]) -> String {
+	match r {
+		Ok(_) => "ok",
+		NotFound => "missing",
+		_ => "other",
+	}
+}
+```
+
+The `_` arm covers every status not named, including those a later release
+adds. It also catches a status you would want to handle by name once it
+exists, the same trade-off as for `FetchError`. A `match` in a suite case, and
+`expect r is …`, are not under the rule.
 
 ### 2xx success
 

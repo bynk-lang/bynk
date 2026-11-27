@@ -461,9 +461,12 @@ fn resolve_qualified_from(
             }
         }
     });
-    // #4502: `AnalyticsSql.select[T]` is compiler-lowered over `query`, so declared nowhere.
-    if out.is_none() && recv == "AnalyticsSql" {
-        out = typed_read("AnalyticsSql", member).map(str::to_string);
+    // #4502, #4099: `AnalyticsSql.select[T]` and `Ai.generateValue[T]` are compiler-lowered, so declared nowhere.
+    if out.is_none()
+        && matches!(recv, "AnalyticsSql" | "Ai")
+        && crate::analytics_tooling::consumes_cloudflare(doc_text, recv)
+    {
+        out = typed_read(recv, member).map(str::to_string);
     }
     match (out, derived_base) {
         // #2865: a derived `D1`'s typed reads are lowered by the compiler, so
@@ -505,6 +508,10 @@ pub(crate) fn typed_read(base: &str, member: &str) -> Option<&'static str> {
         ),
         // #4502: `Analytics.writeValue[T]` writes a record's mapped columns; `AnalyticsSql.select[T]`
         // reads them back (the SQL tail may continue the select list).
+        // #4099: `Ai.generateValue[T]` asks the model for JSON that matches `T`'s schema.
+        ("Ai", "generateValue") => Some(
+            "generateValue[T](model: String, request: GenerateRequest) -> Effect[Result[T, AiError]]",
+        ),
         ("Analytics", "writeValue") => Some("writeValue[T](value: T) -> Effect[()]"),
         // #4101: a derived `Vectorize`'s typed reads, each match's metadata read as `M` on its own.
         ("Vectorize", "queryValue") => Some(
@@ -521,12 +528,13 @@ pub(crate) fn typed_read(base: &str, member: &str) -> Option<&'static str> {
 }
 
 /// The bases whose derived instances have the compiler-lowered typed reads.
-pub(crate) const TYPED_READ_BASES: [&str; 6] = [
+pub(crate) const TYPED_READ_BASES: [&str; 7] = [
     "D1",
     "Postgres",
     "MySql",
     "Analytics",
     "AnalyticsSql",
+    "Ai",
     "Vectorize",
 ];
 
@@ -760,6 +768,23 @@ mod tests {
             "{select}"
         );
         assert!(select.contains("AnalyticsReadError"), "{select}");
+    }
+
+    /// #4099: `Ai.generateValue[T]` has a signature for its type argument and its two parameters.
+    #[test]
+    fn ai_generate_value_has_a_signature() {
+        const DOC: &str = "context a\n\nconsumes bynk.cloudflare { Ai }\n";
+        assert_eq!(
+            resolve_label("Ai.generateValue", DOC, None).as_deref(),
+            Some(
+                "generateValue[T](model: String, request: GenerateRequest) -> Effect[Result[T, AiError]]"
+            )
+        );
+        // The declared operations keep theirs.
+        assert!(resolve_label("Ai.generate", DOC, None).is_some());
+        // A project's own `Ai` is not the first-party one, so it has no such operation.
+        let own = "context a\n\ncapability Ai {\n  fn ask(q: String) -> Effect[String]\n}\n";
+        assert!(resolve_label("Ai.generateValue", own, None).is_none());
     }
 
     /// #4101: a derived `Vectorize` has the typed reads, which are lowered over `query` and `getByIds`.

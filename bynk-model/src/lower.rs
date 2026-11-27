@@ -582,6 +582,11 @@ fn lower_event_pattern_ir(pattern: &EventPattern) -> EventPatternIr {
                             LiteralValue::Int(n) => ConstVal::Int(*n),
                             LiteralValue::Str(s) => ConstVal::Str(s.clone()),
                             LiteralValue::Bool(b) => ConstVal::Bool(*b),
+                            // A subscription pattern's value is an `Int`, `String` or `Bool`
+                            // literal; `Decimal` and `Float` are match-pattern forms (#3973).
+                            LiteralValue::Decimal { .. } | LiteralValue::Float(_) => {
+                                unreachable!("an events pattern value is an Int, String or Bool")
+                            }
                         })
                     }
                     EventPatternValue::Variant { variant, .. } => EventPatternValueIr::Variant {
@@ -1808,6 +1813,7 @@ capability Store {
                 name: "Clock".to_string(),
                 span: Span::default(),
             },
+            bound: None,
             span: Span::default(),
         };
         let ir = lower_cap_ref_ir(&cap_ref);
@@ -1835,6 +1841,7 @@ capability Store {
                 name: "Ledger".to_string(),
                 span: Span::default(),
             },
+            bound: None,
             span: Span::default(),
         };
         let ir = lower_cap_ref_ir(&cap_ref);
@@ -2659,6 +2666,7 @@ provides Store = MemStore given Random, Clock {
                     name: "Clock".to_string(),
                     span: Span::default(),
                 },
+                bound: None,
                 span: Span::default(),
             }],
             ops: Vec::new(),

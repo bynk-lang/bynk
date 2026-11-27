@@ -2631,6 +2631,7 @@ fn an_interrupted_rotation_says_how_to_repair_it() {
     let set = |rotating: bool| EdgeKey::Set {
         value: "minted-value".into(),
         rotating,
+        callee: Vec::new(),
     };
     let keys: BTreeMap<Edge, EdgeKey> = [
         (edge("commerce-orders", "commerce-payment"), set(true)),
@@ -3737,4 +3738,48 @@ mod env_constants {
         assert!(json.contains("\"kind\": \"service\""), "{json}");
         assert!(json.contains("\"variable\": \"APP_ORIGIN\""), "{json}");
     }
+}
+
+// ---- 1D.4a (#4056 Decision E): KV's drift read without credentials ----
+
+/// A plan that reuses a recorded namespace, with no credentials for the drift read, says the
+/// check was skipped and names both variables; with them, or on a `--dry-run`, or with nothing
+/// to reuse, it says nothing.
+#[test]
+fn a_skipped_kv_drift_check_is_noted_with_both_variables() {
+    let order = names(&["api"]);
+    let declared = project(vec![("api", Resources::default().needs_kv())]);
+    let recorded = with_kv(DeployLock::default(), "api");
+    let missing = || {
+        Err(crate::cloudflare::CloudflareError::Credentials(
+            "set CLOUDFLARE_API_TOKEN to create or delete the account's KV namespaces: a token and the account it belongs to".into(),
+        ))
+    };
+    let plan = plan_of(&order, &declared, &recorded).noting_unchecked_kv_with(true, missing);
+    let notes = plan.account_notes();
+    assert_eq!(notes.len(), 1, "{notes:?}");
+    assert!(
+        notes[0].starts_with(
+            "bynk: note: the KV drift check was skipped because CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are not both set"
+        ),
+        "{}",
+        notes[0]
+    );
+    assert!(
+        notes[0].ends_with("set both, the token with \"Workers KV Storage: Edit\", to check it"),
+        "{}",
+        notes[0]
+    );
+    // It speaks of the listing it skipped, never of a create or delete.
+    assert!(!notes[0].contains("create or delete"), "{}", notes[0]);
+    let set = plan_of(&order, &declared, &recorded).noting_unchecked_kv_with(true, || Ok(()));
+    assert!(set.account_notes().is_empty());
+    let dry = plan_of(&order, &declared, &recorded).noting_unchecked_kv_with(false, missing);
+    assert!(dry.account_notes().is_empty(), "a --dry-run reads nothing");
+    let creates =
+        plan_of(&order, &declared, &DeployLock::default()).noting_unchecked_kv_with(true, missing);
+    assert!(
+        creates.account_notes().is_empty(),
+        "a create is the pre-flight's to refuse, not a note"
+    );
 }

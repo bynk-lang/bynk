@@ -823,6 +823,12 @@ pub(crate) fn check_typed(
     (span, expr_id): (Span, ExprId),
     ctx: &mut Ctx,
 ) -> Option<Option<TyId>> {
+    // #4099: `Ai.generateValue[T]`, the same kind of compiler-lowered typed operation.
+    if let Some(typed) =
+        super::ai::check_typed(cap, method, (type_args, args), (span, expr_id), ctx)
+    {
+        return Some(typed);
+    }
     // #4101: `Vectorize.queryValue[M]` and `getByIdsValue[M]`, compiler-lowered the same way.
     if let Some(typed) = super::vector::check_typed(
         cap,

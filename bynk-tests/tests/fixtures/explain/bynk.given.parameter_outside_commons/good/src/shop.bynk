@@ -1,0 +1,9 @@
+context shop
+
+consumes bynk.cloudflare { Kv }
+
+capability Sessions = Kv
+
+fn forget(id: String) -> Effect[()] given Sessions {
+	Sessions.delete(id)
+}

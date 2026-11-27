@@ -74,12 +74,20 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
 const WARNING_ONLY: &[(&str, &str)] = &[
     (
+        "bynk.container.unbounded_instances",
+        "a warning; `positive/4112_container_unbounded_instances` holds it with `expected_warnings.txt`, and `positive/4112_container_bounded_instances` holds the good cases",
+    ),
+    (
         "bynk.http.body_cap_defaulted",
         "a hint, which the positive-fixture gate leaves out; `tests/system/body_cap_hint.rs` holds it",
     ),
     (
         "bynk.store.unique_implies_indexed",
         "a warning; `positive/4038_store_unique_behaviour` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.actor.signed_cookie_issue_on_safe_method",
+        "a warning; `positive/3825_issue_on_safe_method` holds it with `expected_warnings.txt`",
     ),
     (
         "bynk.actor.signed_cookie_ttl_long",
@@ -92,6 +100,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
     (
         "bynk.http.cookie_cross_site_without_credentials",
         "a warning; `positive/3329_cookie_cross_site_without_credentials` holds it with `expected_warnings.txt`, and `positive/3329_cookie_cross_site_credentials` holds the credentialed good case",
+    ),
+    (
+        "bynk.commons.capability_unused",
+        "a warning; `positive/3959_commons_capability_unused` holds it with `expected_warnings.txt`",
     ),
     (
         "bynk.consumes.capability_not_selected",
@@ -152,6 +164,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
     (
         "bynk.agent.write_after_erase",
         "a warning; `positive/3931_agent_erase_write_after` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.match.as_on_wildcard",
+        "a warning; `positive/3971_as_on_wildcard` holds it with `expected_warnings.txt`, and `positive/3971_pattern_as` holds the good case",
     ),
     (
         "bynk.match.refined_pattern_is_range",

@@ -2,28 +2,51 @@
 //!
 //! Routes of the same method are compared segment by segment, left to right. At
 //! the first segment where two routes differ, a literal segment beats a `:name`
-//! segment, so the outcome never depends on how a route is spelt. Segment names
-//! are not part of a route's shape, and empty segments are insignificant
-//! (`/items`, `/items/` and `//items` are one path).
+//! segment, and a `:name` segment beats a `*name` rest (#3752, D5), so the
+//! outcome never depends on how a route is spelt. Segment names are not part of
+//! a route's shape, and empty segments are insignificant (`/items`, `/items/`
+//! and `//items` are one path).
+//!
+//! A rest is a route's last segment and matches **zero or more** remaining
+//! segments. Where it matches zero, it still loses at the position it starts:
+//! `/blog` beats `/blog/*path` for `/blog`.
 //!
 //! Two functions share that rule: [`order`], the order the emitted router tries
 //! its routes in, and [`shadowed`], the routes no request can reach.
 
 use std::cmp::Ordering;
 
-/// One segment of a route: literal text, or a `:name` parameter.
+/// One segment of a route: literal text, a `:name` parameter, or (last only) a
+/// `*name` rest.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Seg<'a> {
     Lit(&'a str),
     Param,
+    Rest,
+}
+
+impl Seg<'_> {
+    /// How strongly a segment binds where two routes differ: lower wins. The end
+    /// of a route ranks with a literal: it only ever meets a rest, and beats it.
+    fn rank(seg: Option<&Self>) -> u8 {
+        match seg {
+            None | Some(Seg::Lit(_)) => 0,
+            Some(Seg::Param) => 1,
+            Some(Seg::Rest) => 2,
+        }
+    }
 }
 
 fn segments(path: &str) -> Vec<Seg<'_>> {
-    path.split('/')
-        .filter(|s| !s.is_empty())
-        .map(|s| {
+    let segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let last = segs.len().wrapping_sub(1);
+    segs.iter()
+        .enumerate()
+        .map(|(i, s)| {
             if s.starts_with(':') && s.len() > 1 {
                 Seg::Param
+            } else if i == last && is_rest_segment(s) {
+                Seg::Rest
             } else {
                 Seg::Lit(s)
             }
@@ -31,25 +54,58 @@ fn segments(path: &str) -> Vec<Seg<'_>> {
         .collect()
 }
 
-/// Whether two routes of one method can match a common path: the same number of
-/// segments, and no position where both are literals that differ.
+/// #3752 (D2): whether a route segment is a `*name` rest: `*` and then an
+/// identifier, the whole segment (`*key.txt` is not one). Only a route's last
+/// segment is read as one; the checker refuses a `*` anywhere else.
+pub fn is_rest_segment(seg: &str) -> bool {
+    seg.strip_prefix('*').is_some_and(|name| {
+        name.chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    })
+}
+
+/// The segment `route` presents at `at`: its own, or, past a final rest, the
+/// rest again (it takes any number of further segments).
+fn seg_at<'r, 'a>(route: &'r [Seg<'a>], at: usize) -> Option<&'r Seg<'a>> {
+    route
+        .get(at)
+        .or_else(|| route.last().filter(|s| **s == Seg::Rest))
+}
+
+/// Whether two routes of one method can match a common path: no position where
+/// both are literals that differ, and the same number of segments unless a rest
+/// takes up the difference.
 fn overlaps(a: &[Seg], b: &[Seg]) -> bool {
-    a.len() == b.len()
-        && a.iter().zip(b).all(|(x, y)| match (x, y) {
-            (Seg::Lit(p), Seg::Lit(q)) => p == q,
-            _ => true,
-        })
+    for i in 0.. {
+        match (a.get(i), b.get(i)) {
+            (Some(Seg::Rest), _) | (_, Some(Seg::Rest)) => return true,
+            (None, None) => return true,
+            (None, Some(_)) | (Some(_), None) => return false,
+            (Some(Seg::Lit(p)), Some(Seg::Lit(q))) if p != q => return false,
+            _ => {}
+        }
+    }
+    unreachable!("the loop returns at the shorter route's end")
 }
 
 /// Whether, of two routes that [`overlaps`], `a` is tried first: at the first
-/// segment where they differ, the literal one wins. `None` when the two have
-/// the same shape (they differ at most in parameter names).
+/// segment where they differ, the more specific one wins (a literal, then a
+/// parameter, then a rest). `None` when the two have the same shape (they differ
+/// at most in parameter names).
 fn precedes(a: &[Seg], b: &[Seg]) -> Option<bool> {
-    a.iter().zip(b).find_map(|(x, y)| match (x, y) {
-        (Seg::Lit(_), Seg::Param) => Some(true),
-        (Seg::Param, Seg::Lit(_)) => Some(false),
-        _ => None,
-    })
+    for i in 0.. {
+        let (x, y) = (a.get(i), b.get(i));
+        let (rx, ry) = (Seg::rank(x), Seg::rank(y));
+        if rx != ry {
+            return Some(rx < ry);
+        }
+        if x.is_none() || y.is_none() || x == Some(&Seg::Rest) {
+            return None;
+        }
+    }
+    unreachable!("the loop returns at the shorter route's end")
 }
 
 /// The indices of `routes` in the order a router tries them. `routes` is each
@@ -78,7 +134,7 @@ pub fn order(routes: &[(&str, &str)]) -> Vec<usize> {
     while out.len() < n {
         let next = (0..n)
             .find(|&i| !done[i] && before[i].iter().all(|&a| done[a]))
-            .expect("the literal-before-parameter rule has no cycle");
+            .expect("the specificity rule has no cycle");
         done[next] = true;
         out.push(next);
     }
@@ -117,29 +173,41 @@ pub fn shadowed(routes: &[(&str, &str)]) -> Vec<(usize, Vec<usize>)> {
 }
 
 /// Whether the paths `route` matches from segment `at` on are all matched by one
-/// of `earlier`: routes already known to match the segments before `at`.
+/// of `earlier`: routes already known to match the segments before `at`. A rest
+/// in `earlier` at `at` matches everything from there on; a rest in `route`
+/// stands for the path ending here or going on with any segment, each a case.
+/// The recursion ends: `at` only grows, and once it passes every finite route in
+/// `earlier`, none is left.
 fn covered(route: &[Seg], at: usize, earlier: Vec<&Vec<Seg>>) -> bool {
-    if at == route.len() {
-        return !earlier.is_empty();
+    if earlier.iter().any(|e| e.get(at) == Some(&Seg::Rest)) {
+        return true;
     }
+    // The routes that end exactly here.
+    let ends = || earlier.iter().any(|e| e.len() == at);
     // The routes that match a segment holding `value`: literal `value`, or any parameter.
     let matching = |value: &str| -> Vec<&Vec<Seg>> {
         earlier
             .iter()
             .copied()
-            .filter(|e| matches!(e[at], Seg::Param) || e[at] == Seg::Lit(value))
+            .filter(|e| {
+                matches!(e.get(at), Some(Seg::Param)) || e.get(at) == Some(&Seg::Lit(value))
+            })
             .collect()
     };
-    match route[at] {
-        Seg::Lit(v) => covered(route, at + 1, matching(v)),
-        Seg::Param => {
+    match seg_at(route, at) {
+        None => ends(),
+        Some(Seg::Lit(v)) => covered(route, at + 1, matching(v)),
+        Some(seg @ (Seg::Param | Seg::Rest)) => {
+            if *seg == Seg::Rest && !ends() {
+                return false;
+            }
             // Every literal the earlier routes name here is a case of its own, and
             // every other value is the case the parameters alone must cover.
             let mut literals: Vec<&str> = earlier
                 .iter()
-                .filter_map(|e| match e[at] {
-                    Seg::Lit(l) => Some(l),
-                    Seg::Param => None,
+                .filter_map(|e| match e.get(at) {
+                    Some(Seg::Lit(l)) => Some(*l),
+                    _ => None,
                 })
                 .collect();
             literals.sort_unstable();
@@ -147,7 +215,7 @@ fn covered(route: &[Seg], at: usize, earlier: Vec<&Vec<Seg>>) -> bool {
             let others: Vec<&Vec<Seg>> = earlier
                 .iter()
                 .copied()
-                .filter(|e| matches!(e[at], Seg::Param))
+                .filter(|e| matches!(e.get(at), Some(Seg::Param)))
                 .collect();
             literals
                 .into_iter()
@@ -157,22 +225,17 @@ fn covered(route: &[Seg], at: usize, earlier: Vec<&Vec<Seg>>) -> bool {
     }
 }
 
-/// Whether two route patterns match a common path (the same number of segments,
-/// and no position where both are literals that differ).
+/// Whether two route patterns match a common path (no position where both are
+/// literals that differ, and the same number of segments unless a rest takes up
+/// the difference).
 pub fn overlap(a: &str, b: &str) -> bool {
     overlaps(&segments(a), &segments(b))
 }
 
-/// Whether `general` matches every path `specific` matches: the same number of
-/// segments, and at each a parameter, or the same literal.
+/// Whether `general` matches every path `specific` matches.
 pub fn covers(general: &str, specific: &str) -> bool {
     let (g, s) = (segments(general), segments(specific));
-    g.len() == s.len()
-        && g.iter().zip(&s).all(|(g, s)| match (g, s) {
-            (Seg::Param, _) => true,
-            (Seg::Lit(a), Seg::Lit(b)) => a == b,
-            (Seg::Lit(_), Seg::Param) => false,
-        })
+    covered(&s, 0, vec![&g])
 }
 
 /// The comparison [`order`] applies to two routes, for callers that sort
@@ -263,5 +326,77 @@ mod tests {
         assert_eq!(compare("/a/b/", "/a/:x"), Ordering::Less);
         assert_eq!(shadowed(&[("GET", "/a/b"), ("GET", "/a//:x/")]).len(), 0);
         assert_eq!(shadowed(&[("GET", "/a/:y"), ("GET", "//a//:x/")]).len(), 1);
+    }
+
+    // #3752 (D5): every line of the track's §5.4, in both declaration orders.
+    #[test]
+    fn a_literal_beats_a_rest() {
+        // `GET /files/index.json` beats `GET /files/*key` for `/files/index.json`.
+        assert_eq!(compare("/files/index.json", "/files/*key"), Ordering::Less);
+        assert_eq!(
+            order(&[("GET", "/files/*key"), ("GET", "/files/index.json")]),
+            vec![1, 0]
+        );
+    }
+
+    #[test]
+    fn a_longer_literal_prefix_beats_a_shorter_rest() {
+        // `GET /a/b/*y` beats `GET /a/*x` for `/a/b/c`: at position 2, `b` beats `*x`.
+        assert_eq!(order(&[("GET", "/a/*x"), ("GET", "/a/b/*y")]), vec![1, 0]);
+        assert!(shadowed(&[("GET", "/a/b/*y"), ("GET", "/a/*x")]).is_empty());
+    }
+
+    #[test]
+    fn a_parameter_beats_a_rest_which_takes_longer_paths() {
+        // `GET /a/:id` beats `GET /a/*x` for `/a/1`; `/a/1/2` goes to `/a/*x`.
+        assert_eq!(order(&[("GET", "/a/*x"), ("GET", "/a/:id")]), vec![1, 0]);
+        assert!(overlap("/a/*x", "/a/1/2"));
+        assert!(!overlap("/a/:id", "/a/1/2"));
+        // Neither shadows the other: `/a/*x` still answers `/a` and `/a/1/2`.
+        assert!(shadowed(&[("GET", "/a/:p"), ("GET", "/a/*x")]).is_empty());
+    }
+
+    #[test]
+    fn a_rest_matching_zero_segments_still_loses_where_it_starts() {
+        // `GET /blog` beats `/blog/*path` for `/blog`, and so for `/blog/` too.
+        assert_eq!(compare("/blog", "/blog/*path"), Ordering::Less);
+        assert_eq!(compare("/blog/", "/blog/*path"), Ordering::Less);
+        assert!(overlap("/blog", "/blog/*path"));
+        assert!(shadowed(&[("GET", "/blog"), ("GET", "/blog/*path")]).is_empty());
+    }
+
+    #[test]
+    fn two_rests_at_one_position_shadow() {
+        // `GET /a/*x` beside `GET /a/*y` is `bynk.http.unreachable_route`, as for `:name`.
+        let found = shadowed(&[("GET", "/a/*x"), ("GET", "/a/*y")]);
+        assert_eq!(found, vec![(1, vec![0])]);
+    }
+
+    #[test]
+    fn a_rest_is_covered_only_by_a_rest_or_every_length() {
+        // A root catch-all covers a narrower rest.
+        assert_eq!(shadowed(&[("GET", "/*all"), ("GET", "/a/*x")]), vec![]);
+        assert_eq!(shadowed(&[("GET", "/a/*x"), ("GET", "/*all")]), vec![]);
+        // `/:a` (one segment) and `/` don't cover `/*p` (two or more).
+        assert!(shadowed(&[("GET", "/"), ("GET", "/:a"), ("GET", "/*p")]).is_empty());
+        // A rest covers a fixed route under it only if it is tried first: it isn't.
+        assert!(shadowed(&[("GET", "/*p"), ("GET", "/a/b")]).is_empty());
+        assert!(covers("/*p", "/a/b"));
+        assert!(covers("/a/*p", "/a/*q"));
+        assert!(!covers("/a/:x", "/a/*q"));
+        assert!(!covers("/a/*q", "/b"));
+    }
+
+    #[test]
+    fn a_rest_is_read_only_as_a_last_named_segment() {
+        assert!(is_rest_segment("*key"));
+        assert!(!is_rest_segment("*"));
+        assert!(!is_rest_segment("x*key"));
+        assert!(!is_rest_segment("*key*"));
+        assert!(!is_rest_segment("*key.txt"));
+        assert!(!is_rest_segment("*1x"));
+        // Not last: a literal shape (the checker refuses it).
+        assert_eq!(segments("/*a/b"), vec![Seg::Lit("*a"), Seg::Lit("b")]);
+        assert_eq!(segments("/a/*b/"), vec![Seg::Lit("a"), Seg::Rest]);
     }
 }

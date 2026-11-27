@@ -21,7 +21,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_WORKERD";
 
@@ -118,19 +118,16 @@ fn serve(dir: &Path, tmp: &Path, state: &Path, log: &str) -> Option<(wrangler::W
         skip("could not launch npx");
         return None;
     };
-    let deadline = Instant::now() + Duration::from_secs(180);
-    while get(port, "/cell/boot-probe").is_err() {
-        if Instant::now() > deadline {
-            let said = fs::read_to_string(&log_path).unwrap_or_default();
-            drop(server);
-            skip(&format!(
-                "wrangler dev did not serve within the boot window (likely no network \
-                 to provision {})\n--- wrangler log ---\n{said}",
-                wrangler::SPEC
-            ));
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+    if let Err(why) =
+        wrangler::wait_until_ready(&log_path, port, &|| get(port, "/cell/boot-probe").is_ok())
+    {
+        let said = fs::read_to_string(&log_path).unwrap_or_default();
+        drop(server);
+        skip(&format!(
+            "{why} (likely no network to provision {})\n--- wrangler log ---\n{said}",
+            wrangler::SPEC
+        ));
+        return None;
     }
     Some((server, port))
 }

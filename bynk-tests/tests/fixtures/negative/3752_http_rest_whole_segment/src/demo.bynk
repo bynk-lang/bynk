@@ -1,0 +1,8 @@
+context demo
+
+// #3752 (D2): a rest is a whole segment; `*key.txt` stays reserved.
+service api from http {
+  on GET("/files/*key.txt") (key: String) -> Effect[HttpResult[String]] by Visitor {
+    Ok(key)
+  }
+}

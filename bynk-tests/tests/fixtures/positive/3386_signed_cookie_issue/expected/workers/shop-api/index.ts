@@ -66,7 +66,7 @@ export default {
             const __r_body = handlers.__deserialise_Login(__body_json, "$");
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
-            const result = await surface.http_POST_login(body);
+            const result = await surface.http_POST_login(request, body);
             return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /login" }), request, ["Bynk realm=\"shop.api\""]), __security_api);
           }
         }

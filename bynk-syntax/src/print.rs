@@ -344,6 +344,7 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
             name,
             type_args,
             args,
+            bindings,
             ..
         } => {
             let targs = if type_args.is_empty() {
@@ -358,7 +359,8 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
                         .join(", ")
                 )
             };
-            let parts: Vec<String> = args.iter().map(|a| expr_with_prec(a, 0)).collect();
+            let mut parts: Vec<String> = args.iter().map(|a| expr_with_prec(a, 0)).collect();
+            parts.extend(bindings.as_deref().map(cap_bindings_src));
             format!("{}{}({})", name.name, targs, parts.join(", "))
         }
         ExprKind::BinOp(op, l, r) => {
@@ -626,6 +628,10 @@ pub fn pattern_to_string(p: &Pattern) -> String {
             LiteralValue::Int(n) => text.clone().unwrap_or_else(|| n.to_string()),
             LiteralValue::Str(s) => format!("\"{}\"", escape_string(s)),
             LiteralValue::Bool(b) => b.to_string(),
+            // #3973: as written (`20.0d`), so the scale the author chose survives formatting.
+            LiteralValue::Decimal { .. } | LiteralValue::Float(_) => {
+                text.clone().unwrap_or_else(|| value.describe())
+            }
         },
         // #2699: `lo..hi`, `lo..`, `..hi`, with no spaces.
         Pattern::Range(r) => r.describe_source(),
@@ -697,6 +703,12 @@ pub fn pattern_to_string(p: &Pattern) -> String {
             .map(pattern_to_string)
             .collect::<Vec<_>>()
             .join(" | "),
+        // #3971: `as` binds tighter than `|`, so an or-pattern inside keeps
+        // its parentheses.
+        Pattern::As { inner, name, .. } => match &**inner {
+            Pattern::Or(..) => format!("({}) as {}", pattern_to_string(inner), name.name),
+            _ => format!("{} as {}", pattern_to_string(inner), name.name),
+        },
     }
 }
 
@@ -706,12 +718,19 @@ pub fn pattern_to_string(p: &Pattern) -> String {
 /// the parser dropped as transparent grouping.
 pub fn is_pattern_src(p: &Pattern) -> String {
     let src = pattern_to_string(p);
-    let has_record = match p {
-        Pattern::Record { .. } => true,
-        Pattern::Or(alts, _) => alts.iter().any(|a| matches!(a, Pattern::Record { .. })),
-        _ => false,
-    };
-    if has_record { format!("({src})") } else { src }
+    // #3971: a record under `as` still ends the pattern at its `}`, so it needs them too.
+    fn opens_record(p: &Pattern) -> bool {
+        match p.peel_as() {
+            Pattern::Record { .. } => true,
+            Pattern::Or(alts, _) => alts.iter().any(opens_record),
+            _ => false,
+        }
+    }
+    if opens_record(p) {
+        format!("({src})")
+    } else {
+        src
+    }
 }
 
 /// #981: whether a block's `()` tail should be omitted rather than printed.
@@ -936,4 +955,13 @@ pub fn lambda_param_src(p: &LambdaParam) -> String {
         (None, Some(tr)) => format!("{name}: {}", type_ref_to_string(tr)),
         (None, None) => name.to_string(),
     }
+}
+
+/// #3959: a call's capability bindings as written, `given Store = Sessions, To = Archive`.
+pub fn cap_bindings_src(bindings: &[CapBinding]) -> String {
+    let pairs: Vec<String> = bindings
+        .iter()
+        .map(|b| format!("{} = {}", b.param.name, b.value.display_name()))
+        .collect();
+    format!("given {}", pairs.join(", "))
 }

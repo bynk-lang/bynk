@@ -1392,7 +1392,7 @@ The convention is enforced as a default by the compiler — context references r
 ### Bootstrap language
 
 The compiler is written in **Rust** (workspace crates `bynkc`, `bynk-fmt`,
-`bynk-lsp`, `bynk-grammar`; Rust 2024 edition, MSRV 1.95). Rust gives the best
+`bynk-lsp`, `bynk-grammar`; Rust 2024 edition, MSRV 1.98). Rust gives the best
 ergonomics for compiler-shaped code — algebraic data types, exhaustive pattern
 matching, and recursive descent with rich error recovery — plus the right
 ecosystem and single-binary distribution. The costs are a steeper contributor

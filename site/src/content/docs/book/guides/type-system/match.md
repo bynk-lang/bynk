@@ -131,9 +131,11 @@ fn label(flag: Bool) -> String {
 ```
 
 Literal patterns match by value — an integer (which may be negative, `-1 => …`),
-a string, or a boolean. They are `match`-only: to test a single value elsewhere,
-use `==`. A refined type (`type Code = Int where …`) is matched against the same
-literals as its base.
+a string, a boolean, or a `Decimal` (`20.0d`, which also matches `20d` and
+`20.00d`). They are `match`-only: to test a single value elsewhere, use `==`. A
+refined type (`type Code = Int where …`) is matched against the same literals as
+its base. A `Float` is never matched against a literal: floating-point equality is
+exact and `NaN` never equals itself (`bynk.types.float_literal_pattern`).
 
 ## Guard a primitive pattern with `where`
 
@@ -246,6 +248,48 @@ arbitrary `Bool` expression; for a guard drawn from the closed refinement
 vocabulary over a primitive scrutinee, see [Guard a primitive pattern with
 `where`](#guard-a-primitive-pattern-with-where) above — the two compose (a
 pattern can carry both a `where` and a trailing `if`).
+
+## Keep the whole value with `as`
+
+A guard checks a value's shape *after* the pattern has bound it, and a guarded arm never counts
+toward exhaustiveness, so reaching for one costs the check: the match then needs a `_` arm it did
+not need before. `pattern as name` does both jobs. The pattern checks the shape, and `name` is the
+whole value it matched:
+
+```bynk
+commons shipping {
+	type Status = enum { Pending, Paid, Cancelled }
+
+	type Order = {
+		id: String,
+		status: Status,
+		total: Int,
+	}
+
+	// With a guard: `paid` is checked after it is bound, and the match needs `_`.
+	fn withGuard(o: Option[Order]) -> Int {
+		match o {
+			Some(paid) if paid.status == Paid => paid.total,
+			_ => 0,
+		}
+	}
+
+	// With `as`: the shape is part of the pattern, so the arms stay exhaustive.
+	fn withAs(o: Option[Order]) -> Int {
+		match o {
+			Some(Order { status: Paid, .. } as paid) => paid.total,
+			Some(Order { status: Pending, .. }) => 0,
+			Some(Order { status: Cancelled, .. }) => 0,
+			None => 0,
+		}
+	}
+}
+```
+
+`as` never narrows what the pattern matches, so it never changes whether a `match` is exhaustive.
+It binds tighter than `|`: `A | B as x` is `A | (B as x)`, and `(A | B) as x` binds whichever
+alternative matched. It works anywhere a pattern does, in a `let … else`, a lambda's record
+pattern and after `is`. `_ as x` adds nothing over `x`, and `bynk check` warns with a fix.
 
 ## Match several patterns with `|`
 

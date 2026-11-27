@@ -734,6 +734,22 @@ pub struct CapRef {
     pub context: Option<QualifiedName>,
     /// The capability's simple name (also the local deps key).
     pub name: Ident,
+    /// #3959: a commons function's capability parameter, `given Store: Kv`,
+    /// carries its bound kind here; `name` is then the parameter. `None` for
+    /// every plain capability reference.
+    pub bound: Option<Ident>,
+    pub span: Span,
+}
+
+/// #3959: one binding of a capability parameter at a call, `Store = Sessions`,
+/// written after the ordinary arguments behind `given`
+/// (`cached(id, load, given Store = Sessions)`).
+#[derive(Debug, Clone)]
+pub struct CapBinding {
+    /// The callee's capability parameter.
+    pub param: Ident,
+    /// The caller's capability bound to it.
+    pub value: CapRef,
     pub span: Span,
 }
 
@@ -760,6 +776,11 @@ impl CapRef {
     /// a dotted string, if any.
     pub fn prefix(&self) -> Option<String> {
         self.context.as_ref().map(|q| q.joined())
+    }
+
+    /// #3959: whether this is a capability parameter (`Store: Kv`).
+    pub fn is_parameter(&self) -> bool {
+        self.bound.is_some()
     }
 }
 
@@ -2704,6 +2725,13 @@ pub struct HttpVariant {
     pub payload: HttpVariantPayload,
     pub status: u16,
 }
+
+/// #4536 (D23 of the pass-through HTTP track): `HttpResult` is extensible. The
+/// RFC 9110 vocabulary below is curated, not complete, and grows in 1.x minor
+/// releases, so a `match` that covers an `HttpResult` needs a wildcard arm, as
+/// for the extensible first-party enums (`FetchError`, `Method`):
+/// `bynk.types.extensible_match_needs_wildcard`.
+pub const HTTP_RESULT_EXTENSIBLE: bool = true;
 
 /// All `HttpResult[T]` variants, in declaration order (ascending status). The
 /// vocabulary tracks the common, modern HTTP status codes (RFC 9110): success
@@ -5240,6 +5268,10 @@ pub enum ExprKind {
         /// v0.20a: explicit type arguments (`name[T](…)`); empty when absent.
         type_args: Vec<TypeRef>,
         args: Vec<Expr>,
+        /// #3959: the capability bindings after the arguments
+        /// (`f(x, given Store = Sessions)`); `None` when there are none. Boxed
+        /// to keep [`Expr`] within its size budget: almost no call has any.
+        bindings: Option<Box<[CapBinding]>>,
         /// #3110: the comments between the arguments; `None` when there are none.
         trivia: Option<Box<ListTrivia>>,
     },
@@ -5716,6 +5748,16 @@ pub enum Pattern {
     /// (including refinement) in each, and every alternative matches the same
     /// value type.
     Or(Vec<Pattern>, Span),
+    /// `p as name` — binds `name` to the whole value `p` matched, at `p`'s
+    /// static type (#3971). Binds tighter than `|`, so `A | B as x` is
+    /// `A | (B as x)`; `(A | B) as x` binds either alternative. It never
+    /// narrows what `inner` matches, so exhaustiveness and reachability
+    /// treat it as `inner`.
+    As {
+        inner: Box<Pattern>,
+        name: Ident,
+        span: Span,
+    },
 }
 
 /// An inclusive integer range, `lo..hi`, `lo..` or `..hi` (patterns track,
@@ -5781,15 +5823,61 @@ pub enum LiteralValue {
     Int(i64),
     Str(String),
     Bool(bool),
+    /// A `Decimal` literal pattern (#3973), kept in its normal form so that `20d`, `20.0d` and
+    /// `20.00d` are equal: a `Decimal` pattern matches by value, as `==` does. The scale the
+    /// author wrote is kept in the pattern's source text, which only the formatter reads.
+    Decimal {
+        coef: String,
+        scale: u32,
+    },
+    /// A `Float` literal as written. The parser admits it so the checker can say why a `Float`
+    /// cannot be matched against a literal (`bynk.types.float_literal_pattern`); it never
+    /// reaches the emitter.
+    Float(String),
 }
 
 impl LiteralValue {
-    /// A human-readable rendering for diagnostics (`31`, `"english"`, `true`).
+    /// The normal form of a `Decimal` literal: an optional `-`, the digits without leading zeros
+    /// and a scale with no trailing zero in the fraction, so equal values are equal here. Zero
+    /// is `0` at scale 0, with no sign.
+    pub fn decimal(negative: bool, digits: &str, scale: u32) -> LiteralValue {
+        let mut coef = digits.trim_start_matches('0').to_string();
+        let mut scale = scale;
+        while scale > 0 && coef.ends_with('0') {
+            coef.pop();
+            scale -= 1;
+        }
+        if coef.is_empty() {
+            return LiteralValue::Decimal {
+                coef: "0".to_string(),
+                scale: 0,
+            };
+        }
+        if negative {
+            coef.insert(0, '-');
+        }
+        LiteralValue::Decimal { coef, scale }
+    }
+
+    /// A human-readable rendering for diagnostics (`31`, `"english"`, `true`, `1.2d`).
     pub fn describe(&self) -> String {
         match self {
             LiteralValue::Int(n) => n.to_string(),
             LiteralValue::Str(s) => format!("{s:?}"),
             LiteralValue::Bool(b) => b.to_string(),
+            LiteralValue::Decimal { coef, scale } => {
+                let (sign, digits) = coef
+                    .strip_prefix('-')
+                    .map_or(("", coef.as_str()), |d| ("-", d));
+                let scale = *scale as usize;
+                if scale == 0 {
+                    return format!("{sign}{digits}d");
+                }
+                let padded = format!("{digits:0>width$}", width = scale + 1);
+                let (int, frac) = padded.split_at(padded.len() - scale);
+                format!("{sign}{int}.{frac}d")
+            }
+            LiteralValue::Float(text) => text.clone(),
         }
     }
 }
@@ -5806,6 +5894,7 @@ impl Pattern {
             Pattern::List { span, .. } => *span,
             Pattern::Refined { span, .. } => *span,
             Pattern::Or(_, span) => *span,
+            Pattern::As { span, .. } => *span,
         }
     }
 
@@ -5839,6 +5928,30 @@ impl Pattern {
                 .collect(),
             Pattern::Refined { inner, .. } => inner.bound_names(),
             Pattern::Or(alts, _) => alts.first().map(Pattern::bound_names).unwrap_or_default(),
+            Pattern::As { inner, name, .. } => {
+                let mut names = inner.bound_names();
+                names.push(name);
+                names
+            }
+        }
+    }
+
+    /// This pattern with any `as name` suffixes peeled off (#3971): what it
+    /// matches, ignoring what it additionally binds.
+    pub fn peel_as(&self) -> &Pattern {
+        match self {
+            Pattern::As { inner, .. } => inner.peel_as(),
+            p => p,
+        }
+    }
+
+    /// The single name a *flat* position binds — a bare name, or an `as` name
+    /// (#3971). The `is` operator binds only at this depth: what a nested
+    /// pattern would bind deeper is match-only (ADR 0169).
+    pub fn flat_binder(&self) -> Option<&Ident> {
+        match self {
+            Pattern::Binding(n) | Pattern::As { name: n, .. } => Some(n),
+            _ => None,
         }
     }
 
@@ -5857,6 +5970,7 @@ impl Pattern {
         match self {
             Pattern::Wildcard(_) | Pattern::Binding(_) => true,
             Pattern::Or(alts, _) => alts.iter().any(Pattern::is_irrefutable),
+            Pattern::As { inner, .. } => inner.is_irrefutable(),
             Pattern::Record { fields, .. } => fields
                 .iter()
                 .all(|(_, sub)| sub.as_ref().is_none_or(Pattern::is_irrefutable)),

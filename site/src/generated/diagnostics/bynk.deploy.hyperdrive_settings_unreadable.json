@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.hyperdrive_settings_unreadable",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`[deploy.hyperdrive]` in `bynk.toml` did not read, so `bynk deploy` stopped before planning. The message names the problem."
+}

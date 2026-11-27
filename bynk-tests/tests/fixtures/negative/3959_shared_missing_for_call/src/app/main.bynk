@@ -1,0 +1,10 @@
+context app.main
+
+consumes bynk { Logger }
+uses geo.r
+
+service probe {
+	on call() -> Effect[()] by Caller {
+		warn("x")
+	}
+}

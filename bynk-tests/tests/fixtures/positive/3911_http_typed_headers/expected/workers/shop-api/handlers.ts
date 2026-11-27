@@ -69,7 +69,7 @@ export const api = {
     })(headers.mode);
     return HttpResult.Ok(`${String(headers.length)} ${String(key)} ${String((headers.tags).length)} ${String(mode)} ${String(headers.priority)}`);
   },
-  async http_GET_raw(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: {}): globalThis.Promise<HttpResult<string>> {
+  async http_GET_raw(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(headers.get("x-probe"), "-"));
   },
 };

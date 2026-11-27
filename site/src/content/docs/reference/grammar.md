@@ -1062,6 +1062,14 @@ Declares the capabilities a handler or provider may use.
 **Static semantics.**
 {{#grammar-semantics given_clause}}
 
+### capability_parameter {#rule-capability_parameter}
+
+{{#grammar capability_parameter}}
+
+A commons free function's capability parameter, `given Store: Kv`: a name for the
+instance each caller binds, bounded by an instantiable kind the commons selects
+(experimental). See [Capability parameters in a commons](/reference/capabilities/#capability-parameters).
+
 ## Actors (v0.45)
 
 An `actor` is a nominal *boundary contract* — a closed, compiler-known
@@ -1811,10 +1819,33 @@ Reads a field of a record or agent state: `value.field`.
 
 {{#grammar call}}
 
-Calls a function or constructs a variant: `name(args)`.
+Calls a function or constructs a variant: `name(args)`. A call to a commons
+function with capability parameters ends its arguments with their bindings,
+`name(args, given Store = Sessions)` (experimental).
 
 **Static semantics.**
 {{#grammar-semantics call}}
+
+### _call_arguments {#rule-_call_arguments}
+
+{{#grammar _call_arguments}}
+
+A call's arguments, then its capability bindings: `f(x, y)`, `f(x, given S = A)`,
+`f(given S = A)`.
+
+### capability_bindings {#rule-capability_bindings}
+
+{{#grammar capability_bindings}}
+
+The bindings after a call's ordinary arguments, behind `given`. No trailing comma
+follows the last.
+
+### capability_binding {#rule-capability_binding}
+
+{{#grammar capability_binding}}
+
+One binding, `Parameter = Capability`: the callee's capability parameter, and a
+capability in the caller's own `given` of the parameter's kind.
 
 ### record_construction {#rule-record_construction}
 
@@ -2057,10 +2088,13 @@ parse error.
 
 {{#grammar literal_pattern}}
 
-Matches a primitive scrutinee (`Int`/`String`/`Bool`, or a refinement over one)
-by value equality — an integer (optionally negated), a string, or a boolean.
-A literal-pattern `match` needs a wildcard `_` arm to be exhaustive, except over
-`Bool`, which is complete once both `true` and `false` appear.
+Matches a primitive scrutinee (`Int`/`String`/`Bool`/`Decimal`, or a refinement
+over one) by value equality — an integer (optionally negated), a string, a
+boolean, or a `Decimal` literal (`20.0d`, `-1.5d`), which matches by value at any
+scale. A literal-pattern `match` needs a wildcard `_` arm to be exhaustive, except
+over `Bool`, which is complete once both `true` and `false` appear. A `Float`
+literal parses so that the checker can say why it is refused
+([`bynk.types.float_literal_pattern`](/reference/diagnostics/bynk.types.float_literal_pattern/)).
 
 ### or_pattern {#rule-or_pattern}
 
@@ -2075,6 +2109,22 @@ value type. `|` is a pattern-position operator only, distinct from boolean
 
 **Static semantics.**
 {{#grammar-semantics or_pattern}}
+
+**See also.** [Pattern-match with `match`](/book/guides/type-system/match/).
+
+### as_pattern {#rule-as_pattern}
+
+{{#grammar as_pattern}}
+
+`pattern as name` (#3971) — binds `name` to the whole value the pattern matched,
+at the pattern's type: `Some(Order { status: Paid, .. } as paid)`. It never
+changes what the pattern matches, so exhaustiveness is unchanged. `as` binds
+tighter than `|`: `A | B as x` is `A | (B as x)`, and `(A | B) as x` binds either
+alternative. `_ as x` is [`bynk.match.as_on_wildcard`](/reference/diagnostics/bynk.match.as_on_wildcard/),
+a warning.
+
+**Static semantics.**
+{{#grammar-semantics as_pattern}}
 
 **See also.** [Pattern-match with `match`](/book/guides/type-system/match/).
 
@@ -2287,6 +2337,20 @@ binding name: qualified (`Status.Done`, `Status.Shipped(at)`) or with a payload
 An [`or_pattern`](#rule-or_pattern) after `let`, whose first alternative opens as
 a [`let_pattern`](#rule-_let_pattern): `let Ok(x) | Err(x) = r else { … }`.
 
+### let_as_pattern {#rule-_let_as_pattern}
+
+{{#grammar _let_as_pattern}}
+
+An [`as_pattern`](#rule-as_pattern) after `let`, whose pattern opens as a
+[`let_pattern`](#rule-_let_pattern): `let [first, ..] as all = xs else { … }`.
+
+### lambda_as_pattern {#rule-_lambda_as_pattern}
+
+{{#grammar _lambda_as_pattern}}
+
+An [`as_pattern`](#rule-as_pattern) as a lambda parameter, over the irrefutable record
+pattern a parameter admits: `(Item { sku, .. } as item) => …`.
+
 ### is_pattern {#rule-_is_pattern}
 
 {{#grammar _is_pattern}}
@@ -2302,6 +2366,14 @@ payload.
 {{#grammar _is_base_pattern}}
 
 The single patterns an [`is_pattern`](#rule-_is_pattern) is built from.
+
+### is_as_pattern {#rule-_is_as_pattern}
+
+{{#grammar _is_as_pattern}}
+
+An [`as_pattern`](#rule-as_pattern) after `is`, over an
+[`is_base_pattern`](#rule-_is_base_pattern): `x is Shipped(at) as s`. A record
+pattern keeps its parentheses, `x is (T { f, .. } as t)`.
 
 ### is_or_pattern {#rule-_is_or_pattern}
 

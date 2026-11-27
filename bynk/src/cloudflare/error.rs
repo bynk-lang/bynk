@@ -49,25 +49,15 @@ impl Exit {
     }
 }
 
-/// Which call failed, as far as its error's predicates need to know.
+/// Which wrangler call failed, as far as its error's predicates need to know: one variant per
+/// operation that still runs as a wrangler process. A kind that moves to REST (1D.4, #4056)
+/// takes its variants with it, so the `wrangler_resource_ops` probe reads what is left here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OpKind {
     QueueCreate,
     QueueInfo,
     QueueDelete,
-    KvCreate,
-    KvList,
-    KvDelete,
     D1MigrationsApply,
-    D1Create,
-    D1List,
-    R2Create,
-    VectorizeList,
-    VectorizeGet,
-    VectorizeCreate,
-    VectorizeListMetadataIndex,
-    VectorizeCreateMetadataIndex,
-    VectorizeDelete,
     Push,
     TriggersDeploy,
     Whoami,
@@ -100,14 +90,13 @@ pub(crate) enum Failure {
         stdout: String,
         stderr: String,
     },
-    /// Wrangler succeeded, but what it printed could not be read; the text says what was missing.
-    Unreadable(String),
 }
 
 /// A wrangler call that failed.
 #[derive(Debug)]
 pub(crate) struct WranglerError {
-    op: OpKind,
+    /// `None` only for a call that runs over REST, which never builds one (a test's misuse).
+    op: Option<OpKind>,
     failure: Failure,
 }
 
@@ -216,7 +205,6 @@ impl WranglerError {
             Failure::Missing => "wrangler not found".to_string(),
             Failure::Start(e) | Failure::Wait(e) | Failure::Io(e) => e.to_string(),
             Failure::Pipe(what) => what.to_string(),
-            Failure::Unreadable(what) => what.clone(),
             Failure::Exit {
                 exit,
                 stdout,
@@ -253,22 +241,13 @@ impl WranglerError {
     /// - A queue: "already exists" on either stream, wrangler being inconsistent about which. The
     ///   race-loser's path (ADR 0194 D2): a queue that was simply there was found by `queues
     ///   info` first.
-    /// - An R2 bucket: "already exists" and "you own it" (code 10004). A bucket another account
-    ///   owns says it is "not available" and stays a failure.
-    /// - A D1 database: "database with that name already exists", which the kind follows with a
-    ///   `d1 list` to adopt it (P4a, #2602).
-    /// - A metadata index: "metadata index already exists", as written: listed between the
-    ///   listing and the create, since Cloudflare builds them asynchronously.
     pub(crate) fn already_exists(&self) -> bool {
         let Some(said) = self.exit_said() else {
             return false;
         };
         let lower = said.to_ascii_lowercase();
         match self.op {
-            OpKind::QueueCreate => lower.contains("already exists"),
-            OpKind::R2Create => lower.contains("already exists") && lower.contains("you own it"),
-            OpKind::D1Create => lower.contains("database with that name already exists"),
-            OpKind::VectorizeCreateMetadataIndex => said.contains("metadata index already exists"),
+            Some(OpKind::QueueCreate) => lower.contains("already exists"),
             _ => false,
         }
     }
@@ -276,19 +255,15 @@ impl WranglerError {
     /// Whether this delete failed only because what it deletes is already gone, so a re-run
     /// `--prune` is safe (#839).
     ///
-    /// - A KV namespace: `code: 10013`, or "namespace not found" (`namespace not found [code:
-    ///   10013]`, confirmed against a real account). The code is the more durable half.
     /// - A queue: "does not exist" (`Queue "<name>" does not exist. To create it, …`).
+    ///
+    /// (A KV namespace's delete runs over REST since 1D.4a, read by its code, 10013.)
     pub(crate) fn already_gone(&self) -> bool {
         let Some(said) = self.exit_said() else {
             return false;
         };
-        let lower = said.to_ascii_lowercase();
         match self.op {
-            OpKind::KvDelete => {
-                said.contains("code: 10013") || lower.contains("namespace not found")
-            }
-            OpKind::QueueDelete => lower.contains("does not exist"),
+            Some(OpKind::QueueDelete) => said.to_ascii_lowercase().contains("does not exist"),
             _ => false,
         }
     }
@@ -324,7 +299,7 @@ mod tests {
 
     #[test]
     fn a_failure_says_both_streams_trimmed_or_its_exit() {
-        let op = Op::KvList;
+        let op = Op::Whoami;
         assert_eq!(exit(&op, 1, " out \n", "\n err ").said(), "err\nout");
         assert_eq!(exit(&op, 1, "", "err").said(), "err");
         assert_eq!(exit(&op, 3, "", "").said(), "wrangler exited 3");
@@ -354,43 +329,39 @@ mod tests {
     fn already_exists_is_read_per_operation() {
         let queue = Op::QueueCreate { name: "q" };
         assert!(exit(&queue, 1, "Queue Already Exists", "").already_exists());
-        let r2 = Op::R2Create {
-            name: "b",
-            jurisdiction: None,
-        };
-        assert!(exit(&r2, 1, "", "already exists, and you own it").already_exists());
-        assert!(!exit(&r2, 1, "", "already exists and is not available").already_exists());
-        let d1 = Op::D1Create {
-            name: "d",
-            jurisdiction: None,
-        };
-        assert!(exit(&d1, 1, "", "A database with that name already exists").already_exists());
-        assert!(!exit(&d1, 1, "", "already exists").already_exists());
-        let meta = Op::Vectorize(VectorizeOp::CreateMetadataIndex {
-            name: "i",
-            property: "p",
-            ty: "string",
-        });
-        assert!(exit(&meta, 1, "", "metadata index already exists [code: 40004]").already_exists());
-        assert!(!exit(&meta, 1, "", "Metadata Index Already Exists").already_exists());
         // Only a failed exit is ever benign, and only for a create.
         assert!(!WranglerError::missing(&queue).already_exists());
-        assert!(!exit(&Op::KvList, 1, "already exists", "").already_exists());
+        assert!(!exit(&Op::Whoami, 1, "already exists", "").already_exists());
+    }
+
+    #[test]
+    fn a_refusal_is_a_4xx_that_is_neither_denied_nor_rate_limited() {
+        use super::super::rest::RestError;
+        let answered = |status, errors: &str| -> CloudflareError {
+            RestError::answered("POST", "/r2/buckets", status, errors).into()
+        };
+        assert!(answered(409, r#"[{"code":10073}]"#).is_refusal());
+        assert!(answered(400, r#"[{"code":7999}]"#).is_refusal());
+        assert!(!answered(403, r#"[{"code":10000}]"#).is_refusal());
+        assert!(
+            !answered(400, r#"[{"code":10000}]"#).is_refusal(),
+            "an auth code is denied"
+        );
+        assert!(!answered(429, "[]").is_refusal());
+        assert!(!answered(500, "[]").is_refusal());
+        assert!(!CloudflareError::Other("x".into()).is_refusal());
+        assert!(!CloudflareError::from(WranglerError::missing(&Op::Whoami)).is_refusal());
     }
 
     #[test]
     fn already_gone_is_read_per_operation() {
-        let kv = Op::KvDelete { id: "i" };
-        assert!(exit(&kv, 1, "", "namespace not found [code: 10013]").already_gone());
-        assert!(exit(&kv, 1, "", "code: 10013").already_gone());
-        assert!(exit(&kv, 1, "", "Namespace Not Found").already_gone());
-        assert!(!exit(&kv, 1, "", "Authentication error [code: 10000]").already_gone());
         let queue = Op::QueueDelete { name: "q" };
         assert!(exit(&queue, 1, "", "Queue \"q\" does not exist.").already_gone());
-        assert!(!WranglerError::missing(&kv).already_gone());
+        assert!(!exit(&queue, 1, "", "Authentication error [code: 10000]").already_gone());
+        assert!(!WranglerError::missing(&queue).already_gone());
+        // Only a delete is ever already gone.
+        assert!(!exit(&Op::Whoami, 1, "", "does not exist").already_gone());
     }
-
-    use super::super::api::VectorizeOp;
 }
 
 /// Whether a failed push's teed output says the Worker it just uploaded does not exist: wrangler's
@@ -433,6 +404,17 @@ impl CloudflareError {
     /// Whether the token lacks the permission ([`super::rest::RestError::is_denied`]).
     pub(crate) fn is_denied(&self) -> bool {
         self.rest().is_some_and(super::rest::RestError::is_denied)
+    }
+
+    /// Whether Cloudflare answered and refused the request itself: a 4xx that is not a denied
+    /// token (401, 403 or an authentication code) or a rate limit (429). A create refused this way
+    /// may have found what it creates already there, which only reading the account can tell
+    /// (1D.4b, #4056): the reference documents no "already exists" code for D1, and none for R2
+    /// that tells this account's bucket from another's.
+    pub(crate) fn is_refusal(&self) -> bool {
+        self.status()
+            .is_some_and(|status| (400..500).contains(&status) && status != 429)
+            && !self.is_denied()
     }
 }
 

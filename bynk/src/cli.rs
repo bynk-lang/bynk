@@ -333,6 +333,14 @@ pub enum Command {
         /// version for every secret every time.
         #[arg(long)]
         force: bool,
+        /// Re-key every edge key on this context at once, with no grace window.
+        /// A rotation (`--force`, or a Worker redeployed after it was deleted)
+        /// keeps the key it replaces verifying on the consumer for 15 days, so
+        /// messages already in a queue are not lost; use this instead when the
+        /// old key leaked, so it stops verifying immediately. Repeatable. Needs
+        /// both Workers of each edge in the run.
+        #[arg(long = "revoke-previous-edge-key", value_name = "CONTEXT")]
+        revoke_previous_edge_key: Vec<String>,
         /// Delete every reported orphan — a KV namespace or queue the ledger
         /// remembers that the current build no longer declares. Never
         /// deletes a Worker. Prompts separately from the creation

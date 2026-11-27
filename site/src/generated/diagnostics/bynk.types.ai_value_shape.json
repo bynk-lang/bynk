@@ -1,0 +1,12 @@
+{
+  "blurb": "`Ai.generateValue[T]` gives the model `T`'s JSON Schema, so `T` must be a type a schema can describe: records, enums, sums, lists, `Option`, `String`-keyed maps and refined base types. A type that contains itself (a tree whose nodes list their children), a generic type, or a `Map` whose key is not a `String` has no schema, so the call is refused naming the field. Flatten the type, or ask for a flat one and build the nested value yourself.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.ai_value_shape",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "type Node = { label: String, children: List[Node] }\nlet _ <- Ai.generateValue[Node](model, ask)    // ✗ `Node` contains itself\n\ntype Node = { label: String, parent: Option[String] }\nlet _ <- Ai.generateValue[Node](model, ask)    // ✓",
+  "severity": "error",
+  "summary": "`Ai.generateValue[T]` asks the model for a type that has no JSON Schema: one that contains itself, a generic type, or a `Map` with a key that is not a `String` (#4099)."
+}

@@ -1,0 +1,20 @@
+commons demo.check
+
+uses demo.holder
+uses demo.shop
+
+---
+#3842: the defaults hold the values they were written with, not merely something that type-checks.
+---
+fn defaultsHoldTheirValues() -> Bool {
+  let h = plain()
+  let best = match h.best {
+    Some(t) => isK(t),
+    None => false,
+  }
+  let marked = match h.marked {
+    Tagged(t) => isN(t),
+    Plain => false,
+  }
+  isK(h.tok) && best && marked && isN(h.inner.tok) && h.toks.length() == 2
+}

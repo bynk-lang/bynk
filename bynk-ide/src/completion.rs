@@ -3148,11 +3148,19 @@ fn member_candidates_from(
                 CommonsItem::Actor(a) if a.name.name == receiver && is_signed_cookie_actor(a) => {
                     for (label, sig) in signed_cookie_members(a) {
                         if seen.insert(label.to_string()) {
-                            out.push(Completion::item(
+                            let item = Completion::item(
                                 label,
                                 CompletionKind::Member,
                                 Some(format!("{sig} — session cookie of `{receiver}`")),
-                            ));
+                            );
+                            // #3825: a handler that issues is refused when cross-site, like a guarded one.
+                            out.push(if label == "issue" {
+                                item.with_doc(Some(
+                                    "CSRF-checked: a non-`GET` route that issues a session is refused when the request is cross-site (fetch metadata, then `Origin` against the service's `cors` origins), before its body runs.",
+                                ))
+                            } else {
+                                item
+                            });
                         }
                     }
                 }
@@ -3191,6 +3199,23 @@ fn member_candidates_from(
             "getByIdsValue",
         ] {
             if let Some(sig) = crate::signature_help::typed_read(base, member)
+                && seen.insert(member.to_string())
+            {
+                out.push(Completion::item(
+                    member.to_string(),
+                    CompletionKind::Member,
+                    Some(format!("{sig} — operation of `{receiver}`")),
+                ));
+            }
+        }
+    }
+    // #4099: `Ai.generateValue[T]` and `AnalyticsSql.select[T]`, which the compiler lowers, are
+    // members of the bare capabilities once the capability's own operations are in scope.
+    if matches!(receiver, "Ai" | "AnalyticsSql")
+        && crate::analytics_tooling::consumes_cloudflare(doc_text, receiver)
+    {
+        for member in ["generateValue", "select"] {
+            if let Some(sig) = crate::signature_help::typed_read(receiver, member)
                 && seen.insert(member.to_string())
             {
                 out.push(Completion::item(
@@ -5377,6 +5402,29 @@ mod tests {
             "{:?}",
             select.detail
         );
+    }
+
+    /// #4099: `Ai.` offers `generateValue` beside the declared operations, with its signature, and
+    /// never the private `generateJson` it is lowered over.
+    #[test]
+    fn the_ai_name_offers_generate_value() {
+        let doc = "context a.b\n\nconsumes bynk.cloudflare { Ai }\n";
+        let items = complete("    Ai.", doc, None);
+        let gv = find(&items, "generateValue", CompletionKind::Member).expect("`generateValue`");
+        assert!(
+            gv.detail
+                .as_deref()
+                .is_some_and(|d| d.contains("Result[T, AiError]")),
+            "{:?}",
+            gv.detail
+        );
+        assert!(find(&items, "generate", CompletionKind::Member).is_some());
+        assert!(find(&items, "generateJson", CompletionKind::Member).is_none());
+        // A project's own capability of the same name is not the first-party one.
+        let own = "context a.b\n\ncapability Ai {\n  fn ask(q: String) -> Effect[String]\n}\n";
+        let items = complete("    Ai.", own, None);
+        assert!(find(&items, "generateValue", CompletionKind::Member).is_none());
+        assert!(find(&items, "ask", CompletionKind::Member).is_some());
     }
 
     /// #4101: a derived `Vectorize` offers the typed reads beside the text operations.

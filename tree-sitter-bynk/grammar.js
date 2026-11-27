@@ -1467,8 +1467,24 @@ module.exports = grammar({
       ),
     given_clause: ($) =>
       // v0.15: a capability may be a bare local name or a dotted cross-context
-      // reference (`B.Cap` / `platform.time.Clock`).
-      seq("given", sep1(field("capability", $.qualified_name), ",")),
+      // reference (`B.Cap` / `platform.time.Clock`). #3959: or a commons
+      // function's capability parameter, `Store: Kv`.
+      seq(
+        "given",
+        sep1(field("capability", choice($.qualified_name, $.capability_parameter)), ","),
+      ),
+
+    // #3959: a capability parameter, `Name: Kind` — a name for the instance a
+    // caller binds, bounded by an instantiable kind.
+    capability_parameter: ($) =>
+      seq(field("name", $.identifier), ":", field("bound", $.identifier)),
+
+    // #3959: a call's capability bindings, after its ordinary arguments:
+    // `given Store = Sessions, To = Archive`. No trailing comma follows them.
+    capability_bindings: ($) => seq("given", sep1($.capability_binding, ",")),
+
+    capability_binding: ($) =>
+      seq(field("parameter", $.identifier), "=", field("value", $.qualified_name)),
 
     // v0.45: an actor declaration — a boundary contract. Normal form
     // `actor Name { auth = Scheme (, identity = Type)? }`. The refinement form
@@ -1722,7 +1738,14 @@ module.exports = grammar({
       choice(
         seq(
           "let",
-          field("pattern", choice($._let_pattern, alias($._let_or_pattern, $.or_pattern))),
+          field(
+            "pattern",
+            choice(
+              $._let_pattern,
+              alias($._let_or_pattern, $.or_pattern),
+              alias($._let_as_pattern, $.as_pattern),
+            ),
+          ),
           field("bind", choice("=", "<-")),
           field("value", $._expression),
           optional(field("principal", $.call_site_actor)),
@@ -1745,6 +1768,9 @@ module.exports = grammar({
         ),
       ),
     _let_paren_record_pattern: ($) => seq("(", $.record_pattern, ")"),
+    // #3971: `let Some(x) as y = …` — `as` after a pattern that may open a `let … else`.
+    _let_as_pattern: ($) =>
+      prec.left(2, seq(field("pattern", $._let_pattern), "as", field("name", $.identifier))),
     // #2010: the patterns that may open a `let … else`, mirroring the Rust
     // parser's `let_pattern_ahead`: a literal, a parenthesised pattern, or a
     // variant with a payload or a qualifier. A bare name stays a binding (and
@@ -2020,7 +2046,17 @@ module.exports = grammar({
         $.record_pattern,
         $.list_pattern,
         $.or_pattern,
+        $.as_pattern,
         $.paren_pattern,
+      ),
+    // #3971: `pattern as name` binds the whole value the pattern matched. It
+    // binds tighter than `|` (`A | B as x` is `A | (B as x)`; `(A | B) as x`
+    // binds either alternative), so its precedence is above `or_pattern`'s.
+    // Never reachable from `refined_pattern`, whose inner form is `_` alone.
+    as_pattern: ($) =>
+      prec.left(
+        2,
+        seq(field("pattern", $._pattern), "as", field("name", $.identifier)),
       ),
     // #2641 (patterns track, slice 1): `Order { status: Paid, total, .. }`. Always
     // open, with the trailing `..` mandatory so that adding a field to the record
@@ -2065,6 +2101,14 @@ module.exports = grammar({
         $.variant_pattern,
         $.list_pattern,
         $.paren_pattern,
+        alias($._is_as_pattern, $.as_pattern),
+      ),
+    // #3971: after `is`, `as` follows a base pattern; a record pattern needs
+    // its parentheses, as everywhere in that position.
+    _is_as_pattern: ($) =>
+      prec.left(
+        2,
+        seq(field("pattern", $._is_base_pattern), "as", field("name", $.identifier)),
       ),
     _is_pattern: ($) =>
       choice($._is_base_pattern, alias($._is_or_pattern, $.or_pattern)),
@@ -2109,10 +2153,14 @@ module.exports = grammar({
       );
     },
     // v0.130 §2.3.4: a literal pattern — an integer (optionally negated), a
-    // string, or a boolean. A closed set (ADR 0001); no `Float`, no `()`.
+    // string, or a boolean (ADR 0001), and a `Decimal` or `Float` literal (#3973); no `()`.
     literal_pattern: ($) =>
       choice(
         seq(optional("-"), $.number_literal),
+        // #3973: a `Decimal` literal matches by value; a `Float` literal parses so the checker
+        // can say why it is refused (`bynk.types.float_literal_pattern`).
+        seq(optional("-"), $.decimal_literal),
+        seq(optional("-"), $.float_literal),
         $.string_literal,
         $.boolean_literal,
       ),
@@ -2241,6 +2289,14 @@ module.exports = grammar({
           optional(seq(":", field("type", $._type_ref))),
         ),
         field("pattern", alias($._lambda_record_pattern, $.record_pattern)),
+        // #3971: `(Item { sku, .. } as item) => …`
+        field("pattern", alias($._lambda_as_pattern, $.as_pattern)),
+      ),
+    _lambda_as_pattern: ($) =>
+      seq(
+        field("pattern", alias($._lambda_record_pattern, $.record_pattern)),
+        "as",
+        field("name", $.identifier),
       ),
     // The irrefutable subset a lambda parameter admits: each field is a bare
     // name, `name: binding`, `name: _`, or a nested such pattern. (A bare
@@ -2307,8 +2363,7 @@ module.exports = grammar({
           seq(
             field("name", choice($.identifier, $._contextual_identifier)),
             "(",
-            optional(sep1(field("arg", $._expression), ",")),
-            optional(","),
+            optional($._call_arguments),
             ")",
           ),
         ),
@@ -2321,10 +2376,20 @@ module.exports = grammar({
           sep1(field("type_arg", $._type_ref), ","),
           "]",
           "(",
-          optional(sep1(field("arg", $._expression), ",")),
-          optional(","),
+          optional($._call_arguments),
           ")",
         ),
+      ),
+
+    // A call's arguments, then (#3959) its capability bindings:
+    // `f(x, y)`, `f(x, given S = A)`, `f(given S = A)`.
+    _call_arguments: ($) =>
+      choice(
+        seq(
+          sep1(field("arg", $._expression), ","),
+          optional(choice(",", seq(",", field("bindings", $.capability_bindings)))),
+        ),
+        field("bindings", $.capability_bindings),
       ),
 
     // v0.20b: a list literal — `[a, b, c]`, optional trailing comma. A

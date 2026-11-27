@@ -1205,6 +1205,97 @@ unguarded arm with the same pattern can always follow it.
 
 <!-- sorted: headings -->
 
+### Binding the whole value
+
+A pattern can check a value's shape but, on its own, cannot keep the value. `pattern as name`
+binds `name` to the whole value the pattern matched (#3971):
+
+```bynk,fragment
+match o {
+  Some(Order { status: Paid, .. } as paid) => ship(paid)
+  Some(Order { status: Pending, .. }) => wait()
+  Some(Order { status: Cancelled, .. }) => nothing()
+  None => nothing()
+}
+```
+
+```bynk,fragment
+let [first as head, ..] = jobs else { 0 }
+```
+
+```bynk,fragment
+if e is (Shipped(tracking: t) as s) { notify(s, t) } else { skip() }
+```
+
+```bynk,fragment
+let totals = orders.map((Order { id, .. } as order) => order.total)
+```
+
+- `name` has the type of the position the pattern sits at: the sum for a variant
+  pattern, the record for a record pattern, the element type for a list element.
+- `as` **never narrows** what the pattern matches. Exhaustiveness and reachability read straight
+  through it, so the match above needs no `_` arm. The guard form it replaces,
+  `Some(paid) if paid.status == Paid`, moves the shape check into a guard, and a guarded arm never
+  counts towards exhaustiveness.
+- `as` binds **tighter than `|`**: `A | B as x` is `A | (B as x)`, which fails the or-pattern rule
+  (every alternative binds the same names, at the same types) unless `A` binds `x` too. Write
+  `(A | B) as x` to bind whichever alternative matched; the formatter keeps the parentheses.
+- It is allowed wherever a pattern is: a match arm, a variant payload, a record field, a list
+  element, an or-alternative, `let … else`, a lambda's record-pattern parameter and after `is`
+  (where a record pattern keeps its parentheses, as in `x is (Order { .. } as o)`). After `is`, an
+  `as` name is bound like the other flat names of its position; what a nested pattern binds
+  deeper stays match-only.
+- `_ as x` is [`bynk.match.as_on_wildcard`](/reference/diagnostics/bynk.match.as_on_wildcard/), a
+  warning: `_` already matches every value, so `x` alone binds the same one. The quick fix writes
+  `x`.
+- `as` stays contextual: only a pattern followed by `as` takes this reading, and `consumes … as`
+  and `embeds … as` are unchanged.
+
+### Decimal literal patterns
+
+A `Decimal` literal is a pattern that matches **by value** (#3973), as `==` compares:
+
+```bynk
+fn band(rate: Decimal) -> String {
+	match rate {
+		0d => "zero-rated",
+		5d => "reduced",
+		20.0d => "standard",
+		_ => "other",
+	}
+}
+```
+
+- `20.0d` matches `20d` and `20.00d` too, whatever scale the value has. A negative literal
+  (`-1.5d`) is a pattern, as `-5` is.
+- Like a `String` literal, a `Decimal` literal never completes the type: a `match` over `Decimal`
+  literals needs a `_` arm or a name.
+- An arm whose literal is equal by value to an earlier one (`20d` after `20.0d`) is
+  `bynk.types.unreachable_arm`.
+- A `Decimal` literal nests (`Some(1.25d)`), and an or-pattern of them (`1d | 2d`) is allowed.
+- A **`Float`** literal is refused, at the top level and nested:
+  [`bynk.types.float_literal_pattern`](/reference/diagnostics/bynk.types.float_literal_pattern/).
+  Floating-point equality is exact and `NaN` never equals itself, so a literal arm rarely means
+  what it seems. A `Float` is not a `match` scrutinee, so compare it with `<`, `>=` or a tolerance in
+  an `if`.
+- A refined pattern (`_ where …`) is not offered for a `Decimal`; the literals above are.
+
+### Each name once
+
+A pattern binds each name at most once. `Both(a, a)`, `Order { id: x, total: x, .. }`,
+`[x, ..x]` and `Some(a as a)` are
+[`bynk.types.duplicate_pattern_binding`](/reference/diagnostics/bynk.types.duplicate_pattern_binding/),
+reported at the repeat, with the first binding marked. Otherwise the body would read one name for
+two values. The rule holds at every depth and in every pattern position: a match arm, `let … else`,
+a destructuring `let`, a lambda's pattern parameter, after `is`, and in a suite case. Rename one of
+the bindings, or write `_` where the value isn't needed.
+
+An or-pattern's alternatives are the exception, because they *must* bind the same names (the
+or-pattern rule above). `Dot(x) | Line(x, _)` binds `x` once, from whichever alternative matched.
+A name repeated *within* one alternative, as in `Dot(x) | Line(x, x)`, is still refused. A field
+listed twice in one record pattern is the separate
+[`bynk.types.duplicate_pattern_field`](/reference/diagnostics/bynk.types.duplicate_pattern_field/).
+
 ### Exhaustiveness and reachability
 
 Both checks are one rule (patterns track, slice 3, #2665): an arm is reachable

@@ -1,0 +1,54 @@
+// #4536: `HttpResult` is extensible, so a match that covers one, here inside
+// an `Option`, needs a wildcard even when it lists every variant.
+context app.probe
+
+fn label(r: Option[HttpResult[String]]) -> String {
+	match r {
+		Some(Ok(_)) => "Ok",
+		Some(NotFound) => "NotFound",
+		Some(Streaming(_)) => "Streaming",
+		Some(Raw(_, _)) => "Raw",
+		Some(RawTagged(_, _, _)) => "RawTagged",
+		Some(RawStreamed(_, _)) => "RawStreamed",
+		Some(RawCreated(_, _)) => "RawCreated",
+		Some(Created(_)) => "Created",
+		Some(Accepted(_)) => "Accepted",
+		Some(NoContent) => "NoContent",
+		Some(PartialContent(_, _, _)) => "PartialContent",
+		Some(MovedPermanently(_)) => "MovedPermanently",
+		Some(Found(_)) => "Found",
+		Some(SeeOther(_)) => "SeeOther",
+		Some(NotModified) => "NotModified",
+		Some(TemporaryRedirect(_)) => "TemporaryRedirect",
+		Some(PermanentRedirect(_)) => "PermanentRedirect",
+		Some(BadRequest(_)) => "BadRequest",
+		Some(Unauthorized) => "Unauthorized",
+		Some(Forbidden) => "Forbidden",
+		Some(MethodNotAllowed) => "MethodNotAllowed",
+		Some(NotAcceptable) => "NotAcceptable",
+		Some(RequestTimeout) => "RequestTimeout",
+		Some(Conflict(_)) => "Conflict",
+		Some(Gone) => "Gone",
+		Some(LengthRequired) => "LengthRequired",
+		Some(PreconditionFailed(_)) => "PreconditionFailed",
+		Some(PayloadTooLarge(_)) => "PayloadTooLarge",
+		Some(UnsupportedMediaType(_)) => "UnsupportedMediaType",
+		Some(UnprocessableEntity(_)) => "UnprocessableEntity",
+		Some(PreconditionRequired(_)) => "PreconditionRequired",
+		Some(TooManyRequests(_)) => "TooManyRequests",
+		Some(UnavailableForLegalReasons(_)) => "UnavailableForLegalReasons",
+		Some(ServerError(_)) => "ServerError",
+		Some(NotImplemented(_)) => "NotImplemented",
+		Some(BadGateway(_)) => "BadGateway",
+		Some(ServiceUnavailable(_)) => "ServiceUnavailable",
+		Some(GatewayTimeout(_)) => "GatewayTimeout",
+		Some(RawError(_, _, _)) => "RawError",
+		None => "none",
+	}
+}
+
+service probe {
+	on call() -> Effect[String] by Caller {
+		Effect.pure(label(None))
+	}
+}

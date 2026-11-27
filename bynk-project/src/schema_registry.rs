@@ -399,6 +399,12 @@ pub struct FieldShape {
     /// omitted when empty, so the lock is unchanged for a field never renamed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub renamed_from: Vec<String>,
+    /// #4523: one node per position inside a field whose type reaches a record or a sum, as a
+    /// stored value's fields have (rooted at the field's wire name), so a change inside the record
+    /// is seen and not judged by the record's name. Omitted for a field that reaches none, and
+    /// for a lock written before it: an unchanged build fills it in.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<PathShape>,
 }
 
 /// Parse `bynk.schema.lock`'s content. `existing: None` means the project
@@ -490,6 +496,7 @@ mod tests {
             ty: ty.to_string(),
             default,
             renamed_from: Vec::new(),
+            paths: Vec::new(),
         }
     }
 

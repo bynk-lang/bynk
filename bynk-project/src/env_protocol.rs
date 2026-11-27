@@ -152,6 +152,17 @@ pub const CALL_FROM_PREFIX: &str = "BYNK_CALL_FROM_";
 /// The prefix of the secret a caller holds for the edge to one callee,
 /// followed by the callee's edge suffix.
 pub const CALL_TO_PREFIX: &str = "BYNK_CALL_TO_";
+/// #4526: the prefix of the callee's **second** verification slot for the edge from one caller,
+/// followed by the caller's edge suffix. A rotation puts the new key in the slot the live key
+/// is not in, so the old key stays where it is and is never read back (Cloudflare returns no
+/// secret's value); the callee verifies under every slot present and unexpired.
+pub const CALL_FROM_SLOT2_PREFIX: &str = "BYNK_CALL_FROM2_";
+/// #4526: the prefix of the secret marking the callee's first slot (`BYNK_CALL_FROM_<S>`) as
+/// retiring, followed by the caller's edge suffix. Its value is the instant, in whole seconds
+/// since the Unix epoch, after which that slot is no longer verified under.
+pub const CALL_UNTIL_PREFIX: &str = "BYNK_CALL_UNTIL_";
+/// #4526: [`CALL_UNTIL_PREFIX`] for the second slot (`BYNK_CALL_FROM2_<S>`).
+pub const CALL_UNTIL_SLOT2_PREFIX: &str = "BYNK_CALL_UNTIL2_";
 /// The edge key from `bynk dev inspect`'s caller, `bynk.dev`: the
 /// [`CALL_FROM_PREFIX`] family's one fixed member.
 pub const CALL_FROM_BYNK_DEV: &str = "BYNK_CALL_FROM_BYNK__DEV";
@@ -332,6 +343,27 @@ pub const PROTOCOL: &[Entry] = &[
         &[runtime("boundary.ts")],
     ),
     worker(
+        CALL_FROM_SLOT2_PREFIX,
+        Carrier::Secret,
+        Shape::Prefix { members: &[] },
+        "bynk::deploy::secrets (bynk-check::wire_format::edge_key_from_slot2)",
+        &[runtime("boundary.ts")],
+    ),
+    worker(
+        CALL_UNTIL_PREFIX,
+        Carrier::Secret,
+        Shape::Prefix { members: &[] },
+        "bynk::deploy::secrets (bynk-check::wire_format::edge_until)",
+        &[runtime("boundary.ts")],
+    ),
+    worker(
+        CALL_UNTIL_SLOT2_PREFIX,
+        Carrier::Secret,
+        Shape::Prefix { members: &[] },
+        "bynk::deploy::secrets (bynk-check::wire_format::edge_until_slot2)",
+        &[runtime("boundary.ts")],
+    ),
+    worker(
         CONTAINERS_UNAVAILABLE,
         Carrier::WorkerVar,
         Shape::Exact,
@@ -382,15 +414,15 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn the_protocol_has_twenty_keys_and_twenty_four_names_a_reader_spells() {
-        assert_eq!(PROTOCOL.len(), 20);
+    fn the_protocol_has_twenty_three_keys_and_twenty_seven_names_a_reader_spells() {
+        assert_eq!(PROTOCOL.len(), 23);
         // `BYNK_DEV_ACK_` is a family of five fixed members, so the keys come to
-        // 24 names a reader spells. The prefix itself is a token, not a name, and
+        // 27 names a reader spells. The prefix itself is a token, not a name, and
         // `BYNK_CALL_FROM_BYNK__DEV` is derived from its prefix at run time.
         let spelt = all_names()
             .filter(|n| *n != DEV_ACK_PREFIX && *n != CALL_FROM_BYNK_DEV)
             .count();
-        assert_eq!(spelt, 24);
+        assert_eq!(spelt, 27);
     }
 
     #[test]

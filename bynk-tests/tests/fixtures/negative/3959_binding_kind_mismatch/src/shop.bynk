@@ -1,0 +1,18 @@
+---
+#3959, track §11 and §14.1 `bynk.given.binding_kind_mismatch`: the kind must match
+exactly, so a `D1` instance cannot bind a `Kv` parameter, and a `Kv` one a `D1`.
+---
+context shop
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv, D1 }
+uses lib.cache
+
+capability Sessions = Kv
+capability Archive = Kv
+capability Orders = D1
+
+fn save(key: String) -> Effect[String] given Orders, Sessions, Logger {
+	let _ <- purge(given Db = Sessions)
+	remember(key, "v", given Store = Orders)
+}

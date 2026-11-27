@@ -62,6 +62,57 @@ pub fn npx_command() -> std::process::Command {
     c
 }
 
+/// How long a smoke gives `wrangler dev` to start serving its Worker: the
+/// cold-cache provisioning, then the start-up, on a machine that may be loaded
+/// well past its core count (#4479).
+#[allow(dead_code)]
+pub const BOOT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(180);
+
+/// The line `wrangler dev` logs once its Worker is serving on `port`.
+#[allow(dead_code)]
+pub fn ready_line(port: u16) -> String {
+    format!("Ready on http://localhost:{port}")
+}
+
+/// Wait until `wrangler dev`, logging to `log_path`, is serving its Worker on `port`:
+/// it has logged [`ready_line`] for that port **and** `probe` (a request the Worker answers,
+/// with whatever status its boot route gives) succeeds, within [`BOOT_DEADLINE`]. The log line
+/// is the gate, and it names the port, because the port answering is not the Worker answering:
+/// under load a probe that accepts any HTTP reply took another server's `403 Forbidden` for the
+/// Worker (#4479). The error says which of the two waits expired.
+#[allow(dead_code)]
+pub fn wait_until_ready(
+    log_path: &std::path::Path,
+    port: u16,
+    probe: &dyn Fn() -> bool,
+) -> Result<(), String> {
+    let ready = ready_line(port);
+    let deadline = std::time::Instant::now() + BOOT_DEADLINE;
+    let mut logged_ready = false;
+    loop {
+        if !logged_ready {
+            logged_ready = std::fs::read_to_string(log_path).is_ok_and(|log| log.contains(&ready));
+        }
+        if logged_ready && probe() {
+            return Ok(());
+        }
+        if std::time::Instant::now() > deadline {
+            return Err(if logged_ready {
+                format!(
+                    "wrangler logged `{ready}` but its Worker did not answer the boot \
+                     probe within the {BOOT_DEADLINE:?} boot deadline"
+                )
+            } else {
+                format!(
+                    "wrangler had not logged `{ready}` within the {BOOT_DEADLINE:?} boot \
+                     deadline"
+                )
+            });
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+}
+
 /// I2 (#1971): the `--var`s a workerd smoke passes `wrangler dev` so its
 /// Worker holds the local key `bynk dev` gives it for each `(caller, callee)`
 /// edge in `edges`, on both ends. A Worker holding a key for an edge it is not

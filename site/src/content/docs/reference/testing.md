@@ -25,7 +25,7 @@ the declared handler and checked for arity and argument types:
 | service | address |
 |---|---|
 | `on call` | `svc.call(args)` |
-| `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, then body); a `system` case may add a trailing [`RequestHeaders`](#request-headers) when the route declares no `headers:` |
+| `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, a [rest](/reference/http/#rest-segments) as the raw rest of the path, `files.GET("/files/*key", "/a/b.png")`, which is `""` or starts with `/` and holds no `?`, `#` or dot segment (`bynk.test.rest_argument`), then body); a `system` case may add a trailing [`RequestHeaders`](#request-headers) when the route declares no `headers:` |
 | `from cron` | `svc.schedule("<expr>", at)` — matched to the handler with that schedule; `at` is an `Instant` when the handler declares it |
 | `from queue` | `svc.message(msg)` |
 | `from Events(E)` | `svc.event(e)`, `svc.event(e, env)` — [one delivered event](#event-address) |
@@ -253,6 +253,8 @@ suite reg.api {
 ```
 
 A line with no colon is ignored, and names are case-insensitive, as on the wire.
+A name given twice is one header, its values joined with `", "`, except `Cookie`,
+whose lines are joined with `"; "` into one cookie-string, as a browser sends it.
 At the `unit` and `integration` tiers the value reaches the handler directly; at
 `system` the driver sends the lines as the request's headers, beside the ones it
 sets itself (`content-type`, and the credential of an actor's `by`), which win.

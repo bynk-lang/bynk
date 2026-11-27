@@ -579,6 +579,15 @@ Well-formedness: §5.
 `given` and a comma-separated list of the capabilities a handler or provider may
 use. Well-formedness: §5.
 
+### §4.3.10a capability_parameter
+
+{{#grammar capability_parameter}}
+
+A commons free function's capability parameter (#3959, experimental): a name for
+the instance each caller binds, and the instantiable kind that bounds it. A `:` after
+a bare capability name in a `given` clause is unambiguous, since the clause is
+followed by `where`, a contract clause or `{`. Well-formedness: §5.
+
 ## §4.4 Services & handlers
 
 A `service` groups the handlers that respond to calls and external triggers.
@@ -1144,6 +1153,25 @@ reserved parse error), and parenthesised arguments — a function call, a
 variant construction, an agent instantiation, or (v0.20a) the **application
 of a function-typed value** in scope. Well-formedness: §5.
 
+### §4.6.10a _call_arguments
+
+{{#grammar _call_arguments}}
+
+The ordinary arguments, then (#3959, experimental) the capability bindings. `given`
+cannot start an expression, so it ends the ordinary arguments; no trailing comma
+follows the last binding.
+
+### §4.6.10b capability_bindings
+
+{{#grammar capability_bindings}}
+
+### §4.6.10c capability_binding
+
+{{#grammar capability_binding}}
+
+One binding: the callee's capability parameter, `=`, and a capability the caller
+holds. Well-formedness: §5.
+
 ### §4.6.11 record_construction
 
 {{#grammar record_construction}}
@@ -1311,8 +1339,11 @@ or `field: _` to ignore it.
 
 {{#grammar literal_pattern}}
 
-An integer (optionally negated), a string, or a boolean, matching a primitive
-scrutinee by value. Exhaustiveness: [§5.6](/reference/spec/static-semantics/#56-pattern-matching).
+An integer (optionally negated), a string, a boolean, or a `Decimal` literal
+(optionally negated), matching a primitive scrutinee by value. A `Float` literal is
+admitted by the grammar so that the checker can refuse it with a reason
+(`bynk.types.float_literal_pattern`, §5.6). Exhaustiveness:
+[§5.6](/reference/spec/static-semantics/#56-pattern-matching).
 
 ### §4.7.8 or_pattern
 
@@ -1426,6 +1457,35 @@ checker (`bynk.types.is_range_pattern`); the tree-sitter grammar does not admit 
 there, since an arm body ending `x is 5` and the next arm starting `..9` would
 otherwise be one range. A bound's range and `lo <= hi` are well-formedness (§5.6).
 
+### §4.7.14 as_pattern {#4714-as_pattern}
+
+{{#grammar as_pattern}}
+
+`pattern as name` (#3971) — binds `name` to the whole value `pattern` matched, at
+the type of the position the pattern sits at, so a pattern can check a value's
+shape and keep the value too: `Some(Order { status: Paid, .. } as paid)`. `as` is
+a suffix on any pattern, wherever a pattern is allowed: a match arm, a variant
+payload, a record field, a list element, an or-alternative, `let … else`, and a
+lambda's record-pattern parameter (`(Item { sku, .. } as item) => …`).
+
+`as` binds tighter than `|`: `A | B as x` is `A | (B as x)`, which is
+well-formed only when `A` binds `x` too (§5.6). Write `(A | B) as x` to bind
+whichever alternative matched; the formatter keeps those parentheses. After
+`is`, the pattern in front of `as` follows the `is` restrictions: a record
+pattern MUST be parenthesised, `x is (T { f, .. } as t)`.
+
+A lambda parameter may be an irrefutable record pattern with an `as` name:
+
+{{#grammar _lambda_as_pattern}}
+
+After `is`, `as` follows a base pattern, and a record pattern keeps its parentheses:
+
+{{#grammar _is_as_pattern}}
+
+`as` is contextual: only a pattern followed by `as` takes this reading, and `as`
+keeps every other meaning (`consumes … as Alias`, `embeds E as V`). Well-formedness:
+§5.6.
+
 ## §4.8 Statements
 
 A block is a sequence of statements ending in an optional value expression.
@@ -1487,6 +1547,10 @@ An or-pattern after `let` opens the same way, its later alternatives being any
 pattern:
 
 {{#grammar _let_or_pattern}}
+
+An as-pattern after `let` takes the same opening (#3971):
+
+{{#grammar _let_as_pattern}}
 
 The `else`-less form of a record `let` (below) takes its record pattern bare or
 in parentheses; the parenthesised one is:

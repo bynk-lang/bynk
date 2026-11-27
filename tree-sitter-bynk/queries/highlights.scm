@@ -231,6 +231,8 @@
  (#match? @variable "^[a-z_]"))
 ; #2680: the name a list pattern's `..rest` binds.
 (list_rest name: (identifier) @variable)
+; #3971: the name `pattern as name` binds.
+(as_pattern name: (identifier) @variable)
 ; Events track slice 1 (spine #936): a subscription pattern's variant value
 ; (`region: Region.Domestic` / bare `Domestic`) — always a nullary reference
 ; (the checker rejects a payload-carrying variant), so unlike

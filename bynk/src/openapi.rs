@@ -51,6 +51,7 @@ use bynk_syntax::ast::{
 use bynk_syntax::error::Severity;
 use serde_json::{Map, Value, json};
 
+pub(crate) mod left_out;
 mod partial;
 mod plain;
 mod wire_names;
@@ -134,6 +135,7 @@ pub fn run(
             return ExitCode::FAILURE;
         }
     };
+    left_out::warn(&analysis, service);
     let format = format.unwrap_or_else(|| match out.and_then(|p| p.extension()) {
         Some(e) if e == "yaml" || e == "yml" => OpenapiFormatArg::Yaml,
         _ => OpenapiFormatArg::Json,
@@ -345,7 +347,7 @@ pub fn document(
     for sel in &selected {
         let expr_types = unit_expr_types(analysis, sel.unit);
         for h in &sel.service.handlers {
-            if !matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Http { .. }) {
+            if left_out::not_described(h) {
                 continue;
             }
             if let Some(m) = wire_contract_for_service(

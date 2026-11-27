@@ -1,0 +1,24 @@
+suite shop.rates {
+  case "a Decimal literal matches by value across scales" {
+    expect band(0d) == "zero-rated"
+    expect band(0.00d) == "zero-rated"
+    expect band(5.000d) == "reduced"
+    expect band(20d) == "standard"
+    expect band(20.00d) == "standard"
+    expect band(-1.50d) == "refund"
+    expect band(0.5d) == "other"
+    expect band(7d) == "other"
+  }
+
+  case "a Decimal literal nests in a payload" {
+    expect tier(Some(1.250d)) == 1
+    expect tier(Some(1.3d)) == 2
+    expect tier(None) == 3
+  }
+
+  case "an or-pattern of Decimal literals" {
+    expect either(1.00d) == 1
+    expect either(2d) == 1
+    expect either(3d) == 0
+  }
+}

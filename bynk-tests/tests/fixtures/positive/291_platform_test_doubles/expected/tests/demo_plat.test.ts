@@ -177,10 +177,10 @@ class __Stub_Fetch {
     type VectorReadOf<M> = __ns_bynk_cloudflare.VectorReadOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a stubbed fetch answers for the network") {
-      return Ok({ status: 204, headers: new globalThis.Map<string, string>(), body: "" });
+      return Ok({ status: 204, headers: new globalThis.Map<string, string>(), body: "", setCookies: [] });
     }
     if (this.__case === "a fetch double sees the request's headers") {
-      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: "" });
+      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: "", setCookies: [] });
     }
     throw new globalThis.Error("bynk: no stub clause matched for Fetch.send");
   }

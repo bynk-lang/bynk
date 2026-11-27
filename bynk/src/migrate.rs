@@ -337,7 +337,10 @@ fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
         },
     );
     let scratch = std::env::temp_dir().join(format!("bynk-migrate-{}", std::process::id()));
-    let api = crate::cloudflare::Wrangler::new(&probe.provenance, &scratch);
+    let api = crate::cloudflare::Account::new(crate::cloudflare::Wrangler::new(
+        &probe.provenance,
+        &scratch,
+    ));
     let secrets = live::WranglerSecrets {
         api: &api,
         scratch: scratch.clone(),

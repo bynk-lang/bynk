@@ -1,0 +1,3 @@
+bynk.types.float_literal_pattern a `Float` can't be matched against the literal `0.1`
+bynk.types.float_literal_pattern a `Float` can't be matched against the literal `0.5`
+bynk.types.float_literal_pattern a `Float` can't be matched against the literal `-1.5`

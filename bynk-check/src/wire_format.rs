@@ -84,6 +84,15 @@ pub use bynk_project::env_protocol::CALL_FROM_PREFIX as EDGE_FROM_PREFIX;
 /// [`edge_key_to`].
 pub use bynk_project::env_protocol::CALL_TO_PREFIX as EDGE_TO_PREFIX;
 
+/// #4526: the callee's second verification slot for an edge, [`edge_key_from_slot2`].
+pub use bynk_project::env_protocol::CALL_FROM_SLOT2_PREFIX as EDGE_FROM_SLOT2_PREFIX;
+
+/// #4526: the secret marking the callee's first slot as retiring, [`edge_until`].
+pub use bynk_project::env_protocol::CALL_UNTIL_PREFIX as EDGE_UNTIL_PREFIX;
+
+/// #4526: the secret marking the callee's second slot as retiring, [`edge_until_slot2`].
+pub use bynk_project::env_protocol::CALL_UNTIL_SLOT2_PREFIX as EDGE_UNTIL_SLOT2_PREFIX;
+
 /// State-migrations S4 (#2259 Decision D): the prefix of `bynk migrate
 /// sweep`'s wake route, `/_bynk/migrate/<Class>`. Not part of the published
 /// call wire format: only the toolchain calls it.
@@ -127,6 +136,24 @@ pub fn edge_suffix(context: &str) -> Option<String> {
 /// [`CALLER_HEADER`], so an undeclared caller finds no key and is refused.
 pub fn edge_key_from(caller: &str) -> Option<String> {
     edge_suffix(caller).map(|s| format!("{EDGE_FROM_PREFIX}{s}"))
+}
+
+/// #4526: the callee's **second** slot for calls from `caller`
+/// (`BYNK_CALL_FROM2_SHOP__ORDERS`): the other place a key for the same edge may sit, so a
+/// rotation can add the new key without reading the old one back. Verified under as the first is.
+pub fn edge_key_from_slot2(caller: &str) -> Option<String> {
+    edge_suffix(caller).map(|s| format!("{EDGE_FROM_SLOT2_PREFIX}{s}"))
+}
+
+/// #4526: the secret that marks the callee's first slot for `caller` as retiring
+/// (`BYNK_CALL_UNTIL_SHOP__ORDERS`): the instant after which that slot is not verified under.
+pub fn edge_until(caller: &str) -> Option<String> {
+    edge_suffix(caller).map(|s| format!("{EDGE_UNTIL_PREFIX}{s}"))
+}
+
+/// #4526: [`edge_until`] for the second slot.
+pub fn edge_until_slot2(caller: &str) -> Option<String> {
+    edge_suffix(caller).map(|s| format!("{EDGE_UNTIL_SLOT2_PREFIX}{s}"))
 }
 
 /// I2 (#1971): the secret the **caller** holds for calls to `callee`

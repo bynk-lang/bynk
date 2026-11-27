@@ -392,6 +392,8 @@ impl Lowering<'_, '_> {
     fn lower(&self, pat: &Pattern, ty: TyId, prior: bool) -> Option<Pat> {
         match pat {
             Pattern::Wildcard(_) | Pattern::Binding(_) => Some(Pat::Wild),
+            // #3971: `as` binds; it never narrows what its pattern matches.
+            Pattern::As { inner, .. } => self.lower(inner, ty, prior),
             Pattern::Refined { inner, .. } => {
                 if prior {
                     Some(Pat::Never)
@@ -411,7 +413,7 @@ impl Lowering<'_, '_> {
                 (Space::Int, LiteralValue::Int(v)) => {
                     Some(Pat::Ctor(Constructor::IntRange(*v, *v), Vec::new()))
                 }
-                (Space::Infinite, LiteralValue::Str(_)) => {
+                (Space::Infinite, LiteralValue::Str(_) | LiteralValue::Decimal { .. }) => {
                     Some(Pat::Ctor(Constructor::Literal(value.clone()), Vec::new()))
                 }
                 _ => None,

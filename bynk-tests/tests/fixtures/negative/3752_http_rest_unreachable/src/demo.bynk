@@ -1,0 +1,13 @@
+context demo
+
+// #3752 (D5): two rests at one position have one shape, so the second spelt is
+// never reached, as for `:name`.
+service api from http {
+  on GET("/a/*x") (x: String) -> Effect[HttpResult[String]] by Visitor {
+    Ok(x)
+  }
+
+  on GET("/a/*y") (y: String) -> Effect[HttpResult[String]] by Visitor {
+    Ok(y)
+  }
+}

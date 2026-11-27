@@ -23,6 +23,37 @@ pub(in crate::emitter) fn literal_label_node(value: &LiteralValue) -> bynk_ts::T
         LiteralValue::Int(n) => num_lit(n.to_string()),
         LiteralValue::Str(s) => TsExpr::Lit(TsLit::Str(s.clone())),
         LiteralValue::Bool(b) => TsExpr::Lit(TsLit::Bool(*b)),
+        // A `Decimal` arm is never a `case` label: it routes through the if-chain, which tests
+        // it by value (`literal_test`), and a `Float` literal pattern is a compile error.
+        LiteralValue::Decimal { .. } | LiteralValue::Float(_) => {
+            unreachable!("a Decimal or Float literal pattern has no case label")
+        }
+    }
+}
+
+/// The test for a literal pattern against the value at `path`: `===` for an `Int`, `String` or
+/// `Bool`, and `__bynkDecimalEqual` for a `Decimal`, which compares by value (`20d` matches
+/// `20.0d`, #3973).
+fn literal_test(path: &PatPath, value: &LiteralValue, cx: &LowerCtx) -> bynk_ts::TsExpr {
+    match value {
+        LiteralValue::Decimal { coef, scale } => {
+            cx.note_decimal("__bynkDecimalEqual");
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(ident("__bynkDecimalEqual")),
+                args: vec![
+                    path.node().clone(),
+                    super::literal::decimal_lit(coef, *scale),
+                ],
+            }
+        }
+        LiteralValue::Int(_)
+        | LiteralValue::Str(_)
+        | LiteralValue::Bool(_)
+        | LiteralValue::Float(_) => path_test(
+            path,
+            bynk_ts::TsBinaryOp::StrictEq,
+            literal_label_node(value),
+        ),
     }
 }
 
@@ -145,13 +176,8 @@ pub(in crate::emitter) fn pattern_tests(
     let tys = cx.ty_render();
     match pattern {
         Pattern::Wildcard(_) | Pattern::Binding(_) => {}
-        Pattern::Literal { value, .. } => {
-            tests.push(path_test(
-                path,
-                TsBinaryOp::StrictEq,
-                literal_label_node(value),
-            ));
-        }
+        Pattern::As { inner, .. } => pattern_tests(path, path_ty, inner, cx, tests),
+        Pattern::Literal { value, .. } => tests.push(literal_test(path, value, cx)),
         // #2699: `x >= lo && x <= hi`, or the one side an open range has.
         Pattern::Range(r) => {
             if let Some(lo) = r.lo {
@@ -351,6 +377,13 @@ pub(in crate::emitter) fn emit_pattern_bindings(
             let local = cx.bind_local_name(&id.name);
             body.push(const_binding(&local, path.node().clone()));
         }
+        // #3971: `p as name` binds the value at `path`, then whatever `p`
+        // binds inside it.
+        Pattern::As { inner, name, .. } => {
+            let local = cx.bind_local_name(&name.name);
+            body.push(const_binding(&local, path.node().clone()));
+            emit_pattern_bindings(body, path, path_ty, inner, cx);
+        }
         // #472: a refined pattern binds only what its inner pattern binds
         // (`_ where P` binds nothing today).
         Pattern::Refined { inner, .. } => {
@@ -530,6 +563,10 @@ fn pattern_binding_paths(
     match pattern {
         Pattern::Wildcard(_) | Pattern::Literal { .. } | Pattern::Range(_) => {}
         Pattern::Binding(id) => out.push((id.name.clone(), path.node().clone())),
+        Pattern::As { inner, name, .. } => {
+            out.push((name.name.clone(), path.node().clone()));
+            pattern_binding_paths(path, path_ty, inner, cx, out);
+        }
         Pattern::Variant {
             variant, bindings, ..
         } => {

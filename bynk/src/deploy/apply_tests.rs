@@ -36,8 +36,8 @@ const ENVIRONMENTS: [&str; 2] = ["default", "staging"];
 /// small account kept in `state/` (the indexes, their metadata indexes and the queues), exactly
 /// as the stand-in did, so the fixtures are unchanged.
 fn account(root: PathBuf) -> crate::cloudflare::fake::Recording {
-    use crate::cloudflare::Op;
     use crate::cloudflare::fake::{Recording, failed};
+    use crate::cloudflare::{CloudflareError, Op};
     Recording::new(move |op| {
         let n = calls_so_far(&root) + 1;
         std::fs::write(root.join("n"), format!("{n}\n")).unwrap();
@@ -47,11 +47,26 @@ fn account(root: PathBuf) -> crate::cloudflare::fake::Recording {
         std::fs::write(root.join("calls.log"), log).unwrap();
         if std::fs::read_to_string(root.join("fail_at")).is_ok_and(|at| at.trim().parse() == Ok(n))
         {
-            return Err(failed(
+            // A KV call is a REST call since 1D.4a, R2's and D1's since 1D.4b and Vectorize's
+            // since 1D.4c: each fails as Hyperdrive's stand-in does.
+            if matches!(
                 op,
-                "",
-                &format!("✘ [ERROR] the stand-in failed call {n}\n"),
-            ));
+                Op::KvCreate { .. }
+                    | Op::KvList
+                    | Op::KvDelete { .. }
+                    | Op::D1Create { .. }
+                    | Op::D1List
+                    | Op::R2Create { .. }
+                    | Op::R2Owned { .. }
+                    | Op::Vectorize(_)
+            ) {
+                return Err(CloudflareError::Other(format!(
+                    "Cloudflare answered 500 to call {n}"
+                )));
+            }
+            return Err(
+                failed(op, "", &format!("✘ [ERROR] the stand-in failed call {n}\n")).into(),
+            );
         }
         let state = root.join("state");
         let at = |file: String| state.join(file);
@@ -117,7 +132,7 @@ fn account(root: PathBuf) -> crate::cloudflare::fake::Recording {
             }
             Op::QueueInfo { name } => {
                 if !at(format!("queue.{name}")).exists() {
-                    return Err(failed(op, "", ""));
+                    return Err(failed(op, "", "").into());
                 }
                 String::new()
             }
@@ -528,6 +543,8 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
                         source: &source,
                         force: false,
                         edge_keys: &edge_keys,
+                        expired: &std::collections::BTreeMap::new(),
+                        cleaned: &std::cell::RefCell::new(std::collections::BTreeSet::new()),
                         foreign_keys: &foreign_keys,
                         foreign_secrets: &foreign_secrets,
                         listed: &listed,

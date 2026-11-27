@@ -52,7 +52,7 @@ A [`D1` instance](/reference/bynk-capabilities/#sql-databases-d1) takes it too:
 capability Orders = D1 @jurisdiction("eu")
 ```
 
-`bynk deploy` creates the database with `wrangler d1 create --jurisdiction eu` and records the jurisdiction
+`bynk deploy` creates the database in the `eu` jurisdiction through Cloudflare's API and records the jurisdiction
 in `bynk.deploy.lock`. A database's jurisdiction is fixed when it is made, so adding or changing the
 annotation on a database that is already provisioned is refused, and the plan never recreates it: it holds
 data. Keep the annotation the database was made with, or create a new `D1` capability, move the data

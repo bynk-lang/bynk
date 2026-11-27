@@ -189,6 +189,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
         Some(Callee::D1Select { row, .. }) => vec![*row],
         // #4105: a typed Analytics read decodes its rows.
         Some(Callee::AnalyticsSelect { row, .. }) => vec![*row],
+        // #4099: `Ai.generateValue[T]` decodes the reply as `T`.
+        Some(Callee::AiGenerateValue { value, .. }) => vec![*value],
         // #4101: a typed Vectorize read decodes each match's metadata.
         Some(Callee::VectorValueRead { meta, .. }) => vec![*meta],
         Some(
@@ -535,7 +537,7 @@ fn walk_expr_for_constraints(
             // reported where they wrote it — at the pattern, below.
             let hidden_record = matches!(&discriminant.kind, ExprKind::Ident(i) if bynk_syntax::ast::is_generated_binding(&i.name))
                 && matches!(
-                    arms.first().map(|a| &a.pattern),
+                    arms.first().map(|a| a.pattern.peel_as()),
                     Some(Pattern::Record { .. })
                 );
             if !hidden_record && let Some(ty) = typed.expr_ty(discriminant.id).as_deref() {
@@ -626,7 +628,9 @@ fn opaque_record_patterns(
                 opaque_record_patterns(a, consumed, top, errors);
             }
         }
-        Pattern::Refined { inner, .. } => opaque_record_patterns(inner, consumed, top, errors),
+        Pattern::Refined { inner, .. } | Pattern::As { inner, .. } => {
+            opaque_record_patterns(inner, consumed, top, errors)
+        }
         Pattern::Wildcard(_)
         | Pattern::Binding(_)
         | Pattern::Literal { .. }
@@ -685,34 +689,13 @@ pub fn check_context_declarations(
     let mut errors = Vec::new();
     let no_vars: HashSet<String> = HashSet::new();
 
-    // Build a resolved-commons snapshot for the per-handler checker.
-    // We synthesise a ResolvedCommons by reusing typed.types / typed.fns /
-    // typed.methods; the resolver wouldn't add anything new. `ResolvedCommons::new`
-    // derives `local_type_names`/`event_type_names` from `table` — the
-    // *pre-merge* local table — rather than `typed.types` (already
-    // local+uses+consumes merged); see its doc comment for why that
-    // distinction matters (owner-only emission, spine #936).
-    let resolved = ResolvedCommons::new(
-        typed.commons.clone(),
-        typed.types.clone(),
-        &table.types,
-        typed.fns.clone(),
-        typed.methods.clone(),
-        table.agents.clone(),
-        &table.events,
-        cross_context.clone(),
-        HashMap::new(),
+    let resolved = declarations_resolved(
+        typed,
+        table,
+        cross_context,
         is_context,
-        uses_commons_type_names.clone(),
-    )
-    .with_local_fns(&table.fns)
-    // #1883, slice 1a: a handler body sees the unit's assets too.
-    .with_assets(typed.assets.clone())
-    .with_embeds(typed.embeds.clone())
-    .with_consts(typed.consts.clone())
-    .with_shadowed_imports(typed.shadowed_imports.clone())
-    .with_scope_facts_of(typed)
-    .with_stability(typed.stability.clone());
+        uses_commons_type_names,
+    );
 
     // v0.25: capability operation signatures reference types.
     check_capability_decls(table, &typed.types, &no_vars, refs);
@@ -748,91 +731,8 @@ pub fn check_context_declarations(
         })
         .collect();
     // v0.17: flattened capabilities (`consumes U { Cap }`) enter the local map
-    // under their bare names, resolved from the consumed unit's exported
-    // capability so bare `given Cap` / `Cap.op(…)` type-check as if local.
-    let mut receiving_cache: Option<checker::Projection> = None;
-    for (cap, unit) in &cross_context.flattened_caps {
-        let Some(xcap) = cross_context
-            .consumed_capabilities
-            .get(unit)
-            .and_then(|m| m.get(cap))
-        else {
-            continue;
-        };
-        // #2634: an operation may name a type the unit declares but does not
-        // export (an adapter's `Token`), or one the consumer also declares.
-        // As the qualified `U.Cap.op` call does, resolve the signature against
-        // the unit's own table; a name the consumer binds to a structurally
-        // different type is refused (`bynk.boundary.structural_mismatch`)
-        // rather than read as the consumer's. The refusal is per op, at its call.
-        let unit_types = cross_context
-            .consumed_types
-            .get(unit)
-            .unwrap_or(&typed.types);
-        let (receiving, _) = receiving_cache.get_or_insert_with(|| {
-            checker::projected_types(&typed.types, &cross_context.consumed_types, tys)
-        });
-        let ops = xcap
-            .ops
-            .iter()
-            .map(|op| {
-                let vars: HashSet<String> = op.type_params.iter().cloned().collect();
-                let mut conflict: Option<(String, String, bool)> = None;
-                let mut resolve = |tr: &TypeRef, in_param: bool| {
-                    // #4111: a type the unit consumes from an adapter (`bynk.crypto`'s `Secret`)
-                    // is not in its contract view, which reads consumed contexts only, so a name
-                    // the view lacks is read as `bynk`'s own type of that name. It is resolved
-                    // against `bynk`'s declarations and never the consumer's table, where a type
-                    // of the consumer's own called `Secret` would answer to it.
-                    let (ty, signature_types) =
-                        match checker::resolve_type_ref_in(tr, unit_types, &vars, tys) {
-                            Some(ty) => (ty, unit_types),
-                            None => {
-                                match checker::resolve_type_ref_in(tr, bynk_types(), &vars, tys) {
-                                    Some(ty) => (ty, bynk_types()),
-                                    None => (tys.intern(Ty::Unit), unit_types),
-                                }
-                            }
-                        };
-                    // The same-name check reads the table the type came from, so a consumer type
-                    // called `Secret` is refused against `bynk`'s, not mistaken for it.
-                    if conflict.is_none()
-                        && let Some(name) = checker::rebrand_conflict(
-                            ty,
-                            signature_types,
-                            &typed.types,
-                            receiving,
-                            tys,
-                        )
-                    {
-                        conflict = Some((unit.clone(), name, in_param));
-                    }
-                    checker::rebrand_return_type(ty, &typed.types, tys)
-                };
-                let params = op.params.iter().map(|(_, tr)| resolve(tr, true)).collect();
-                let return_ty = resolve(&op.return_type, false);
-                CapabilityOpInfo {
-                    name: op.name.clone(),
-                    type_params: op.type_params.clone(),
-                    params,
-                    param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
-                    return_ty,
-                    codable_params: op.codable_params.clone(),
-                    key_params: op.key_params.clone(),
-                    reply_policy: op.reply_policy,
-                    boundary_conflict: conflict,
-                }
-            })
-            .collect();
-        capability_info_map.insert(
-            cap.clone(),
-            CapabilityInfo {
-                name: cap.clone(),
-                ops,
-                derived_from: None,
-            },
-        );
-    }
+    // under their bare names.
+    capability_info_map.extend(flattened_capability_infos(typed, cross_context, tys));
 
     check_provider_decls(
         typed,
@@ -1258,6 +1158,145 @@ fn check_provider_decls(
     // a cycle — the composition root cannot instantiate one in dependency
     // order. Self-provision (`provides X = … given X`) is the trivial cycle.
     detect_provider_dependency_cycles(&table.providers, errors);
+}
+
+/// The resolved-commons snapshot the declaration checks type bodies against:
+/// `typed`'s merged tables with the unit's local ones. Shared by a context's
+/// declarations and (#3959) a commons' `given` functions.
+pub(crate) fn declarations_resolved(
+    typed: &checker::TypedCommons,
+    table: &UnitTable,
+    cross_context: &resolver::CrossContextInfo,
+    is_context: bool,
+    uses_commons_type_names: &HashSet<String>,
+) -> ResolvedCommons {
+    // Build a resolved-commons snapshot for the per-handler checker.
+    // We synthesise a ResolvedCommons by reusing typed.types / typed.fns /
+    // typed.methods; the resolver wouldn't add anything new. `ResolvedCommons::new`
+    // derives `local_type_names`/`event_type_names` from `table` — the
+    // *pre-merge* local table — rather than `typed.types` (already
+    // local+uses+consumes merged); see its doc comment for why that
+    // distinction matters (owner-only emission, spine #936).
+    ResolvedCommons::new(
+        typed.commons.clone(),
+        typed.types.clone(),
+        &table.types,
+        typed.fns.clone(),
+        typed.methods.clone(),
+        table.agents.clone(),
+        &table.events,
+        cross_context.clone(),
+        HashMap::new(),
+        is_context,
+        uses_commons_type_names.clone(),
+    )
+    .with_local_fns(&table.fns)
+    // #1883, slice 1a: a handler body sees the unit's assets too.
+    .with_assets(typed.assets.clone())
+    .with_embeds(typed.embeds.clone())
+    .with_consts(typed.consts.clone())
+    .with_shadowed_imports(typed.shadowed_imports.clone())
+    .with_scope_facts_of(typed)
+    .with_stability(typed.stability.clone())
+}
+
+/// v0.17: the capabilities a unit flattens in with `consumes U { Cap }`, by
+/// bare name, resolved from the consumed unit's exported capability so bare
+/// `given Cap` / `Cap.op(…)` type-check as if local. #3959: a commons' braced
+/// `consumes` of a first-party unit's capabilities reaches them the same way.
+pub(crate) fn flattened_capability_infos(
+    typed: &checker::TypedCommons,
+    cross_context: &resolver::CrossContextInfo,
+    tys: &Arc<Types>,
+) -> HashMap<String, CapabilityInfo> {
+    // v0.17: flattened capabilities (`consumes U { Cap }`) enter the local map
+    // under their bare names, resolved from the consumed unit's exported
+    // capability so bare `given Cap` / `Cap.op(…)` type-check as if local.
+    let mut out: HashMap<String, CapabilityInfo> = HashMap::new();
+    let mut receiving_cache: Option<checker::Projection> = None;
+    for (cap, unit) in &cross_context.flattened_caps {
+        let Some(xcap) = cross_context
+            .consumed_capabilities
+            .get(unit)
+            .and_then(|m| m.get(cap))
+        else {
+            continue;
+        };
+        // #2634: an operation may name a type the unit declares but does not
+        // export (an adapter's `Token`), or one the consumer also declares.
+        // As the qualified `U.Cap.op` call does, resolve the signature against
+        // the unit's own table; a name the consumer binds to a structurally
+        // different type is refused (`bynk.boundary.structural_mismatch`)
+        // rather than read as the consumer's. The refusal is per op, at its call.
+        let unit_types = cross_context
+            .consumed_types
+            .get(unit)
+            .unwrap_or(&typed.types);
+        let (receiving, _) = receiving_cache.get_or_insert_with(|| {
+            checker::projected_types(&typed.types, &cross_context.consumed_types, tys)
+        });
+        let ops = xcap
+            .ops
+            .iter()
+            .map(|op| {
+                let vars: HashSet<String> = op.type_params.iter().cloned().collect();
+                let mut conflict: Option<(String, String, bool)> = None;
+                let mut resolve = |tr: &TypeRef, in_param: bool| {
+                    // #4111: a type the unit consumes from an adapter (`bynk.crypto`'s `Secret`)
+                    // is not in its contract view, which reads consumed contexts only, so a name
+                    // the view lacks is read as `bynk`'s own type of that name. It is resolved
+                    // against `bynk`'s declarations and never the consumer's table, where a type
+                    // of the consumer's own called `Secret` would answer to it.
+                    let (ty, signature_types) =
+                        match checker::resolve_type_ref_in(tr, unit_types, &vars, tys) {
+                            Some(ty) => (ty, unit_types),
+                            None => {
+                                match checker::resolve_type_ref_in(tr, bynk_types(), &vars, tys) {
+                                    Some(ty) => (ty, bynk_types()),
+                                    None => (tys.intern(Ty::Unit), unit_types),
+                                }
+                            }
+                        };
+                    // The same-name check reads the table the type came from, so a consumer type
+                    // called `Secret` is refused against `bynk`'s, not mistaken for it.
+                    if conflict.is_none()
+                        && let Some(name) = checker::rebrand_conflict(
+                            ty,
+                            signature_types,
+                            &typed.types,
+                            receiving,
+                            tys,
+                        )
+                    {
+                        conflict = Some((unit.clone(), name, in_param));
+                    }
+                    checker::rebrand_return_type(ty, &typed.types, tys)
+                };
+                let params = op.params.iter().map(|(_, tr)| resolve(tr, true)).collect();
+                let return_ty = resolve(&op.return_type, false);
+                CapabilityOpInfo {
+                    name: op.name.clone(),
+                    type_params: op.type_params.clone(),
+                    params,
+                    param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
+                    return_ty,
+                    codable_params: op.codable_params.clone(),
+                    key_params: op.key_params.clone(),
+                    reply_policy: op.reply_policy,
+                    boundary_conflict: conflict,
+                }
+            })
+            .collect();
+        out.insert(
+            cap.clone(),
+            CapabilityInfo {
+                name: cap.clone(),
+                ops,
+                derived_from: None,
+            },
+        );
+    }
+    out
 }
 
 /// #2868: type-check this file's context functions that declare `given`. They
@@ -3772,7 +3811,7 @@ fn check_unreachable_routes(table: &UnitTable, errors: &mut Vec<CompileError>) {
             ),
         )
         .with_note(
-            "at the first segment where two routes differ, a literal segment beats a `:name` one; remove this route, or make it match a path the others do not",
+            "at the first segment where two routes differ, a literal segment beats a `:name` one, and a `:name` beats a `*name` rest; remove this route, or make it match a path the others do not",
         );
         for c in covering {
             err = err.with_label(
@@ -3846,6 +3885,7 @@ fn check_service_decls(
     }
 
     check_unreachable_routes(table, errors);
+    crate::http_rest::check_rest_routes(table, &typed.stability, errors);
 
     // v0.140 (ADR 0163): validate handler-position annotations (`@cache`) across
     // every handler — services and agents — so a misplaced annotation is caught
@@ -5429,6 +5469,7 @@ fn validate_service_cors(service: &ServiceDecl, table: &UnitTable, errors: &mut 
     }
     check_ws_cookie_origins(service, table, errors);
     warn_cross_site_cookie_without_credentials(service, errors);
+    warn_issue_on_safe_method(service, table, errors);
 }
 
 /// #3904 (`bynk.ws.cookie_needs_origins`): a `from websocket` service whose `on open` authenticates a
@@ -5512,6 +5553,45 @@ fn check_ws_cookie_origins(
                 "a browser sends the cookie on a cross-site upgrade by itself and a WebSocket is not covered by CORS, so the upgrade is refused with `403` unless its `Origin` is exactly one of these origins; a wildcard would admit every site",
             ),
         );
+    }
+}
+
+/// #3825 (`bynk.actor.signed_cookie_issue_on_safe_method`, a warning): a `GET` that issues a session. A
+/// state-changing route that issues one is checked for login CSRF by fetch metadata and the service's
+/// `cors` origins, which a `GET` is outside of (a link click, a prefetch, an `<img>` all send one), so a
+/// sign-in done as a `GET` is unprotected. Steer the author to `POST`.
+fn warn_issue_on_safe_method(
+    service: &ServiceDecl,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    for handler in &service.handlers {
+        if !matches!(
+            handler.kind,
+            HandlerKind::Http {
+                method: bynk_syntax::ast::HttpMethod::Get,
+                ..
+            }
+        ) {
+            continue;
+        }
+        // A `GET` guarded by a `SignedCookie` actor (a sliding session that re-issues its caller's own
+        // identity) has nothing to plant: the caller already has the session.
+        if crate::actors::signed_cookie_seam_for(handler, &table.actors).is_some() {
+            continue;
+        }
+        for actor in crate::actors::issued_cookie_actors(handler, &table.actors) {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.signed_cookie_issue_on_safe_method",
+                    handler.span,
+                    format!("this `GET` route issues a `{actor}` session, so it is not checked for login CSRF"),
+                )
+                .with_note(
+                    "a route that issues a session and is not a `GET` is refused when its request is cross-site (by fetch metadata, then `Origin` against the service's `cors` origins); a `GET` is outside that check, so a hostile page can make a signed-out visitor's browser sign in as someone else. Issue the session from a `POST`",
+                ),
+            );
+        }
     }
 }
 
@@ -6606,8 +6686,9 @@ fn check_rejected_handlers(table: &UnitTable, errors: &mut Vec<CompileError>) {
 }
 
 /// #3753: `*`, `{` and `}` are reserved in a route segment, literal or
-/// `:name`, so a rest-segment form (#3752) can be added later without changing
-/// what an existing route means. Reports the segment's first reserved
+/// `:name`, so a route form can be added later without changing what an
+/// existing route means. #3752 spent `*` on a final `*name` rest, which the
+/// caller reads before asking here. Reports the segment's first reserved
 /// character, once, and returns whether it found one, so the caller skips the
 /// segment rather than also reporting a parameter named `key*`.
 fn reserved_route_char(
@@ -6625,7 +6706,9 @@ fn reserved_route_char(
             handler.span,
             format!("`{ch}` in the route `{path}` is reserved for a future route form"),
         )
-        .with_note(if seg.starts_with(':') {
+        .with_note(if ch == '*' {
+            "a rest segment is `*` and then a name, and only as the route's whole last segment (`/files/*key`)".to_string()
+        } else if seg.starts_with(':') {
             format!("drop `{ch}` from the parameter's name: a `:name` segment already takes any value, so check it in the handler")
         } else {
             format!("to match a literal `{ch}`, take the segment as a `:name` parameter and check it in the handler")
@@ -6706,7 +6789,20 @@ fn validate_http_handler(
     // #3753: a refused route has no reliable parameter list, so its handler
     // parameters are not also reported as unbound (`extra_param`).
     let mut refused = false;
-    for seg in path.split('/').filter(|s| !s.is_empty()) {
+    let segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    for (i, seg) in segs.iter().copied().enumerate() {
+        // #3752 (D2): a final `*name` is a rest, bound like a parameter; a final
+        // bare `*` is `bynk.http.rest_unnamed` (`crate::http_rest`).
+        if i + 1 == segs.len() {
+            if let Some(name) = crate::http_rest::rest_name(seg) {
+                path_param_names.push(name);
+                continue;
+            }
+            if crate::http_rest::is_unnamed_rest(seg) {
+                refused = true;
+                continue;
+            }
+        }
         if reserved_route_char(seg, path, handler, errors) {
             refused = true;
             continue;
@@ -6729,7 +6825,14 @@ fn validate_http_handler(
             errors.push(CompileError::new(
                 "bynk.http.unbound_path_param",
                 handler.span,
-                format!("path parameter `:{name}` has no matching handler parameter `{name}`",),
+                format!(
+                    "path parameter `{}{name}` has no matching handler parameter `{name}`",
+                    if crate::http_rest::rest_name(path) == Some(name) {
+                        "*"
+                    } else {
+                        ":"
+                    },
+                ),
             ));
         }
     }
@@ -6831,7 +6934,9 @@ fn validate_http_handler(
         }
         // #3910: a path parameter reads as a typed `query` field does, minus `Option`
         // and `List` (a segment is always present and single-valued).
-        if is_path && !is_query_leaf(&p.type_ref, types) {
+        // #3752: a rest's type is `bynk.http.rest_param_type`'s concern.
+        let is_rest = is_path && crate::http_rest::rest_name(path) == Some(p.name.name.as_str());
+        if is_path && !is_rest && !is_query_leaf(&p.type_ref, types) {
             errors.push(
                 CompileError::new(
                     "bynk.http.path_param_not_stringy",

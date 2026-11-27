@@ -1,0 +1,3 @@
+# At the match: its arms list every `HttpResult` variant today, inside `Option`.
+# exact
+bynk.types.extensible_match_needs_wildcard	app/probe.bynk:6:2

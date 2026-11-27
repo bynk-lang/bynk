@@ -3,6 +3,8 @@
 //!
 //! - [`api`]: [`CloudflareApi`], one method per account operation, and [`Op`], which names each
 //!   call and renders its wrangler arguments.
+//! - [`account`]: [`Account`], the one implementation a run uses, which routes each operation to
+//!   its transport (1D.4, #4056).
 //! - [`process`]: [`Wrangler`], the adapter that runs each operation as a wrangler process.
 //! - [`error`]: [`WranglerError`], whose text is what bynk printed before the move, byte for
 //!   byte, and which is the one place wrangler's prose is read ("already exists", "already
@@ -19,6 +21,7 @@
 //! 1D.4 then moves each resource operation to REST behind these same methods, so a kind does not
 //! change when its transport does.
 
+pub(crate) mod account;
 pub(crate) mod api;
 pub(crate) mod error;
 #[cfg(test)]
@@ -28,9 +31,12 @@ pub(crate) mod process;
 pub(crate) mod rest;
 pub(crate) mod retry;
 
+pub(crate) use account::Account;
 #[cfg(test)]
 pub(crate) use api::Op;
-pub(crate) use api::{CloudflareApi, PushCall, VectorizeOp};
+#[cfg(test)]
+pub(crate) use api::VectorizeOp;
+pub(crate) use api::{CloudflareApi, PushCall};
 #[cfg(test)]
 pub(crate) use error::WranglerError;
 pub(crate) use error::{CloudflareError, Exit, Failure, push_lost_its_upload};
