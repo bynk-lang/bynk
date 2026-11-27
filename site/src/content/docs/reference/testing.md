@@ -716,6 +716,9 @@ On a route an **`ApiKey`** actor guards, `by Client("acct-7")` at `system` prese
 the harness mints one for the identity into the participant's in-process key store, under the
 suite's [`env`](#env) entry for the actor's pepper (else a fixed test pepper), once per identity
 per run, so the real seam verifies it. Below `system` the identity is given, as for every actor.
+A case that revokes that identity's keys (`revokeAll`, or `revoke` of the one key) then presents
+the same key again, so the seam refuses it: that is how a case checks a revoked key is refused on
+the next request.
 
 Eleven reserved principals drive the failures. Each yields the same
 [`HttpOutcome[T]`](#httpoutcome) as a `Wire` call, with the seam's `401` as
@@ -731,15 +734,15 @@ Eleven reserved principals drive the failures. Each yields the same
 | `by WrongAudience` | an `Oidc` or `Bearer` token correctly signed and unexpired, whose `aud` is not the actor's audience | a route with an `Oidc` actor, or a single `Bearer` actor that declares an `audience` |
 | `by WrongAlgorithm` | two otherwise valid `Oidc` tokens under an algorithm the seam must refuse: one with `alg: none` (no signature), and one `HS256`-signed with the JWKS public key as the HMAC secret (algorithm confusion) | a route with an `Oidc` actor |
 | `by NoSubject` | two correctly signed, unexpired `Oidc` tokens with a `sub` the seam must refuse: one empty, one absent | a route with an `Oidc` actor |
-| `by Revoked` | a `SignedCookie` cookie correctly signed and unexpired, for a session that was issued and then revoked in the actor's session agent (`revokeAll`) | a route with a single `SignedCookie` actor declared with `sessions = true` |
+| `by Revoked` | a `SignedCookie` cookie correctly signed and unexpired, for a session that was issued and then revoked in the actor's session agent (`revokeAll`); on an `ApiKey` route, a key minted and then revoked (`revoke`) | a route with a single `SignedCookie` actor declared with `sessions = true`, or a single `ApiKey` actor |
 | `by Malformed` | a key with the actor's prefix and a bad checksum, which the seam refuses before any lookup | a route with a single `ApiKey` actor |
 | `by Unknown` | two well-formed keys that were never minted: a key number its store never held, and a handle no store holds | a route with a single `ApiKey` actor |
 
 On an `ApiKey` route the driver also counts the key store's comparisons, and fails the case unless
 the seam did the work its contract says: none for `by Malformed`, one against a fixed dummy hash for
-each `by Unknown` key, and one against the record for `by Forged`. So "an unknown key costs the same
-as a wrong one" is pinned by every run, not by timing. `Malformed`, `Unknown` and `Forged` get
-byte-identical responses.
+each `by Unknown` key and for `by Revoked` (revoking deletes the record), and one against the record
+for `by Forged`. So "an unknown key costs the same as a wrong one" is pinned by every run, not by
+timing. `Malformed`, `Unknown`, `Forged` and `Revoked` get byte-identical responses.
 
 On an [actor sum](/book/guides/actors/multiple-callers/) a bad credential is presented to
 one member's seam, so the principal names the member in parentheses:
@@ -769,7 +772,7 @@ route with no `Oidc` actor is `bynk.test.wrong_issuer_needs_oidc_route`,
 `bynk.test.wrong_audience_needs_oidc_route`,
 `bynk.test.wrong_algorithm_needs_oidc_route` or
 `bynk.test.no_subject_needs_oidc_route`. `by Revoked` on a route without a `sessions = true`
-`SignedCookie` actor is `bynk.test.revoked_needs_sessions_route`. `by Malformed` or `by Unknown`
+`SignedCookie` actor or an `ApiKey` actor is `bynk.test.revoked_needs_sessions_route`. `by Malformed` or `by Unknown`
 on a route without an `ApiKey` actor is `bynk.test.key_principal_needs_api_key_route`, and
 `by Expired` on an `ApiKey` route is `bynk.test.expired_needs_bearer_route`, since keys do not
 expire yet.

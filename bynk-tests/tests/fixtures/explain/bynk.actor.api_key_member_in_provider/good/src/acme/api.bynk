@@ -1,0 +1,14 @@
+context acme.api
+
+consumes bynk { ApiKeyId }
+
+type AccountId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER"), identity = AccountId }
+
+service api from http {
+	on DELETE("/accounts/:id/keys/:key") (id: AccountId, key: ApiKeyId) -> Effect[HttpResult[()]] by Visitor {
+		let gone <- Client.revoke(id, key)
+		if gone { NoContent } else { NotFound }
+	}
+}

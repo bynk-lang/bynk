@@ -456,6 +456,58 @@ export async function mintApiKey<R>(
 }
 
 // ---------------------------------------------------------------------------------------------
+// `Actor.list(identity)`, `Actor.revoke(identity, id)` and `Actor.revokeAll(identity)` (slice 2)
+// ---------------------------------------------------------------------------------------------
+
+/** An `Option[String]` as an agent call answers it. */
+type HandleOption = { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" };
+
+/**
+ * `list`: the identity's keys, as `ApiKeyInfo` values, from its current store's labels and
+ * creation times. No handle, or a retired store, is no keys. Only a key in both maps is listed,
+ * so a key revoked between the two reads is left out, never half-shown. Never a secret or a digest.
+ */
+export async function apiKeyList<R>(
+  prefix: string,
+  handle: HandleOption,
+  labelsOf: (handle: string) => Promise<ReadonlyMap<string, string>>,
+  createdOf: (handle: string) => Promise<ReadonlyMap<string, number>>,
+): Promise<R> {
+  if (handle.tag !== "Some") return [] as unknown as R;
+  const h = handle.value;
+  const labels = await labelsOf(h);
+  const created = await createdOf(h);
+  const out: unknown[] = [];
+  for (const [keyNo, label] of labels) {
+    const at = created.get(keyNo);
+    if (at === undefined) continue;
+    out.push({
+      id: apiKeyIdOf(prefix, h, keyNo),
+      label,
+      created: at,
+      expires: { tag: "None" },
+      lastUsed: { tag: "None" },
+    });
+  }
+  return out as unknown as R;
+}
+
+/**
+ * `revoke`: `false` for an id that is not one of this actor's (a bad form or another prefix),
+ * else what the identity's `<Actor>KeyOwner.revoke(handle, keyNo)` answers, which is `false` for
+ * another identity's key or one already gone.
+ */
+export async function apiKeyRevoke(
+  prefix: string,
+  id: string,
+  revoke: (handle: string, keyNo: string) => Promise<boolean>,
+): Promise<boolean> {
+  const parsed = parseApiKeyId(id, prefix);
+  if (parsed === null) return false;
+  return revoke(parsed.handle, parsed.keyNo);
+}
+
+// ---------------------------------------------------------------------------------------------
 // The `system` test tier (track §10). These run only in a generated test module: they mint a real
 // key into the in-process key store, build the keys the failure principals present, and count the
 // key store's comparisons so a case can tell the seam did the same work (D3 B).
@@ -524,6 +576,20 @@ export function apiKeyBadKey(kind: string, real: string, prefix: string): string
     default:
       throw new Error(`bynk: no such bad API key \`${kind}\``);
   }
+}
+
+/** `by Revoked` (slice 2): the real key `real`, revoked through `revoke` (the participant's
+ *  in-process `<Actor>KeyOwner.revoke`) before it is presented. Revoking deletes the record, so the
+ *  seam then compares the key once against the dummy digest, as for a key never minted. */
+export async function apiKeyRevokedForTest(
+  real: string,
+  prefix: string,
+  revoke: (handle: string, keyNo: string) => Promise<boolean>,
+): Promise<string> {
+  const parsed = parseApiKey(real, prefix);
+  if (parsed === null) throw new Error("bynk: the test key is not a key of this actor");
+  await revoke(parsed.handle, parsed.keyNo);
+  return real;
 }
 
 /** The key store's comparisons so far: every `Crypto.equal`, and those against the dummy digest. */

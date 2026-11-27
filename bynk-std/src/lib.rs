@@ -1638,6 +1638,7 @@ pub const BUILTIN_EXPERIMENTAL: &[&str] = &[
 /// a unit.
 pub const BUILTIN_GATED: &[(&str, &str)] = &[
     ("bynk.ApiKeyId", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeyInfo", "bynk.actor.ApiKey"),
     ("bynk.ApiKeyLabel", "bynk.actor.ApiKey"),
     ("bynk.ApiKeySecret", "bynk.actor.ApiKey"),
     ("bynk.ApiKeyValue", "bynk.actor.ApiKey"),
@@ -1804,6 +1805,29 @@ pub fn names_first_party_item_in(units: &[Unit], path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// #3939 (slice 2, §9): what `list` answers carries no key material. `ApiKeyInfo`'s fields are
+    /// exactly these, none of them an `ApiKeyValue`, a `Secret` or bytes, so its codec cannot pick up
+    /// a secret or a digest without this pin, and its review, changing.
+    #[test]
+    fn api_key_info_holds_no_key_material() {
+        let start = BYNK_ADAPTER_SRC
+            .find("\ttype ApiKeyInfo = {")
+            .expect("`ApiKeyInfo` is declared");
+        let body = &BYNK_ADAPTER_SRC[start..];
+        let body = &body[..body.find("\n\t}").expect("the record closes")];
+        let fields: Vec<&str> = body.lines().skip(1).map(str::trim).collect();
+        assert_eq!(
+            fields,
+            [
+                "id: ApiKeyId,",
+                "label: ApiKeyLabel,",
+                "created: Instant,",
+                "expires: Option[Instant],",
+                "lastUsed: Option[Instant],",
+            ]
+        );
+    }
+
     /// #3939 (D3 B): every `bynk.crypto` binding compares through the runtime's one constant-time
     /// function, the one the `ApiKey` key store calls (`apiKeyEqual`), rather than a copy.
     #[test]

@@ -6,6 +6,7 @@ import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
 import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 
 export interface Plain {
   readonly id: string;
@@ -59,7 +60,7 @@ export const firePlain = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       return (async () => {
-        __events.push({ type: "Plain", payload: __serialise_Plain({ id: id }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Plain", payload: __serialise_Plain({ id: id }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
     })();
     if (__events.length > 0) {
@@ -75,7 +76,7 @@ export const fireMap = {
     const __result = await (async () => {
       const m: ReadonlyMap<string, number> = new globalThis.Map(new globalThis.Map<string, number>()).set("k", 7);
       return (async () => {
-        __events.push({ type: "WithMap", payload: __serialise_WithMap({ id: id, m: m }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "WithMap", payload: __serialise_WithMap({ id: id, m: m }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
     })();
     if (__events.length > 0) {
@@ -90,7 +91,7 @@ export const fireSet = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       return (async () => {
-        __events.push({ type: "WithSet", payload: __serialise_WithSet({ id: id, s: new globalThis.Set<string>(["x", "y"]) }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "WithSet", payload: __serialise_WithSet({ id: id, s: new globalThis.Set<string>(["x", "y"]) }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
     })();
     if (__events.length > 0) {
@@ -105,7 +106,7 @@ export const fireBytes = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       return (async () => {
-        __events.push({ type: "WithBytes", payload: __serialise_WithBytes({ id: id, b: new globalThis.TextEncoder().encode("hi") }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "WithBytes", payload: __serialise_WithBytes({ id: id, b: new globalThis.TextEncoder().encode("hi") }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
     })();
     if (__events.length > 0) {
@@ -120,7 +121,7 @@ export const fireOption = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       return (async () => {
-        __events.push({ type: "WithOption", payload: __serialise_WithOption({ id: id, o: Some(3) }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "WithOption", payload: __serialise_WithOption({ id: id, o: Some(3) }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
     })();
     if (__events.length > 0) {
@@ -135,7 +136,7 @@ export const fireDecimal = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       return (async () => {
-        __events.push({ type: "WithDecimal", payload: __serialise_WithDecimal({ id: id, d: { coefficient: 125n, scale: 2 } }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "WithDecimal", payload: __serialise_WithDecimal({ id: id, d: { coefficient: 125n, scale: 2 } }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
     })();
     if (__events.length > 0) {
@@ -151,22 +152,22 @@ export const fireAll = {
     const __result = await (async () => {
       const m: ReadonlyMap<string, number> = new globalThis.Map(new globalThis.Map<string, number>()).set("k", 7);
       const __r0 = await (async () => {
-        __events.push({ type: "Plain", payload: __serialise_Plain({ id: id }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Plain", payload: __serialise_Plain({ id: id }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       const __r1 = await (async () => {
-        __events.push({ type: "WithMap", payload: __serialise_WithMap({ id: id, m: m }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "WithMap", payload: __serialise_WithMap({ id: id, m: m }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       const __r2 = await (async () => {
-        __events.push({ type: "WithSet", payload: __serialise_WithSet({ id: id, s: new globalThis.Set<string>(["x", "y"]) }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "WithSet", payload: __serialise_WithSet({ id: id, s: new globalThis.Set<string>(["x", "y"]) }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       const __r3 = await (async () => {
-        __events.push({ type: "WithBytes", payload: __serialise_WithBytes({ id: id, b: new globalThis.TextEncoder().encode("hi") }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "WithBytes", payload: __serialise_WithBytes({ id: id, b: new globalThis.TextEncoder().encode("hi") }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       const __r4 = await (async () => {
-        __events.push({ type: "WithOption", payload: __serialise_WithOption({ id: id, o: Some(3) }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "WithOption", payload: __serialise_WithOption({ id: id, o: Some(3) }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return (async () => {
-        __events.push({ type: "WithDecimal", payload: __serialise_WithDecimal({ id: id, d: { coefficient: 125n, scale: 2 } }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "WithDecimal", payload: __serialise_WithDecimal({ id: id, d: { coefficient: 125n, scale: 2 } }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
     })();
     if (__events.length > 0) {
@@ -181,10 +182,10 @@ export const fireMixed = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "WithDecimal", payload: __serialise_WithDecimal({ id: id, d: { coefficient: 125n, scale: 2 } }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "WithDecimal", payload: __serialise_WithDecimal({ id: id, d: { coefficient: 125n, scale: 2 } }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return (async () => {
-        __events.push({ type: "Plain", payload: __serialise_Plain({ id: id }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Plain", payload: __serialise_Plain({ id: id }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.pub", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
     })();
     if (__events.length > 0) {

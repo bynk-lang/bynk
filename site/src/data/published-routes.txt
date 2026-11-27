@@ -1371,6 +1371,7 @@
 /reference/diagnostics/bynk.actor.api_key_bad_arg/
 /reference/diagnostics/bynk.actor.api_key_identity_not_string_constructible/
 /reference/diagnostics/bynk.actor.api_key_internal/
+/reference/diagnostics/bynk.actor.api_key_member_in_provider/
 /reference/diagnostics/bynk.actor.api_key_mint_outside_handler/
 /reference/diagnostics/bynk.actor.api_key_missing_secret/
 /reference/diagnostics/bynk.actor.api_key_prefix_shared/
@@ -1672,8 +1673,10 @@
 /reference/diagnostics/bynk.event.pattern_unknown_field/
 /reference/diagnostics/bynk.event.pattern_unknown_variant/
 /reference/diagnostics/bynk.event.pattern_variant_payload/
+/reference/diagnostics/bynk.event.queue_name_collision/
 /reference/diagnostics/bynk.event.return_not_effect_unit/
 /reference/diagnostics/bynk.event.schema_version_mismatch/
+/reference/diagnostics/bynk.event.unbounded_payload/
 /reference/diagnostics/bynk.event.unknown_annotation/
 /reference/diagnostics/bynk.event.unknown_subscription/
 /reference/diagnostics/bynk.exec.unavailable/

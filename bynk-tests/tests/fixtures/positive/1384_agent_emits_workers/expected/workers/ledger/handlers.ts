@@ -6,6 +6,7 @@ import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 
 export interface Bumped {
@@ -67,7 +68,7 @@ export class Ledger {
       const next = __state.total + amount;
       __state.total = next;
       const __r0 = await (async () => {
-        __events.push({ type: "Bumped", payload: __serialise_Bumped({ amount: amount }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ledger", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Bumped", payload: __serialise_Bumped({ amount: amount }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ledger", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return next;
     })();

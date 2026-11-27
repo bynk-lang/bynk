@@ -6,6 +6,7 @@ import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 
 export interface Placed {
@@ -74,7 +75,7 @@ export class Tally {
       const next = __state.count + 1;
       __state.count = next;
       const __r0 = await (async () => {
-        __events.push({ type: "Tallied", payload: __serialise_Tallied({ id: id }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Tallied", payload: __serialise_Tallied({ id: id }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return next;
     })();
@@ -110,7 +111,7 @@ export const place = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Placed", payload: __serialise_Placed({ id: id }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Placed", payload: __serialise_Placed({ id: id }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return __makeTally(id, deps.env).bump(id, deps);
     })();

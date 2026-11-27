@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {
+    "many": "1ee2c67f0919d1c4",
+    "one": "8418b1bf6b65964d",
+    "session": "e3c03111d35f2d9f"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "many": "Svc(\"many\",Ret(L(Rec(\"CloseInfo\",F(\"clean\",B(\"Bool\")),F(\"code\",B(\"Int\")),F(\"reason\",B(\"String\"))))))",
+    "one": "Svc(\"one\",Ret(Rec(\"CloseInfo\",F(\"clean\",B(\"Bool\")),F(\"code\",B(\"Int\")),F(\"reason\",B(\"String\")))))",
+    "session": "Svc(\"session\",Ret(Rec(\"Cookie\",F(\"domain\",O(B(\"String\")),D()),F(\"expires\",O(B(\"Instant\")),D()),F(\"httpOnly\",B(\"Bool\"),D()),F(\"maxAge\",O(B(\"Duration\")),D()),F(\"name\",B(\"String\")),F(\"partitioned\",B(\"Bool\"),D()),F(\"path\",B(\"String\"),D()),F(\"sameSite\",Sum(\"SameSite\",V(\"Lax\"),V(\"Strict\"),V(\"Unrestricted\")),D()),F(\"secure\",B(\"Bool\"),D()),F(\"value\",B(\"String\")))))"
+  }
+}

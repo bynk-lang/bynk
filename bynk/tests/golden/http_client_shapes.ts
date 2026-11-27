@@ -485,7 +485,7 @@ export type BoundaryError =
 export type __BoundaryError = BoundaryError;
 export type __JsonValue = JsonValue;
 
-/** Why a call returned no response of the route's own. Returned, never thrown. */
+/** Why a call returned no response of the route's own. Returned, never thrown (but see `CleartextCredential`). */
 export type CallFailure =
   /** A value failed a refinement (or did not fit its type) before anything was sent. */
   | { readonly kind: "Invalid"; readonly error: BoundaryError }
@@ -537,6 +537,12 @@ export interface ClientOptions {
 }
 
 /**
+ * The `fetch`es [`viaBinding`] made. A call through one never reaches the network, so the cleartext check
+ * (#4610) skips it. A private registry, not an option: nothing a caller sets can switch the check off.
+ */
+const __bindingFetches = new globalThis.WeakSet<object>();
+
+/**
  * A Cloudflare Service Binding (`env.API`), or anything with a `fetch` method that takes
  * what `fetch` does.
  */
@@ -558,7 +564,10 @@ export function viaBinding(
   binding: FetchBinding,
   baseUrl: string = "https://bynk.invalid",
 ): { readonly baseUrl: string; readonly fetch: typeof globalThis.fetch; readonly sendContract: true } {
-  return { baseUrl, sendContract: true, fetch: ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch };
+  const send = ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch;
+  // #4610: nothing leaves the Worker, whatever `baseUrl` says, so a credential on it is not exposed.
+  __bindingFetches.add(send);
+  return { baseUrl, sendContract: true, fetch: send };
 }
 
 /** What one reply of a route is. */
@@ -761,6 +770,65 @@ export function __invalid(e: unknown): CallFailure {
   };
 }
 
+/**
+ * #4610: a call that carries a credential is refused over cleartext. A bearer or OIDC token
+ * sent over `http:` or `ws:` to a host that is not this machine crosses the network readable,
+ * and anyone on the path can replay it until it expires. `__call` and the WebSocket client
+ * share this one test and one error, so the rule cannot differ between them.
+ */
+export class CleartextCredential extends globalThis.Error {
+  /** The URL without its userinfo, query or fragment: what the message prints. See [`__redactedUrl`]. */
+  readonly url: string;
+  constructor(url: string) {
+    const shown = __redactedUrl(url);
+    super(`refusing to send a credential over cleartext to ${shown}: use an \`https://\` (or \`wss://\`) base URL. Plain \`http://\` and \`ws://\` are allowed only to localhost, a *.localhost name, 127.0.0.0/8 or [::1]`);
+    this.name = "CleartextCredential";
+    this.url = shown;
+  }
+}
+
+/**
+ * `url` as an error may print it: scheme, host, port and path only. Userinfo (`user:pass@`) and a query or
+ * fragment can hold a secret (`?api_key=`, a WebSocket's route parameters), and an error is logged.
+ */
+function __redactedUrl(url: string): string {
+  const origin = (globalThis as { readonly location?: { readonly origin?: string } }).location?.origin;
+  try {
+    const parsed = origin === undefined || origin === "null" ? new globalThis.URL(url) : new globalThis.URL(url, origin);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+  } catch {
+    return "an unparseable URL";
+  }
+}
+
+/** `hostname` (a parsed URL's, so already lower-cased and with an IPv4 address in dotted form) is this machine. */
+function __isLoopbackHost(hostname: string): boolean {
+  // One trailing dot names the same host (`localhost.`).
+  const host = hostname.endsWith(".") ? hostname.slice(0, -1) : hostname;
+  if (host === "localhost" || host.endsWith(".localhost") || host === "[::1]") return true;
+  // A parsed hostname holds an IPv4 address as four decimal parts, whatever form it was written in.
+  const v4 = /^(\d{1,3})\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.exec(host);
+  return v4 !== null && v4[1] === "127";
+}
+
+/**
+ * Whether `url` (as a call will use it: the base URL resolved against `location.origin` when
+ * relative) is `http:` or `ws:` to a host that is not loopback. Decided on the parsed URL's
+ * hostname, never by a prefix, so `http://localhost.evil.com` and `http://127.0.0.1.evil.com` are
+ * remote. A URL that does not parse is left to `fetch` to reject.
+ */
+export function __cleartextRemote(url: string): boolean {
+  const origin = (globalThis as { readonly location?: { readonly origin?: string } }).location?.origin;
+  let parsed: globalThis.URL;
+  try {
+    parsed = origin === undefined || origin === "null" ? new globalThis.URL(url) : new globalThis.URL(url, origin);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "ws:") return false;
+  return !__isLoopbackHost(parsed.hostname);
+}
+
 function __url(options: ClientOptions, route: __Route, request: __Request): string {
   const params = request.params ?? {};
   const path = route.path
@@ -868,8 +936,8 @@ function __classify(route: __Route, response: globalThis.Response, text: string)
 
 /**
  * What iterating a call's `events` throws when the stream fails after its status was
- * sent (a dropped connection, an abort): the one place the client throws, because by
- * then there is no `CallFailure` left to return. `reason` is what the body rejected with.
+ * sent (a dropped connection, an abort): the only throw once a request is sent, because by
+ * then there is no `CallFailure` left to return. (A `CleartextCredential` is thrown before one is.) `reason` is what the body rejected with.
  */
 export class StreamFailure extends globalThis.Error {
   readonly reason: unknown;
@@ -1089,6 +1157,15 @@ export async function __call(
   let streamed: unknown;
   try {
     const headers = await __headers(options, init, request, route);
+    // #4610: the credential is an `Authorization` header, from the options, the init or a typed record.
+    const url = __url(options, route, request);
+    if (
+      (headers.get("authorization") ?? "") !== "" &&
+      !(options.fetch !== undefined && __bindingFetches.has(options.fetch)) &&
+      __cleartextRemote(url)
+    ) {
+      throw new CleartextCredential(url);
+    }
     const sent: globalThis.RequestInit & { duplex?: "half" } = { ...init, method: route.method, headers };
     if (options.credentials !== undefined && sent.credentials === undefined) sent.credentials = options.credentials;
     if (request.body !== undefined) sent.body = globalThis.JSON.stringify(request.body);
@@ -1099,10 +1176,12 @@ export async function __call(
       // A streamed upload needs `duplex: "half"`, and only some browsers can make one.
       if (request.raw instanceof globalThis.ReadableStream) sent.duplex = "half";
     }
-    response = await send(__url(options, route, request), sent);
+    response = await send(url, sent);
     streamed = route.streamed?.(route, response);
     text = streamed === undefined ? await response.text() : "";
   } catch (cause) {
+    // The one refusal that is thrown: nothing was sent, and no `Transport` failure would say why.
+    if (cause instanceof CleartextCredential) throw cause;
     return { kind: "Transport", cause } satisfies CallFailure;
   }
   return streamed !== undefined ? streamed : __classify(route, response, text);

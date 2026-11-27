@@ -4,6 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 
 export interface PaymentConfirmed {
   readonly orderId: string;
@@ -18,7 +19,7 @@ export const markPaid = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       return (async () => {
-        __events.push({ type: "PaymentConfirmed", payload: __serialise_PaymentConfirmed({ orderId: orderId, retryCount: None }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "commerce.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "PaymentConfirmed", payload: __serialise_PaymentConfirmed({ orderId: orderId, retryCount: None }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "commerce.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
     })();
     if (__events.length > 0) {

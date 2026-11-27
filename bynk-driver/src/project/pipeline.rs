@@ -1051,15 +1051,21 @@ pub(super) fn run_checks(
 
         // #2252: the rule `emit_boundary_helpers` roots a consumed type's
         // codecs by (#2036): imported from a context, and not declared here.
+        // #3939: a `bynk` prelude type too (`ApiKeyId`): `handlers` re-exports
+        // its codecs but binds no `<T>` value, so a path parameter of one is
+        // validated with the codec, as a consumed context's is.
         if kind == UnitKind::Context {
             let from_contexts = imported_from_kind
                 .iter()
-                .filter(|(n, k)| **k == UnitKind::Context && !local_names.contains(*n))
-                .filter(|(n, _)| {
-                    imported_from
-                        .get(*n)
-                        .and_then(|owner| unit_info.get(owner))
-                        .is_some_and(|i| i.kind == UnitKind::Context)
+                .filter(|(n, _)| !local_names.contains(*n))
+                .filter(|(n, k)| {
+                    imported_from.get(*n).is_some_and(|owner| {
+                        owner == bynk_check::firstparty::BYNK_UNIT
+                            || (**k == UnitKind::Context
+                                && unit_info
+                                    .get(owner)
+                                    .is_some_and(|i| i.kind == UnitKind::Context))
+                    })
                 })
                 .map(|(n, _)| n.clone())
                 .collect();

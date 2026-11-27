@@ -5,6 +5,7 @@ import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 
 export interface Pinged {
   readonly n: number;
@@ -18,7 +19,7 @@ export const api = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Pinged", payload: __serialise_Pinged({ n: 7 }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.emitter", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Pinged", payload: __serialise_Pinged({ n: 7 }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.emitter", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return HttpResult.Created("sent");
     })();
