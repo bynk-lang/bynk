@@ -349,3 +349,5 @@ does not run it again.
   [Stream](/reference/types/#stream).
 - Reference: [HTTP](/reference/http/) — the sibling request/response protocol, including
   [streamed responses](/reference/http/#streamed-responses).
+- Reference: [HTTP client — WebSocket services](/reference/http-client/#websocket-services) — the typed
+  `connect` that `bynk client` generates for a front end.

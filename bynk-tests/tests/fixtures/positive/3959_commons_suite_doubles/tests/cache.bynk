@@ -1,0 +1,43 @@
+---
+#3959, track §9: a commons suite binds a parameter to the kind's double, named by the kind
+(`given Store = Kv`), and stubs and observes it (`stub Kv.get`, `expect Kv.put called`); a
+shared capability's double is observed (`expect Logger.info called`); a suite-local
+instance (`capability Archive = Kv`) is a second, distinct double; and a `given` suite
+helper seeds a double.
+---
+suite lib.cache
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+capability Archive = Kv
+
+fn seed(key: String) -> Effect[()] given Kv {
+	Kv.put(key, "seeded")
+}
+
+case "the kind double is bound, stubbed and observed" {
+	stub Kv.get(_) returns None
+	let v <- remember("k", "v", given Store = Kv)
+	expect v == "v"
+	expect Kv.put called once
+	expect Logger.info called
+}
+
+case "a suite-local instance is a second, distinct double" {
+	let _ <- Kv.put("k", "v")
+	let before <- Archive.get("k")
+	expect before == None
+	let moved <- copy("k", given From = Kv, To = Archive)
+	expect moved
+	expect Archive.put called once
+	let got <- Archive.get("k")
+	expect got == Some("v")
+}
+
+case "a given suite helper seeds the kind double" {
+	let _ <- seed("k")
+	let v <- remember("k", "v", given Store = Kv)
+	expect v == "v"
+	expect Kv.put called 2 times
+}

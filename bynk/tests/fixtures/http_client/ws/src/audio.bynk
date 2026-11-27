@@ -1,0 +1,36 @@
+context audio
+
+type StreamId = opaque String
+
+// An anonymous upgrade with binary frames both ways: nothing to offer, and a `Uint8Array` in and out.
+service pipe from websocket(in: Bytes, out: Bytes) {
+  on open(stream: StreamId) -> Effect[()] by user: Visitor {
+    let _ <- Taps(stream).attach(stream, connection)
+    ()
+  }
+
+  on message(stream: StreamId, frame: Bytes) -> Effect[()] by user: Visitor {
+    let _ <- connection.send(frame)
+    ()
+  }
+
+  on close(stream: StreamId) -> Effect[()] by user: Visitor {
+    let _ <- Taps(stream).detach(stream)
+    ()
+  }
+}
+
+agent Taps {
+  key id: StreamId
+  store conns: Map[StreamId, Connection[Bytes]]
+
+  on call attach(k: StreamId, c: Connection[Bytes]) -> Effect[()] {
+    let _ <- conns.put(k, c)
+    ()
+  }
+
+  on call detach(k: StreamId) -> Effect[()] {
+    let _ <- conns.remove(k)
+    ()
+  }
+}

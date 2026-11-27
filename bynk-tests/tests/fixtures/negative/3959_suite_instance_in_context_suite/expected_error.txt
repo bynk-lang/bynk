@@ -1,0 +1,2 @@
+bynk.capability.derived_outside_context suite-local capability `Archive` is declared in a suite whose target is not a commons
+# exact

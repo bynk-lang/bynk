@@ -13,9 +13,10 @@
 //!   port one test has released and not yet used is a port another test's
 //!   `bind(":0")` may be given.
 //!
-//! [`free_port`] removes both, among callers of the helper. Every port it returns has been recorded in a
-//! process-wide set, so it is never handed out twice in one process, and a
-//! whole batch ([`free_ports`]) is bound at once so a batch is distinct.
+//! [`free_port`] removes both, among callers of the helper. Every port it returns has a claim file
+//! made for this process, and that file, not the in-memory set, is the process-wide record: this
+//! module is compiled once per `#[path]` include, so a test binary holds several copies, each with
+//! its own set (#4578). A whole batch ([`free_ports`]) is bound at once so a batch is distinct.
 //!
 //! A test that still binds `127.0.0.1:0` directly (an upstream listener it serves
 //! itself) is outside the registry, and may be given a port that was issued and
@@ -36,7 +37,8 @@
 //! which the fixed per-test bands in `system/` do not use. A port in it is
 //! tried for being bound, claimed across processes by a file in the temp
 //! directory (nextest runs each test in its own process; the claim ends with its
-//! owner, or after [`CLAIM_FOR`] where that cannot be told), and recorded in the process-wide set.
+//! owner, or after [`CLAIM_FOR`] where that cannot be told), which also refuses a port another
+//! copy of this module in the same process issued. The in-memory set is only this copy's shortcut.
 
 // Each test binary includes this whole module and uses part of it.
 #![allow(dead_code)]
@@ -55,7 +57,8 @@ const BAND: std::ops::Range<u16> = 28_000..30_000;
 /// `/proc`): a test's whole run, with room to spare. On Linux a claim also ends with its owner.
 const CLAIM_FOR: Duration = Duration::from_secs(10 * 60);
 
-/// Ports this process has already handed out.
+/// Ports this copy of the module has already handed out: a shortcut only. The claim file is the
+/// process-wide record, because each `#[path]` include has its own set.
 fn issued() -> &'static Mutex<HashSet<u16>> {
     static ISSUED: OnceLock<Mutex<HashSet<u16>>> = OnceLock::new();
     ISSUED.get_or_init(Default::default)
@@ -73,6 +76,11 @@ fn made(path: &std::path::Path) -> Option<u128> {
     Some(at.duration_since(SystemTime::UNIX_EPOCH).ok()?.as_nanos())
 }
 
+/// When this process started, as nanoseconds since the epoch, where `/proc` says.
+fn started() -> Option<u128> {
+    made(std::path::Path::new("/proc/self"))
+}
+
 /// Claim `port` against the other test processes. A claim is a file named for its owner's pid in
 /// a directory of the port's own, so a claim needs no takeover: one whose owner is gone (or whose
 /// age passes [`CLAIM_FOR`]) is simply ignored, and removed. Two processes that claim at once
@@ -85,7 +93,15 @@ fn claim(port: u16) -> bool {
     let _ = std::fs::create_dir_all(&dir);
     let me = std::process::id();
     let mine = dir.join(me.to_string());
-    if std::fs::File::create(&mine).is_err() {
+    // `create_new`: the file is also this process's own record of the port. The harness is compiled
+    // into the one test binary once per module that includes it, each copy with its own `issued`
+    // set, so a port another copy issued is found here, not in `issued`, and is refused (#4578).
+    if std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&mine)
+        .is_err()
+    {
         return false;
     }
     let mine_key = (made(&mine).unwrap_or(0), me);
@@ -159,6 +175,7 @@ pub fn free_ports<const N: usize>() -> [u16; N] {
     while held.len() < N {
         attempts += 1;
         assert!(attempts < 1_000, "the OS keeps handing out used ports");
+        // No cross-module guarantee here: only this copy's `issued` set deduplicates.
         let listener = TcpListener::bind("127.0.0.1:0").expect("the OS hands out a free port");
         let port = listener.local_addr().expect("local addr").port();
         if issued.insert(port) {

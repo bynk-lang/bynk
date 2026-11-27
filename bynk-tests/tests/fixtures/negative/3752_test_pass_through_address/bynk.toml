@@ -1,0 +1,9 @@
+[project]
+name = "demo"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[unstable]
+allow = ["bynk.http.rest", "bynk.http.ANY", "bynk.Upstream", "bynk.InboundRequest", "bynk.Forwarded", "bynk.PassThrough", "bynk.UpstreamError"]

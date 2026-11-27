@@ -1,0 +1,6 @@
+[project]
+name = "3959-suite-instance-experimental"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

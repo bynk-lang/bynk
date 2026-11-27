@@ -1,0 +1,2 @@
+bynk.capability.base_not_instantiable `bynk.Logger` has no named instances, so a suite cannot declare a second double of it
+# exact

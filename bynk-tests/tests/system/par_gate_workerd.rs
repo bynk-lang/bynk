@@ -369,26 +369,30 @@ fn a_par_join_in_an_agent_handler_adds_no_interleaving() {
     let log = || fs::read_to_string(&log_path).unwrap_or_default();
 
     // `peek` of a fresh room answers once the Worker is up.
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if let Ok((200, body)) = get(port, "/peek/boot") {
-            assert_eq!(body, "\"0\"", "a fresh agent has not been hit");
-            break;
+    let booted = std::cell::RefCell::new(None);
+    if let Err(why) = wrangler::wait_until_ready(&log_path, port, &|| match get(port, "/peek/boot")
+    {
+        Ok((200, body)) => {
+            *booted.borrow_mut() = Some(body);
+            true
         }
-        if Instant::now() > deadline {
-            let log = log();
-            drop(guard);
-            let _ = fs::remove_dir_all(&tmp);
-            if skip(&format!(
-                "the worker did not answer within the boot window (likely no network \
-                 to provision {WRANGLER})\n{log}"
-            )) {
-                return;
-            }
-            unreachable!()
+        _ => false,
+    }) {
+        let log = log();
+        drop(guard);
+        let _ = fs::remove_dir_all(&tmp);
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})\n{log}"
+        )) {
+            return;
         }
-        std::thread::sleep(Duration::from_millis(500));
+        unreachable!()
     }
+    assert_eq!(
+        booted.into_inner().expect("the probe answered"),
+        "\"0\"",
+        "a fresh agent has not been hit"
+    );
 
     let held = Held::start(listener);
     let mut report = String::new();

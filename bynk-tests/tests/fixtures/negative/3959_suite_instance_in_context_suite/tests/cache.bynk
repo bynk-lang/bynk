@@ -1,0 +1,11 @@
+---
+#3959, track §9: a suite-local instance lifts `bynk.capability.derived_outside_context`
+for a commons suite only; a context's suite is refused.
+---
+suite shop
+
+capability Archive = Kv
+
+case "c" {
+	expect true
+}
