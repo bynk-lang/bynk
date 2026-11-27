@@ -1,3 +1,5 @@
+import { __bynkDecimalParse } from "../src/decimal.ts";
+const D = (s: string) => { const r = __bynkDecimalParse(s); if (r.tag !== "Some") throw new Error(s); return r.value; };
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -90,7 +92,7 @@ test("a statement runs through query with its ? parameters and the connection is
     { tag: "MySqlTimestamp", value: Date.UTC(2026, 10, 12, 9, 30, 0, 5) },
     { tag: "MySqlDateTime", value: "2026-11-12 09:30:00" },
     { tag: "MySqlJson", value: '{"a":1}' },
-    { tag: "MySqlDecimal", value: "12345678901234567890.5" },
+    { tag: "MySqlDecimal", value: D("12345678901234567890.5") },
   ];
   const out = await exec(ENDPOINT, "SELECT * FROM t WHERE a = ? LIMIT ?, ?", params);
   assert.equal(out.ok, true);

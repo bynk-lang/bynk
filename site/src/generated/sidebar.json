@@ -436,6 +436,10 @@
             "link": "/book/guides/effects-and-capabilities/use-several-kv-namespaces/"
           },
           {
+            "label": "Write a library that uses a capability",
+            "link": "/book/guides/effects-and-capabilities/write-a-library-that-uses-a-capability/"
+          },
+          {
             "label": "Store files in R2",
             "link": "/book/guides/effects-and-capabilities/store-files-in-r2/"
           },

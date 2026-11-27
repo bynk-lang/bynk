@@ -1659,6 +1659,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "on schedule(\"*/45 * * * *\") () -> Effect[Result[(), String]] { … }   // ⚠ fires at :00 and :45, then :00 again\n\non schedule(\"0,45 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ says so explicitly",
     },
     Explain {
+        code: "bynk.d1.column_affinity",
+        blurb: "A typed read of a `D1` row reads each field by one storage convention: an `Instant` or `Duration` is `INTEGER` milliseconds, and a payload-less enum is `TEXT`, the variant's name. A SQLite column declared with the other affinity stores the value in a form the field does not read (a timestamp kept as ISO text, an enum kept as a number), so the decode fails, naming the field. Declare the column to match, or read it into a field of the column's own type (`String` or `Int`) and convert. Only a column read straight from a table has a declared type, so this is a warning on the common case, not a proof. `Decimal` has its own check, `bynk.d1.decimal_numeric_affinity`.",
+        example: "CREATE TABLE orders (id TEXT PRIMARY KEY, placed TEXT NOT NULL);       // ⚠ read as an `Instant`, it is text\n\nCREATE TABLE orders (id TEXT PRIMARY KEY, placed INTEGER NOT NULL);    // ✓ epoch milliseconds",
+    },
+    Explain {
         code: "bynk.d1.decimal_numeric_affinity",
         blurb: "A `Decimal` is exact only as text. A `Json.decodeSql` or `select` row may hold a `Decimal`, read from a SQLite `TEXT` column, which keeps its digits. A column declared `DECIMAL`, `NUMERIC`, `REAL` or an integer type has numeric affinity, so SQLite hands the value back as a number, and a number does not decode as a `Decimal`. Declare the column `TEXT` (the compiler stores a `Decimal` as its canonical text), or read the column into a `Float`. Only a column read straight from a table has a declared type, so this is a warning on the common case, not a proof.",
         example: "CREATE TABLE prices (id TEXT PRIMARY KEY, amount NUMERIC NOT NULL);   // ⚠ read as a `Decimal`, it arrives as a number\n\nCREATE TABLE prices (id TEXT PRIMARY KEY, amount TEXT NOT NULL);      // ✓ the digits stay exact",
@@ -7048,7 +7053,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.sql_row_shape",
-        blurb: "`select[T]`, `firstAs[T]` and `Json.decodeSql` read each SQL row into a record, and a column holds only a plain value. So `T` must be a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes`, or a refined or opaque type over one, or an `Option` of either (Postgres and MySQL also read `Decimal`); a nested record, a list or an enum has no column to read. `T` is the row itself, so `select[List[Row]]` is refused too. Flatten the record.",
+        blurb: "`select[T]`, `firstAs[T]` and `Json.decodeSql` read each SQL row into a record, and a column holds only a plain value. So `T` must be a record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`, `Decimal`, `Instant`, `Duration` or a payload-less enum, or a refined or opaque type over a scalar one, or an `Option` of either, the same for `D1`, `Postgres` and `MySql`; a nested record, a list or an enum with payloads has no column to read. `T` is the row itself, so `select[List[Row]]` is refused too. Flatten the record.",
         example: "type Money = { cents: Int }\ntype Order = { id: String, total: Money }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✗ `total` is a record\n\ntype Order = { id: String, total: Int }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✓",
     },
     Explain {
@@ -8489,6 +8494,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["cron_handler"],
     )),
     warn(d(
+        "bynk.d1.column_affinity",
+        "An `Instant`, `Duration` or enum row field is read from a SQLite column declared with the other affinity (`INTEGER` milliseconds, or `TEXT` for an enum), so the typed read fails to decode; declare the column to match (warning).",
+    )),
+    warn(d(
         "bynk.d1.decimal_numeric_affinity",
         "A `Decimal` row field is read from a SQLite column declared with numeric affinity (`DECIMAL`, `NUMERIC`, `REAL`), which hands the value back as a number that does not decode; declare the column `TEXT` (warning).",
     )),
@@ -8550,8 +8559,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.deploy.agent_move_refused",
-        "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
+        "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Move it with its state with `--move-agent <context>` (planned with `--dry-run` in this release), or start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use. A `reason` says why a named move is refused: `chained`, `partial_selection`, `order`, `routes`, `tombstones`, `renamed_in_place`, `both`, or `apply_not_yet` outside `--dry-run`.",
     ),
+    warn(d(
+        "bynk.deploy.agent_move_window",
+        "A `--move-agent` move keeps its agents' state, but from the commit (the source's push) until the receiver goes live again, calls to the moving contexts fail: a window of about one push. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`, beside the plan's `moves`.",
+    )),
     warn(d(
         "bynk.deploy.agent_starts_fresh",
         "A context that hosts agents moves to a different Worker script and `--accept-fresh-agent <context>` named it, so its agents start with fresh state there and the old state stays in the old script, which is no longer a Worker of the project: do not delete it if the data matters. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`.",
@@ -8627,6 +8640,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.deploy.ledger_unreadable",
         "`bynk deploy` could not read `bynk.deploy.lock`, the ledger of what is deployed, so it stopped before planning: a plan made without it would call everything new. Fix or restore the file (it is plain TOML). With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
+        "bynk.deploy.move_agent_unused",
+        "A `--move-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
     ),
     d(
         "bynk.deploy.multiple_websocket_members",
@@ -12253,7 +12270,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.sql_row_shape",
-        "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). A `Postgres` row may also hold a `Decimal` or an `Instant` (Hyperdrive H3).",
+        "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`, `Decimal`, `Instant`, `Duration` or a payload-less enum (or a refined or opaque type over a scalar one, or an `Option` of either), or a `List` of such records, one set for `D1`, `Postgres` and `MySql` (standard-library P4c, #4046).",
         &["method_call"],
     ),
     d(

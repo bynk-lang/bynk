@@ -1,3 +1,5 @@
+import { __bynkDecimalParse } from "../src/decimal.ts";
+const D = (s: string) => { const r = __bynkDecimalParse(s); if (r.tag !== "Some") throw new Error(s); return r.value; };
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { classifyPgError, jsonColumn, makePgExecute, pgExecute, redactSecret } from "../src/postgres.ts";
@@ -138,7 +140,7 @@ test("parameters reach the driver in their driver form", async () => {
     { tag: "PgBoolean", value: false },
     { tag: "PgTimestamp", value: 1_700_000_000_000 },
     { tag: "PgJson", value: '{"a":1}' },
-    { tag: "PgNumeric", value: "12345678901234567890.5" },
+    { tag: "PgNumeric", value: D("12345678901234567890.5") },
   ]);
   const p = f.calls[0]!.params;
   assert.equal(p[0], null);

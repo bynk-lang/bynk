@@ -514,7 +514,10 @@ adapter bynk.cloudflare {
 
 	---
 	A value bound to a `?n` parameter of a `D1` statement, by SQLite storage
-	class. `Boolean` binds as `1` or `0`, as SQLite has no boolean.
+	class. `Boolean` binds as `1` or `0`, as SQLite has no boolean. `Decimal` binds
+	as its canonical text, and `Timestamp` an `Instant` as integer milliseconds,
+	the forms a typed read reads them back from (`Duration` binds as `Integer`
+	milliseconds, an enum as `Text` of its variant's name).
 	---
 	type SqlValue =
 		| Null
@@ -523,6 +526,8 @@ adapter bynk.cloudflare {
 		| Text(value: String)
 		| Blob(value: Bytes)
 		| Boolean(value: Bool)
+		| Numeric(value: Decimal)
+		| Timestamp(value: Instant)
 
 	---
 	One statement of a `D1.batch`: its SQL, a string literal, and its
@@ -755,7 +760,7 @@ adapter bynk.cloudflare {
 	A value bound to a `$n` parameter of a `Postgres` statement. `PgInteger`
 	binds a whole number and `PgReal` a float; `PgText` binds text, `PgBytea` bytes
 	and `PgBoolean` a flag. `PgTimestamp` binds an `Instant` as a `timestamptz`.
-	`PgJson` binds JSON text and `PgNumeric` a decimal as text, each as text
+	`PgJson` binds JSON text and `PgNumeric` a `Decimal` as its canonical text, each as text
 	the server types from the column or cast it meets (`$1::jsonb`,
 	`$2::numeric`), so neither loses a digit to a float. The variants carry the
 	`Pg` prefix because a bare `Null`, `Integer`, `Real`, `Text` or `Boolean`
@@ -770,7 +775,7 @@ adapter bynk.cloudflare {
 		| PgBoolean(value: Bool)
 		| PgTimestamp(value: Instant)
 		| PgJson(value: String)
-		| PgNumeric(value: String)
+		| PgNumeric(value: Decimal)
 
 	---
 	What a `Postgres.run` changed: the rows the statement inserted, updated or
@@ -853,7 +858,7 @@ adapter bynk.cloudflare {
 		| MySqlTimestamp(value: Instant)
 		| MySqlDateTime(value: String)
 		| MySqlJson(value: String)
-		| MySqlDecimal(value: String)
+		| MySqlDecimal(value: Decimal)
 
 	---
 	What a `MySql.run` changed: `rowCount` is the rows the statement affected

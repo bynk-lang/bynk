@@ -35,6 +35,7 @@
 // @ts-ignore TS2307 when the package is not installed
 import { PGlite } from "@electric-sql/pglite";
 import { PG_TEST_DOUBLE_SCHEME, classifyPgError, jsonRow, registerPgTestDouble, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "../postgres.ts";
+import { __bynkDecimalToString } from "../decimal.ts";
 
 /** The part of PGlite's query result this module reads. */
 interface PgliteResult {
@@ -91,6 +92,8 @@ function driverParam(p: PgParam): unknown {
       return null;
     case "PgTimestamp":
       return new Date(p.value);
+    case "PgNumeric":
+      return __bynkDecimalToString(p.value);
     default:
       return p.value;
   }

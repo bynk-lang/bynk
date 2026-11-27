@@ -639,7 +639,8 @@ refused, with new `reason`s on `bynk.deploy.agent_move_refused`:
   swapping members: give one of them a new key, or do it in two manifests and two deploys);
 - a `--worker` or `--context` run that leaves out a Worker of the set (`partial_selection`:
   run the whole project);
-- a set whose two nodes cannot be ordered (`order`).
+- a set whose two nodes cannot be ordered (`order`);
+- a context that carries its own class tombstones, a `replaces` or a `removed agent` (`tombstones`, ruled on [#3565](https://github.com/bynk-lang/bynk/issues/3565): where they belong after the move is unsettled).
 
 One phase 1 push can carry entries from several sources (S13), and one phase 2 push several
 `transferred_to`s (S14), so the pair-at-a-time fallback this paragraph once held in reserve is

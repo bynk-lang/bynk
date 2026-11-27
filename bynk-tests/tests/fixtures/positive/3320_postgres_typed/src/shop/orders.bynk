@@ -13,10 +13,15 @@ consumes bynk.cloudflare { Postgres, PgError, PgReadError, PgRun, PgStatement, P
 
 capability Main = Postgres
 
+type Status = enum { Open, Shipped }
+
 type Order = {
 	id: Int,
 	name: String,
 	placed: Instant,
+	wait: Duration,
+	total: Decimal,
+	status: Status,
 	note: Option[String],
 	paid: Bool,
 }

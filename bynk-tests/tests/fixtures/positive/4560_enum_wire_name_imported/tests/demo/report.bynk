@@ -1,0 +1,16 @@
+---
+#4560: the accessor works on an imported enum, `@name` included.
+---
+suite demo.report
+
+case "wireName reads the imported enum's wire names" {
+  expect label(Open) == "open"
+  expect label(Shipped) == "shipped-out"
+  expect label(Delivered) == "Delivered"
+}
+
+case "fromWireName reads them back, exactly" {
+  expect parse("shipped-out") == Some(Shipped)
+  expect parse("Delivered") == Some(Delivered)
+  expect parse("Shipped") == None
+}

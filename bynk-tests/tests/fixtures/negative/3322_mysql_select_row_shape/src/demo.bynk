@@ -5,7 +5,8 @@ consumes bynk.cloudflare { MySql }
 
 capability Legacy = MySql
 
-type Placed = { id: Int, at: Instant }
+type Shape = | Circle(radius: Float) | Dot
+type Placed = { id: Int, shape: Shape }
 
 service probe {
   on call() -> Effect[Bool] by Caller given Legacy {

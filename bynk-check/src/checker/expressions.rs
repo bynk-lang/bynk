@@ -2463,18 +2463,12 @@ pub(crate) fn check_variant_construction(
             continue;
         };
         if !compatible(actual, expected, tys) {
-            ctx.errors.push(CompileError::new(
-                "bynk.types.variant_payload_mismatch",
-                arg.span,
-                format!(
-                    "argument {} to variant `{}` has type `{}`, but field `{}` expects `{}`",
-                    i + 1,
-                    variant_name,
-                    actual.display(tys),
-                    field.name.name,
-                    expected.display(tys)
-                ),
-            ));
+            super::sql_decimal_param::push_payload_mismatch(
+                ctx.errors,
+                (arg, i, variant_name, &field.name.name),
+                (actual, expected),
+                tys,
+            );
             ok = false;
         }
     }

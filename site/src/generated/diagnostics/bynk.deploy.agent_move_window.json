@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.agent_move_window",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `--move-agent` move keeps its agents' state, but from the commit (the source's push) until the receiver goes live again, calls to the moving contexts fail: a window of about one push. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`, beside the plan's `moves`."
+}
