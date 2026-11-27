@@ -417,6 +417,9 @@ pub(crate) struct Applied<K: ResourceKind> {
     /// #4602: what to tell the user the step did that its plan line did not forecast (a namespace
     /// made again, a queue adopted), printed once its commits are written.
     pub(crate) notes: Vec<Notice>,
+    /// The failure that stopped the step part-way, returned once `commits` are written: what it
+    /// did to the account before failing is recorded (#3999).
+    pub(crate) stopped: Option<DeployFailure>,
 }
 
 impl<K: ResourceKind> Applied<K> {
@@ -426,6 +429,7 @@ impl<K: ResourceKind> Applied<K> {
             bound: Vec::new(),
             commits: Vec::new(),
             notes: Vec::new(),
+            stopped: None,
         }
     }
 
@@ -435,6 +439,7 @@ impl<K: ResourceKind> Applied<K> {
             bound: vec![(binding.to_string(), bound)],
             commits: Vec::new(),
             notes: Vec::new(),
+            stopped: None,
         }
     }
 
@@ -447,6 +452,12 @@ impl<K: ResourceKind> Applied<K> {
     /// And `commit` to write.
     pub(crate) fn with(mut self, commit: Commit<K::Change>) -> Self {
         self.commits.push(commit);
+        self
+    }
+
+    /// Stopped by `failure`, after its commits are written.
+    pub(crate) fn stopping(mut self, failure: DeployFailure) -> Self {
+        self.stopped = Some(failure);
         self
     }
 

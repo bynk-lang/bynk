@@ -1,0 +1,10 @@
+{
+  "blurb": "A literal code passed to `message(…)` in a unit that declares a message bundle must be a code of that unit's `@reference` block: a code resolves only against the bundles declared in the unit where `message(code)` is called, and the reference locale holds every code (the other locales are held to it by `bynk.messages.incomplete`). The usual cause is a typo, and the diagnostic suggests the nearest declared code. A code the program computes, such as a parameter, is not checked here, and a unit that declares no bundle has nothing to check against: its `render` is `bynk.locale`'s, which returns the code itself. Fix the code, or declare it in the reference block. To show a message another unit owns, call a function that unit exports.",
+  "category": "Message bundles",
+  "categoryAnchor": "message-bundles",
+  "code": "bynk.messages.unknown_code",
+  "constructs": [],
+  "example": "messages \"en\" @reference {\n  \"cart.greeting\" => \"Hello, {name}!\"\n}\n\nfn heading() -> Message {\n  message(\"cart.greting\")           // ✗ not a code of this unit's reference bundle\n  message(\"cart.greeting\")          // ✓\n}",
+  "severity": "error",
+  "summary": "A literal `message(\"code\")` in a unit that declares a message bundle names a code its `@reference` block does not declare."
+}

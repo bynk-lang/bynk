@@ -1,0 +1,24 @@
+commons shop.cart
+
+uses bynk.locale
+uses bynk.locale.types
+
+messages "en" @reference {
+  "greeting" => "Your basket, {name}."
+}
+
+messages "fr" {
+  "greeting" => "Votre panier, {name}."
+}
+
+---
+Renders `code` for `tag`. A computed code is not checked against the bundle: an unknown one
+renders as itself.
+---
+fn say(tag: LocaleTag, code: String, name: String) -> String {
+  render(tag, withText(message(code), "name", name))
+}
+
+fn greeting(tag: LocaleTag, name: String) -> String {
+  render(tag, withText(message("greeting"), "name", name))
+}

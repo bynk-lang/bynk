@@ -88,6 +88,7 @@ mod workers_api_key;
 pub mod workers_emit;
 pub(crate) mod workers_entry;
 pub mod workers_group;
+pub mod workers_moves;
 mod workers_sum;
 mod workers_ws_auth;
 pub mod wrangler;
@@ -109,7 +110,7 @@ pub use workers_entry::{
     emit_worker_entry, field_spec_source, form_body_specs, renamed_specs_source,
     table_has_plain_json,
 };
-pub use workers_group::{GroupEntry, GroupMember, emit_group_entry};
+pub use workers_group::{GroupEntry, GroupForward, GroupMember, emit_group_entry};
 pub use wrangler::{ClassTombstones, emit_wrangler_toml};
 
 mod boundary;
@@ -363,6 +364,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         imported_from: HashMap::new(),
         imported_from_kind: HashMap::new(),
         imported_decl_paths: HashMap::new(),
+        split_consumed_contexts: HashSet::new(),
         consumed_type_aliases: HashMap::new(),
         unit_kind: UnitKind::Commons,
         owning_context: None,

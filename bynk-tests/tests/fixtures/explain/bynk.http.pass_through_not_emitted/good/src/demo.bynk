@@ -1,9 +1,0 @@
-context demo
-
-consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
-
-service proxy from http {
-  on GET("/blog/*path") (path: String) -> Effect[HttpResult[String]] by Visitor {
-    Ok(path)
-  }
-}

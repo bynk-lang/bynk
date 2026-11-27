@@ -148,11 +148,20 @@ Bundles are checked as a set, not file by file:
   (`bynk.messages.format_mismatch`).
 - Templates parse as valid ICU (`bynk.messages.malformed_icu_syntax`).
 
+A code is **scoped to the unit that declares it**: `message(code)`, and the
+`render` over it, resolve only against the bundles of the unit where they are
+called, so two units can each own `"greeting"` without colliding. A literal code
+in a unit that declares a bundle must be one of its `@reference` block
+(`bynk.messages.unknown_code`), and another unit's `render` is not reachable
+through `uses` (`bynk.messages.cross_unit_render`): use another unit's messages by
+calling a function it exports.
+
 What it does **not** check: whether the call site that builds a `Message`
-actually supplies the parameters a code's template names. `code` is a runtime
-`String`, so nothing statically ties a `message("greeting")` call to the
-`"greeting"` entry. A missing parameter degrades to its literal `{name}` text
-at render time rather than failing the build.
+supplies the parameters a code's template names, or a code the program computes.
+`message(code)` with `code` a parameter is a runtime `String`, so nothing
+statically ties it to an entry; an unknown one degrades to its code at render
+time, and a missing parameter to its literal `{name}` text, rather than failing
+the build.
 
 **See also:**
 [Declare a message bundle](/book/guides/localisation/declare-a-message-bundle/),

@@ -1,0 +1,12 @@
+---
+#3959, track §12: a suite-local instance is experimental, behind `bynk.given.parameters`, as
+the commons' own selection of `Kv` is; a build reports the commons first, and `bynk check`
+the instance too.
+---
+suite lib.cache
+
+capability Archive = Kv
+
+case "c" {
+	expect true
+}

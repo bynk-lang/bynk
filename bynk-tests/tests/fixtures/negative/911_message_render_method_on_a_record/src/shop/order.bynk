@@ -1,0 +1,9 @@
+commons shop.order
+
+uses shop.messages
+
+type Order = { id: Int }
+
+fn describe(o: Order) -> String {
+  o.render()
+}

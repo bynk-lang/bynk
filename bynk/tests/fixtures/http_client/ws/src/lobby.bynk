@@ -1,0 +1,60 @@
+context lobby
+
+consumes bynk { Cookie, Clock }
+
+type Guest = String where NonEmpty && MaxLength(64)
+type Frame = { text: String }
+type Login = { name: String }
+
+// A browser signs in over HTTP, then opens the socket from the page: the cookie it was given rides on the
+// upgrade, and the client offers no credential of its own. Both services list the page's origin in `cors`.
+actor Visitor2 { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = Guest }
+
+service lounge from websocket(in: Frame, out: Frame) {
+  cors { origins: ["https://app.example.com"], credentials: true }
+
+  on open(name: String) -> Effect[()] by user: Visitor2 {
+    let _ <- connection.send(Frame { text: "welcome" })
+    let _ <- Seats(name).sit(user.identity, connection)
+    ()
+  }
+
+  on close(name: String) -> Effect[()] by user: Visitor2 {
+    let _ <- Seats(name).leave(user.identity)
+    ()
+  }
+}
+
+agent Seats {
+  key id: String
+  store conns: Map[Guest, Connection[Frame]]
+
+  on call sit(u: Guest, conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+
+  on call leave(u: Guest) -> Effect[()] {
+    let _ <- conns.remove(u)
+    ()
+  }
+}
+
+// Signing in is the route that issues the session, so it is checked for login CSRF: the page's origin is
+// listed here too.
+service sign from http {
+  cors { origins: ["https://app.example.com"], credentials: true }
+
+  @limit(maxBody: 256)
+  on POST("/login") (body: Login) -> Effect[HttpResult[String]] by v: Visitor given Clock {
+    let Ok(g) = Guest.of(body.name) else {
+      BadRequest("bad name")
+    }
+    let c <- Visitor2.issue(g)
+    Created("welcome").withCookie(c)
+  }
+
+  on GET("/health") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+}
