@@ -1,0 +1,8 @@
+context demo
+
+// #3752 (D2): a rest is named, as a `:name` parameter is.
+service api from http {
+  on GET("/files/*") () -> Effect[HttpResult[String]] by Visitor {
+    Ok("x")
+  }
+}

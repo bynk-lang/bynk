@@ -28,11 +28,25 @@ export function decodePath(path: string): string[] | null {
 // percent-encoding whose shape the pattern would match answers `malformed` (a
 // description naming the segment's position) instead of throwing, so the route
 // answers a `400 MalformedPath` before its handler, actor or body is touched.
+//
+// #3752 (D3, D4): a pattern whose last segment is a `*name` rest matches when the
+// segments before it match (decoded, as above) and binds `name` to the rest of
+// the path as received: sliced from the raw path, never rebuilt from segments, so
+// it stays percent-encoded and keeps its empty segments and trailing slash
+// (`/blog/*path` binds `""` for `/blog`, `"/"` for `/blog/`, `"//x"` for
+// `/blog//x`). A malformed escape inside the rest is the handler's to judge. A dot
+// segment inside it (`.`, `..`, or either percent-encoded), which a WHATWG URL
+// never holds, answers `malformed`: defence in depth for a host that does not
+// normalise. A rest never matches a path under the reserved `/_bynk/`.
 export function matchPath(
   pattern: string,
   path: string,
 ): { params: Record<string, string>; malformed?: string } | null {
   const patternSegments = pattern.split("/").filter(Boolean);
+  const last = patternSegments[patternSegments.length - 1];
+  if (last !== undefined && isRestSegment(last)) {
+    return matchRest(patternSegments.slice(0, -1), last.slice(1), path);
+  }
   const pathSegments = path.split("/").filter(Boolean);
   if (patternSegments.length !== pathSegments.length) return null;
   const params: Record<string, string> = {};
@@ -55,6 +69,50 @@ export function matchPath(
     return { params: {}, malformed: `path segment ${malformedAt} is not valid percent-encoding` };
   }
   return { params };
+}
+
+// #3752 (D2): a `*name` rest segment: `*` then an identifier, the whole segment.
+function isRestSegment(seg: string): boolean {
+  return /^\*[A-Za-z_][A-Za-z0-9_]*$/.test(seg);
+}
+
+// #3752: whether a raw path segment is a dot segment, `.` or `..`, spelt with any
+// mix of `.` and `%2e` (either case).
+function isDotSegment(raw: string): boolean {
+  const s = raw.replace(/%2e/gi, ".");
+  return s === "." || s === "..";
+}
+
+// #3752: `matchPath` for a pattern ending in a rest: `prefix` is its segments
+// before the rest, `name` the rest's name.
+function matchRest(
+  prefix: readonly string[],
+  name: string,
+  path: string,
+): { params: Record<string, string>; malformed?: string } | null {
+  // Walk the raw path past `prefix.length` non-empty segments; the rest is what
+  // follows, from the `/` after the last of them (or the whole path at the root).
+  const raw: string[] = [];
+  let at = 0;
+  while (raw.length < prefix.length) {
+    while (path[at] === "/") at++;
+    if (at >= path.length) return null;
+    const end = path.indexOf("/", at);
+    const stop = end === -1 ? path.length : end;
+    raw.push(path.slice(at, stop));
+    at = stop;
+  }
+  const rest = path.slice(at);
+  // `/_bynk/` is Bynk's: the prefixes it serves are dispatched before any route, and a
+  // rest (a root catch-all, or one after a `:name`) never takes the others.
+  if (path.split("/").find((s) => s !== "") === "_bynk") return null;
+  const head = prefix.length === 0 ? null : matchPath("/" + prefix.join("/"), "/" + raw.join("/"));
+  if (prefix.length !== 0 && head === null) return null;
+  if (head?.malformed !== undefined) return head;
+  if (rest.split("/").some(isDotSegment)) {
+    return { params: {}, malformed: "the path holds a `.` or `..` segment" };
+  }
+  return { params: { ...(head?.params ?? {}), [name]: rest } };
 }
 
 // #3909: the `Allow` of a path whose routes overlap. `base` is the `Allow` of the

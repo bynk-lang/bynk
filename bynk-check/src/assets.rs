@@ -372,15 +372,10 @@ pub fn at_path_error(a: &AssetDecl) -> Option<CompileError> {
 }
 
 /// Whether the HTTP route `pattern` (`/a/:id/b`) matches the URL path `path`:
-/// the same number of segments, each literal equal or a `:param`. Routes have
-/// no wildcards, so this is the whole matching rule.
+/// the same number of segments, each literal equal or a `:param`, or (#3752) a
+/// final `*rest` that takes the remaining segments, however many.
 fn route_matches(pattern: &str, path: &str) -> bool {
-    let p: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
-    let u: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
-    p.len() == u.len()
-        && p.iter()
-            .zip(&u)
-            .all(|(ps, us)| ps.starts_with(':') || ps == us)
+    crate::route_order::covers(pattern, path)
 }
 
 /// #1883, slice 2 ([DECISION C]): fixed asset paths against each Worker's
@@ -493,7 +488,8 @@ pub fn phase_asset_routes(
                         if !route_matches(path, at) {
                             continue;
                         }
-                        let literal = !path.split('/').any(|s| s.starts_with(':'));
+                        let literal = !path.split('/').any(|s| s.starts_with(':'))
+                            && crate::http_rest::rest_name(path).is_none();
                         let err = if literal {
                             CompileError::new(
                                 "bynk.asset.shadows_route",
@@ -1345,6 +1341,11 @@ mod tests {
         assert!(!route_matches("/a/:id", "/a"));
         assert!(!route_matches("/:page", "/a/b"));
         assert!(!route_matches("/favicon.png", "/favicon.ico"));
+        // #3752: a rest takes any number of segments, zero included.
+        assert!(route_matches("/*path", "/favicon.ico"));
+        assert!(route_matches("/static/*key", "/static/a/b.css"));
+        assert!(route_matches("/static/*key", "/static"));
+        assert!(!route_matches("/static/*key", "/other/a.css"));
     }
 
     const HANDLER: &str = "service web from http {\n  on GET(\"ROUTE\") () -> Effect[HttpResult[String]] by Visitor {\n    Ok(\"x\")\n  }\n}\n";

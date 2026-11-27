@@ -247,6 +247,13 @@ A function precondition: `requires <name>: <pred>`, a pure `Bool` over the
 parameters. Guards the call and filters the runner's generated arguments (like a
 `for all … where`). `result` is not in scope in a `requires`.
 
+### rest segment {#term-rest-segment}
+
+A route's last segment written `*name`, which matches the rest of the path (zero
+or more segments) and binds it, still percent-encoded, as a `String`. The
+weakest segment when routes are ordered. Experimental. See
+[Rest segments](/reference/http/#rest-segments).
+
 ### `result` {#term-result}
 
 The contextual binding for a function's return value, in scope only inside an

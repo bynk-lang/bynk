@@ -150,6 +150,37 @@ pub fn emitted_local_name(binding: &LocalBinding, locals: &[LocalBinding]) -> Op
     Some(ts_ident(&binding.name))
 }
 
+/// The TypeScript method name for an `on <METHOD>("<path>")` handler, the key on
+/// the service object the Worker's router calls: `http_<METHOD>`, then one part
+/// per segment, `Param_<name>` for a `:name` and (#3752, D6) `Rest_<name>` for a
+/// final `*name`, every other character outside `[A-Za-z0-9]` written `_`. Here,
+/// below the emitter, so the checker can refuse two handlers of a service whose
+/// names would collide (`bynk.http.handler_name_collision`): the scheme is not
+/// injective (`/a-b` and `/a_b` both give `http_GET_a_b`).
+pub fn http_handler_name(method: &str, path: &str) -> String {
+    let segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let mut s = format!("http_{method}");
+    for (i, seg) in segs.iter().enumerate() {
+        s.push('_');
+        if let Some(rest) = seg.strip_prefix(':') {
+            s.push_str("Param_");
+            s.push_str(&sanitise_path_segment(rest));
+        } else if i + 1 == segs.len() && crate::route_order::is_rest_segment(seg) {
+            s.push_str("Rest_");
+            s.push_str(&sanitise_path_segment(&seg[1..]));
+        } else {
+            s.push_str(&sanitise_path_segment(seg));
+        }
+    }
+    s
+}
+
+fn sanitise_path_segment(s: &str) -> String {
+    s.chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
