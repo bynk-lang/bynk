@@ -693,18 +693,22 @@ pub fn hidden_or_gated_types(
     out
 }
 
+/// What [`editor_phase`] reads: the project root, the editor's overlay, the parsed files, the
+/// unit tables and each unit's `uses`.
+pub type EditorUnits<'a> = (
+    &'a Path,
+    &'a HashMap<std::path::PathBuf, String>,
+    &'a [ParsedFile],
+    &'a HashMap<String, UnitTable>,
+    &'a HashMap<String, Vec<String>>,
+);
+
 /// The editor's embed and template phase (`analysis::analyse_project_inner`): every declared embed
 /// names a file in `embeds/` (`embeds::phase_embed_files`), then each template's text is read from
 /// the overlay or the disk ([`read_template_texts`]) and checked ([`phase_templates`]), and joins
 /// `snapshots`, so the language server publishes its diagnostics at the template's own line.
 pub fn editor_phase(
-    (project_root, overlay, parsed, tables, uses): (
-        &Path,
-        &HashMap<std::path::PathBuf, String>,
-        &[ParsedFile],
-        &HashMap<String, UnitTable>,
-        &HashMap<String, Vec<String>>,
-    ),
+    (project_root, overlay, parsed, tables, uses): EditorUnits<'_>,
     policy: &crate::stability::StabilityPolicy,
     snapshots: &mut Vec<(std::path::PathBuf, String)>,
     errors: &mut ErrorSink,

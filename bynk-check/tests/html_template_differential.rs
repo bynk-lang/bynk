@@ -88,15 +88,14 @@ fn render(pieces: &[Piece]) -> String {
         format!("\\(v{n})")
     };
     let mut out = String::new();
-    let mut parts =
-        |out: &mut String, parts: &[Option<String>], hole: &mut dyn FnMut() -> String| {
-            for p in parts {
-                match p {
-                    Some(t) => out.push_str(t),
-                    None => out.push_str(&hole()),
-                }
+    let parts = |out: &mut String, parts: &[Option<String>], hole: &mut dyn FnMut() -> String| {
+        for p in parts {
+            match p {
+                Some(t) => out.push_str(t),
+                None => out.push_str(&hole()),
             }
-        };
+        }
+    };
     for p in pieces {
         match p {
             Piece::Text(t) => out.push_str(t),

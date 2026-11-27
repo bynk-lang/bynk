@@ -2,7 +2,7 @@
 //! errors at the template's own line, as the build does, with a related location at the
 //! `template` declaration.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn analysed(fixture: &str) -> bynk_ide::ProjectDiagnostics {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -19,7 +19,7 @@ fn a_template_error_is_shown_at_the_template_line() {
     let file = r
         .files
         .iter()
-        .find(|f| f.source_path == PathBuf::from("embeds/page.html"))
+        .find(|f| f.source_path == Path::new("embeds/page.html"))
         .expect("the template file is one of the analysed files");
     let d = file
         .diagnostics

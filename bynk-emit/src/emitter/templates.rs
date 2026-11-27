@@ -33,7 +33,9 @@ fn text_of(value: TsExpr, base: BaseType, runtime_use: &RuntimeUse) -> TsExpr {
         BaseType::Instant => call(ident("__bynkInstantToIso"), vec![value]),
         BaseType::Duration => call(ident("__bynkDurationToString"), vec![value]),
         BaseType::String => value,
-        _ => call(ident("String"), vec![value]),
+        BaseType::Int | BaseType::Bool | BaseType::Float | BaseType::Bytes => {
+            call(ident("String"), vec![value])
+        }
     }
 }
 

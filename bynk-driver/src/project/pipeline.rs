@@ -1455,17 +1455,21 @@ fn extend_with_test_errors(
     errors.extend_attributed_by_span(parsed, test_errors);
 }
 
+/// What [`read_embeds`] checks templates against: the parsed files, the unit tables and each
+/// unit's `uses`.
+type EmbedUnits<'a> = (
+    &'a [ParsedFile],
+    &'a HashMap<String, UnitTable>,
+    &'a HashMap<String, Vec<String>>,
+);
+
 /// #2387, slice 2: the text of every declared embed, read through the folder's
 /// reader. Typed HTML (#3927, slice 1): then every `template` is checked against
 /// its file's text (`bynk_check::templates`), and each template file joins
 /// `snapshots` under its path, so a diagnostic in it renders at its line.
 fn read_embeds(
     embed_files: Option<&assets::EmbedFolder>,
-    (parsed, tables, uses): (
-        &[ParsedFile],
-        &HashMap<String, UnitTable>,
-        &HashMap<String, Vec<String>>,
-    ),
+    (parsed, tables, uses): EmbedUnits<'_>,
     policy: &bynk_check::stability::StabilityPolicy,
     snapshots: &mut Vec<(PathBuf, String)>,
     errors: &mut ErrorSink,
