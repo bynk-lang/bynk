@@ -1546,13 +1546,26 @@ a namespace or a queue. Clean one up by hand with `wrangler delete` if you're
 sure it's unused.
 
 A queue still consumed by a Worker can't be deleted: Cloudflare refuses with
-`11005`. So before `--prune` deletes a queue, it removes **every** consumer the
-queue has: an orphaned Worker of the project, a Worker outside the project, or an
-HTTP pull consumer alike. A Worker stays deployed; it just stops consuming that
-queue. Check the queue's consumers (`wrangler queues info <queue>`) before you
-confirm if something outside the project might still read from it. If a consumer
-can't be removed, the queue is left, and the prune names that consumer and any it
-had already removed.
+`11005`. So before it asks, `--prune` reads each orphaned queue's consumers:
+
+- A queue that only this project's own Workers consume (Workers the ledger records
+  in this environment) is pruned. The confirmation names them, and they are
+  detached first. A detached Worker stays deployed; it just stops consuming that
+  queue:
+
+  ```
+  bynk: will delete queue `old-jobs` (detaching `shop-jobs`)
+  ```
+- A queue that any other consumer reads, whether a Worker outside the project or an
+  HTTP pull consumer, is **not pruned**. Nothing is deleted for it, and it stays
+  reported. Bynk names each foreign consumer with the command that detaches it:
+
+  ```
+  bynk: error: not pruned: the queue `old-jobs` is consumed by the Worker `billing` (not one of this project's Workers), so nothing was deleted for it: detach it by hand (`wrangler queues consumer remove old-jobs billing`) or keep the queue
+  ```
+
+  Detach it, or keep the queue. The other orphans in the run are still pruned, and
+  the run then fails, so a script notices.
 
 Tearing a project down by hand works the same way, in that order. Cloudflare
 refuses to delete a Worker that still consumes a queue (`10064`) and refuses to

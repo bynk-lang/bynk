@@ -73,31 +73,65 @@ impl<'a> Account<'a> {
         Ok(self.rest(purpose)?.request(request)?)
     }
 
-    /// #4601: remove each of queue `name`'s consumers (id `queue_id`), so the queue can then be
-    /// deleted. Cloudflare refuses to delete a queue a Worker consumes (400 `11005`) and to delete
-    /// that Worker while it consumes the queue (403 `10064`); removing the consumer first breaks
-    /// the cycle. A removal answered 404 (the consumer, or the whole queue, already gone) is
-    /// skipped: the queue's own delete then answers for it, and a queue already gone reads as
-    /// such (`10104`) to the prune. Any other refusal stops before the queue is deleted, naming
-    /// the order and any consumers this call already removed, since those stay removed.
-    fn remove_queue_consumers(&self, name: &str, queue_id: &str) -> Result<(), CloudflareError> {
+    /// The id of the queue `name`, checked before it reaches a request path; `None` when the
+    /// account has no such queue.
+    fn queue_id(&self, name: &str) -> Result<Option<String>, CloudflareError> {
+        let Some(id) = self.queue_find(name)? else {
+            return Ok(None);
+        };
+        if !rest::queues::is_queue_id(&id) {
+            return Err(CloudflareError::Other(format!(
+                "the queue `{name}` has the id `{id}`, which is not a queue id, so nothing was deleted"
+            )));
+        }
+        Ok(Some(id))
+    }
+
+    /// The consumers of the queue `queue_id`, each id checked before it reaches a request path.
+    fn consumers_of(
+        &self,
+        name: &str,
+        queue_id: &str,
+    ) -> Result<Vec<rest::queues::Consumer>, CloudflareError> {
         let request = rest::queues::list_consumers(queue_id);
         let body = self.send(Purpose::Queues, &request)?;
         let consumers = rest::queues::consumers(&body)
             .ok_or_else(|| unreadable(&request, "`result` list of consumers"))?;
+        if let Some(bad) = consumers.iter().find(|c| !rest::queues::is_queue_id(&c.id)) {
+            return Err(CloudflareError::Other(format!(
+                "the queue `{name}` has a consumer with the id `{}`, which is not a consumer id, \
+                 so nothing was deleted",
+                bad.id
+            )));
+        }
+        Ok(consumers)
+    }
+
+    /// #4601: remove each of queue `name`'s consumers (id `queue_id`), so the queue can then be
+    /// deleted. Cloudflare refuses to delete a queue a Worker consumes (400 `11005`) and to delete
+    /// that Worker while it consumes the queue (403 `10064`); removing the consumer first breaks
+    /// the cycle. Only the project's own Workers (`detach`) are removed: any other consumer (a
+    /// foreign Worker, an HTTP pull consumer) refuses the delete before anything is removed. A
+    /// removal answered 404 (the consumer, or the whole queue, already gone) is skipped: the
+    /// queue's own delete then answers for it, and a queue already gone reads as such (`10104`)
+    /// to the prune. Any other refusal stops before the queue is deleted, naming the order and
+    /// any consumers this call already removed, since those stay removed.
+    fn remove_queue_consumers(
+        &self,
+        name: &str,
+        queue_id: &str,
+        detach: &BTreeSet<String>,
+    ) -> Result<(), CloudflareError> {
+        let consumers = self.consumers_of(name, queue_id)?;
+        let foreign: Vec<_> = consumers.iter().filter(|c| !c.is_own(detach)).collect();
+        if !foreign.is_empty() {
+            return Err(CloudflareError::Other(rest::queues::foreign_consumers(
+                name, &foreign,
+            )));
+        }
         let mut removed = Vec::new();
-        for consumer in consumers {
-            let who = consumer.script.as_deref().map_or_else(
-                || format!("`{}`", consumer.id),
-                |s| format!("the Worker `{s}`"),
-            );
-            if !rest::queues::is_queue_id(&consumer.id) {
-                return Err(CloudflareError::Other(format!(
-                    "the queue `{name}` has a consumer with the id `{}`, which is not a consumer \
-                     id, so neither it nor the queue was deleted",
-                    consumer.id
-                )));
-            }
+        for consumer in &consumers {
+            let who = format!("`{}`", consumer.script.as_deref().unwrap_or(&consumer.id));
             match self.send(
                 Purpose::Queues,
                 &rest::queues::delete_consumer(queue_id, &consumer.id),
@@ -108,11 +142,11 @@ impl<'a> Account<'a> {
                     let already = if removed.is_empty() {
                         String::new()
                     } else {
-                        format!("; already removed: {}", removed.join(", "))
+                        format!("; already detached: {}", removed.join(", "))
                     };
                     return Err(CloudflareError::Other(format!(
-                        "could not remove {who} as a consumer of the queue `{name}`, so the queue \
-                         was not deleted (a consumed queue is deleted only after its consumers are \
+                        "could not detach {who} from the queue `{name}`, so the queue was not \
+                         deleted (a consumed queue is deleted only after its consumers are \
                          removed{already}): {e}"
                     )));
                 }
@@ -214,16 +248,21 @@ impl CloudflareApi for Account<'_> {
         }
     }
 
-    fn queue_delete(&self, name: &str) -> Result<bool, CloudflareError> {
-        let Some(id) = self.queue_find(name)? else {
+    fn queue_consumers(
+        &self,
+        name: &str,
+    ) -> Result<Option<Vec<rest::queues::Consumer>>, CloudflareError> {
+        match self.queue_id(name)? {
+            Some(id) => self.consumers_of(name, &id).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    fn queue_delete(&self, name: &str, detach: &BTreeSet<String>) -> Result<bool, CloudflareError> {
+        let Some(id) = self.queue_id(name)? else {
             return Ok(false);
         };
-        if !rest::queues::is_queue_id(&id) {
-            return Err(CloudflareError::Other(format!(
-                "the queue `{name}` has the id `{id}`, which is not a queue id, so nothing was deleted"
-            )));
-        }
-        self.remove_queue_consumers(name, &id)?;
+        self.remove_queue_consumers(name, &id, detach)?;
         self.send(Purpose::Queues, &rest::queues::delete(&id))
             .map(|_| true)
     }
@@ -660,7 +699,8 @@ mod tests {
     fn a_consumed_queue_is_deleted_after_its_consumer_is_removed() {
         let (base, seen) = consumed_queue_stub(200);
         let root = std::env::temp_dir();
-        assert_eq!(account(base, &root).queue_delete("jobs"), Ok(true));
+        let own = BTreeSet::from(["shop-jobs".to_string()]);
+        assert_eq!(account(base, &root).queue_delete("jobs", &own), Ok(true));
         assert_eq!(
             *seen.lock().unwrap(),
             [
@@ -678,12 +718,13 @@ mod tests {
     fn a_consumer_that_cannot_be_removed_leaves_the_queue_and_says_why() {
         let (base, seen) = consumed_queue_stub(403);
         let root = std::env::temp_dir();
+        let own = BTreeSet::from(["shop-jobs".to_string()]);
         let e = account(base, &root)
-            .queue_delete("jobs")
+            .queue_delete("jobs", &own)
             .unwrap_err()
             .to_string();
         assert!(
-            e.starts_with("could not remove the Worker `shop-jobs` as a consumer of the queue `jobs`, so the queue was not deleted (a consumed queue is deleted only after its consumers are removed): DELETE /queues/4e5f6a7b/consumers/9f8e7d: Cloudflare answered 403"),
+            e.starts_with("could not detach `shop-jobs` from the queue `jobs`, so the queue was not deleted (a consumed queue is deleted only after its consumers are removed): DELETE /queues/4e5f6a7b/consumers/9f8e7d: Cloudflare answered 403"),
             "{e}"
         );
         assert!(
@@ -692,6 +733,33 @@ mod tests {
                 .unwrap()
                 .contains(&"DELETE /accounts/acct/queues/4e5f6a7b".to_string()),
             "the queue was not touched"
+        );
+    }
+
+    /// #4601: a consumer that is not one of the project's Workers (here, `shop-jobs` is not in
+    /// `detach`) refuses the delete before anything is removed: neither the consumer nor the
+    /// queue is touched, and the refusal names it with the command that detaches it.
+    #[test]
+    fn a_foreign_consumer_refuses_the_delete_before_anything_is_removed() {
+        let (base, seen) = consumed_queue_stub(200);
+        let root = std::env::temp_dir();
+        let e = account(base, &root)
+            .queue_delete("jobs", &BTreeSet::from(["shop-api".to_string()]))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            e,
+            "the queue `jobs` is consumed by the Worker `shop-jobs` (not one of this project's \
+             Workers), so nothing was deleted for it: detach it by hand (`wrangler queues \
+             consumer remove jobs shop-jobs`) or keep the queue"
+        );
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [
+                "GET /accounts/acct/queues?per_page=100&page=1",
+                "GET /accounts/acct/queues/4e5f6a7b/consumers",
+            ],
+            "nothing was deleted"
         );
     }
 

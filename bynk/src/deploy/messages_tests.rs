@@ -527,7 +527,10 @@ const REST_OPERATIONS: &[(&str, Run)] = &[
         format!("{:?}", queue_exists(p, "jobs"))
     }),
     ("Queues delete (REST)", |p, _| {
-        shown(delete_queue(p, "jobs"))
+        // `shop-jobs` and `shop-mail` are the project's own Workers; any other consumer is
+        // refused (#4601).
+        let own = BTreeSet::from(["shop-jobs".to_string(), "shop-mail".to_string()]);
+        shown(delete_queue(p, "jobs", &own))
     }),
 ];
 
@@ -865,7 +868,26 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
     ),
     (
         "Queues delete (REST)",
-        "second consumer cannot be removed",
+        "second own consumer cannot be detached",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"},{"consumer_id":"1a2b3c","script":"shop-mail","type":"worker"}]}"#,
+            ),
+            (200, r#"{"success":true,"result":null}"#),
+            (
+                403,
+                r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#,
+            ),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "an HTTP pull consumer refuses the delete, nothing removed",
         &[
             (
                 200,
@@ -875,10 +897,19 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
                 200,
                 r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"shop-jobs","type":"worker"},{"consumer_id":"1a2b3c","type":"http_pull"}]}"#,
             ),
-            (200, r#"{"success":true,"result":null}"#),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "a foreign Worker consumer refuses the delete, nothing removed",
+        &[
             (
-                403,
-                r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#,
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"consumer_id":"9f8e7d","script":"billing","type":"worker"}]}"#,
             ),
         ],
     ),

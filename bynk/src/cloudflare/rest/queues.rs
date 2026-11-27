@@ -96,11 +96,53 @@ pub(crate) fn list_consumers(queue_id: &str) -> Request {
     }
 }
 
-/// One of a queue's consumers: its id, and the Worker it runs when it names one.
+/// One of a queue's consumers: its id, the Worker it runs when it names one, and whether it is
+/// an HTTP pull consumer (`"type": "http_pull"`), which runs no Worker.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Consumer {
     pub(crate) id: String,
     pub(crate) script: Option<String>,
+    pub(crate) pull: bool,
+}
+
+impl Consumer {
+    /// Whether this is a Worker consumer running one of `own` (the project's scripts).
+    pub(crate) fn is_own(&self, own: &std::collections::BTreeSet<String>) -> bool {
+        !self.pull && self.script.as_ref().is_some_and(|s| own.contains(s))
+    }
+
+    /// The consumer as a refusal names it, with the command that detaches it from `queue`.
+    fn foreign(&self, queue: &str) -> (String, String) {
+        match (&self.script, self.pull) {
+            (Some(script), false) => (
+                format!("the Worker `{script}` (not one of this project's Workers)"),
+                format!("wrangler queues consumer remove {queue} {script}"),
+            ),
+            (_, true) => (
+                format!("the HTTP pull consumer `{}`", self.id),
+                format!("wrangler queues consumer http remove {queue}"),
+            ),
+            (None, false) => (
+                format!("the consumer `{}`, which names no Worker", self.id),
+                format!("DELETE /queues/{{queue_id}}/consumers/{}", self.id),
+            ),
+        }
+    }
+}
+
+/// #4601: why the queue `queue` is not deleted while `foreign` consume it: each named, with the
+/// command that detaches it. Bynk detaches only its own Workers; a foreign Worker or an HTTP pull
+/// consumer is someone else's reader, so the queue is left for a person to decide.
+pub(crate) fn foreign_consumers(queue: &str, foreign: &[&Consumer]) -> String {
+    let (names, commands): (Vec<String>, Vec<String>) =
+        foreign.iter().map(|c| c.foreign(queue)).unzip();
+    format!(
+        "the queue `{queue}` is consumed by {}, so nothing was deleted for it: detach {} by hand \
+         (`{}`) or keep the queue",
+        names.join(" and "),
+        if foreign.len() == 1 { "it" } else { "them" },
+        commands.join("`, `"),
+    )
 }
 
 /// The consumers in a [`list_consumers`] answer; `None` when it has no `result` list or an entry
@@ -116,6 +158,7 @@ pub(crate) fn consumers(body: &serde_json::Value) -> Option<Vec<Consumer>> {
                     .as_str()
                     .or_else(|| c["script_name"].as_str())
                     .map(str::to_string),
+                pull: c["type"].as_str() == Some("http_pull"),
             })
         })
         .collect()
@@ -185,15 +228,18 @@ mod tests {
             [
                 Consumer {
                     id: "9f8e7d".into(),
-                    script: Some("shop-jobs".into())
+                    script: Some("shop-jobs".into()),
+                    pull: false,
                 },
                 Consumer {
                     id: "1a2b3c".into(),
-                    script: Some("older-shape".into())
+                    script: Some("older-shape".into()),
+                    pull: false,
                 },
                 Consumer {
                     id: "4d5e6f".into(),
-                    script: None
+                    script: None,
+                    pull: true,
                 },
             ]
         );

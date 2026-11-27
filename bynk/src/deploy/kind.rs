@@ -609,6 +609,16 @@ pub(crate) trait ResourceKind: Sized {
         None
     }
 
+    /// [`ResourceKind::prune_notice`], given what the run read of the account just before it
+    /// asks (`orphans`): a queue names the Workers it detaches (#4601).
+    fn prune_notice_in(
+        orphan: &Self::Orphan,
+        environment: &str,
+        _orphans: &Orphans,
+    ) -> Option<Notice> {
+        Self::prune_notice(orphan, environment)
+    }
+
     /// Delete `orphan` from the account, and what forgetting it changes. Only called for a
     /// [`ResourceKind::prunable`] orphan; report-only by default.
     fn prune(
@@ -1002,7 +1012,7 @@ pub(crate) fn prune_notices(orphans: &Orphans, environment: &str) -> (Vec<Notice
     impl KindVisitor for Announce<'_> {
         fn visit<K: ResourceKind>(&mut self) {
             for orphan in K::orphans_in(self.orphans) {
-                if let Some(notice) = K::prune_notice(orphan, self.environment) {
+                if let Some(notice) = K::prune_notice_in(orphan, self.environment, self.orphans) {
                     self.notices.push(notice);
                 }
                 self.count += usize::from(K::prunable(orphan));

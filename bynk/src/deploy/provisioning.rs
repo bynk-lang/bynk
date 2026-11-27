@@ -418,8 +418,15 @@ pub(crate) fn queues_to_record(declared: &Resources, created: &BTreeSet<String>)
 /// already gone, so a re-run `--prune` is safe (#839): one the listing does not
 /// show, or a delete answered with Cloudflare's `10104 QueueNotFound`, is
 /// success.
-pub(crate) fn delete_queue(api: &dyn CloudflareApi, name: &str) -> Result<(), CloudflareError> {
-    match api.queue_delete(name) {
+///
+/// Only the consumers in `detach`, the project's own Workers, are removed before the queue
+/// (#4601); any other consumer refuses the delete before anything is removed.
+pub(crate) fn delete_queue(
+    api: &dyn CloudflareApi,
+    name: &str,
+    detach: &BTreeSet<String>,
+) -> Result<(), CloudflareError> {
+    match api.queue_delete(name, detach) {
         Ok(_) => Ok(()),
         Err(e)
             if e.rest()
@@ -617,12 +624,12 @@ mod tests {
         // #839, over REST since 1D.4d: a queue the listing no longer shows, or a delete answered
         // with `10104 QueueNotFound`, is the end state `--prune` asked for.
         let absent = Recording::new(|_: &Op<'_>| Ok::<_, CloudflareError>("absent".into()));
-        assert_eq!(delete_queue(&absent, "jobs"), Ok(()));
+        assert_eq!(delete_queue(&absent, "jobs", &BTreeSet::new()), Ok(()));
         let raced = Recording::new(|_: &Op<'_>| Err(queue_refusal("DELETE", 404, 10104)));
-        assert_eq!(delete_queue(&raced, "jobs"), Ok(()));
+        assert_eq!(delete_queue(&raced, "jobs", &BTreeSet::new()), Ok(()));
         // Any other refusal is a real failure, in Cloudflare's words.
         let other = Recording::new(|_: &Op<'_>| Err(queue_refusal("DELETE", 400, 10107)));
-        let e = delete_queue(&other, "jobs").unwrap_err();
+        let e = delete_queue(&other, "jobs", &BTreeSet::new()).unwrap_err();
         assert!(e.to_string().contains("400"), "{e}");
     }
 

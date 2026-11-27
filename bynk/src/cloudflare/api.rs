@@ -21,9 +21,18 @@ pub(crate) trait CloudflareApi {
     /// The id of the account's queue named exactly `name`, if it has one (REST, `GET /queues`,
     /// every page read: the reference has no lookup by name).
     fn queue_find(&self, name: &str) -> Result<Option<String>, CloudflareError>;
+    /// The consumers of the queue `name` (REST, `GET /queues/{id}/consumers`): `None` when the
+    /// account has no queue of that name.
+    fn queue_consumers(
+        &self,
+        name: &str,
+    ) -> Result<Option<Vec<super::rest::queues::Consumer>>, CloudflareError>;
     /// Delete the queue `name`, found by name and deleted by id (REST, `DELETE /queues/{id}`):
-    /// `false` when the account has no queue of that name, so nothing was deleted.
-    fn queue_delete(&self, name: &str) -> Result<bool, CloudflareError>;
+    /// `false` when the account has no queue of that name, so nothing was deleted. Its consumers
+    /// are removed first (Cloudflare refuses to delete a consumed queue, `11005`), but only when
+    /// each is a Worker named in `detach`, the project's own: any other consumer refuses the
+    /// delete before anything is removed (#4601).
+    fn queue_delete(&self, name: &str, detach: &BTreeSet<String>) -> Result<bool, CloudflareError>;
     /// Create a KV namespace titled `title` (REST, `POST /storage/kv/namespaces`): its id.
     fn kv_create(&self, title: &str) -> Result<String, CloudflareError>;
     /// Every KV namespace id on the account, every page read (REST).
@@ -199,6 +208,10 @@ pub(crate) enum Op<'a> {
         name: &'a str,
     },
     #[cfg(test)]
+    QueueConsumers {
+        name: &'a str,
+    },
+    #[cfg(test)]
     QueueDelete {
         name: &'a str,
     },
@@ -297,6 +310,8 @@ impl Op<'_> {
             Op::QueueInfo { name } => words(&["queues", "info", name]),
             #[cfg(test)]
             Op::QueueDelete { name } => words(&["queues", "delete", name]),
+            #[cfg(test)]
+            Op::QueueConsumers { name } => words(&["queues", "consumers", name]),
             // KV's lines are the wrangler calls it made before 1D.4a, kept for the fake's log.
             #[cfg(test)]
             Op::KvCreate { title } => words(&["kv", "namespace", "create", title]),
@@ -445,7 +460,10 @@ impl Op<'_> {
         Some(match self {
             // Over REST (1D.4d).
             #[cfg(test)]
-            Op::QueueCreate { .. } | Op::QueueInfo { .. } | Op::QueueDelete { .. } => {
+            Op::QueueCreate { .. }
+            | Op::QueueInfo { .. }
+            | Op::QueueConsumers { .. }
+            | Op::QueueDelete { .. } => {
                 return None;
             }
             // Over REST (1D.4a): never a wrangler call, so never a wrangler error.
@@ -490,6 +508,7 @@ mod tests {
             (Op::QueueCreate { name: "jobs" }, "queues create jobs"),
             (Op::QueueInfo { name: "jobs" }, "queues info jobs"),
             (Op::QueueDelete { name: "jobs" }, "queues delete jobs"),
+            (Op::QueueConsumers { name: "jobs" }, "queues consumers jobs"),
             (Op::KvCreate { title: "api" }, "kv namespace create api"),
             (Op::KvList, "kv namespace list"),
             (
