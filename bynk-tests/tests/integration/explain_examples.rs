@@ -98,6 +98,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/3329_cookie_cross_site_without_credentials` holds it with `expected_warnings.txt`, and `positive/3329_cookie_cross_site_credentials` holds the credentialed good case",
     ),
     (
+        "bynk.commons.capability_unused",
+        "a warning; `positive/3959_commons_capability_unused` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.consumes.capability_not_selected",
         "a warning; `positive/3536_per_file_consumes` holds it with `expected_warnings.txt`",
     ),
@@ -156,6 +160,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
     (
         "bynk.agent.write_after_erase",
         "a warning; `positive/3931_agent_erase_write_after` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.match.as_on_wildcard",
+        "a warning; `positive/3971_as_on_wildcard` holds it with `expected_warnings.txt`, and `positive/3971_pattern_as` holds the good case",
     ),
     (
         "bynk.match.refined_pattern_is_range",

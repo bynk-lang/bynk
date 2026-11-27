@@ -11,8 +11,23 @@ bynk deploy
 
 The first deploy checks Node and Wrangler, compiles the project, shows what it
 will create, checks your Wrangler authentication, asks for confirmation, then
-provisions each context's resources and deploys its Worker. Authenticate first
-with `wrangler login` or `CLOUDFLARE_API_TOKEN`.
+provisions each context's resources and deploys its Worker.
+
+Authenticate first. There are two halves:
+
+- **The push** runs through Wrangler, so `wrangler login` (or
+  `CLOUDFLARE_API_TOKEN`) is enough for it.
+- **The account's resources** are created, checked and deleted through
+  Cloudflare's API, which needs both `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID`. A `wrangler login` session is not enough, and the
+  token needs the permission of each kind it touches; the sections below name
+  them. Today that is KV, R2 and D1, along with Hyperdrive and the linked kinds.
+
+  A deploy that needs them and lacks one stops before the confirmation, with
+  nothing created, and names the missing variable and the permission. A
+  redeploy whose namespaces, buckets and databases are all recorded needs
+  neither. `bynk doctor`
+  shows a `cloudflare api` row for a project that declares account resources.
 
 Use `--yes` in an automated, non-interactive invocation:
 
@@ -551,6 +566,13 @@ titled `<worker>-<capability>`. Both get an environment suffix under `--env`
 recorded in `bynk.deploy.lock` under its Worker and its binding, and only ever
 written into the generated `wrangler.toml` immediately before the push.
 
+Creating and deleting a namespace goes through Cloudflare's API, so it needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with "Workers KV
+Storage: Edit". Before each redeploy reuses a recorded namespace, the deploy
+lists the account's namespaces and creates again any that were deleted by hand.
+Without the variables that check is skipped, the ledger is trusted, and the
+plan says so in a note.
+
 Titles are account-wide, so two of a project's namespaces must not share one:
 Worker `shop` with `capability CartSessions` and Worker `shop-cart` with
 `capability Sessions` would both be `shop-cart-sessions`. `bynk deploy` refuses
@@ -570,8 +592,13 @@ deploy shop-cart
 ```
 
 A bucket is named `<worker>-<capability>`, with an environment suffix under
-`--env` (`shop-cart-archives-staging`), and created with
-`wrangler r2 bucket create`, in its `@jurisdiction` when it has one. R2 allows
+`--env` (`shop-cart-archives-staging`), and created through Cloudflare's API,
+in its `@jurisdiction` when it has one. That needs `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`, the token with "Workers R2 Storage: Edit", when a bucket
+is created; a recorded bucket is reused without a call. If the create is refused
+because the name is taken, the deploy asks the account for the bucket by name:
+one this account holds is adopted, and one another account owns stays a
+failure. R2 allows
 3 to 63 lowercase letters, digits and hyphens, not starting or ending with a
 hyphen. A derived name outside that is refused at plan time, naming the
 instance, as is a name two instances would share. R2 bucket names are treated
@@ -788,16 +815,19 @@ d1 create shop-cart-orders (D1_ORDERS)
 deploy shop-cart
 ```
 
-The first deploy runs `wrangler d1 create`, records the name and the
-`database_id` Cloudflare minted, in `d1_instances`, before the push (an
-interrupted run never makes a second one), and writes both into the generated
-`[[d1_databases]]` entry. If a database of that name is already on the account,
-deploy adopts it, looking its id up with `wrangler d1 list`. Under `--env` the
-environment gets its own database and id.
+The first deploy creates the database through Cloudflare's API, records the
+name and the `database_id` Cloudflare minted, in `d1_instances`, before the push
+(an interrupted run never makes a second one), and writes both into the
+generated `[[d1_databases]]` entry. Creating one needs `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`, the token with "D1: Edit"; a recorded database is reused
+without a call. If the create is refused and a database of exactly that name is
+already on the account, deploy adopts it, looking its id up by name. Under
+`--env` the environment gets its own database and id. Migrations still run
+through wrangler, so a `wrangler login` session covers them on a redeploy.
 
 A `D1` with `@jurisdiction("eu")` is planned as
 `d1 create shop-cart-orders (D1_ORDERS) in jurisdiction eu` and created with
-`--jurisdiction eu`; the ledger records the jurisdiction beside the id. It is fixed at creation, so a
+that jurisdiction; the ledger records the jurisdiction beside the id. It is fixed at creation, so a
 source that later adds or changes it for a database already in the ledger is refused with an
 explanation, never recreated. A database already on the account but not in the ledger would be adopted,
 and Bynk cannot read back the jurisdiction it was made with, so with `@jurisdiction` the plan notes

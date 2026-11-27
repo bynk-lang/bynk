@@ -360,6 +360,9 @@
   "bynk.cloudflare.edge_cache_public_authenticated": [
     "/book/guides/effects-and-capabilities/cache-at-the-edge/#mark-what-may-be-cached"
   ],
+  "bynk.commons.capability_unused": [
+    "/reference/capabilities/#capability-parameters"
+  ],
   "bynk.consumes.alias_conflict": [
     "/book/guides/program-structure/consume-services/#use-an-alias"
   ],
@@ -798,18 +801,42 @@
   "bynk.generics.unknown_where_param": [
     "/reference/generics/#bounds"
   ],
+  "bynk.given.binding_duplicate": [
+    "/reference/capabilities/#capability-parameters"
+  ],
+  "bynk.given.binding_kind_mismatch": [
+    "/reference/capabilities/#capability-parameters"
+  ],
+  "bynk.given.binding_missing": [
+    "/reference/capabilities/#capability-parameters"
+  ],
+  "bynk.given.binding_shared": [
+    "/reference/capabilities/#capability-parameters"
+  ],
+  "bynk.given.binding_unknown": [
+    "/reference/capabilities/#capability-parameters"
+  ],
   "bynk.given.cross_context_unknown_capability": [
     "/reference/capabilities/",
     "/book/guides/effects-and-capabilities/share-across-contexts/"
   ],
-  "bynk.given.fn_outside_context": [
-    "/reference/capabilities/#capabilities-in-functions"
-  ],
   "bynk.given.fn_unsupported": [
     "/reference/capabilities/#capabilities-in-functions"
   ],
+  "bynk.given.kind_needs_parameter": [
+    "/reference/capabilities/#capability-parameters"
+  ],
   "bynk.given.missing_for_call": [
     "/reference/capabilities/#capabilities-in-functions"
+  ],
+  "bynk.given.parameter_name_conflict": [
+    "/reference/capabilities/#capability-parameters"
+  ],
+  "bynk.given.parameter_outside_commons": [
+    "/reference/capabilities/#capability-parameters"
+  ],
+  "bynk.given.shared_as_parameter": [
+    "/reference/capabilities/#capability-parameters"
   ],
   "bynk.given.undeclared_capability": [
     "/book/concepts/effects-and-capabilities/understand-the-capability-model/"
@@ -2127,6 +2154,9 @@
   ],
   "bynk.types.duplicate_literal_arm": [
     "/reference/types/#exhaustiveness-and-reachability"
+  ],
+  "bynk.types.duplicate_pattern_binding": [
+    "/reference/types/#each-name-once"
   ],
   "bynk.types.duplicate_pattern_field": [
     "/reference/types/#record-patterns"

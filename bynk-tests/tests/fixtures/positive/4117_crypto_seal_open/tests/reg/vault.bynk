@@ -1,0 +1,46 @@
+suite reg.vault
+
+// #4117: a unit-tier test runs the real AES-256-GCM through the Node binding.
+
+case "a sealed value opens with the same key and context" {
+	let sealed <- sealer.call(
+		"0000000000000000000000000000000000000000000000000000000000000001",
+		"a@example.test",
+		"customer-17"
+	)
+	let back <- opener.call(
+		"0000000000000000000000000000000000000000000000000000000000000001",
+		sealed,
+		"customer-17"
+	)
+	expect back == "a@example.test"
+}
+
+case "a wrong context, a wrong key and a tampered value all fail to open" {
+	let key = "0000000000000000000000000000000000000000000000000000000000000001"
+	let sealed <- sealer.call(key, "a@example.test", "customer-17")
+	let wrongContext <- opener.call(key, sealed, "customer-18")
+	let wrongKey <- opener.call(
+		"0000000000000000000000000000000000000000000000000000000000000002",
+		sealed,
+		"customer-17"
+	)
+	let tampered <- opener.call(key, sealed.concat("00"), "customer-17")
+	let truncated <- opener.call(key, "01", "customer-17")
+	expect wrongContext == "open failed"
+	expect wrongKey == "open failed"
+	expect tampered == "open failed"
+	expect truncated == "open failed"
+}
+
+case "the same value never seals the same way twice" {
+	let key = "0000000000000000000000000000000000000000000000000000000000000001"
+	let one <- sealer.call(key, "same", "ctx")
+	let two <- sealer.call(key, "same", "ctx")
+	expect one != two
+}
+
+case "a key that is not 32 bytes is refused" {
+	let sealed <- sealer.call("00", "x", "ctx")
+	expect sealed == "bad key"
+}

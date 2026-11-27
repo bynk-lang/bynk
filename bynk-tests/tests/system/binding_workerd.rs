@@ -220,6 +220,42 @@ fn run_smoke_with(
     env: &[(&str, &str)],
     drive: &dyn Fn(u16) -> Vec<String>,
 ) -> Option<(Vec<String>, String)> {
+    run_smoke_awaiting(project, ctx, source, files, prepare, boot, env, &[], drive)
+}
+
+/// How long the wrangler log is given to hold the lines a smoke asserts on
+/// (#4479): `wrangler dev` prints a Worker's console asynchronously, so a log
+/// read the instant the last request was answered can lack lines the Worker
+/// has already written, most of all on a loaded machine.
+const LOG_DEADLINE: Duration = Duration::from_secs(60);
+
+/// The wrangler log at `path`, once it holds every one of `lines` or after
+/// [`LOG_DEADLINE`] (the caller's own assertion then names the missing line).
+fn read_log_awaiting(path: &Path, lines: &[&str]) -> String {
+    let deadline = Instant::now() + LOG_DEADLINE;
+    loop {
+        let log = read_log(path);
+        if lines.iter().all(|line| log.contains(line)) || Instant::now() > deadline {
+            return log;
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+}
+
+/// [`run_smoke_with`] that, after `drive`, waits for the wrangler log to hold
+/// each of `awaits` before it reads the log back.
+#[allow(clippy::too_many_arguments)]
+fn run_smoke_awaiting(
+    project: &str,
+    ctx: &str,
+    source: &str,
+    files: &[(&str, &str)],
+    prepare: &dyn Fn(&std::path::Path) -> Option<String>,
+    boot: &str,
+    env: &[(&str, &str)],
+    awaits: &[&str],
+    drive: &dyn Fn(u16) -> Vec<String>,
+) -> Option<(Vec<String>, String)> {
     if !tools::tool_exists("npx") && skip("`npx` is not on PATH") {
         return None;
     }
@@ -236,7 +272,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.crypto\", \"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Ai\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.given.parameters\", \"bynk.crypto\", \"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Ai\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -292,23 +328,18 @@ fn run_smoke_with(
         return None;
     };
 
-    let deadline = Instant::now() + Duration::from_secs(180);
-    while get(port, boot).is_err() {
-        if Instant::now() > deadline {
-            let log = read_log(&log_path);
-            drop(server);
-            skip(&format!(
-                "wrangler dev did not serve within the boot window (likely no network \
-                 to provision {})\n--- wrangler log ---\n{log}",
-                wrangler::SPEC
-            ));
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+    if let Err(why) = wrangler::wait_until_ready(&log_path, port, &|| get(port, boot).is_ok()) {
+        let log = read_log(&log_path);
+        drop(server);
+        skip(&format!(
+            "{why} (likely no network to provision {})\n--- wrangler log ---\n{log}",
+            wrangler::SPEC
+        ));
+        return None;
     }
 
     let failures = drive(port);
-    let log = read_log(&log_path);
+    let log = read_log_awaiting(&log_path, awaits);
     drop(server);
     let _ = fs::remove_dir_all(&tmp);
     Some((failures, log))
@@ -353,6 +384,100 @@ fn workers_kv_round_trips_on_workerd() {
     assert!(
         failures.is_empty(),
         "WorkersKv on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+/// #3959 (capability parameters, slice 1): a commons function that takes its
+/// `Kv` as a capability parameter, bound at each call. Track §11: the
+/// instance is written at every call and never inferred, so the namespace a
+/// call reads and writes is the one its binding names.
+const CAP_PARAMS_COMMONS: &str = "commons lib.cache
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+fn remember(key: String, value: String) -> Effect[String] given Store: Kv, Logger {
+\tlet hit <- Store.get(key)
+\tmatch hit {
+\t\tSome(text) => Effect.pure(text),
+\t\tNone => {
+\t\t\tlet _ <- Store.put(key, value)
+\t\t\tlet _ <- Logger.info(\"stored \\(key)\")
+\t\t\tEffect.pure(value)
+\t\t},
+\t}
+}
+";
+
+const CAP_PARAMS_SOURCE: &str = "context params.smoke
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+uses lib.cache
+
+capability Sessions = Kv
+
+capability Notes {
+\tfn note(key: String, value: String) -> Effect[String]
+}
+
+provides Notes = KvNotes given Sessions, Logger {
+\tfn note(key: String, value: String) -> Effect[String] {
+\t\tremember(key, value, given Store = Sessions)
+\t}
+}
+
+service api from http {
+\ton GET(\"/sessions/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Sessions, Logger {
+\t\tlet v <- remember(key, value, given Store = Sessions)
+\t\tOk(v)
+\t}
+
+\ton GET(\"/bare/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Kv, Logger {
+\t\tlet v <- remember(key, value, given Store = Kv)
+\t\tOk(v)
+\t}
+
+\ton GET(\"/notes/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Notes {
+\t\tlet v <- Notes.note(key, value)
+\t\tOk(v)
+\t}
+}
+";
+
+/// #3959, slice 1: the commons function runs on workerd through a derived
+/// instance, through the bare `Kv`, and from a Bynk-bodied provider, and each
+/// call reaches exactly the namespace its binding names (track §11).
+#[test]
+fn capability_parameter_binds_the_named_instance_on_workerd() {
+    let steps: &[(&str, u16, &str)] = &[
+        // A derived instance: the first value is stored, the second read back.
+        ("/sessions/k/first", 200, r#""first""#),
+        ("/sessions/k/second", 200, r#""first""#),
+        // The bare `Kv`, bound explicitly, is its own namespace.
+        ("/bare/k/plain", 200, r#""plain""#),
+        ("/bare/k/again", 200, r#""plain""#),
+        // A provider binds its own `given Sessions`: it sees the session value.
+        ("/notes/k/note", 200, r#""first""#),
+        ("/notes/n/note", 200, r#""note""#),
+        ("/sessions/n/other", 200, r#""note""#),
+    ];
+    let Some((failures, log)) = run_smoke_with(
+        "params-smoke",
+        "params",
+        CAP_PARAMS_SOURCE,
+        &[("src/lib/cache.bynk", CAP_PARAMS_COMMONS)],
+        &|_| None,
+        "/sessions/boot/boot",
+        &[],
+        &|port| check_steps(port, steps),
+    ) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "a capability parameter on workerd reached a namespace other than its binding names:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }
@@ -792,6 +917,40 @@ fn workers_r2_round_trips_on_workerd() {
     );
 }
 
+/// The two limiters' windows (`@period` in [`RATELIMIT_SOURCE`]), each with the
+/// room the steps need before the window ends: far more than they take, on a
+/// loaded machine too.
+const RATELIMIT_LOGIN_WINDOW: (Duration, Duration) =
+    (Duration::from_secs(60), Duration::from_secs(15));
+const RATELIMIT_READS_WINDOW: (Duration, Duration) =
+    (Duration::from_secs(10), Duration::from_secs(5));
+
+/// Wait until the wall clock is at least `room` away from the end of the
+/// current window of each `(period, room)`. Miniflare's limiter keeps one count
+/// per key per window of `period` aligned to the clock (`floor(now / period)`),
+/// so the steps of a smoke that counts requests must all fall in one window.
+/// This sleeps only for the part of a window that is too short, never past the
+/// window's own end, and then asks again.
+fn wait_for_window_room(windows: &[(Duration, Duration)]) {
+    loop {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("the clock is after 1970");
+        let short = windows
+            .iter()
+            .filter_map(|(period, room)| {
+                let left =
+                    *period - Duration::from_nanos((now.as_nanos() % period.as_nanos()) as u64);
+                (left < *room).then_some(left)
+            })
+            .max();
+        match short {
+            Some(left) => std::thread::sleep(left + Duration::from_millis(50)),
+            None => return,
+        }
+    }
+}
+
 const RATELIMIT_SOURCE: &str = "context rl.smoke
 
 consumes bynk.cloudflare
@@ -829,6 +988,9 @@ fn workers_ratelimit_counts_on_workerd() {
     ];
     let Some((failures, log)) =
         run_smoke("rl-smoke", "rl", RATELIMIT_SOURCE, "/reads/boot", &|port| {
+            // Miniflare counts in fixed windows aligned to the wall clock, so a pair of
+            // requests that straddles a window's end is counted in two windows (#4479).
+            wait_for_window_room(&[RATELIMIT_LOGIN_WINDOW, RATELIMIT_READS_WINDOW]);
             check_steps(port, steps)
         })
     else {
@@ -843,9 +1005,29 @@ fn workers_ratelimit_counts_on_workerd() {
 
 const CRYPTO_SOURCE: &str = "context cr.smoke
 
-consumes bynk.crypto { Crypto }
+consumes bynk.crypto { Crypto, CryptoError }
+
+fn show(r: Result[Bytes, CryptoError]) -> String {
+\tmatch r {
+\t\tOk(b) => b.decodeUtf8().getOrElse(\"not text\")
+\t\tErr(_) => \"open failed\"
+\t}
+}
 
 service api from http {
+\ton GET(\"/seal/:text\") (text: String) -> Effect[HttpResult[String]] by Visitor given Crypto {
+\t\tlet imported <- Crypto.importCipherKey(Bytes.fromHex(\"0000000000000000000000000000000000000000000000000000000000000001\").getOrElse(Bytes.empty()))
+\t\tmatch imported {
+\t\t\tOk(key) => {
+\t\t\t\tlet sealed <- Crypto.seal(key, Bytes.fromUtf8(text), Bytes.fromUtf8(\"ctx\"))
+\t\t\t\tlet back <- Crypto.open(key, sealed, Bytes.fromUtf8(\"ctx\"))
+\t\t\t\tlet wrong <- Crypto.open(key, sealed, Bytes.fromUtf8(\"other\"))
+\t\t\t\tOk(\"\\(show(back)) | \\(show(wrong)) | \\(sealed.length())\")
+\t\t\t}
+\t\t\tErr(_) => Ok(\"bad key\")
+\t\t}
+\t}
+
 \ton GET(\"/roundtrip/:pw\") (pw: String) -> Effect[HttpResult[String]] by Visitor given Crypto {
 \t\tlet stored <- Crypto.hashPassword(pw)
 \t\tlet ok <- Crypto.verifyPassword(pw, stored)
@@ -869,8 +1051,8 @@ service api from http {
 ";
 
 #[test]
-fn crypto_password_hashing_and_hkdf_run_on_workerd() {
-    // #4118: `crypto.subtle` on a real `workerd`, not Node: `hashPassword` and `verifyPassword` at the
+fn crypto_password_hashing_hkdf_and_seal_run_on_workerd() {
+    // #4118, #4117: `crypto.subtle` on a real `workerd`, not Node: `hashPassword` and `verifyPassword` at the
     // Workers count (100,000), a stored hash above it (refused by the binding's own cap, `false`), and the
     // HKDF answer `node:crypto` gives for the same input. What this cannot see is the limit itself:
     // `wrangler dev` runs the open-source workerd, which accepts 600,000, while deployed Workers refuse
@@ -886,6 +1068,8 @@ fn crypto_password_hashing_and_hkdf_run_on_workerd() {
             "\"c1a70c6be6f6e6bf655da130593cef039aa373a2c7b62622c0bbc3c62fe6f146\"",
         ),
         ("/high/passwordPASSWORDpassword", 200, "\"false false\""),
+        // seal then open with the same scope, then with another; 1 + 12 + len + 16 bytes sealed.
+        ("/seal/hello", 200, "\"hello | open failed | 34\""),
     ];
     let Some((failures, log)) = run_smoke("cr-smoke", "cr", CRYPTO_SOURCE, "/derive", &|port| {
         check_steps(port, steps)
@@ -989,6 +1173,20 @@ service catchall from email(\"*@q.example\") {
 }
 ";
 
+/// How long the queue smoke waits for its consumer to have seen every message: a local queue
+/// delivers in batches after a timeout, so this is the one wait there that is the platform's.
+const QUEUE_DELIVERY_DEADLINE: Duration = Duration::from_secs(120);
+
+/// What the platform's own email handler logged for each outcome the runtime applied (#3328).
+const QUEUE_EMAIL_LOG_LINES: [(&str, &str); 3] = [
+    ("a forward", "Email handler forwarded message"),
+    ("a reply", "Email handler replied to sender"),
+    (
+        "a reject",
+        "Email handler rejected message with the following reason: \"not wanted\"",
+    ),
+];
+
 #[test]
 fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
     // P2 (#2578): Miniflare simulates `[[queues.producers]]` and
@@ -996,7 +1194,7 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
     // the generated consumer as the value its decoder expects, which is the
     // contract `WorkersQueue` exists to keep; text that is not JSON is refused
     // before anything is sent.
-    let Some((failures, log)) = run_smoke_with(
+    let Some((failures, log)) = run_smoke_awaiting(
         "q-smoke",
         "q",
         QUEUE_SOURCE,
@@ -1004,6 +1202,7 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
         &install_npm_dependencies,
         "/seen/boot",
         &[],
+        &QUEUE_EMAIL_LOG_LINES.map(|(_, line)| line),
         &|port| {
             let mut failures = check_steps(
                 port,
@@ -1030,7 +1229,7 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
                 ("o-7", "11"),
                 ("o-8", "12"),
             ];
-            let deadline = Instant::now() + Duration::from_secs(60);
+            let deadline = Instant::now() + QUEUE_DELIVERY_DEADLINE;
             loop {
                 let seen = expected
                     .iter()
@@ -1041,7 +1240,9 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
             );
                 if all || Instant::now() > deadline {
                     if !all {
-                        failures.push(format!("not every message was consumed: {seen:?}"));
+                        failures.push(format!(
+                            "not every message was consumed within the {QUEUE_DELIVERY_DEADLINE:?} delivery deadline: {seen:?}"
+                        ));
                     }
                     break;
                 }
@@ -1060,17 +1261,10 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
     );
     // #3328: what the platform's own handler did with each message, beside the
     // outcomes the runtime applied.
-    for (what, line) in [
-        ("a forward", "Email handler forwarded message"),
-        ("a reply", "Email handler replied to sender"),
-        (
-            "a reject",
-            "Email handler rejected message with the following reason: \"not wanted\"",
-        ),
-    ] {
+    for (what, line) in QUEUE_EMAIL_LOG_LINES {
         assert!(
             log.contains(line),
-            "{what} is not in the wrangler log ({line:?}):\n{log}"
+            "{what} is not in the wrangler log ({line:?}) within {LOG_DEADLINE:?}:\n{log}"
         );
     }
     assert!(
@@ -1608,6 +1802,8 @@ fn upstream() -> u16 {
                 let reply = match path {
                     "/redirect" => "HTTP/1.1 302 Found\r\nlocation: /landed\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_string(),
                     "/landed" => "HTTP/1.1 200 OK\r\ncontent-length: 6\r\nconnection: close\r\n\r\nlanded".to_string(),
+                    // #4115: two `Set-Cookie` headers, the first with an `Expires` comma.
+                    "/cookies" => "HTTP/1.1 200 OK\r\nset-cookie: a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT\r\nset-cookie: b=2\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_string(),
                     _ => {
                         std::thread::sleep(Duration::from_secs(30));
                         return;
@@ -1639,6 +1835,14 @@ service api from http {{
 \t\t}}
 \t}}
 
+\ton GET(\"/cookies\") () -> Effect[HttpResult[String]] by Visitor given Fetch {{
+\t\tlet res <- Fetch.send(Request {{ method: Get, url: \"http://127.0.0.1:{upstream}/cookies\" }})
+\t\tmatch res {{
+\t\t\tOk(r) => Ok(r.setCookies.fold(\"\", (acc, c) => acc.concat(\"[\").concat(c).concat(\"]\")))
+\t\t\tErr(_) => Ok(\"other\")
+\t\t}}
+\t}}
+
 \ton GET(\"/ready\") () -> Effect[HttpResult[String]] by Visitor {{
 \t\tOk(\"ready\")
 \t}}
@@ -1662,6 +1866,12 @@ fn fetch_send_with_times_out_and_returns_a_manual_redirect_on_workerd() {
                 ("/go/redirect/follow/long", 200, r#""200 landed""#),
                 ("/go/redirect/manual/long", 200, r#""302 ""#),
                 ("/go/hang/follow/short", 200, r#""timeout""#),
+                // #4115: both cookies reach `setCookies` intact on workerd, the `Expires` comma included.
+                (
+                    "/cookies",
+                    200,
+                    r#""[a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT][b=2]""#,
+                ),
             ],
         )
     }) else {
@@ -1741,9 +1951,22 @@ fn bytes_upstream() -> u16 {
     port
 }
 
+/// K5c: the head timeout the streamed download is given. It is generous because
+/// it bounds a request's head, which a machine loaded past its core count can
+/// take well over the 300 ms it once was to answer (#4479).
+const STREAM_HEAD_TIMEOUT_MS: u64 = 3_000;
+/// K5c: the gap between the parts of `/chunks`. Four of them make a body of
+/// twice [`STREAM_HEAD_TIMEOUT_MS`], which is what the smoke needs: a body that
+/// outlasts the head timeout and is not cut by it.
+const STREAM_PART_GAP_MS: u64 = 1_500;
+/// K5c: the timeout of the upload the downloaded stream is piped into. Its
+/// response head only arrives once the whole body has been sent, so it is
+/// several times the body's own length.
+const STREAM_UPLOAD_TIMEOUT_MS: u64 = 30_000;
+
 /// K5c (#2627): an upstream on `127.0.0.1` for the streamed-body smoke.
-/// `/chunks` answers the bytes 0–255 chunked, in four parts 150 ms apart, so
-/// the body outlasts a 300 ms head timeout; `/text` answers `alpha beta
+/// `/chunks` answers the bytes 0–255 chunked, in four parts `STREAM_PART_GAP_MS`
+/// apart, so the body outlasts the `STREAM_HEAD_TIMEOUT_MS` head timeout; `/text` answers `alpha beta
 /// gamma` chunked; `/echo` answers the request body it was sent — read chunked
 /// or by content-length — with how it was framed as `x-seen-te` and
 /// `x-seen-length`.
@@ -1844,7 +2067,7 @@ fn streams_upstream() -> u16 {
                         chunked(
                             &mut stream,
                             all.chunks(64).map(<[u8]>::to_vec).collect(),
-                            150,
+                            STREAM_PART_GAP_MS,
                         );
                     }
                     "/text" => chunked(
@@ -1913,15 +2136,15 @@ service api from http {{
 \t}}
 
 \t// K5c (#2627): a platform stream, piped from one fetch into the next. The
-\t// 300 ms timeout bounds the head alone; the body takes about 600 ms.
+\t// head timeout bounds the head alone; the body takes twice as long.
 \ton GET(\"/stream-round\") () -> Effect[HttpResult[String]] by Visitor given Fetch {{
-\t\tlet options = FetchOptions {{ timeout: Some(Duration.millis(300)), redirect: Follow }}
+\t\tlet options = FetchOptions {{ timeout: Some(Duration.millis({STREAM_HEAD_TIMEOUT_MS})), redirect: Follow }}
 \t\tlet down = Request {{ method: Get, url: \"http://127.0.0.1:{streams}/chunks\", contentType: None, authorization: None, headers: Map.empty(), body: None }}
 \t\tlet got <- Fetch.receiveStream(down, options)
 \t\tmatch got {{
 \t\t\tOk(d) => {{
 \t\t\t\tlet up = Request {{ method: Post, url: \"http://127.0.0.1:{streams}/echo\", contentType: None, authorization: None, headers: Map.empty(), body: None }}
-\t\t\t\tlet echoed <- Fetch.sendStream(up, d.body, FetchOptions {{ timeout: Some(5.seconds), redirect: Follow }})
+\t\t\t\tlet echoed <- Fetch.sendStream(up, d.body, FetchOptions {{ timeout: Some(Duration.millis({STREAM_UPLOAD_TIMEOUT_MS})), redirect: Follow }})
 \t\t\t\tmatch echoed {{
 \t\t\t\t\tOk(e) => {{
 \t\t\t\t\t\tlet parts <- e.body.collect()

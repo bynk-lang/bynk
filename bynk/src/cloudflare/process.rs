@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 
 use crate::probe::Provenance;
 
-use super::api::{CloudflareApi, Op, PushCall, PushRun, VectorizeOp};
+use super::api::{Op, PushCall, PushRun, VectorizeOp};
 use super::error::{Exit, Failure, WranglerError};
 
 /// The process adapter: wrangler as `provenance` resolves it, run from `project_root`.
@@ -247,41 +247,24 @@ pub(crate) fn tee_stderr(child: &mut Child) -> Option<JoinHandle<String>> {
     }))
 }
 
-impl CloudflareApi for Wrangler<'_> {
-    fn queue_create(&self, name: &str) -> Result<(), WranglerError> {
+/// Each operation that still runs as a wrangler process; [`super::Account`] routes the trait's
+/// methods here.
+impl Wrangler<'_> {
+    pub(crate) fn queue_create(&self, name: &str) -> Result<(), WranglerError> {
         self.run_from_root(Op::QueueCreate { name }).map(drop)
     }
 
     /// Answered by the exit code alone, both streams discarded: the reason to ask `queues info`
     /// rather than read a create's complaint (ADR 0194 D2).
-    fn queue_info(&self, name: &str) -> Result<(), WranglerError> {
+    pub(crate) fn queue_info(&self, name: &str) -> Result<(), WranglerError> {
         self.status(&Op::QueueInfo { name }, self.project_root)
     }
 
-    fn queue_delete(&self, name: &str) -> Result<(), WranglerError> {
+    pub(crate) fn queue_delete(&self, name: &str) -> Result<(), WranglerError> {
         self.run_from_root(Op::QueueDelete { name }).map(drop)
     }
 
-    fn kv_create(&self, title: &str) -> Result<String, WranglerError> {
-        let op = Op::KvCreate { title };
-        let stdout = self.run(&op, self.project_root, false)?;
-        parse_kv_id(&stdout).ok_or_else(|| {
-            WranglerError::new(
-                &op,
-                Failure::Unreadable("wrangler did not return a namespace id".into()),
-            )
-        })
-    }
-
-    fn kv_list(&self) -> Result<String, WranglerError> {
-        self.run_from_root(Op::KvList)
-    }
-
-    fn kv_delete(&self, id: &str) -> Result<(), WranglerError> {
-        self.run_from_root(Op::KvDelete { id }).map(drop)
-    }
-
-    fn d1_migrations_apply(
+    pub(crate) fn d1_migrations_apply(
         &self,
         worker_dir: &Path,
         binding: &str,
@@ -294,33 +277,11 @@ impl CloudflareApi for Wrangler<'_> {
         self.run(&op, worker_dir, true).map(drop)
     }
 
-    fn d1_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<String, WranglerError> {
-        let op = Op::D1Create { name, jurisdiction };
-        let stdout = self.run(&op, self.project_root, false)?;
-        parse_d1_id(&stdout).ok_or_else(|| {
-            WranglerError::new(
-                &op,
-                Failure::Unreadable(format!(
-                    "`wrangler d1 create` succeeded but printed no `database_id`:\n{stdout}"
-                )),
-            )
-        })
-    }
-
-    fn d1_list(&self) -> Result<String, WranglerError> {
-        self.run_from_root(Op::D1List)
-    }
-
-    fn r2_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<(), WranglerError> {
-        self.run_from_root(Op::R2Create { name, jurisdiction })
-            .map(drop)
-    }
-
-    fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {
+    pub(crate) fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {
         self.run_from_root(Op::Vectorize(op))
     }
 
-    fn push(&self, call: PushCall<'_>) -> Result<PushRun, WranglerError> {
+    pub(crate) fn push(&self, call: PushCall<'_>) -> Result<PushRun, WranglerError> {
         let op = Op::Push {
             args: call.args,
             secrets_file: call.secrets_file,
@@ -350,7 +311,11 @@ impl CloudflareApi for Wrangler<'_> {
         })
     }
 
-    fn triggers_deploy(&self, worker_dir: &Path, environment: &str) -> Result<(), WranglerError> {
+    pub(crate) fn triggers_deploy(
+        &self,
+        worker_dir: &Path,
+        environment: &str,
+    ) -> Result<(), WranglerError> {
         let op = Op::TriggersDeploy { environment };
         let status = self
             .command(&op, worker_dir)?
@@ -363,7 +328,7 @@ impl CloudflareApi for Wrangler<'_> {
         }
     }
 
-    fn whoami(&self) -> Result<(), WranglerError> {
+    pub(crate) fn whoami(&self) -> Result<(), WranglerError> {
         // Wherever bynk runs: `whoami` reads no config.
         let op = Op::Whoami;
         let status = self
@@ -379,22 +344,26 @@ impl CloudflareApi for Wrangler<'_> {
         }
     }
 
-    fn worker_deployments(&self, name: &str) -> Result<(), WranglerError> {
+    pub(crate) fn worker_deployments(&self, name: &str) -> Result<(), WranglerError> {
         self.run_from_root(Op::WorkerDeployments { name }).map(drop)
     }
 
-    fn rollback(&self, script: &str, version: &str) -> Result<(), WranglerError> {
+    pub(crate) fn rollback(&self, script: &str, version: &str) -> Result<(), WranglerError> {
         self.run_from_root(Op::Rollback { script, version })
             .map(drop)
     }
 
-    fn secret_list(&self, worker_dir: &Path, environment: &str) -> Result<String, WranglerError> {
+    pub(crate) fn secret_list(
+        &self,
+        worker_dir: &Path,
+        environment: &str,
+    ) -> Result<String, WranglerError> {
         // In the Worker's directory: `secret list` reads the Worker's name from the config
         // beside it, and any KV id is materialised by now.
         self.run(&Op::SecretList { environment }, worker_dir, false)
     }
 
-    fn secret_put(
+    pub(crate) fn secret_put(
         &self,
         worker_dir: &Path,
         name: &str,
@@ -413,7 +382,7 @@ impl CloudflareApi for Wrangler<'_> {
         )
     }
 
-    fn named_secret(
+    pub(crate) fn named_secret(
         &self,
         dir: &Path,
         verb: &str,
@@ -427,7 +396,7 @@ impl CloudflareApi for Wrangler<'_> {
         Self::feed(&op, command, stdin, "could not open wrangler's stdin")
     }
 
-    fn d1_migrations_apply_local(
+    pub(crate) fn d1_migrations_apply_local(
         &self,
         worker_dir: &Path,
         binding: &str,
@@ -437,7 +406,7 @@ impl CloudflareApi for Wrangler<'_> {
         self.run(&op, worker_dir, true).map(drop)
     }
 
-    fn secrets_store_list_local(
+    pub(crate) fn secrets_store_list_local(
         &self,
         worker_dir: &Path,
         store: &str,
@@ -448,78 +417,9 @@ impl CloudflareApi for Wrangler<'_> {
     }
 }
 
-/// The namespace id in `wrangler kv namespace create`'s printed binding snippet: `"id": "…"` in a
-/// JSON config, `id = "…"` in a TOML one.
-pub(crate) fn parse_kv_id(output: &str) -> Option<String> {
-    // A whole-output JSON document first (compact or pretty), then the line scan.
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(output) {
-        let id = value.get("id").or_else(|| {
-            value
-                .get(bynk_project::wrangler_keys::WranglerKey::KvNamespaces.top_key())?
-                .get(0)?
-                .get("id")
-        });
-        if let Some(id) = id.and_then(|id| id.as_str()) {
-            return Some(id.to_owned());
-        }
-    }
-    output.lines().find_map(|line| {
-        let line = line.trim().trim_start_matches(['{', '[']).trim_start();
-        let rest = line
-            .strip_prefix("\"id\"")
-            .or_else(|| line.strip_prefix("id"))?
-            .trim_start();
-        let rest = rest
-            .strip_prefix([':', '='])?
-            .trim_start()
-            .strip_prefix('"')?;
-        let id = &rest[..rest.find('"')?];
-        (!id.is_empty()).then(|| id.to_owned())
-    })
-}
-
-/// The `database_id` in `wrangler d1 create`'s output: the config snippet it prints, as TOML
-/// (`database_id = "…"`) or JSON (`"database_id": "…"`).
-pub(crate) fn parse_d1_id(output: &str) -> Option<String> {
-    let at = output.find("database_id")?;
-    let rest = &output[at + "database_id".len()..];
-    let rest = rest.trim_start_matches('"').trim_start();
-    let rest = rest.strip_prefix(['=', ':'])?.trim_start();
-    let id = rest.strip_prefix('"')?.split('"').next()?;
-    (!id.is_empty() && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
-        .then(|| id.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parses_the_kv_id_from_the_printed_binding_snippet() {
-        let toml = "🌀 Creating namespace with title \"api\"\n✨ Success!\n\
-                    [[kv_namespaces]]\nbinding = \"api\"\nid = \"abc\"\n";
-        assert_eq!(parse_kv_id(toml), Some("abc".into()));
-        let json = "{\n  \"kv_namespaces\": [\n    {\n      \"binding\": \"api\",\n      \"id\": \"abc\"\n    }\n  ]\n}\n";
-        assert_eq!(parse_kv_id(json), Some("abc".into()));
-        let compact = r#"{"kv_namespaces":[{"binding":"api","id":"abc"}]}"#;
-        assert_eq!(parse_kv_id(compact), Some("abc".into()));
-        assert_eq!(parse_kv_id("✘ [ERROR] nope"), None);
-    }
-
-    #[test]
-    fn the_d1_id_is_read_from_either_snippet_format() {
-        let toml = "✅ Successfully created DB 'shop-orders' in region WEUR\nCreated your new D1 database.\n\n[[d1_databases]]\nbinding = \"shop_orders\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n";
-        assert_eq!(
-            parse_d1_id(toml).as_deref(),
-            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
-        );
-        let json = "{\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-orders\",\n      \"database_id\": \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n    }\n  ]\n}";
-        assert_eq!(
-            parse_d1_id(json).as_deref(),
-            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
-        );
-        assert_eq!(parse_d1_id("Created your new D1 database."), None);
-    }
 
     /// The tee copies stderr through and keeps it, through a line that is not UTF-8, with the
     /// kept text readable afterwards. Unix: it runs `sh`.
@@ -662,9 +562,7 @@ mod tests {
     #[test]
     fn a_wrangler_that_cannot_start_says_why() {
         let absent = Provenance::Path(std::env::temp_dir().join("bynk-no-such-wrangler"));
-        let e = Wrangler::new(&absent, Path::new("."))
-            .kv_list()
-            .unwrap_err();
+        let e = Wrangler::new(&absent, Path::new(".")).whoami().unwrap_err();
         assert!(matches!(e.failure(), Failure::Start(_)), "{e:?}");
         assert!(!e.to_string().is_empty());
     }
@@ -673,7 +571,7 @@ mod tests {
     fn a_missing_wrangler_is_an_error_before_anything_runs() {
         let missing = Provenance::Missing;
         let api = Wrangler::new(&missing, Path::new("."));
-        assert_eq!(api.kv_list().unwrap_err().to_string(), "wrangler not found");
+        assert_eq!(api.whoami().unwrap_err().to_string(), "wrangler not found");
         assert_eq!(
             api.queue_info("q").unwrap_err().to_string(),
             "wrangler not found"

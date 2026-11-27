@@ -1,0 +1,23 @@
+---
+#3959, §14.1 `bynk.given.parameter_outside_commons` (track Q6): only a commons free
+function takes capability parameters; a context function and a handler name instances.
+---
+context shop
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv, D1 }
+uses lib.cache
+
+capability Sessions = Kv
+capability Archive = Kv
+capability Orders = D1
+
+fn save(key: String) -> Effect[()] given Store: Kv {
+	Effect.pure(())
+}
+
+service api {
+	on call(key: String) -> Effect[()] by Caller given Store: Kv {
+		Effect.pure(())
+	}
+}

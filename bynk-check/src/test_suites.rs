@@ -7031,6 +7031,9 @@ service intake from queue(\"orders\") {
             .assert_reports("bynk.resolve.unknown_name");
         case(&format!("{get}    match r {{\n      BadRequest(m) | NotFound => expect m.length() == 9\n      _ => expect false\n    }}"))
             .assert_reports("bynk.types.or_pattern_binding_mismatch");
+        // #4550: a case body's patterns are checked for a name bound twice.
+        case(&format!("{get}    match r {{\n      Raw(b, b) => expect b.length() == 2\n      _ => expect false\n    }}"))
+            .assert_reports("bynk.types.duplicate_pattern_binding");
         case(&format!("{get}    expect r is Bogus(_)"))
             .assert_reports("bynk.types.is_unknown_variant");
     }

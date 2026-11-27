@@ -345,9 +345,12 @@ pub(crate) fn check_fn_in(
         fold_init_expected: None,
         caps: match fn_caps {
             Some(c) => {
+                // #3959: a parameter outside a commons was refused
+                // (`parameter_outside_commons`), so it is not reported unused too.
                 let given_entries: Vec<(String, Span)> = f
                     .given
                     .iter()
+                    .filter(|g| input.is_commons || !g.is_parameter())
                     .map(|g| (g.key().to_string(), g.span))
                     .collect();
                 CapabilityCtx {
@@ -862,21 +865,28 @@ fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx:
 /// `g`'s; a handler calls `f`, so it declares `f`'s. Recursion needs no special
 /// case. A test case supplies the capabilities its target's handlers would get.
 /// The capabilities the callee needs count as used by the caller.
-pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx) {
+pub(crate) fn require_callee_given(
+    name: &Ident,
+    callee: &FnDecl,
+    // #3959: the call's arguments and bindings; `None` for a reference to the
+    // function as a value.
+    site: Option<&super::cap_bindings::CallSite>,
+    ctx: &mut Ctx,
+) {
     // #2881: a refused declaration (`given_fn_refusal`) is reported once, at
-    // the declaration; its callers cannot act on a missing `given`. A function
-    // this unit does not declare came in through `uses`, which only brings in a
-    // commons, so a `given` on it is always refused there.
-    if callee.given.is_empty() {
+    // the declaration; its callers cannot act on a missing `given`.
+    if callee.given.is_empty() && site.is_none_or(|s| s.bindings.is_empty()) {
         return;
     }
-    if ctx.input.imported_fn_names.contains(&callee.name.display())
-        || given_fn_refusal(callee, ctx.input.is_context || ctx.test_values).is_some()
-    {
+    if given_fn_refusal(callee, true).is_some() {
         return;
+    }
+    // #3959: a commons function's capability parameters are bound at the call.
+    if let Some(site) = site {
+        super::cap_bindings::check_call_bindings(name, callee, site, ctx);
     }
     let mut missing: Vec<String> = Vec::new();
-    for c in &callee.given {
+    for c in callee.given.iter().filter(|c| !c.is_parameter()) {
         let key = c.key().to_string();
         // `given_remaining` holds every declared key, including a consumed
         // context's (`given B.Cap`), which has no `capabilities` entry.
@@ -934,10 +944,13 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
     ctx.errors.push(err);
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn check_call(
     name: &Ident,
     type_args: &[TypeRef],
     args: &[Expr],
+    // #3959: the capability bindings after the arguments.
+    bindings: &[CapBinding],
     span: Span,
     // #593: the binding's expected type grounds a generic variant constructor
     // whose payload cannot determine every parameter (`let o: Opt[Int] = Nil`).
@@ -948,6 +961,12 @@ pub(crate) fn check_call(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    if let Some(b) = bindings.first()
+        && !ctx.input.fns.contains_key(&name.name)
+    {
+        ctx.errors
+            .push(super::cap_bindings::binding_on_a_non_function(name, b));
+    }
     if let Some(fn_decl) = ctx.input.fns.get(&name.name) {
         ctx.refs.record(name.span, SymbolKind::Fn, &name.name);
         let fn_decl = Arc::clone(fn_decl);
@@ -955,7 +974,12 @@ pub(crate) fn check_call(
             .insert(expr_id, Callee::Fn(Arc::clone(&fn_decl), Vec::new()));
         warn_bynk_list_deprecation(name, args, span, ctx);
         refuse_experimental_import(name, ctx);
-        require_callee_given(name, &fn_decl, ctx);
+        let site = super::cap_bindings::CallSite {
+            args,
+            bindings,
+            span,
+        };
+        require_callee_given(name, &fn_decl, Some(&site), ctx);
         let ret = check_call_against_fn(name, &fn_decl, type_args, args, expected, ctx);
         // Slice 1: the comparator witnesses the generic-call path resolved.
         if let Some(witnesses) = ctx.last_witness.take() {
@@ -1957,7 +1981,8 @@ pub(crate) fn check_static_call(
         );
         // #2865: `select[T]` / `firstAs[T]` on a derived `D1` are lowered by
         // the compiler over `all`/`first`, not declared operations.
-        // #4105: the typed Analytics operations, lowered over `query` and `write`.
+        // #4105, #4099: the typed Analytics and Ai operations, lowered over `query`, `write` and
+        // the binding's JSON-mode generation.
         if let Some(typed) = super::analytics::check_typed(
             &type_name.name,
             cap.derived_from.as_ref(),
@@ -5071,6 +5096,17 @@ pub(crate) fn record_principal(
     kind
 }
 
+/// #3821: whether the route's lone `Bearer` actor declares the claim a `by WrongIssuer` or `by
+/// WrongAudience` token gets wrong, so its seam checks it.
+fn declares(by: Option<&ByClause>, bad: BadCredential, ctx: &Ctx) -> bool {
+    by.and_then(|by| crate::actors::bearer_claims_of_route(by, &ctx.test_actors))
+        .is_some_and(|c| match bad {
+            BadCredential::WrongIssuer => c.issuer.is_some(),
+            BadCredential::WrongAudience => c.audience.is_some(),
+            _ => false,
+        })
+}
+
 /// #3052, #3225: what an `Oidc`-only failure principal is, for the diagnostic
 /// raised when the call does not reach an `Oidc` seam.
 struct OidcOnlyPrincipal {
@@ -5089,12 +5125,12 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
         BadCredential::WrongIssuer => (
             "bynk.test.wrong_issuer_needs_oidc_route",
             "a token for another issuer",
-            "; a `Bearer` token has no issuer to check",
+            "; a `Bearer` route takes it when its actor declares an `issuer`",
         ),
         BadCredential::WrongAudience => (
             "bynk.test.wrong_audience_needs_oidc_route",
             "a token for another audience",
-            "; a `Bearer` token has no audience to check",
+            "; a `Bearer` route takes it when its actor declares an `audience`",
         ),
         BadCredential::WrongAlgorithm => (
             "bynk.test.wrong_algorithm_needs_oidc_route",
@@ -5614,7 +5650,8 @@ pub(crate) fn check_effect_let_principal(
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
             (BadCredential::Revoked, _) => {}
-            (n, _) if !oidc && oidc_only_principal(n).is_some() => {
+            // #3821: a `Bearer` route that declares the claim is driven by `WrongIssuer`/`WrongAudience` too.
+            (n, _) if !oidc && oidc_only_principal(n).is_some() && !declares(by, n, ctx) => {
                 let kind = oidc_only_principal(n).expect("matched above");
                 ctx.errors.push(
                     CompileError::new(

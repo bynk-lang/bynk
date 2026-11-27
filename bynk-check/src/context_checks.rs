@@ -189,6 +189,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
         Some(Callee::D1Select { row, .. }) => vec![*row],
         // #4105: a typed Analytics read decodes its rows.
         Some(Callee::AnalyticsSelect { row, .. }) => vec![*row],
+        // #4099: `Ai.generateValue[T]` decodes the reply as `T`.
+        Some(Callee::AiGenerateValue { value, .. }) => vec![*value],
         Some(
             Callee::Fn(decl, ws)
             | Callee::FnValue(decl, ws)
@@ -533,7 +535,7 @@ fn walk_expr_for_constraints(
             // reported where they wrote it — at the pattern, below.
             let hidden_record = matches!(&discriminant.kind, ExprKind::Ident(i) if bynk_syntax::ast::is_generated_binding(&i.name))
                 && matches!(
-                    arms.first().map(|a| &a.pattern),
+                    arms.first().map(|a| a.pattern.peel_as()),
                     Some(Pattern::Record { .. })
                 );
             if !hidden_record && let Some(ty) = typed.expr_ty(discriminant.id).as_deref() {
@@ -624,7 +626,9 @@ fn opaque_record_patterns(
                 opaque_record_patterns(a, consumed, top, errors);
             }
         }
-        Pattern::Refined { inner, .. } => opaque_record_patterns(inner, consumed, top, errors),
+        Pattern::Refined { inner, .. } | Pattern::As { inner, .. } => {
+            opaque_record_patterns(inner, consumed, top, errors)
+        }
         Pattern::Wildcard(_)
         | Pattern::Binding(_)
         | Pattern::Literal { .. }
@@ -683,34 +687,13 @@ pub fn check_context_declarations(
     let mut errors = Vec::new();
     let no_vars: HashSet<String> = HashSet::new();
 
-    // Build a resolved-commons snapshot for the per-handler checker.
-    // We synthesise a ResolvedCommons by reusing typed.types / typed.fns /
-    // typed.methods; the resolver wouldn't add anything new. `ResolvedCommons::new`
-    // derives `local_type_names`/`event_type_names` from `table` — the
-    // *pre-merge* local table — rather than `typed.types` (already
-    // local+uses+consumes merged); see its doc comment for why that
-    // distinction matters (owner-only emission, spine #936).
-    let resolved = ResolvedCommons::new(
-        typed.commons.clone(),
-        typed.types.clone(),
-        &table.types,
-        typed.fns.clone(),
-        typed.methods.clone(),
-        table.agents.clone(),
-        &table.events,
-        cross_context.clone(),
-        HashMap::new(),
+    let resolved = declarations_resolved(
+        typed,
+        table,
+        cross_context,
         is_context,
-        uses_commons_type_names.clone(),
-    )
-    .with_local_fns(&table.fns)
-    // #1883, slice 1a: a handler body sees the unit's assets too.
-    .with_assets(typed.assets.clone())
-    .with_embeds(typed.embeds.clone())
-    .with_consts(typed.consts.clone())
-    .with_shadowed_imports(typed.shadowed_imports.clone())
-    .with_scope_facts_of(typed)
-    .with_stability(typed.stability.clone());
+        uses_commons_type_names,
+    );
 
     // v0.25: capability operation signatures reference types.
     check_capability_decls(table, &typed.types, &no_vars, refs);
@@ -746,91 +729,8 @@ pub fn check_context_declarations(
         })
         .collect();
     // v0.17: flattened capabilities (`consumes U { Cap }`) enter the local map
-    // under their bare names, resolved from the consumed unit's exported
-    // capability so bare `given Cap` / `Cap.op(…)` type-check as if local.
-    let mut receiving_cache: Option<checker::Projection> = None;
-    for (cap, unit) in &cross_context.flattened_caps {
-        let Some(xcap) = cross_context
-            .consumed_capabilities
-            .get(unit)
-            .and_then(|m| m.get(cap))
-        else {
-            continue;
-        };
-        // #2634: an operation may name a type the unit declares but does not
-        // export (an adapter's `Token`), or one the consumer also declares.
-        // As the qualified `U.Cap.op` call does, resolve the signature against
-        // the unit's own table; a name the consumer binds to a structurally
-        // different type is refused (`bynk.boundary.structural_mismatch`)
-        // rather than read as the consumer's. The refusal is per op, at its call.
-        let unit_types = cross_context
-            .consumed_types
-            .get(unit)
-            .unwrap_or(&typed.types);
-        let (receiving, _) = receiving_cache.get_or_insert_with(|| {
-            checker::projected_types(&typed.types, &cross_context.consumed_types, tys)
-        });
-        let ops = xcap
-            .ops
-            .iter()
-            .map(|op| {
-                let vars: HashSet<String> = op.type_params.iter().cloned().collect();
-                let mut conflict: Option<(String, String, bool)> = None;
-                let mut resolve = |tr: &TypeRef, in_param: bool| {
-                    // #4111: a type the unit consumes from an adapter (`bynk.crypto`'s `Secret`)
-                    // is not in its contract view, which reads consumed contexts only, so a name
-                    // the view lacks is read as `bynk`'s own type of that name. It is resolved
-                    // against `bynk`'s declarations and never the consumer's table, where a type
-                    // of the consumer's own called `Secret` would answer to it.
-                    let (ty, signature_types) =
-                        match checker::resolve_type_ref_in(tr, unit_types, &vars, tys) {
-                            Some(ty) => (ty, unit_types),
-                            None => {
-                                match checker::resolve_type_ref_in(tr, bynk_types(), &vars, tys) {
-                                    Some(ty) => (ty, bynk_types()),
-                                    None => (tys.intern(Ty::Unit), unit_types),
-                                }
-                            }
-                        };
-                    // The same-name check reads the table the type came from, so a consumer type
-                    // called `Secret` is refused against `bynk`'s, not mistaken for it.
-                    if conflict.is_none()
-                        && let Some(name) = checker::rebrand_conflict(
-                            ty,
-                            signature_types,
-                            &typed.types,
-                            receiving,
-                            tys,
-                        )
-                    {
-                        conflict = Some((unit.clone(), name, in_param));
-                    }
-                    checker::rebrand_return_type(ty, &typed.types, tys)
-                };
-                let params = op.params.iter().map(|(_, tr)| resolve(tr, true)).collect();
-                let return_ty = resolve(&op.return_type, false);
-                CapabilityOpInfo {
-                    name: op.name.clone(),
-                    type_params: op.type_params.clone(),
-                    params,
-                    param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
-                    return_ty,
-                    codable_params: op.codable_params.clone(),
-                    key_params: op.key_params.clone(),
-                    reply_policy: op.reply_policy,
-                    boundary_conflict: conflict,
-                }
-            })
-            .collect();
-        capability_info_map.insert(
-            cap.clone(),
-            CapabilityInfo {
-                name: cap.clone(),
-                ops,
-                derived_from: None,
-            },
-        );
-    }
+    // under their bare names.
+    capability_info_map.extend(flattened_capability_infos(typed, cross_context, tys));
 
     check_provider_decls(
         typed,
@@ -1256,6 +1156,145 @@ fn check_provider_decls(
     // a cycle — the composition root cannot instantiate one in dependency
     // order. Self-provision (`provides X = … given X`) is the trivial cycle.
     detect_provider_dependency_cycles(&table.providers, errors);
+}
+
+/// The resolved-commons snapshot the declaration checks type bodies against:
+/// `typed`'s merged tables with the unit's local ones. Shared by a context's
+/// declarations and (#3959) a commons' `given` functions.
+pub(crate) fn declarations_resolved(
+    typed: &checker::TypedCommons,
+    table: &UnitTable,
+    cross_context: &resolver::CrossContextInfo,
+    is_context: bool,
+    uses_commons_type_names: &HashSet<String>,
+) -> ResolvedCommons {
+    // Build a resolved-commons snapshot for the per-handler checker.
+    // We synthesise a ResolvedCommons by reusing typed.types / typed.fns /
+    // typed.methods; the resolver wouldn't add anything new. `ResolvedCommons::new`
+    // derives `local_type_names`/`event_type_names` from `table` — the
+    // *pre-merge* local table — rather than `typed.types` (already
+    // local+uses+consumes merged); see its doc comment for why that
+    // distinction matters (owner-only emission, spine #936).
+    ResolvedCommons::new(
+        typed.commons.clone(),
+        typed.types.clone(),
+        &table.types,
+        typed.fns.clone(),
+        typed.methods.clone(),
+        table.agents.clone(),
+        &table.events,
+        cross_context.clone(),
+        HashMap::new(),
+        is_context,
+        uses_commons_type_names.clone(),
+    )
+    .with_local_fns(&table.fns)
+    // #1883, slice 1a: a handler body sees the unit's assets too.
+    .with_assets(typed.assets.clone())
+    .with_embeds(typed.embeds.clone())
+    .with_consts(typed.consts.clone())
+    .with_shadowed_imports(typed.shadowed_imports.clone())
+    .with_scope_facts_of(typed)
+    .with_stability(typed.stability.clone())
+}
+
+/// v0.17: the capabilities a unit flattens in with `consumes U { Cap }`, by
+/// bare name, resolved from the consumed unit's exported capability so bare
+/// `given Cap` / `Cap.op(…)` type-check as if local. #3959: a commons' braced
+/// `consumes` of a first-party unit's capabilities reaches them the same way.
+pub(crate) fn flattened_capability_infos(
+    typed: &checker::TypedCommons,
+    cross_context: &resolver::CrossContextInfo,
+    tys: &Arc<Types>,
+) -> HashMap<String, CapabilityInfo> {
+    // v0.17: flattened capabilities (`consumes U { Cap }`) enter the local map
+    // under their bare names, resolved from the consumed unit's exported
+    // capability so bare `given Cap` / `Cap.op(…)` type-check as if local.
+    let mut out: HashMap<String, CapabilityInfo> = HashMap::new();
+    let mut receiving_cache: Option<checker::Projection> = None;
+    for (cap, unit) in &cross_context.flattened_caps {
+        let Some(xcap) = cross_context
+            .consumed_capabilities
+            .get(unit)
+            .and_then(|m| m.get(cap))
+        else {
+            continue;
+        };
+        // #2634: an operation may name a type the unit declares but does not
+        // export (an adapter's `Token`), or one the consumer also declares.
+        // As the qualified `U.Cap.op` call does, resolve the signature against
+        // the unit's own table; a name the consumer binds to a structurally
+        // different type is refused (`bynk.boundary.structural_mismatch`)
+        // rather than read as the consumer's. The refusal is per op, at its call.
+        let unit_types = cross_context
+            .consumed_types
+            .get(unit)
+            .unwrap_or(&typed.types);
+        let (receiving, _) = receiving_cache.get_or_insert_with(|| {
+            checker::projected_types(&typed.types, &cross_context.consumed_types, tys)
+        });
+        let ops = xcap
+            .ops
+            .iter()
+            .map(|op| {
+                let vars: HashSet<String> = op.type_params.iter().cloned().collect();
+                let mut conflict: Option<(String, String, bool)> = None;
+                let mut resolve = |tr: &TypeRef, in_param: bool| {
+                    // #4111: a type the unit consumes from an adapter (`bynk.crypto`'s `Secret`)
+                    // is not in its contract view, which reads consumed contexts only, so a name
+                    // the view lacks is read as `bynk`'s own type of that name. It is resolved
+                    // against `bynk`'s declarations and never the consumer's table, where a type
+                    // of the consumer's own called `Secret` would answer to it.
+                    let (ty, signature_types) =
+                        match checker::resolve_type_ref_in(tr, unit_types, &vars, tys) {
+                            Some(ty) => (ty, unit_types),
+                            None => {
+                                match checker::resolve_type_ref_in(tr, bynk_types(), &vars, tys) {
+                                    Some(ty) => (ty, bynk_types()),
+                                    None => (tys.intern(Ty::Unit), unit_types),
+                                }
+                            }
+                        };
+                    // The same-name check reads the table the type came from, so a consumer type
+                    // called `Secret` is refused against `bynk`'s, not mistaken for it.
+                    if conflict.is_none()
+                        && let Some(name) = checker::rebrand_conflict(
+                            ty,
+                            signature_types,
+                            &typed.types,
+                            receiving,
+                            tys,
+                        )
+                    {
+                        conflict = Some((unit.clone(), name, in_param));
+                    }
+                    checker::rebrand_return_type(ty, &typed.types, tys)
+                };
+                let params = op.params.iter().map(|(_, tr)| resolve(tr, true)).collect();
+                let return_ty = resolve(&op.return_type, false);
+                CapabilityOpInfo {
+                    name: op.name.clone(),
+                    type_params: op.type_params.clone(),
+                    params,
+                    param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
+                    return_ty,
+                    codable_params: op.codable_params.clone(),
+                    key_params: op.key_params.clone(),
+                    reply_policy: op.reply_policy,
+                    boundary_conflict: conflict,
+                }
+            })
+            .collect();
+        out.insert(
+            cap.clone(),
+            CapabilityInfo {
+                name: cap.clone(),
+                ops,
+                derived_from: None,
+            },
+        );
+    }
+    out
 }
 
 /// #2868: type-check this file's context functions that declare `given`. They
@@ -2439,6 +2478,142 @@ fn check_scheme_arg_kinds(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
     }
 }
 
+/// The keys a `Bearer` actor's config admits (#3821): the signing `secret`, the `issuer` and `audience`
+/// its tokens must carry, and the `trustFrom` variable that can replace the last two at run time.
+const BEARER_KEYS: &[&str] = &["secret", "issuer", "audience", "trustFrom"];
+
+/// #3821: the `Bearer` config checks that are not about the secret or the identity: the key set is
+/// closed (so an `issuer` that was never enforced cannot be written and ignored), `issuer`, `audience`
+/// and `trustFrom` are non-empty strings, and two `Bearer` actors on one secret must each declare an
+/// `audience`, and different ones, or a token minted for one is accepted by the other.
+fn check_bearer_actor(
+    actor: &ActorDecl,
+    auth: &Ident,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    for (i, arg) in actor.auth_config.iter().enumerate() {
+        // A repeated key would be read once and the other dropped, which is what a check you wrote must
+        // never do (the shared-secret rule below compares the one value that is read).
+        if actor.auth_config[..i]
+            .iter()
+            .any(|earlier| earlier.key.name == arg.key.name)
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.bearer_bad_arg",
+                    arg.key.span,
+                    format!("the `Bearer` config key `{}` is given more than once", arg.key.name),
+                )
+                .with_note(
+                    "the first would win quietly in a scheme that guards a token; give each key once",
+                ),
+            );
+        }
+        if !BEARER_KEYS.contains(&arg.key.name.as_str()) {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.bearer_unknown_key",
+                    arg.key.span,
+                    format!("unknown `Bearer` config key `{}`", arg.key.name),
+                )
+                .with_note(
+                    "the keys are `secret`, `issuer`, `audience` and `trustFrom`; a key that is not one of them would be ignored, and a token check you wrote would not run",
+                ),
+            );
+        }
+    }
+    for key in ["issuer", "audience", "trustFrom"] {
+        if let Some(arg) = actor.scheme_arg(key)
+            && arg.value.as_str().is_none_or(str::is_empty)
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.bearer_bad_arg",
+                    arg.span,
+                    format!("a `Bearer` actor's `{key}` must be a non-empty string"),
+                )
+                .with_note(
+                    "write `auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\", audience = \"api\")`; `trustFrom` names the environment variable whose JSON `{\"issuer\", \"audience\"}` replaces them",
+                ),
+            );
+        }
+    }
+    let Some(secret) = actor.scheme_arg("secret").and_then(|a| a.value.as_str()) else {
+        return;
+    };
+    if let Some(arg) = actor.scheme_arg("trustFrom")
+        && arg.value.as_str() == Some(secret)
+    {
+        errors.push(
+            CompileError::new(
+                "bynk.actor.bearer_bad_arg",
+                arg.span,
+                "a `Bearer` actor's `trustFrom` names its own signing secret",
+            )
+            .with_note(
+                "`trustFrom` names a different environment variable, whose JSON `{ \"issuer\", \"audience\" }` replaces the declared values; the secret holds the signing key",
+            ),
+        );
+    }
+    let mine = actor.scheme_arg("audience").and_then(|a| a.value.as_str());
+    for other in table.actors.values() {
+        // Report each pair once, at the actor that sorts later, so the order of the table does not matter.
+        if other.name.name >= actor.name.name
+            || other
+                .auth
+                .as_ref()
+                .and_then(|a| crate::actors::Scheme::from_name(a.name.as_str()))
+                != Some(crate::actors::Scheme::Bearer)
+            || other.scheme_arg("secret").and_then(|a| a.value.as_str()) != Some(secret)
+        {
+            continue;
+        }
+        let theirs = other.scheme_arg("audience").and_then(|a| a.value.as_str());
+        // One `trustFrom` variable shared by the pair would give both the same audience at run time
+        // (a staging override is the natural use), whatever each declares.
+        let my_trust = actor.scheme_arg("trustFrom").and_then(|a| a.value.as_str());
+        let shared_trust = my_trust.is_some()
+            && my_trust == other.scheme_arg("trustFrom").and_then(|a| a.value.as_str());
+        if !shared_trust && mine.is_some() && theirs.is_some() && mine != theirs {
+            continue;
+        }
+        if shared_trust {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.bearer_secret_shared",
+                    auth.span,
+                    format!(
+                        "`Bearer` actors `{}` and `{}` share the secret `{secret}` and the `trustFrom` variable `{}`, so that variable can give both the same audience and a token minted for one is accepted by the other",
+                        other.name.name,
+                        actor.name.name,
+                        my_trust.unwrap_or_default()
+                    ),
+                )
+                .with_note(
+                    "give each actor its own `trustFrom` variable (or none), and declare a different `audience` on each; mint each actor's tokens with its own audience, which `bynk token <Actor>` does. Or give each actor its own secret",
+                ),
+            );
+            continue;
+        }
+        errors.push(
+            CompileError::new(
+                "bynk.actor.bearer_secret_shared",
+                auth.span,
+                format!(
+                    "`Bearer` actors `{}` and `{}` share the secret `{secret}` without distinct audiences, so a token minted for one is accepted by the other",
+                    other.name.name, actor.name.name
+                ),
+            )
+            .with_note(format!(
+                "declare a different `audience` on each (`audience = \"{}\"` and `audience = \"{}\"`) and mint each actor's tokens with its own audience; `bynk token <Actor>` does that. Or give each actor its own secret",
+                other.name.name.to_lowercase(),
+                actor.name.name.to_lowercase()
+            )),
+        );
+    }
+}
+
 /// The keys a `SignedCookie` actor's config admits (#3386).
 const SIGNED_COOKIE_KEYS: &[&str] = &[
     "cookie", "secret", "previous", "ttl", "sameSite", "sessions",
@@ -3319,6 +3494,7 @@ fn check_actor_contracts(
             // v0.47: a Bearer actor must name its signing secret and yield a
             // string-constructible identity (minted from the JWT `sub` claim).
             Some(Scheme::Bearer) => {
+                check_bearer_actor(actor, auth, table, errors);
                 if actor.scheme_arg("secret").is_none() {
                     errors.push(
                         CompileError::new(
@@ -8794,7 +8970,7 @@ pub fn reject_fn_types(
                     ),
                 )
                 .with_note(
-                    "keep the key bytes in `Secrets` and import the key again where it is used (`Crypto.importSigningKey` / `Crypto.importVerifyKey`)",
+                    "keep the key bytes in `Secrets` and import the key again where it is used (`Crypto.importSigningKey`, `Crypto.importVerifyKey` or `Crypto.importCipherKey`)",
                 ),
             );
         }

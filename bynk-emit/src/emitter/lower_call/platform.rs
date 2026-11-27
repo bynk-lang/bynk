@@ -10,13 +10,14 @@ use bynk_ts::{TsExpr, TsLit, TsStmt, TsType};
 
 use super::super::emit::flatten_emit_ident_chain;
 use super::super::lower::Pre;
+use super::super::lower::member_node;
 use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_type_ref_to_ts_type;
 use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
 use crate::ts_build::{
-    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member, method_call,
-    num_lit, paren, ret, str_lit,
+    arrow_with, binary, block, block_arrow, call, const_typed, expr_stmt, ident, member,
+    method_call, num_lit, paren, ret, str_lit,
 };
 use bynk_ts::TsParam;
 
@@ -557,6 +558,152 @@ pub(in crate::emitter) fn lower_analytics_select_call(
             alternate: Box::new(err("AnalyticsDecode", member(d(), "error"))),
         }),
     ];
+    Some(call(paren(block_arrow(vec![], true, body)), vec![]))
+}
+
+/// #4099: lower `Ai.generateValue[T](model, request)`, or `None` when the call is not one. The
+/// checker wrote `T`'s JSON Schema; this asks the binding's JSON-mode generation for JSON that
+/// matches it and decodes the reply as `T`. A platform refusal is the `Err` as it comes; a reply
+/// that is not JSON, or does not decode as `T`, is `BadReply` naming the kind of failure and the
+/// path, never the model's text (it may echo what the user wrote).
+pub(in crate::emitter) fn lower_ai_generate_value_call(
+    e: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    let Some(Callee::AiGenerateValue {
+        value,
+        schema,
+        wrapped,
+        ..
+    }) = cx.commons().callees.get(&e.id).cloned()
+    else {
+        return None;
+    };
+    let (model, request) = (args.first()?, args.get(1)?);
+    let shown = cx.ty_render().display(value);
+    let decoder = json_decoder_fn(value, DecodeSource::Json, cx)
+        .unwrap_or_else(|| cx.missing_fact(e.span, "JSON decoder for a `generateValue` type"));
+    let model = pre.lower_node(model, cx);
+    let request = pre.lower_node(request, cx);
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    let r = || ident("__r");
+    let d = || ident("__d");
+    let tag_is = |obj: TsExpr, tag: &str| {
+        binary(
+            bynk_ts::TsBinaryOp::StrictEq,
+            member(obj, "tag"),
+            str_lit(tag),
+        )
+    };
+    // `Ai.generateJson` is the binding's own, not an operation of the `Ai` interface.
+    let ai = TsExpr::As {
+        expr: Box::new(TsExpr::As {
+            expr: Box::new(chain(deps_node, &["Ai"])),
+            ty: TsType::named("unknown"),
+        }),
+        ty: TsType::named(
+            "{ generateJson(model: unknown, request: unknown, schema: string): globalThis.Promise<Result<string, unknown>> }",
+        ),
+    };
+    let bad_reply = TsExpr::TemplateLit {
+        parts: vec![
+            format!("the reply is not a {shown} ("),
+            " at ".to_string(),
+            ")".to_string(),
+        ],
+        exprs: vec![
+            chain(d(), &["error", "kind", "tag"]),
+            chain(d(), &["error", "path"]),
+        ],
+    };
+    let mut body = vec![
+        const_typed("__decode", None, decoder),
+        const_typed(
+            "__r",
+            None,
+            TsExpr::Await(Box::new(call(
+                member(paren(ai), "generateJson"),
+                vec![model, request, str_lit(&schema)],
+            ))),
+        ),
+        TsStmt::if_stmt(
+            tag_is(r(), "Err"),
+            ret(call(
+                ident("Err"),
+                vec![TsExpr::As {
+                    expr: Box::new(member(r(), "error")),
+                    ty: TsType::named("never"),
+                }],
+            )),
+            None,
+        ),
+    ];
+    // A type that is not a record was asked for as `{"value": …}`: read the answer from there, and
+    // leave anything else for the decoder to refuse at the path it names.
+    if wrapped {
+        let json = || member_node("globalThis", "JSON");
+        body.push(TsStmt::let_stmt(
+            bynk_ts::TsBindingName::Ident("__t".to_string()),
+            Some(TsType::named("string")),
+            Some(member(r(), "value")),
+            None,
+        ));
+        let parsed = TsExpr::As {
+            expr: Box::new(call(member(json(), "parse"), vec![member(r(), "value")])),
+            ty: TsType::named("{ value?: unknown } | null"),
+        };
+        let unwrap = vec![
+            const_typed("__w", None, parsed),
+            const_typed(
+                "__v",
+                None,
+                TsExpr::OptionalMember {
+                    object: Box::new(ident("__w")),
+                    property: "value".to_string(),
+                },
+            ),
+            TsStmt::if_stmt(
+                binary(
+                    bynk_ts::TsBinaryOp::StrictNotEq,
+                    ident("__v"),
+                    ident("undefined"),
+                ),
+                TsStmt::assign(
+                    ident("__t"),
+                    call(member(json(), "stringify"), vec![ident("__v")]),
+                    None,
+                ),
+                None,
+            ),
+        ];
+        body.push(TsStmt::try_catch(
+            block(unwrap),
+            Some("__e"),
+            block(Vec::new()),
+            None,
+        ));
+    }
+    let text = if wrapped {
+        ident("__t")
+    } else {
+        member(r(), "value")
+    };
+    body.extend(vec![
+        const_typed("__d", None, call(ident("__decode"), vec![text])),
+        ret(TsExpr::Conditional {
+            test: Box::new(tag_is(d(), "Ok")),
+            consequent: Box::new(call(ident("Ok"), vec![member(d(), "value")])),
+            alternate: Box::new(call(
+                ident("Err"),
+                vec![object(vec![
+                    ("tag", tag_const("BadReply")),
+                    ("message", bad_reply),
+                ])],
+            )),
+        }),
+    ]);
     Some(call(paren(block_arrow(vec![], true, body)), vec![]))
 }
 

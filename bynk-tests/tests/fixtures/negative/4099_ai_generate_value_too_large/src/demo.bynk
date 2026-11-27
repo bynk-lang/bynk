@@ -1,0 +1,27 @@
+context demo
+
+consumes bynk.cloudflare { Ai, GenerateRequest, ChatMessage, ChatRole }
+
+type L0 = { a: String, b: String }
+type L1 = { x: L0, y: L0 }
+type L2 = { x: L1, y: L1 }
+type L3 = { x: L2, y: L2 }
+type L4 = { x: L3, y: L3 }
+type L5 = { x: L4, y: L4 }
+type L6 = { x: L5, y: L5 }
+type L7 = { x: L6, y: L6 }
+type L8 = { x: L7, y: L7 }
+type L9 = { x: L8, y: L8 }
+type L10 = { x: L9, y: L9 }
+type L11 = { x: L10, y: L10 }
+type L12 = { x: L11, y: L11 }
+type L13 = { x: L12, y: L12 }
+type L14 = { x: L13, y: L13 }
+
+service probe {
+    on call() -> Effect[Bool] by Caller given Ai {
+        let ask = GenerateRequest { messages: [ChatMessage { role: ChatRole.User, content: "x" }] }
+        let _ <- Ai.generateValue[L14]("@cf/meta/llama-3.3-70b-instruct-fp8-fast", ask)
+        true
+    }
+}

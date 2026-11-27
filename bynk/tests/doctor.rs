@@ -25,6 +25,8 @@ struct Fake {
     npx: bool,
     /// #3477: whether a Docker daemon answers (`docker info`).
     docker_running: bool,
+    /// #4056: the environment variables that are set.
+    env: Vec<&'static str>,
 }
 
 impl Fake {
@@ -46,6 +48,10 @@ impl Fake {
     }
     fn with_npx(mut self) -> Self {
         self.npx = true;
+        self
+    }
+    fn with_env(mut self, names: &[&'static str]) -> Self {
+        self.env.extend(names);
         self
     }
     fn with_docker(mut self, running: bool) -> Self {
@@ -79,6 +85,9 @@ impl Toolbox for Fake {
     }
     fn docker_daemon_running(&self, _path: &Path) -> bool {
         self.docker_running
+    }
+    fn env_set(&self, name: &str) -> bool {
+        self.env.contains(&name)
     }
 }
 
@@ -834,4 +843,112 @@ fn a_project_with_a_container_is_warned_when_docker_is_missing_or_stopped() {
 
 fn report_fails(report: &doctor::Report) -> bool {
     report.exit_nonzero(&bare())
+}
+
+// ---------------------------------------------------------------------------
+// #4056 Decision F: the `cloudflare api` row
+// ---------------------------------------------------------------------------
+
+const KV_SOURCE: &str =
+    "context shop.cart\n\nconsumes bynk.cloudflare { Kv }\n\ncapability Sessions = Kv\n";
+
+fn api_row(report: &doctor::Report) -> Option<doctor::Row> {
+    cap(report, Capability::Deploy)
+        .rows
+        .iter()
+        .find(|row| row.label == "cloudflare api")
+        .cloned()
+}
+
+/// A Deploy capability that is green except for the `cloudflare api` row.
+fn deploy_ready() -> Fake {
+    Fake::default()
+        .path_tool("node", "/usr/bin/node", Some(node_at_floor()))
+        .path_tool("wrangler", "/usr/bin/wrangler", Some(wrangler_at_min()))
+        .path_tool("npm", "/usr/bin/npm", Some(v(10, 0, 0)))
+}
+
+/// Outside a project, and in one that declares no account resource, there is no row.
+#[test]
+fn the_cloudflare_api_row_shows_only_for_a_project_with_account_resources() {
+    let fake = Fake::default();
+    assert!(api_row(&doctor::diagnose(&fake, &ctx(false), &bare())).is_none());
+    let (dir, c) = project_with(&format!("{PLAIN_SOURCE}// a\n"));
+    assert!(api_row(&doctor::diagnose(&fake, &c, &bare())).is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+    let (dir, c) = project_with(&format!("{KV_SOURCE}// b\n"));
+    assert!(api_row(&doctor::diagnose(&fake, &c, &bare())).is_some());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Both variables set is `ok`; each one missing is a warning that names it, with the remedy.
+/// The values are never read, so never shown.
+#[test]
+fn the_cloudflare_api_row_names_each_missing_variable() {
+    // Each test's source differs in length, so each has its own scratch project.
+    let (dir, c) = project_with(&format!("{KV_SOURCE}// cc\n"));
+    let row = |env: &[&'static str]| {
+        api_row(&doctor::diagnose(
+            &Fake::default().with_env(env),
+            &c,
+            &bare(),
+        ))
+        .unwrap()
+    };
+    let both = row(&["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]);
+    assert_eq!(both.level, Level::Ok);
+    assert_eq!(
+        both.detail,
+        "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID set (the token is not checked here)"
+    );
+    assert_eq!(both.remedy, None);
+    let cases: [(&[&'static str], &str); 3] = [
+        (&["CLOUDFLARE_API_TOKEN"], "CLOUDFLARE_ACCOUNT_ID not set"),
+        (&["CLOUDFLARE_ACCOUNT_ID"], "CLOUDFLARE_API_TOKEN not set"),
+        (
+            &[],
+            "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID not set",
+        ),
+    ];
+    for (env, detail) in cases {
+        let warned = row(env);
+        assert_eq!(warned.level, Level::Warn);
+        assert_eq!(warned.detail, detail);
+        assert_eq!(
+            warned.remedy.as_deref(),
+            Some(
+                "set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID: `bynk deploy` creates, checks and deletes this project's account resources through Cloudflare's API; `wrangler login` covers the push only"
+            )
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Never a failure: `bynk deploy` and `bynk dev` gate on `--only deploy`, and neither stops for
+/// it. `--strict` escalates it, as it does every warning.
+#[test]
+fn the_cloudflare_api_row_never_fails_the_deploy_gate_but_strict_escalates_it() {
+    let (dir, c) = project_with(&format!("{KV_SOURCE}// ddd\n"));
+    let only_deploy = DoctorOptions {
+        only: Some(Capability::Deploy),
+        strict: false,
+    };
+    let report = doctor::diagnose(&deploy_ready(), &c, &only_deploy);
+    assert_eq!(api_row(&report).unwrap().level, Level::Warn);
+    assert_eq!(cap(&report, Capability::Deploy).level, Level::Warn);
+    assert!(!report.exit_nonzero(&only_deploy));
+    let strict = DoctorOptions {
+        only: Some(Capability::Deploy),
+        strict: true,
+    };
+    assert!(report.exit_nonzero(&strict));
+    let set = deploy_ready().with_env(&["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]);
+    let report = doctor::diagnose(&set, &c, &only_deploy);
+    assert_eq!(
+        cap(&report, Capability::Deploy).level,
+        Level::Ok,
+        "control: all green"
+    );
+    assert!(!report.exit_nonzero(&strict));
+    let _ = std::fs::remove_dir_all(&dir);
 }

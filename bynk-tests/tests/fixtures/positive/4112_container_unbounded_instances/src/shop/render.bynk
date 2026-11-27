@@ -7,6 +7,14 @@ context shop.render
 consumes bynk
 consumes bynk.cloudflare { Container, ContainerError }
 
+type TenantId = String where NonEmpty
+
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = TenantId }
+
+type Job = { tenant: String }
+
+type Jar = { tenant: String = "none" }
+
 capability Renderer = Container @build("containers/renderer") @port(8080)
 
 service api from http {
@@ -34,6 +42,75 @@ service api from http {
 		match res {
 			Ok(r) => Ok(r.body.decodeUtf8().getOrElse("")),
 			Err(_) => ServerError("thumbnail failed"),
+		}
+	}
+
+	// `sendBytes` names the instance too.
+	on POST("/upload/:name") (
+		name: String
+	) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Post,
+			url: "http://renderer/upload",
+		}
+		let res <- Renderer.sendBytes(name, req, Bytes.fromUtf8("data"))
+		match res {
+			Ok(r) => Ok(r.body.decodeUtf8().getOrElse("")),
+			Err(_) => ServerError("upload failed"),
+		}
+	}
+
+	// A header, a cookie and a body are request input as much as a path parameter is.
+	on GET("/by-header") (
+		headers: RequestHeaders
+	) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send(headers.get("x-tenant").getOrElse("none"), req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	on GET("/by-cookie") (cookies: Jar) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send(cookies.tenant, req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	on POST("/by-body") (body: Job) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send(body.tenant, req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	// A sum with an open member (`Visitor`) is as open as `Visitor`.
+	on GET("/either/:team") (
+		team: String
+	) -> Effect[HttpResult[String]] by who: Member | Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send(team, req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
 		}
 	}
 }

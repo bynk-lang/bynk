@@ -121,6 +121,35 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
+  async http_GET_either_Param_team(team: string, deps: { Renderer: Renderer; who: { tag: "Member"; identity: TenantId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Browser"; identity: TenantId } }): globalThis.Promise<HttpResult<string>> {
+    const req = { method: Method.Get, url: "http://renderer/render", contentType: { tag: "None" as const }, authorization: { tag: "None" as const }, headers: new globalThis.Map(), body: { tag: "None" as const } };
+    const res = await deps.Renderer.send(`team-${String(team)}`, req);
+    switch (res.tag) {
+      case "Ok": {
+        const r = res.value;
+        return HttpResult.Ok(r.body);
+      }
+      case "Err": {
+        return HttpResult.ServerError("render failed");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+  async http_GET_canonical_Param_name(name: string, deps: { Renderer: Renderer }): globalThis.Promise<HttpResult<string>> {
+    const req = { method: Method.Get, url: "http://renderer/render", contentType: { tag: "None" as const }, authorization: { tag: "None" as const }, headers: new globalThis.Map(), body: { tag: "None" as const } };
+    const __r0 = "shared";
+    const res = await deps.Renderer.send(__r0, req);
+    switch (res.tag) {
+      case "Ok": {
+        const r = res.value;
+        return HttpResult.Ok(r.body);
+      }
+      case "Err": {
+        return HttpResult.ServerError("render failed");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
 };
 
 export function __serialise_Plan(value: Plan): __JsonValue {

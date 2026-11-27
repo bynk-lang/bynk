@@ -386,6 +386,110 @@ export function cryptoSuite(stem, b, platform) {
     });
   });
 
+  // #4117. AES-256-GCM `seal`/`open`. The known answer is NIST's GCM test case 16 (the 256-bit key with
+  // associated data): `seal` is `version || nonce || ciphertext || tag`, with the nonce fixed through the
+  // provider's constructor, the only place a nonce can be given.
+  const GCM_KEY = unhex("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308");
+  const GCM_NONCE = unhex("cafebabefacedbaddecaf888");
+  const GCM_PLAIN = unhex(
+    "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a721c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39",
+  );
+  const GCM_AAD = unhex("feedfacedeadbeeffeedfacedeadbeefabaddad2");
+  const GCM_CIPHERTEXT =
+    "522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662";
+  const GCM_TAG = "76fc6ece0f4e1768cddf8853bb2d551b";
+
+  const cipherKey = async (c, raw = GCM_KEY) => (await c.importCipherKey(raw)).value;
+
+  t("CryptoProvider.seal: the value is version, nonce, ciphertext and tag, matching the NIST GCM known answer", async () => {
+    const c = new b.CryptoProvider(() => GCM_NONCE);
+    const sealed = await c.seal(await cipherKey(c), GCM_PLAIN, GCM_AAD);
+    assert.equal(hex(sealed), "01" + hex(GCM_NONCE) + GCM_CIPHERTEXT + GCM_TAG);
+    // An independent implementation agrees.
+    const cipher = nodeCrypto.createCipheriv("aes-256-gcm", GCM_KEY, GCM_NONCE);
+    cipher.setAAD(Buffer.from(GCM_AAD));
+    const theirs = Buffer.concat([cipher.update(GCM_PLAIN), cipher.final(), cipher.getAuthTag()]);
+    assert.equal(hex(sealed.subarray(13)), theirs.toString("hex"));
+  });
+
+  t("CryptoProvider.seal: a fresh random nonce each time, so the same plaintext never seals the same way twice", async () => {
+    const c = provider();
+    const key = await cipherKey(c);
+    const one = await c.seal(key, utf8("same"), utf8("ctx"));
+    const two = await c.seal(key, utf8("same"), utf8("ctx"));
+    assert.equal(one.length, 1 + 12 + 4 + 16);
+    assert.equal(one[0], 1);
+    assert.notEqual(hex(one.subarray(1, 13)), hex(two.subarray(1, 13)));
+    assert.notEqual(hex(one), hex(two));
+    // The empty plaintext and the empty context are allowed.
+    const empty = await c.seal(key, new Uint8Array(), new Uint8Array());
+    assert.equal(empty.length, 1 + 12 + 16);
+    assert.equal((await c.open(key, empty, new Uint8Array())).value.length, 0);
+  });
+
+  t("CryptoProvider.open: round-trips, and returns the NIST known answer's plaintext", async () => {
+    const c = provider();
+    const key = await cipherKey(c);
+    const sealed = await c.seal(key, utf8("a@example.test"), utf8("customer-17"));
+    const back = await c.open(key, sealed, utf8("customer-17"));
+    assert.equal(back.tag, "Ok");
+    assert.equal(Buffer.from(back.value).toString("utf8"), "a@example.test");
+    const known = Uint8Array.from([1, ...GCM_NONCE, ...unhex(GCM_CIPHERTEXT + GCM_TAG)]);
+    assert.equal(hex((await c.open(key, known, GCM_AAD)).value), hex(GCM_PLAIN));
+  });
+
+  t("CryptoProvider.open: a wrong key, wrong context, flipped byte, truncation or unknown version each fail the same way", async () => {
+    const c = provider();
+    const key = await cipherKey(c);
+    const other = await cipherKey(c, unhex("00".repeat(32)));
+    const sealed = await c.seal(key, utf8("secret value"), utf8("ctx"));
+    const failed = (r) => {
+      assert.equal(r.tag, "Err");
+      assert.deepEqual(r.error, { tag: "OpenFailed" });
+    };
+    failed(await c.open(other, sealed, utf8("ctx")));
+    failed(await c.open(key, sealed, utf8("ctx2")));
+    failed(await c.open(key, sealed, new Uint8Array()));
+    for (const at of [0, 1, 12, 13, sealed.length - 1]) {
+      const flipped = Uint8Array.from(sealed);
+      flipped[at] ^= 1;
+      failed(await c.open(key, flipped, utf8("ctx")));
+    }
+    failed(await c.open(key, sealed.slice(0, sealed.length - 1), utf8("ctx")));
+    failed(await c.open(key, sealed.slice(0, 28), utf8("ctx")));
+    failed(await c.open(key, new Uint8Array(), utf8("ctx")));
+    const v2 = Uint8Array.from(sealed);
+    v2[0] = 2;
+    failed(await c.open(key, v2, utf8("ctx")));
+    const extra = Uint8Array.from([...sealed, 0]);
+    failed(await c.open(key, extra, utf8("ctx")));
+  });
+
+  t("CryptoProvider.importCipherKey: takes exactly 32 bytes and says nothing of the key on failure", async () => {
+    const c = provider();
+    assert.equal((await c.importCipherKey(GCM_KEY)).tag, "Ok");
+    for (const n of [0, 16, 24, 31, 33, 64]) {
+      const r = await c.importCipherKey(new Uint8Array(n).fill(7));
+      assert.equal(r.tag, "Err");
+      assert.equal(r.error.tag, "InvalidKey");
+      assert.ok(!JSON.stringify(r.error).includes("0707"));
+    }
+  });
+
+  t("CryptoProvider.importCipherKeyFromSecret: imports a base64 key a Secret holds, and a bad secret is InvalidKey", async () => {
+    const c = provider();
+    const secret = (text) => ({ reveal: () => text });
+    const key = (await c.importCipherKeyFromSecret(secret(Buffer.from(GCM_KEY).toString("base64")))).value;
+    const sealed = await c.seal(key, utf8("x"), utf8("c"));
+    assert.equal(hex((await c.open(await cipherKey(c), sealed, utf8("c"))).value), hex(utf8("x")));
+    for (const text of ["not base64!!", Buffer.from(new Uint8Array(16)).toString("base64"), ""]) {
+      const r = await c.importCipherKeyFromSecret(secret(text));
+      assert.equal(r.tag, "Err");
+      assert.equal(r.error.tag, "InvalidKey");
+      assert.ok(!JSON.stringify(r.error).includes(text) || text === "");
+    }
+  });
+
   // #4118. HKDF-SHA-256: RFC 5869 appendix A, test cases 1 to 3 (the second is the long-input case).
   const RFC5869 = [
     {

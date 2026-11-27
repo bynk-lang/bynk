@@ -136,7 +136,10 @@ pub(super) fn apply_local_migrations(
             continue;
         };
         for (binding, dir) in migrating_databases(&config) {
-            let api = crate::cloudflare::Wrangler::new(provenance, &worker_dir);
+            let api = crate::cloudflare::Account::new(crate::cloudflare::Wrangler::new(
+                provenance,
+                &worker_dir,
+            ));
             match api.d1_migrations_apply_local(
                 &worker_dir,
                 &binding,

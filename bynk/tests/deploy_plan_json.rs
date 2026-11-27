@@ -305,3 +305,129 @@ fn a_project_with_no_contexts_is_not_an_unknown_context() {
     assert_eq!(r["code"], "bynk.deploy.no_workers_built");
     assert!(r.get("requested").is_none(), "{r}");
 }
+
+#[test]
+fn an_unreadable_pin_file_is_a_refusal_entry_with_its_path() {
+    let dir = plain_project("pins_unreadable");
+    write(&dir.join("bynk.foreign.toml"), "this is = = not toml\n");
+    let out = deploy(&dir, &["--format", "json"]);
+    let r = only_refusal(&out);
+    assert_eq!(r["code"], "bynk.deploy.pins_unreadable");
+    assert_eq!(r["path"], "bynk.foreign.toml");
+    // The run had its upload order by then, and the document says so.
+    let order = stdout_json(&out)["order"].as_array().unwrap().clone();
+    assert_eq!(order.len(), 1, "{order:?}");
+}
+
+#[test]
+fn an_adoption_entry_that_names_no_capability_is_a_refusal_entry() {
+    let dir = plain_project("adoption_unmatched");
+    let manifest = std::fs::read_to_string(dir.join("bynk.toml")).unwrap();
+    let image = format!("registry.cloudflare.com/acct/web@sha256:{}", "a".repeat(64));
+    write(
+        &dir.join("bynk.toml"),
+        &format!("{manifest}\n[deploy.containers.Web]\nimage = {{ production = \"{image}\" }}\n"),
+    );
+    let out = deploy(&dir, &["--format", "json"]);
+    let r = only_refusal(&out);
+    assert_eq!(r["code"], "bynk.deploy.adoption_unmatched");
+    assert_eq!(r["table"], "containers");
+    assert_eq!(r["capability"], "Web");
+    assert_eq!(stdout_json(&out)["order"].as_array().unwrap().len(), 1);
+}
+
+/// A project whose context declares a `Kv` instance, which a plan with no account credentials
+/// cannot check.
+fn kv_project(name: &str) -> PathBuf {
+    let dir = plain_project(name);
+    write(
+        &dir.join("src/shop/orders.bynk"),
+        "context shop.orders\n\nconsumes bynk.cloudflare { Kv }\n\ncapability Sessions = Kv\n\nservice ping {\n\ton call() -> Effect[Int] by Caller {\n\t\t1\n\t}\n}\n",
+    );
+    dir
+}
+
+#[test]
+fn a_plan_that_could_not_be_checked_against_the_account_says_so_in_its_warnings() {
+    let dir = kv_project("account_note");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk"))
+        .args(["deploy", "--dry-run", "--format", "json"])
+        .arg(&dir)
+        .env("BYNK_NO_INSTALL", "1")
+        .env_remove("CLOUDFLARE_API_TOKEN")
+        .env_remove("CLOUDFLARE_ACCOUNT_ID")
+        .output()
+        .expect("runs bynk");
+    assert!(out.status.success(), "a dry run is not refused");
+    let doc = stdout_json(&out);
+    let warnings = doc["warnings"].as_array().expect("warnings is an array");
+    assert_eq!(warnings.len(), 1, "{doc}");
+    assert_eq!(warnings[0]["code"], "bynk.deploy.account_note");
+    // The same note is on stderr, as it always was.
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("not checked against the account"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn an_adoption_with_nothing_for_this_environment_is_a_warning_in_the_plan() {
+    let dir = plain_project("adoption_partial");
+    write(
+        &dir.join("src/shop/orders.bynk"),
+        "context shop.orders\n\nconsumes bynk.cloudflare { Vectorize }\n\ncapability Docs = Vectorize @dimensions(768) @metric(\"cosine\")\n\nservice ping {\n\ton call() -> Effect[Int] by Caller {\n\t\t1\n\t}\n}\n",
+    );
+    let manifest = std::fs::read_to_string(dir.join("bynk.toml")).unwrap();
+    write(
+        &dir.join("bynk.toml"),
+        &format!(
+            "{manifest}\n[unstable]\nallow = [\"bynk.cloudflare.Vectorize\"]\n\n[deploy.vectorize.Docs]\nindex = {{ production = \"docs-prod\" }}\n"
+        ),
+    );
+    let out = deploy(&dir, &["--format", "json"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let doc = stdout_json(&out);
+    let adopted = doc["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|w| w["code"] == "bynk.deploy.adoption_partial")
+        .unwrap_or_else(|| panic!("no adoption_partial in {doc}"));
+    assert_eq!(adopted["table"], "vectorize");
+    assert_eq!(adopted["capability"], "Docs");
+    assert_eq!(adopted["environment"], "default");
+}
+
+#[test]
+fn a_refused_run_keeps_the_warnings_stderr_printed_before_it() {
+    // The adoption note is printed, then the unmatched container entry refuses: the document has both.
+    let dir = plain_project("refused_keeps_warnings");
+    write(
+        &dir.join("src/shop/orders.bynk"),
+        "context shop.orders\n\nconsumes bynk.cloudflare { Vectorize }\n\ncapability Docs = Vectorize @dimensions(768) @metric(\"cosine\")\n\nservice ping {\n\ton call() -> Effect[Int] by Caller {\n\t\t1\n\t}\n}\n",
+    );
+    let manifest = std::fs::read_to_string(dir.join("bynk.toml")).unwrap();
+    let image = format!("registry.cloudflare.com/acct/web@sha256:{}", "a".repeat(64));
+    write(
+        &dir.join("bynk.toml"),
+        &format!(
+            "{manifest}\n[unstable]\nallow = [\"bynk.cloudflare.Vectorize\"]\n\n[deploy.vectorize.Docs]\nindex = {{ production = \"docs-prod\" }}\n\n[deploy.containers.Web]\nimage = {{ production = \"{image}\" }}\n"
+        ),
+    );
+    let out = deploy(&dir, &["--format", "json"]);
+    assert!(!out.status.success());
+    let doc = stdout_json(&out);
+    assert_eq!(
+        doc["refusals"][0]["code"], "bynk.deploy.adoption_unmatched",
+        "{doc}"
+    );
+    assert_eq!(
+        doc["warnings"][0]["code"], "bynk.deploy.adoption_partial",
+        "{doc}"
+    );
+}

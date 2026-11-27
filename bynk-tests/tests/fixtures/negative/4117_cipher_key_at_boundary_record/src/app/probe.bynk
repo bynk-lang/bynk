@@ -1,0 +1,10 @@
+// #4117: a `CipherKey` is a live, non-extractable platform key, so a record that can be stored or
+// sent cannot hold one, as a `SigningKey` cannot.
+context app.probe
+
+consumes bynk.crypto { Crypto }
+
+type Vault = {
+	owner: String,
+	key: CipherKey,
+}

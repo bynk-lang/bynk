@@ -1,0 +1,12 @@
+{
+  "blurb": "The bindings after `given` in a call's arguments name the callee's capability parameters (`given Store: Kv`). A name the callee does not declare, or a binding on a call to a function, method or constructor with no capability parameters at all, has nothing to bind. Check the parameter's name in the callee's signature, or remove the bindings.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.binding_unknown",
+  "constructs": [
+    "call"
+  ],
+  "example": "fn forget(id: String) -> Effect[()] given Store: Kv { … }\n\nforget(id, given Store = Sessions, Cache = Sessions)   // ✗ `forget` has no parameter `Cache`\n\nforget(id, given Store = Sessions)                    // ✓",
+  "severity": "error",
+  "summary": "A call binds a name that is not one of its callee's capability parameters, or binds on a callee that has none."
+}

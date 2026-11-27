@@ -1,0 +1,11 @@
+suite demo.check {
+  case "every default holds the value it was written with" {
+    expect defaultsHoldTheirValues()
+  }
+
+  case "a record built in a test body takes the defaults" {
+    let h = Holder { name: "x" }
+    expect isK(h.tok)
+    expect isN(h.inner.tok)
+  }
+}

@@ -57,6 +57,34 @@ export default {
           }
         }
         {
+          const __m = __matchPath("/canonical/:name", path);
+          if ((method === "GET" || method === "HEAD") && __m) {
+            __route = "GET /canonical/:name";
+            if (__m.malformed) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+            }
+            const __raw_name = __m.params["name"];
+            const name = __raw_name;
+            const result = await surface.http_GET_canonical_Param_name(name);
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop.render\""]), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          const __m = __matchPath("/either/:team", path);
+          if ((method === "GET" || method === "HEAD") && __m) {
+            __route = "GET /either/:team";
+            if (__m.malformed) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+            }
+            const __raw_team = __m.params["team"];
+            const team = __raw_team;
+            const result = await surface.http_GET_either_Param_team(request, team);
+            const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"shop.render\"", "Bynk-Cookie realm=\"shop.render\""])), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
           const __m = __matchPath("/plan/:plan", path);
           if ((method === "GET" || method === "HEAD") && __m) {
             __route = "GET /plan/:plan";
@@ -99,6 +127,16 @@ export default {
             const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"shop.render\""])), __security_api);
             return method === "HEAD" ? __headResponse(__response) : __response;
           }
+        }
+        if (__matchPath("/canonical/:name", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_api);
+        }
+        if (__matchPath("/either/:team", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_api);
         }
         if (__matchPath("/mine", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;

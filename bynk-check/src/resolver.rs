@@ -230,6 +230,10 @@ pub struct ResolvedCommons {
     /// check (#907): only a context's emission rebrands a `uses`-sourced
     /// commons sum type's variant constructors out of value scope.
     pub is_context: bool,
+    /// #3959: true iff this unit is a `commons` (a test-only one included),
+    /// whose free functions may declare capability parameters and shared
+    /// capabilities. Set with [`ResolvedCommons::with_is_commons`].
+    pub(crate) is_commons: bool,
     /// Names of types brought into scope via `uses` of a *commons*
     /// specifically (as opposed to a local declaration, or a type surfaced
     /// via `consumes`) — every name [`compute_is_uses_commons_type`] accepts
@@ -544,6 +548,7 @@ impl ResolvedCommons {
             extensible_enums: HashSet::new(),
             unselected_types: HashSet::new(),
             stability: Default::default(),
+            is_commons: false,
         }
     }
 
@@ -613,6 +618,13 @@ impl ResolvedCommons {
     /// S3 (#1963): set [`ResolvedCommons::stability`].
     pub fn with_stability(mut self, stability: crate::stability::UnitStability) -> Self {
         self.stability = stability;
+        self
+    }
+
+    /// #3959: mark the unit a `commons`, whose free functions may declare
+    /// `given` (capability parameters and shared capabilities).
+    pub fn with_is_commons(mut self, is_commons: bool) -> Self {
+        self.is_commons = is_commons;
         self
     }
 
@@ -1053,6 +1065,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             extensible_enums: HashSet::new(),
             unselected_types: HashSet::new(),
             stability: Default::default(),
+            is_commons: false,
         };
         (resolved, errors)
     }
@@ -2453,7 +2466,7 @@ impl Gate<'_> {
                     self.pattern(e);
                 }
             }
-            Pattern::Refined { inner, .. } => self.pattern(inner),
+            Pattern::Refined { inner, .. } | Pattern::As { inner, .. } => self.pattern(inner),
             Pattern::Or(alts, _) => {
                 for a in alts {
                     self.pattern(a);
@@ -4877,28 +4890,33 @@ fn collect_is_pattern_binding_names(pattern: &Pattern, into: &mut HashMap<String
     match pattern {
         Pattern::Variant { bindings, .. } => {
             for b in bindings {
-                if let Pattern::Binding(name) = b.pattern() {
+                if let Some(name) = b.pattern().flat_binder() {
                     into.insert(name.name.clone(), ());
                 }
             }
         }
+        // #3971: an `as` name binds the whole value, then what its pattern binds.
+        Pattern::As { inner, name, .. } => {
+            into.insert(name.name.clone(), ());
+            collect_is_pattern_binding_names(inner, into);
+        }
         Pattern::Record { fields, .. } => {
             for (name, sub) in fields {
-                match sub {
+                match sub.as_ref().map(Pattern::flat_binder) {
                     None => {
                         into.insert(name.name.clone(), ());
                     }
-                    Some(Pattern::Binding(n)) => {
+                    Some(Some(n)) => {
                         into.insert(n.name.clone(), ());
                     }
-                    Some(_) => {}
+                    Some(None) => {}
                 }
             }
         }
         // #2680: a list pattern's elements that are bare names, and its `..rest`.
         Pattern::List { elems, rest, .. } => {
             for e in elems {
-                if let Pattern::Binding(n) = e {
+                if let Some(n) = e.flat_binder() {
                     into.insert(n.name.clone(), ());
                 }
             }

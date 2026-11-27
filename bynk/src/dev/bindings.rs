@@ -214,8 +214,15 @@ pub(super) fn warn_missing_local_secrets(
             continue;
         };
         for (binding, store, secret) in entries {
-            let listed = crate::cloudflare::Wrangler::new(provenance, &worker_dir)
-                .secrets_store_list_local(&worker_dir, &store, &persist_to_args(wrangler_args));
+            let listed = crate::cloudflare::Account::new(crate::cloudflare::Wrangler::new(
+                provenance,
+                &worker_dir,
+            ))
+            .secrets_store_list_local(
+                &worker_dir,
+                &store,
+                &persist_to_args(wrangler_args),
+            );
             if listed.as_ref().is_err_and(|e| e.is_missing()) {
                 return;
             }

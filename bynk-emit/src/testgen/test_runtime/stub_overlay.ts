@@ -1,6 +1,16 @@
 function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
-  return new globalThis.Proxy(stub, {
+  const proxy: unknown = new globalThis.Proxy(stub, {
     get(target, prop) {
+      // #4099: `Ai.generateValue[T]` is lowered over the binding's JSON-mode `generateJson`, which
+      // is not an operation of `Ai` and so cannot be stubbed. In a test it reads the text of the
+      // stubbed `generate` (`stub Ai.generate(_, _) returns Ok(Generation { text: "{…}", … })`),
+      // so a case runs the same decode production does, with a model's reply for its input.
+      if (cap === "Ai" && prop === "generateJson") {
+        return async (model: unknown, request: unknown) => {
+          const reply = await (proxy as { generate(m: unknown, r: unknown): Promise<{ tag: string; value: { text: string } }> }).generate(model, request);
+          return reply.tag === "Ok" ? { tag: "Ok", value: reply.value.text } : reply;
+        };
+      }
       const t = target as Record<PropertyKey, unknown> & { __applies?: (op: string) => boolean };
       // An own property (the stub's state, or a wrapper the recording proxy
       // installed) always answers; a stubbed operation answers when it applies
@@ -16,4 +26,5 @@ function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
       };
     },
   });
+  return proxy;
 }

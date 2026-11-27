@@ -1,5 +1,8 @@
+bynk.actor.bearer_bad_arg
 bynk.actor.bearer_identity_not_string_constructible
 bynk.actor.bearer_missing_secret
+bynk.actor.bearer_secret_shared
+bynk.actor.bearer_unknown_key
 bynk.actor.binder_shadows_param
 bynk.actor.by_on_agent
 bynk.actor.caller_not_admitted

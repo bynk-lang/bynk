@@ -1,0 +1,12 @@
+{
+  "blurb": "A commons may select a first-party capability in its braced `consumes`, so that its functions can name it in `given`: as a shared capability (`given Logger`) or as the bound of a capability parameter (`given Store: Kv`). The selection brings in the capability's contract and nothing else, so one that no function in the file names only misleads a reader about what the library reaches. Remove it from the list, or use it. Capabilities in a commons are experimental: `[unstable] allow = [\"bynk.given.parameters\"]`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.commons.capability_unused",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "commons shop.cache\n\nconsumes bynk.cloudflare { Kv }   // ✗ nothing here names `Kv`\n\nfn key(id: String) -> String { \"session:\\(id)\" }\n\nconsumes bynk.cloudflare { Kv }   // ✓ a function's `given` names it\n\nfn forget(id: String) -> Effect[()] given Store: Kv {\n\tStore.delete(key(id))\n}",
+  "severity": "warning",
+  "summary": "A commons selects a first-party capability in its `consumes` that no function's `given` names (warning)."
+}

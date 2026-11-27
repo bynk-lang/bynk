@@ -381,3 +381,47 @@ fn an_extensible_enum_with_every_declared_variant_gets_just_the_wildcard() {
     };
     assert_eq!(action.title, "Fill the missing match arm");
 }
+
+/// #4536: the built-in `HttpResult` is extensible too. A `match` listing every
+/// variant it has today gets just the wildcard arm, and then checks clean.
+#[test]
+fn an_http_result_with_every_variant_gets_just_the_wildcard() {
+    use bynk_syntax::ast::{HTTP_VARIANTS, HttpVariantPayload};
+    let arms: String = HTTP_VARIANTS
+        .iter()
+        .map(|v| {
+            let arity = match v.payload {
+                HttpVariantPayload::None => 0,
+                HttpVariantPayload::Value
+                | HttpVariantPayload::Message
+                | HttpVariantPayload::Location
+                | HttpVariantPayload::Streamed => 1,
+                HttpVariantPayload::Raw | HttpVariantPayload::RawStreamed => 2,
+                HttpVariantPayload::RawTagged
+                | HttpVariantPayload::Partial
+                | HttpVariantPayload::RawError => 3,
+            };
+            let pat = if arity == 0 {
+                v.name.to_string()
+            } else {
+                format!("{}({})", v.name, vec!["_"; arity].join(", "))
+            };
+            format!("    {pat} => \"x\",\n")
+        })
+        .collect();
+    let src = canon(&format!(
+        "commons app.m\n\nfn label(r: HttpResult[String]) -> String {{\n  match r {{\n{arms}  }}\n}}\n"
+    ));
+    let root = setup("httpresult", &src);
+    let (_, diags) = diagnose(&root, None);
+    assert_eq!(
+        cats(&diags),
+        vec!["bynk.types.extensible_match_needs_wildcard"],
+        "only the wildcard is missing"
+    );
+    let filled = fill("httpresult", &src);
+    assert!(
+        filled.contains("\t\t_ => \"\",\n\t}"),
+        "the wildcard comes last:\n{filled}"
+    );
+}

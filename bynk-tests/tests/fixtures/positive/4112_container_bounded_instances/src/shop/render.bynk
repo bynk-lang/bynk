@@ -11,6 +11,8 @@ type TenantId = String where NonEmpty
 
 actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = TenantId }
 
+actor Browser { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = TenantId }
+
 type Plan = enum { Free, Pro }
 
 capability Renderer = Container @build("containers/renderer") @port(8080)
@@ -80,6 +82,37 @@ service api from http {
 			url: "http://renderer/render",
 		}
 		let res <- Renderer.send(shard(name), req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	// A sum of authenticated actors is closed too: no member of it is open.
+	on GET("/either/:team") (
+		team: String
+	) -> Effect[HttpResult[String]] by who: Member | Browser given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send("team-\(team)", req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	// A parameter that is rebound is not the request's input any more.
+	on GET("/canonical/:name") (
+		name: String
+	) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let name = "shared"
+		let res <- Renderer.send(name, req)
 		match res {
 			Ok(r) => Ok(r.body),
 			Err(_) => ServerError("render failed"),

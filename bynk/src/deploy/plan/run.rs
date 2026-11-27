@@ -10,8 +10,8 @@ use super::shared::{
     SharedWithDefault, comparison_skipped, has_comparable_bindings, shared_bindings,
     shared_constants, strict_refusal, without_deliberate,
 };
-use super::{Entry, Stop, code, refused_report};
-use crate::cloudflare::Wrangler;
+use super::{Entry, Stop, code, refusals, refused_report};
+use crate::cloudflare::{Account, Wrangler};
 use crate::deploy::LOCK_FILE;
 use crate::deploy::agent_move::{AgentGate, checked_agent_moves};
 use crate::deploy::apply::LedgerWriter;
@@ -51,8 +51,7 @@ use crate::deploy::secrets::SecretSource;
 use crate::deploy::secrets::wrangler_runner_in;
 use crate::probe::Toolbox;
 use crate::workers;
-use bynk_driver::colour;
-use bynk_driver::emsg;
+use bynk_driver::{colour, emsg};
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -357,18 +356,15 @@ fn deploy(
     let mut resources = match project_resources(&workers_dir, &available, &model) {
         Ok(resources) => resources,
         Err(e) => {
-            return Err(Stop::error(Entry::new(
-                code::WORKERS_UNREADABLE,
-                e.to_string(),
-            )));
+            return Err(Stop::error(refusals::workers_unreadable(&e)));
         }
     };
     // #3883: a named environment claims only the addresses `[deploy.email]` maps it to.
     if let Err(e) = crate::deploy::email::claim(&mut resources, &model.layout, &opts.environment) {
-        return Err(Stop::error(
-            Entry::new(code::EMAIL_CLAIM_REFUSED, e.to_string())
-                .with("environment", opts.environment.as_str()),
-        ));
+        return Err(Stop::error(refusals::email_claim_refused(
+            &opts.environment,
+            &e,
+        )));
     }
     let (graph, groups) = (service_graph(&resources), GroupNames::of(project_root));
     // Read before the plan: a malformed `--secrets-file` is the user's typo, and
@@ -415,6 +411,12 @@ fn deploy(
     )?;
 
     let order = ordered(&selected, &graph, &resources)?;
+    // #3797: every stop from here on has the upload order, which its document carries.
+    let order_names: Vec<String> = order
+        .iter()
+        .map(|worker| deployed_worker_name(&opts.environment, worker))
+        .collect();
+    let run_stop = |stop: Stop, warnings: &[Entry]| stop.with_run(&order_names, warnings);
 
     // #3562 (G5): a context with agent state that would change scripts is refused before
     // anything is pushed, `--dry-run` included.
@@ -423,10 +425,7 @@ fn deploy(
     if !agents.may_go_on() {
         // #3797: the refusals, with what the run knew, for a client that asked for JSON.
         return Err(Stop {
-            order: order
-                .iter()
-                .map(|worker| deployed_worker_name(&opts.environment, worker))
-                .collect(),
+            order: order_names.clone(),
             refusals: agents.refusals,
             warnings: agents.warnings,
             ..Stop::from(ExitCode::FAILURE)
@@ -436,19 +435,27 @@ fn deploy(
         moves, warnings, ..
     } = agents;
 
-    check_foreign_pins(project_root, &workers_dir, &order, opts)?;
+    check_foreign_pins(project_root, &workers_dir, &order, opts)
+        .map_err(|stop| run_stop(stop, &warnings))?;
 
     // Review of #1974: names the account scopes (a namespace's title, a
     // bucket's, a database's, a dataset's) can coincide, so they are refused
     // before the plan, `--dry-run` included, not met as wrangler's own error.
     // #3479: an index `bynk.toml` names for this environment is adopted, not
     // created, so its name is known before the plan.
-    if apply_adoptions(project_root, &mut resources, &opts.environment).is_err() {
-        return Err(ExitCode::FAILURE.into());
+    let mut warnings = warnings;
+    match apply_adoptions(project_root, &mut resources, &opts.environment) {
+        Ok(notes) => warnings.extend(notes),
+        Err((notes, refusal)) => {
+            warnings.extend(notes);
+            return Err(run_stop(Stop::refused(refusal), &warnings));
+        }
     }
     if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
-        emsg!("bynk: error: {message}");
-        return Err(ExitCode::FAILURE.into());
+        return Err(run_stop(
+            Stop::error(refusals::account_name_conflict(message)),
+            &warnings,
+        ));
     }
     // #2055: a first deploy hands `wrangler deploy` Bynk's own
     // `--secrets-file`, so a passthrough one would be a second, with
@@ -458,7 +465,10 @@ fn deploy(
         secrets_file_passthrough_refusal(&opts.wrangler_args, &order, &lock, &opts.environment)
     {
         colour::eprint(&refusal);
-        return Err(ExitCode::FAILURE.into());
+        return Err(run_stop(
+            Stop::refused(refusals::secrets_file_passthrough(&refusal)),
+            &warnings,
+        ));
     }
 
     // #3319: each `Postgres` binding's connection string is read now, from the
@@ -466,11 +476,18 @@ fn deploy(
     // deploy before the plan (`--dry-run` included) and the plan can show a
     // changed string as an update. The string itself goes no further than the
     // `Wants` below.
-    let Some(hyperdrive_wants) =
-        hyperdrive::wants_for_run(project_root, &order, &resources, &opts.environment)
-    else {
-        return Err(ExitCode::FAILURE.into());
-    };
+    let hyperdrive_wants =
+        match hyperdrive::wants_for_run(project_root, &order, &resources, &opts.environment) {
+            Ok(wants) => wants,
+            Err(refusals) => {
+                return Err(Stop {
+                    refusals,
+                    order: order_names.clone(),
+                    warnings: warnings.clone(),
+                    ..Stop::from(ExitCode::FAILURE)
+                });
+            }
+        };
     let plan = derive_plan(
         &order,
         &resources,
@@ -486,20 +503,25 @@ fn deploy(
         Lives::for_plan(&hyperdrive_wants),
     )
     .checked_against_account()
-    .with_report(Vec::new(), warnings);
+    .noting_unchecked_kv(!opts.dry_run)
+    .with_report(Vec::new(), warnings.clone());
     let own_scripts: BTreeSet<String> =
         script_names(&workers_dir, &available).into_keys().collect();
-    let Ok(shared) = shared_with_default(project_root, opts, &model, &own_scripts) else {
-        return Err(ExitCode::FAILURE.into());
-    };
-    let plan = plan.with_shared(shared);
-    print_plan_then_forward_warnings(&plan, opts, &order, &resources, project_root);
+    let shared = shared_with_default(project_root, opts, &model, &own_scripts)
+        .map_err(|stop| run_stop(stop, &warnings))?;
+    let mut plan = plan.with_shared(shared);
+    // P5 (#2323): a changed `@jurisdiction` is a new bucket beside the old,
+    // whose objects do not move, so it is only made on an explicit `--yes`. #3797: known before
+    // the plan is printed, so the JSON plan lists it; a dry run only shows the plan.
+    let recreate = recreate_refusal(&plan, opts.yes).filter(|_| !opts.dry_run);
+    if let Some(refusal) = recreate {
+        plan = plan.with_refusal(refusals::recreate_needs_yes(refusal));
+    }
+    let plan = print_plan_then_forward_warnings(plan, opts, &order, &resources, project_root);
     if opts.dry_run {
         return Ok(());
     }
-    // P5 (#2323): a changed `@jurisdiction` is a new bucket beside the old,
-    // whose objects do not move, so it is only made on an explicit `--yes`.
-    if let Some(refusal) = recreate_refusal(&plan, opts.yes) {
+    if let Some(refusal) = recreate {
         emsg!("bynk: error: {refusal}");
         return Err(ExitCode::FAILURE.into());
     }
@@ -530,7 +552,7 @@ fn deploy(
         return Err(ExitCode::FAILURE.into());
     }
 
-    let api = Wrangler::new(&probe.provenance, project_root);
+    let api = Account::new(Wrangler::new(&probe.provenance, project_root));
     let tools = Tools {
         api: &api,
         project_root,
@@ -688,7 +710,7 @@ fn shared_with_default(
     opts: &DeployOptions,
     model: &bynk_emit::emit_model::WorkersBuild,
     own_scripts: &BTreeSet<String>,
-) -> Result<Vec<SharedWithDefault>, ()> {
+) -> Result<Vec<SharedWithDefault>, Stop> {
     use bynk_project::vars::DEFAULT_ENVIRONMENT;
     let Ok(options) = bynk_driver::try_project_options(project_root) else {
         return Ok(Vec::new());
@@ -738,10 +760,14 @@ fn shared_with_default(
                 // Said, not skipped quietly: a strict run must not pass unchecked.
                 let (message, refuse) =
                     comparison_skipped(environment, opts.strict_environments, &cause);
-                emsg!("{message}");
                 if refuse {
-                    return Err(());
+                    emsg!("{message}");
+                    return Err(Stop::refused(refusals::strict_environments_unchecked(
+                        &message,
+                        environment,
+                    )));
                 }
+                emsg!("{message}");
             }
         }
     }
@@ -749,7 +775,17 @@ fn shared_with_default(
         && let Some(refusal) = strict_refusal(&shared, environment)
     {
         emsg!("{refusal}");
-        return Err(());
+        let mut names: Vec<String> = Vec::new();
+        for s in &shared {
+            if !names.contains(&s.name) {
+                names.push(s.name.clone());
+            }
+        }
+        return Err(Stop::refused(refusals::strict_environments_shared(
+            &refusal,
+            environment,
+            &names,
+        )));
     }
     Ok(shared)
 }

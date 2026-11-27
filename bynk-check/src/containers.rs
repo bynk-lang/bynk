@@ -251,22 +251,50 @@ pub struct InstanceFromInput {
     pub input: String,
 }
 
+/// The names that depend on a handler input, each with the input it came from.
+type Inputs = HashMap<String, String>;
+
+/// `inputs` less the names a new scope binds, which shadow them.
+fn without<'a>(inputs: &Inputs, names: impl IntoIterator<Item = &'a str>) -> Inputs {
+    let mut scope = inputs.clone();
+    for name in names {
+        scope.remove(name);
+    }
+    scope
+}
+
 /// The first handler input `e` depends on, or `None`.
 ///
 /// A value depends on an input when it mentions one, or a local bound from one: an interpolation,
 /// a method call on it, an `if`. It does not follow a call to a function (`normalise(tenant)`): that
 /// is where an author bounds the set, so a name laundered through one is not warned about, rather
 /// than warned about wrongly (#4112). A lambda is not entered either.
-fn depends_on_input(e: &Expr, inputs: &HashMap<String, String>) -> Option<String> {
+///
+/// It does not look at a value's type, so a `Bool`-valued input, or an enum interpolated directly,
+/// still counts as an input although the name can take only a few values; mapping it through a
+/// `match` onto its names is how a closed set is written (and is not warned about).
+///
+/// A binding that reuses an input's name (`let tenant = "shared"`, a match arm's pattern, a
+/// block's own `let`) stops the name being an input in its scope.
+fn depends_on_input(e: &Expr, inputs: &Inputs) -> Option<String> {
     match &e.kind {
         ExprKind::Ident(id) => inputs.get(&id.name).cloned(),
         ExprKind::Call { .. } | ExprKind::Lambda(_) => None,
         // The value of a `match` or an `if` is one of its branches, not what it tests: mapping a
         // value onto a closed set (`match plan { Free => "free", Pro => "pro" }`) is how a set is
         // bounded, so the scrutinee and the condition are not followed, only the branches.
-        ExprKind::Match { arms, .. } => arms.iter().find_map(|arm| match &arm.body {
-            MatchBody::Expr(body) => depends_on_input(body, inputs),
-            MatchBody::Block(block) => block_depends_on_input(block, inputs),
+        ExprKind::Match { arms, .. } => arms.iter().find_map(|arm| {
+            let scope = without(
+                inputs,
+                arm.pattern
+                    .bound_names()
+                    .into_iter()
+                    .map(|i| i.name.as_str()),
+            );
+            match &arm.body {
+                MatchBody::Expr(body) => depends_on_input(body, &scope),
+                MatchBody::Block(block) => block_depends_on_input(block, &scope),
+            }
         }),
         ExprKind::If {
             then_block,
@@ -281,16 +309,48 @@ fn depends_on_input(e: &Expr, inputs: &HashMap<String, String>) -> Option<String
     }
 }
 
-/// [`depends_on_input`] for a block's value, its tail.
-fn block_depends_on_input(block: &Block, inputs: &HashMap<String, String>) -> Option<String> {
-    depends_on_input(&block.tail, inputs)
+/// [`depends_on_input`] for a block's value, its tail, after the block's own bindings.
+fn block_depends_on_input(block: &Block, inputs: &Inputs) -> Option<String> {
+    let mut scope = inputs.clone();
+    for statement in &block.statements {
+        bind_statement(&mut scope, statement);
+    }
+    depends_on_input(&block.tail, &scope)
+}
+
+/// What `statement` does to which names depend on an input once it has run. A pure `let x = …`
+/// from an input makes `x` an input; any other binding of `x` (from something that does not
+/// depend on an input, or from an effect's result, which is not followed) makes it not one, so a
+/// parameter that is rebound stops being an input.
+fn bind_statement(inputs: &mut Inputs, statement: &Statement) {
+    match statement {
+        Statement::Let(l) => match depends_on_input(&l.value, inputs) {
+            Some(origin) => {
+                inputs.insert(l.name.name.clone(), origin);
+            }
+            None => {
+                inputs.remove(&l.name.name);
+            }
+        },
+        Statement::EffectLet(l) => {
+            inputs.remove(&l.name.name);
+        }
+        Statement::Par(p) => {
+            for inner in &p.statements {
+                if let Statement::Let(l) | Statement::EffectLet(l) = inner {
+                    inputs.remove(&l.name.name);
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Every call in `e` of an instance operation on a container in `containers`.
 fn collect_instance_calls(
     e: &Expr,
     containers: &HashSet<String>,
-    inputs: &HashMap<String, String>,
+    inputs: &Inputs,
     out: &mut Vec<InstanceFromInput>,
 ) {
     if let ExprKind::MethodCall {
@@ -311,43 +371,89 @@ fn collect_instance_calls(
             input,
         });
     }
-    for child in bynk_syntax::ast::expr_children(e) {
-        collect_instance_calls(child, containers, inputs, out);
+    match &e.kind {
+        ExprKind::Block(block) => collect_in_block(block, containers, inputs, out),
+        ExprKind::If {
+            cond,
+            then_block,
+            else_block,
+        } => {
+            collect_instance_calls(cond, containers, inputs, out);
+            collect_in_block(then_block, containers, inputs, out);
+            collect_in_block(else_block, containers, inputs, out);
+        }
+        ExprKind::Match { discriminant, arms } => {
+            collect_instance_calls(discriminant, containers, inputs, out);
+            for arm in arms {
+                let scope = without(
+                    inputs,
+                    arm.pattern
+                        .bound_names()
+                        .into_iter()
+                        .map(|i| i.name.as_str()),
+                );
+                if let Some(guard) = &arm.guard {
+                    collect_instance_calls(guard, containers, &scope, out);
+                }
+                match &arm.body {
+                    MatchBody::Expr(body) => collect_instance_calls(body, containers, &scope, out),
+                    MatchBody::Block(block) => collect_in_block(block, containers, &scope, out),
+                }
+            }
+        }
+        ExprKind::Lambda(l) => {
+            let scope = without(inputs, l.params.iter().map(|p| p.name.name.as_str()));
+            collect_instance_calls(&l.body, containers, &scope, out);
+        }
+        _ => {
+            for child in bynk_syntax::ast::expr_children(e) {
+                collect_instance_calls(child, containers, inputs, out);
+            }
+        }
     }
 }
 
+/// [`collect_instance_calls`] through a block's statements in order, each seeing what the ones
+/// before it bound, then its tail.
+fn collect_in_block(
+    block: &Block,
+    containers: &HashSet<String>,
+    inputs: &Inputs,
+    out: &mut Vec<InstanceFromInput>,
+) {
+    let mut scope = inputs.clone();
+    for statement in &block.statements {
+        let mut exprs: Vec<&Expr> = Vec::new();
+        bynk_syntax::ast::statement_exprs(statement, &mut exprs);
+        for e in exprs {
+            collect_instance_calls(e, containers, &scope, out);
+        }
+        bind_statement(&mut scope, statement);
+    }
+    collect_instance_calls(&block.tail, containers, &scope, out);
+}
+
 /// The calls in `handler` that name a container instance (one of `containers`) from the handler's
-/// own input: a path, query or body parameter, or a local bound from one, in statement order.
+/// own input: a path, query, header, cookie or body parameter, or a local bound from one, in
+/// statement order.
 ///
-/// The check follows values through the handler's top-level `let`s and stops there: a binding made
-/// inside a nested block or a match arm, or from the result of an effect, is not followed, so it
-/// can miss a name and never reports one wrongly.
+/// The check follows values through pure `let`s, in the handler body and in the blocks inside it,
+/// and stops at what it cannot follow: a binding from the result of an effect, a function's result,
+/// a lambda. So it can miss a name; a name that is rebound (to anything but a value that depends on
+/// an input) is no longer one, so it does not report one wrongly for that.
 pub fn instances_from_input(
     handler: &Handler,
     containers: &HashSet<String>,
 ) -> Vec<InstanceFromInput> {
     // Each name that depends on an input, with the input it came from (a parameter, or the
     // parameter a local was bound from).
-    let mut inputs: HashMap<String, String> = handler
+    let inputs: Inputs = handler
         .params
         .iter()
         .map(|p| (p.name.name.clone(), p.name.name.clone()))
         .collect();
     let mut found = Vec::new();
-    for statement in &handler.body.statements {
-        let mut exprs: Vec<&Expr> = Vec::new();
-        bynk_syntax::ast::statement_exprs(statement, &mut exprs);
-        for e in exprs {
-            collect_instance_calls(e, containers, &inputs, &mut found);
-        }
-        // A pure `let x = …` from an input is an input; an effect result is not.
-        if let Statement::Let(l) = statement
-            && let Some(origin) = depends_on_input(&l.value, &inputs)
-        {
-            inputs.insert(l.name.name.clone(), origin);
-        }
-    }
-    collect_instance_calls(&handler.body.tail, containers, &inputs, &mut found);
+    collect_in_block(&handler.body, containers, &inputs, &mut found);
     found
 }
 
@@ -487,6 +593,46 @@ mod tests {
             "    let n <- Lookup.get(tenant)\n    let r <- Renderer.send(n, req)\n    Ok(\"\")",
         ] {
             assert_eq!(found(&handler(body)), [], "{body}");
+        }
+    }
+
+    #[test]
+    fn a_rebound_parameter_is_no_longer_an_input() {
+        for body in [
+            // A pure `let` of something that does not depend on an input.
+            "    let tenant = \"shared\"\n    let r <- Renderer.send(tenant, req)\n    Ok(\"\")",
+            // An effect bind: its result is not followed.
+            "    let tenant <- Tenants.canonical(tenant)\n    let r <- Renderer.send(tenant, req)\n    Ok(\"\")",
+            // A block's own `let`.
+            "    let n = if true {\n      let tenant = \"shared\"\n      tenant\n    } else {\n      \"x\"\n    }\n    let r <- Renderer.send(n, req)\n    Ok(\"\")",
+            // A match arm's pattern reusing the name.
+            "    let n = match Plans.pick() {\n      tenant => tenant\n    }\n    let r <- Renderer.send(n, req)\n    Ok(\"\")",
+            // The same, with the call inside the arm.
+            "    match Plans.pick() {\n      tenant => Renderer.send(tenant, req)\n    }",
+            // A lambda parameter reusing the name, with the call inside the lambda.
+            "    let f = (tenant) => Renderer.send(tenant, req)\n    Ok(\"\")",
+        ] {
+            assert_eq!(found(&handler(body)), [], "{body}");
+        }
+    }
+
+    #[test]
+    fn a_name_still_depends_on_an_input_inside_a_nested_scope() {
+        for body in [
+            // A block that uses the parameter, not a rebound name.
+            "    let n = if true {\n      let other = \"x\"\n      tenant\n    } else {\n      \"x\"\n    }\n    let r <- Renderer.send(n, req)\n    Ok(\"\")",
+            // The call inside an `if` branch.
+            "    if true {\n      Renderer.send(tenant, req)\n    } else {\n      Ok(\"\")\n    }",
+            // A match arm that binds another name.
+            "    match Plans.pick() {\n      other => Renderer.send(tenant, req)\n    }",
+            // Rebinding to a value that depends on the input keeps it one.
+            "    let tenant = tenant.toLower()\n    let r <- Renderer.send(tenant, req)\n    Ok(\"\")",
+        ] {
+            assert_eq!(
+                found(&handler(body)),
+                [("Renderer.send".into(), "tenant".into())],
+                "{body}"
+            );
         }
     }
 

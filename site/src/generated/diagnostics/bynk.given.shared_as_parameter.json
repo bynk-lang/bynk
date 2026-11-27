@@ -1,0 +1,12 @@
+{
+  "blurb": "A capability parameter exists to choose between instances, so its bound must be a kind with instances (`Kv`, `D1`, `R2`, …). A capability with none (`Clock`, `Random`, `Logger`, `Fetch`, `Secrets`, `Locale`, `Idempotency`, the Cloudflare singletons, `Crypto`) has exactly one per caller, so a binding would add a name and no choice. Name it bare, as a shared capability: `given Logger`.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.shared_as_parameter",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": "fn note(text: String) -> Effect[()] given L: Logger {   // ✗ there is only one `Logger`\n\tL.info(text)\n}\n\nfn note(text: String) -> Effect[()] given Logger {      // ✓ a shared capability\n\tLogger.info(text)\n}",
+  "severity": "error",
+  "summary": "A capability with no instances bounds a capability parameter (`given L: Logger`); it is named bare, as a shared capability."
+}

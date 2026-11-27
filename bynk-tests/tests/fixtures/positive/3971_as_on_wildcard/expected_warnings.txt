@@ -1,0 +1,2 @@
+# #3971: `_ as name` binds what the bare name already binds.
+as_on_wildcard `_ as order` is just `order`

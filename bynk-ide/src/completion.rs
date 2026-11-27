@@ -284,6 +284,9 @@ fn complete_base(
     if let Some(keys) = signed_cookie_key_candidates(line_prefix) {
         return keys;
     }
+    if let Some(keys) = bearer_key_candidates(line_prefix) {
+        return keys;
+    }
     if auth_scheme_position(line_prefix) {
         return auth_scheme_candidates();
     }
@@ -2856,6 +2859,53 @@ fn auth_scheme_candidates() -> Vec<Completion> {
     .collect()
 }
 
+/// #3821: inside the parentheses of `auth = Bearer(…`, the config keys not yet written.
+fn bearer_key_candidates(line_prefix: &str) -> Option<Vec<Completion>> {
+    let open = line_prefix.rfind("Bearer(")? + "Bearer(".len();
+    let args = &line_prefix[open..];
+    if args.contains(')') {
+        return None;
+    }
+    let current = args.rsplit(',').next().unwrap_or(args);
+    if current.contains('=') {
+        return Some(Vec::new());
+    }
+    let written: Vec<&str> = args
+        .split(',')
+        .filter_map(|part| part.split('=').next().map(str::trim))
+        .collect();
+    Some(
+        [
+            (
+                "secret",
+                "the environment variable holding the signing secret (required)",
+            ),
+            (
+                "issuer",
+                "the `iss` a token must carry; unchecked when not given",
+            ),
+            (
+                "audience",
+                "the `aud` a token must carry (or contain, for an array); unchecked when not given. Two actors on one secret need different ones",
+            ),
+            (
+                "trustFrom",
+                "an environment variable whose JSON `{ \"issuer\", \"audience\" }` replaces the declared values at run time",
+            ),
+        ]
+        .into_iter()
+        .filter(|(key, _)| !written.contains(key))
+        .map(|(key, detail)| {
+            Completion::item(
+                key,
+                CompletionKind::Field,
+                Some(format!("Bearer key — {detail}")),
+            )
+        })
+        .collect(),
+    )
+}
+
 /// #3386: inside the parentheses of `auth = SignedCookie(…`, the config keys not yet written.
 fn signed_cookie_key_candidates(line_prefix: &str) -> Option<Vec<Completion>> {
     let open = line_prefix.rfind("SignedCookie(")? + "SignedCookie(".len();
@@ -3135,6 +3185,23 @@ fn member_candidates_from(
     {
         for member in ["select", "firstAs", "writeValue"] {
             if let Some(sig) = crate::signature_help::typed_read(base, member)
+                && seen.insert(member.to_string())
+            {
+                out.push(Completion::item(
+                    member.to_string(),
+                    CompletionKind::Member,
+                    Some(format!("{sig} — operation of `{receiver}`")),
+                ));
+            }
+        }
+    }
+    // #4099: `Ai.generateValue[T]` and `AnalyticsSql.select[T]`, which the compiler lowers, are
+    // members of the bare capabilities once the capability's own operations are in scope.
+    if matches!(receiver, "Ai" | "AnalyticsSql")
+        && crate::analytics_tooling::consumes_cloudflare(doc_text, receiver)
+    {
+        for member in ["generateValue", "select"] {
+            if let Some(sig) = crate::signature_help::typed_read(receiver, member)
                 && seen.insert(member.to_string())
             {
                 out.push(Completion::item(
@@ -5205,6 +5272,38 @@ mod tests {
     }
 
     #[test]
+    fn a_bearer_actor_completes_its_claim_keys() {
+        // #3821
+        let keys = complete(
+            "actor User { auth = Bearer(secret = \"K\", ",
+            "context a.b\n",
+            None,
+        );
+        for key in ["issuer", "audience", "trustFrom"] {
+            assert!(find(&keys, key, CompletionKind::Field).is_some(), "{key}");
+        }
+        assert!(
+            find(&keys, "secret", CompletionKind::Field).is_none(),
+            "already written"
+        );
+        let after_issuer = complete(
+            "actor User { auth = Bearer(secret = \"K\", issuer = \"web\", ",
+            "context a.b\n",
+            None,
+        );
+        assert!(find(&after_issuer, "issuer", CompletionKind::Field).is_none());
+        assert!(find(&after_issuer, "audience", CompletionKind::Field).is_some());
+        assert!(
+            complete(
+                "actor User { auth = Bearer(issuer = ",
+                "context a.b\n",
+                None
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
     fn a_signed_cookie_actor_offers_issue_and_expire() {
         let doc = "context a.b\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hour), identity = UserId }\n";
         let items = complete("    User.", doc, None);
@@ -5289,6 +5388,29 @@ mod tests {
             "{:?}",
             select.detail
         );
+    }
+
+    /// #4099: `Ai.` offers `generateValue` beside the declared operations, with its signature, and
+    /// never the private `generateJson` it is lowered over.
+    #[test]
+    fn the_ai_name_offers_generate_value() {
+        let doc = "context a.b\n\nconsumes bynk.cloudflare { Ai }\n";
+        let items = complete("    Ai.", doc, None);
+        let gv = find(&items, "generateValue", CompletionKind::Member).expect("`generateValue`");
+        assert!(
+            gv.detail
+                .as_deref()
+                .is_some_and(|d| d.contains("Result[T, AiError]")),
+            "{:?}",
+            gv.detail
+        );
+        assert!(find(&items, "generate", CompletionKind::Member).is_some());
+        assert!(find(&items, "generateJson", CompletionKind::Member).is_none());
+        // A project's own capability of the same name is not the first-party one.
+        let own = "context a.b\n\ncapability Ai {\n  fn ask(q: String) -> Effect[String]\n}\n";
+        let items = complete("    Ai.", own, None);
+        assert!(find(&items, "generateValue", CompletionKind::Member).is_none());
+        assert!(find(&items, "ask", CompletionKind::Member).is_some());
     }
 
     #[test]

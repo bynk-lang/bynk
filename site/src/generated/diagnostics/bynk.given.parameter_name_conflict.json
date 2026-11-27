@@ -1,0 +1,12 @@
+{
+  "blurb": "Inside a commons function's body a capability parameter is called like a capability (`Store.get(key)`), so its name must mean one thing there. A parameter may not take the name of a capability or kind the commons can see (`given Kv: Kv`, or `given Clock: Kv` beside a selected `Clock`), of one of the function's type parameters, or of another of its capability parameters. Rename it.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.parameter_name_conflict",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": "fn copy(key: String) -> Effect[()] given Kv: Kv, To: Kv { … }     // ✗ `Kv` is the kind's own name\n\nfn copy(key: String) -> Effect[()] given From: Kv, To: Kv { … }   // ✓",
+  "severity": "error",
+  "summary": "A capability parameter shadows a visible capability or kind, a type parameter, or another capability parameter."
+}

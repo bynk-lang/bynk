@@ -87,95 +87,6 @@
    call: queues delete jobs
    -> ok ()
 
-== kv namespace create · wrangler missing
-   -> error wrangler not found
-== kv namespace create · wrangler does not start
-   -> error No such file or directory (os error 2)
-== kv namespace create · exits 1, stderr only
-   call: kv namespace create shop-api
-   -> error it went wrong on stderr
-== kv namespace create · exits 1, stdout only
-   call: kv namespace create shop-api
-   -> error it went wrong on stdout
-== kv namespace create · exits 1, both streams
-   call: kv namespace create shop-api
-   -> error wrong on stderr
-      and on stdout
-== kv namespace create · exits 3, silent
-   call: kv namespace create shop-api
-   -> error wrangler exited 3
-== kv namespace create · killed by SIGTERM, silent
-   call: kv namespace create shop-api
-   -> error wrangler exited 143
-== kv namespace create · exits 0, unreadable output
-   call: kv namespace create shop-api
-   -> error wrangler did not return a namespace id
-== kv namespace create · TOML snippet
-   call: kv namespace create shop-api
-   -> ok "0123abcd"
-== kv namespace create · JSON snippet
-   call: kv namespace create shop-api
-   -> ok "4567ef"
-
-== kv namespace list · wrangler missing
-   -> None
-== kv namespace list · wrangler does not start
-   -> None
-== kv namespace list · exits 1, stderr only
-   call: kv namespace list
-   -> None
-== kv namespace list · exits 1, stdout only
-   call: kv namespace list
-   -> None
-== kv namespace list · exits 1, both streams
-   call: kv namespace list
-   -> None
-== kv namespace list · exits 3, silent
-   call: kv namespace list
-   -> None
-== kv namespace list · killed by SIGTERM, silent
-   call: kv namespace list
-   -> None
-== kv namespace list · exits 0, unreadable output
-   call: kv namespace list
-   -> None
-== kv namespace list · two namespaces
-   call: kv namespace list
-   -> Some({"a1", "b2"})
-
-== kv namespace delete · wrangler missing
-   -> error wrangler not found
-== kv namespace delete · wrangler does not start
-   -> error No such file or directory (os error 2)
-== kv namespace delete · exits 1, stderr only
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> error it went wrong on stderr
-== kv namespace delete · exits 1, stdout only
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> error it went wrong on stdout
-== kv namespace delete · exits 1, both streams
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> error wrong on stderr
-      and on stdout
-== kv namespace delete · exits 3, silent
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> error wrangler exited 3
-== kv namespace delete · killed by SIGTERM, silent
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> error wrangler exited 143
-== kv namespace delete · exits 0, unreadable output
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> ok ()
-== kv namespace delete · deleted
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> ok ()
-== kv namespace delete · not found, code 10013
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> ok ()
-== kv namespace delete · not found, prose
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> ok ()
-
 == d1 migrations apply (default) · wrangler missing
    -> error wrangler not found
 == d1 migrations apply (default) · wrangler does not start
@@ -225,110 +136,6 @@
    -> error wrangler exited 143
 == d1 migrations apply (--env staging) · exits 0, unreadable output
    call: d1 migrations apply DB --remote --env staging
-   -> ok ()
-
-== d1 create · wrangler missing
-   -> error wrangler not found
-== d1 create · wrangler does not start
-   -> error No such file or directory (os error 2)
-== d1 create · exits 1, stderr only
-   call: d1 create shop-db
-   -> error it went wrong on stderr
-== d1 create · exits 1, stdout only
-   call: d1 create shop-db
-   -> error it went wrong on stdout
-== d1 create · exits 1, both streams
-   call: d1 create shop-db
-   -> error wrong on stderr
-      and on stdout
-== d1 create · exits 3, silent
-   call: d1 create shop-db
-   -> error wrangler exited 3
-== d1 create · killed by SIGTERM, silent
-   call: d1 create shop-db
-   -> error wrangler exited 143
-== d1 create · exits 0, unreadable output
-   call: d1 create shop-db
-   -> error `wrangler d1 create` succeeded but printed no `database_id`:
-      nothing this reads
-== d1 create · created
-   call: d1 create shop-db
-   -> ok "0a1b-2c3d"
-== d1 create · created, JSON snippet
-   call: d1 create shop-db
-   -> ok "ffee-0011"
-== d1 create · already exists, listed
-   call: d1 create shop-db
-   call: d1 list --json
-   -> ok "abcd-ef01"
-== d1 create · already exists, not listed
-   call: d1 create shop-db
-   call: d1 list --json
-   -> error it already exists, but `wrangler d1 list` does not show it
-== d1 create · already exists, listing fails
-   call: d1 create shop-db
-   call: d1 list --json
-   -> error it already exists, and listing the account's databases failed: could not list
-== d1 create · already exists, listing silent
-   call: d1 create shop-db
-   call: d1 list --json
-   -> error it already exists, and listing the account's databases failed: wrangler exited 2
-
-== r2 bucket create · wrangler missing
-   -> error wrangler not found
-== r2 bucket create · wrangler does not start
-   -> error No such file or directory (os error 2)
-== r2 bucket create · exits 1, stderr only
-   call: r2 bucket create shop-files
-   -> error it went wrong on stderr
-== r2 bucket create · exits 1, stdout only
-   call: r2 bucket create shop-files
-   -> error it went wrong on stdout
-== r2 bucket create · exits 1, both streams
-   call: r2 bucket create shop-files
-   -> error wrong on stderr
-      and on stdout
-== r2 bucket create · exits 3, silent
-   call: r2 bucket create shop-files
-   -> error wrangler exited 3
-== r2 bucket create · killed by SIGTERM, silent
-   call: r2 bucket create shop-files
-   -> error wrangler exited 143
-== r2 bucket create · exits 0, unreadable output
-   call: r2 bucket create shop-files
-   -> ok ()
-== r2 bucket create · created
-   call: r2 bucket create shop-files
-   -> ok ()
-== r2 bucket create · already exists, and you own it
-   call: r2 bucket create shop-files
-   -> ok ()
-== r2 bucket create · already exists, not yours
-   call: r2 bucket create shop-files
-   -> error The bucket already exists and is not available.
-
-== r2 bucket create (--jurisdiction eu) · wrangler missing
-   -> error wrangler not found
-== r2 bucket create (--jurisdiction eu) · wrangler does not start
-   -> error No such file or directory (os error 2)
-== r2 bucket create (--jurisdiction eu) · exits 1, stderr only
-   call: r2 bucket create shop-files --jurisdiction eu
-   -> error it went wrong on stderr
-== r2 bucket create (--jurisdiction eu) · exits 1, stdout only
-   call: r2 bucket create shop-files --jurisdiction eu
-   -> error it went wrong on stdout
-== r2 bucket create (--jurisdiction eu) · exits 1, both streams
-   call: r2 bucket create shop-files --jurisdiction eu
-   -> error wrong on stderr
-      and on stdout
-== r2 bucket create (--jurisdiction eu) · exits 3, silent
-   call: r2 bucket create shop-files --jurisdiction eu
-   -> error wrangler exited 3
-== r2 bucket create (--jurisdiction eu) · killed by SIGTERM, silent
-   call: r2 bucket create shop-files --jurisdiction eu
-   -> error wrangler exited 143
-== r2 bucket create (--jurisdiction eu) · exits 0, unreadable output
-   call: r2 bucket create shop-files --jurisdiction eu
    -> ok ()
 
 == vectorize list · wrangler missing
@@ -847,4 +654,188 @@
    call: secret delete MIGRATE_KEY --name shop-api
    call: stdin: 
    -> ok ()
+
+== KV create (REST) · unreachable
+   -> error POST /storage/kv/namespaces: io: Connection refused (os error N)
+== KV create (REST) · 200, success
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> ok "x"
+== KV create (REST) · 200, success false
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== KV create (REST) · 404 with errors
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== KV create (REST) · 403 with errors
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== KV create (REST) · 500 without errors
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: Cloudflare answered 500 
+== KV create (REST) · 200, unreadable
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: unreadable answer (expected value at line 1 column 1)
+== KV create (REST) · created
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> ok "0123abcd"
+== KV create (REST) · title taken, code 10014
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: Cloudflare answered 400 [{"code":10014,"message":"a namespace with this account ID and title already exists"}]
+
+== KV list (REST) · unreachable
+   -> None
+== KV list (REST) · 200, success
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · 200, success false
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · 404 with errors
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · 403 with errors
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · 500 without errors
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · 200, unreadable
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · two namespaces, one page
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> Some({"a1", "b2"})
+
+== KV delete (REST) · unreachable
+   -> error DELETE /storage/kv/namespaces/0123abcd: io: Connection refused (os error N)
+== KV delete (REST) · 200, success
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> ok ()
+== KV delete (REST) · 200, success false
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> error DELETE /storage/kv/namespaces/0123abcd: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== KV delete (REST) · 404 with errors
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> error DELETE /storage/kv/namespaces/0123abcd: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== KV delete (REST) · 403 with errors
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> error DELETE /storage/kv/namespaces/0123abcd: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== KV delete (REST) · 500 without errors
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> error DELETE /storage/kv/namespaces/0123abcd: Cloudflare answered 500 
+== KV delete (REST) · 200, unreadable
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> error DELETE /storage/kv/namespaces/0123abcd: unreadable answer (expected value at line 1 column 1)
+== KV delete (REST) · deleted
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> ok ()
+== KV delete (REST) · not found, code 10013
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> ok ()
+
+== D1 create (REST) · unreachable
+   -> error POST /d1/database: io: Connection refused (os error N)
+== D1 create (REST) · 200, success
+   request: POST /accounts/acct/d1/database {"name":"shop-db"}
+   -> error POST /d1/database: Cloudflare's answer has no database id
+== D1 create (REST) · 200, success false
+   request: POST /accounts/acct/d1/database {"name":"shop-db"}
+   -> error POST /d1/database: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== D1 create (REST) · 404 with errors
+   request: POST /accounts/acct/d1/database {"name":"shop-db"}
+   -> error POST /d1/database: Cloudflare answered 404 [{"code":10007,"message":"not found"}] (looking the database up by name to adopt it also failed: GET /d1/database?name=shop-db&per_page=100&page=1: io: Connection refused (os error N))
+== D1 create (REST) · 403 with errors
+   request: POST /accounts/acct/d1/database {"name":"shop-db"}
+   -> error POST /d1/database: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== D1 create (REST) · 500 without errors
+   request: POST /accounts/acct/d1/database {"name":"shop-db"}
+   -> error POST /d1/database: Cloudflare answered 500 
+== D1 create (REST) · 200, unreadable
+   request: POST /accounts/acct/d1/database {"name":"shop-db"}
+   -> error POST /d1/database: unreadable answer (expected value at line 1 column 1)
+== D1 create (REST) · created
+   request: POST /accounts/acct/d1/database {"name":"shop-db"}
+   -> ok ("0a1b2c3d-0000-4000-8000-000000000000", false)
+== D1 create (REST) · refused, the name is the account's: adopted
+   request: POST /accounts/acct/d1/database
+   request: GET /accounts/acct/d1/database?name=shop-db&per_page=100&page=1
+   -> ok ("abcd-ef01", true)
+== D1 create (REST) · refused, no database of exactly that name
+   request: POST /accounts/acct/d1/database
+   request: GET /accounts/acct/d1/database?name=shop-db&per_page=100&page=1
+   -> error POST /d1/database: Cloudflare answered 400 [{"code":7502,"message":"A database with that name already exists"}]
+
+== D1 create (REST, jurisdiction eu) · unreachable
+   -> error POST /d1/database: io: Connection refused (os error N)
+== D1 create (REST, jurisdiction eu) · 200, success
+   request: POST /accounts/acct/d1/database {"jurisdiction":"eu","name":"shop-db"}
+   -> error POST /d1/database: Cloudflare's answer has no database id
+== D1 create (REST, jurisdiction eu) · 200, success false
+   request: POST /accounts/acct/d1/database {"jurisdiction":"eu","name":"shop-db"}
+   -> error POST /d1/database: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== D1 create (REST, jurisdiction eu) · 404 with errors
+   request: POST /accounts/acct/d1/database {"jurisdiction":"eu","name":"shop-db"}
+   -> error POST /d1/database: Cloudflare answered 404 [{"code":10007,"message":"not found"}] (looking the database up by name to adopt it also failed: GET /d1/database?name=shop-db&per_page=100&page=1: io: Connection refused (os error N))
+== D1 create (REST, jurisdiction eu) · 403 with errors
+   request: POST /accounts/acct/d1/database {"jurisdiction":"eu","name":"shop-db"}
+   -> error POST /d1/database: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== D1 create (REST, jurisdiction eu) · 500 without errors
+   request: POST /accounts/acct/d1/database {"jurisdiction":"eu","name":"shop-db"}
+   -> error POST /d1/database: Cloudflare answered 500 
+== D1 create (REST, jurisdiction eu) · 200, unreadable
+   request: POST /accounts/acct/d1/database {"jurisdiction":"eu","name":"shop-db"}
+   -> error POST /d1/database: unreadable answer (expected value at line 1 column 1)
+
+== R2 create (REST) · unreachable
+   -> error POST /r2/buckets: io: Connection refused (os error N)
+== R2 create (REST) · 200, success
+   request: POST /accounts/acct/r2/buckets {"name":"shop-files"}
+   -> ok false
+== R2 create (REST) · 200, success false
+   request: POST /accounts/acct/r2/buckets {"name":"shop-files"}
+   -> error POST /r2/buckets: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== R2 create (REST) · 404 with errors
+   request: POST /accounts/acct/r2/buckets {"name":"shop-files"}
+   -> error POST /r2/buckets: Cloudflare answered 404 [{"code":10007,"message":"not found"}] (asking the account for the bucket by name also failed: GET /r2/buckets/shop-files: io: Connection refused (os error N))
+== R2 create (REST) · 403 with errors
+   request: POST /accounts/acct/r2/buckets {"name":"shop-files"}
+   -> error POST /r2/buckets: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== R2 create (REST) · 500 without errors
+   request: POST /accounts/acct/r2/buckets {"name":"shop-files"}
+   -> error POST /r2/buckets: Cloudflare answered 500 
+== R2 create (REST) · 200, unreadable
+   request: POST /accounts/acct/r2/buckets {"name":"shop-files"}
+   -> error POST /r2/buckets: unreadable answer (expected value at line 1 column 1)
+== R2 create (REST) · created
+   request: POST /accounts/acct/r2/buckets {"name":"shop-files"}
+   -> ok false
+== R2 create (REST) · conflict, the account's own bucket: accepted
+   request: POST /accounts/acct/r2/buckets
+   request: GET /accounts/acct/r2/buckets/shop-files
+   -> ok true
+== R2 create (REST) · conflict, another account's bucket
+   request: POST /accounts/acct/r2/buckets
+   request: GET /accounts/acct/r2/buckets/shop-files
+   -> error POST /r2/buckets: Cloudflare answered 409 [{"code":10073,"message":"Bucket name already exists."}]
+
+== R2 create (REST, jurisdiction eu) · unreachable
+   -> error POST /r2/buckets: io: Connection refused (os error N)
+== R2 create (REST, jurisdiction eu) · 200, success
+   request: POST /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu] {"name":"shop-files"}
+   -> ok false
+== R2 create (REST, jurisdiction eu) · 200, success false
+   request: POST /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu] {"name":"shop-files"}
+   -> error POST /r2/buckets: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== R2 create (REST, jurisdiction eu) · 404 with errors
+   request: POST /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu] {"name":"shop-files"}
+   -> error POST /r2/buckets: Cloudflare answered 404 [{"code":10007,"message":"not found"}] (asking the account for the bucket by name also failed: GET /r2/buckets/shop-files: io: Connection refused (os error N))
+== R2 create (REST, jurisdiction eu) · 403 with errors
+   request: POST /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu] {"name":"shop-files"}
+   -> error POST /r2/buckets: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== R2 create (REST, jurisdiction eu) · 500 without errors
+   request: POST /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu] {"name":"shop-files"}
+   -> error POST /r2/buckets: Cloudflare answered 500 
+== R2 create (REST, jurisdiction eu) · 200, unreadable
+   request: POST /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu] {"name":"shop-files"}
+   -> error POST /r2/buckets: unreadable answer (expected value at line 1 column 1)
 

@@ -49,10 +49,12 @@ use bynk_syntax::span::Span;
 /// public-dependency-already-exists shape as `Ty`/`TyId` below.
 pub use bynk_syntax::ast::ExprId;
 
+pub mod ai;
 pub mod analytics;
 pub(crate) mod applied_bounds;
 mod call_outcome;
 mod calls;
+mod cap_bindings;
 pub mod codable;
 mod collections;
 mod cookie_lints;
@@ -77,6 +79,7 @@ pub(crate) mod nested_effect;
 pub(crate) mod nested_wrapper;
 mod par;
 mod partial_content;
+mod pattern_as;
 mod query_more;
 mod query_par;
 mod refined_range;
@@ -943,6 +946,16 @@ pub enum Callee {
         sql: Option<String>,
         span: Span,
     },
+    /// #4099: `Ai.generateValue[T](model, request)`. The compiler writes `T`'s JSON Schema
+    /// (`schema`, compact JSON) into the call, and the reply is decoded as `value`.
+    AiGenerateValue {
+        value: TyId,
+        schema: String,
+        /// `schema` is `T`'s inside `{"value": …}` (`T` is not a record), which the call unwraps.
+        wrapped: bool,
+        /// The type argument, which names `T` where the editor shows the schema.
+        span: Span,
+    },
     /// #3070: a literal SQL statement of a derived `D1` instance, recorded under
     /// the *SQL argument's* id (not the call's, which keeps its own entry), so
     /// the project phase can prepare it against the binding's migrations.
@@ -1761,7 +1774,7 @@ pub fn check_record_in(
             // and its body is not checked; a context function's is checked with
             // the context's declarations (`check_given_fns`).
             if !f.given.is_empty() {
-                if let Some(err) = given_fn_refusal(f, input.is_context) {
+                if let Some(err) = given_fn_refusal(f, input.is_context || input.is_commons) {
                     errors.push(err);
                 }
                 continue;
@@ -1921,31 +1934,33 @@ pub fn check_suite_decls(
 }
 
 /// #2868: why a `given` clause on this function is refused, if it is. Only a
-/// free, effectful function in a context may declare `given`: a context knows
-/// which capabilities it consumes, where a commons is shared by contexts that
-/// may consume different ones (so its functions keep the function-value style,
-/// `(m) => Logger.error(m)` passed in), and a method call has no place to carry
-/// the capabilities.
-pub(crate) fn given_fn_refusal(f: &FnDecl, is_context: bool) -> Option<CompileError> {
+/// free, effectful function may declare `given`, and only in a context (which
+/// knows which capabilities it consumes) or (#3959) a commons, whose functions
+/// take capability parameters and shared capabilities. An adapter's helpers
+/// stay pure, and a method call has no place to carry the capabilities.
+pub(crate) fn given_fn_refusal(f: &FnDecl, may_declare: bool) -> Option<CompileError> {
     let span = f.given.first().map(|g| g.span)?;
     let span = span.merge(f.given.last().map_or(span, |g| g.span));
-    if !is_context {
+    if !may_declare {
         return Some(
             CompileError::new(
-                "bynk.given.fn_outside_context",
+                "bynk.given.fn_unsupported",
                 span,
                 format!(
-                    "function `{}` cannot declare `given`: only a function in a context can",
+                    "function `{}` cannot declare `given`: only a function in a context or a commons can",
                     f.name.display()
                 ),
             )
             .with_note(
-                "a commons is shared by every context that uses it, and those contexts may consume different capabilities, so a commons function reaches a capability only through a function value its caller passes in",
-            )
-            .with_note(
-                "take the operation as a parameter instead, `log: (String) -> Effect[()]`, and pass `(m) => Logger.error(m)` from the handler; or move the function into the context that consumes the capability",
+                "an adapter's helpers are pure: take the operation as a parameter, `log: (String) -> Effect[()]`, or move the function into a commons or a context",
             ),
         );
+    }
+    // #3959: a method's `given` cannot take a capability parameter anywhere.
+    if matches!(f.name, FnName::Method { .. })
+        && let Some(p) = f.given.iter().find(|g| g.is_parameter())
+    {
+        return Some(crate::cap_params::parameter_outside_commons(p));
     }
     if matches!(f.name, FnName::Method { .. }) {
         return Some(
@@ -1957,7 +1972,7 @@ pub(crate) fn given_fn_refusal(f: &FnDecl, is_context: bool) -> Option<CompileEr
                     f.name.display()
                 ),
             )
-            .with_note("only a free function in a context can declare `given`; take the operation as a function-value parameter, or make this a free function"),
+            .with_note("only a free function in a context or a commons can declare `given`; take the operation as a function-value parameter, or make this a free function"),
         );
     }
     if !matches!(f.return_type, TypeRef::Effect(..)) {
@@ -2218,8 +2233,10 @@ pub fn check_handler_body(
         param_scope.extend(self_scope);
     }
     let effectful = return_ty.is_effect(tys);
+    // #3959: a capability parameter on a handler was refused, not unused.
     let given_entries: Vec<(String, Span)> = given
         .iter()
+        .filter(|c| !c.is_parameter())
         .map(|c| (c.key().to_string(), c.span))
         .collect();
     let given_remaining: HashSet<String> = given_entries.iter().map(|(k, _)| k.clone()).collect();
@@ -5854,8 +5871,10 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             name,
             type_args,
             args,
+            bindings,
             ..
         } => {
+            let bindings = bindings.as_deref().unwrap_or_default();
             // v0.9: HttpResult variant call. Prefer HttpResult when the
             // surrounding type implies it; otherwise defer to fn/user-variant
             // resolution and only fall back to HttpResult when nothing else
@@ -5880,7 +5899,9 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     // `queue_variant` else-if below) relies on the http and
                     // queue variant keyword sets being disjoint, so an http
                     // name could never have taken the queue branch anyway.
-                    check_call(name, type_args, args, expr.span, expected, expr.id, ctx)
+                    check_call(
+                        name, type_args, args, bindings, expr.span, expected, expr.id, ctx,
+                    )
                 }
             } else if let Some(qv) = queue_variant(&name.name)
                 && (expected.is_some_and(|t| peel_to_queue_result(t, tys))
@@ -5891,7 +5912,9 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                     .insert(expr.id, Callee::intrinsic(StaticOp::QueueResult(qv)));
                 check_queue_variant(expr.span, qv, args, ctx)
             } else {
-                check_call(name, type_args, args, expr.span, expected, expr.id, ctx)
+                check_call(
+                    name, type_args, args, bindings, expr.span, expected, expr.id, ctx,
+                )
             }
         }
         ExprKind::UnaryOp(op, inner) => check_unary(*op, inner, expr.span, ctx),

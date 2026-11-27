@@ -51,6 +51,8 @@ mod integration {
     mod by_on_agent;
     #[path = "call_hierarchy_index.rs"]
     mod call_hierarchy_index;
+    #[path = "capability_binding_fix.rs"]
+    mod capability_binding_fix;
     #[path = "capability_paths.rs"]
     mod capability_paths;
     #[path = "carrier_source_map.rs"]
@@ -327,6 +329,8 @@ mod system {
     mod asset_check_behaviour;
     #[path = "bearer_auth.rs"]
     mod bearer_auth;
+    #[path = "bearer_claims_seam.rs"]
+    mod bearer_claims_seam;
     #[path = "behaviour_fixtures.rs"]
     mod behaviour_fixtures;
     #[path = "binding_behaviour.rs"]

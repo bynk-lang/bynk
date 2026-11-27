@@ -18,9 +18,9 @@ use super::super::lower_call::cross_context::{
 };
 use super::super::lower_call::kernel::lower_kernel_method_call;
 use super::super::lower_call::platform::{
-    lower_analytics_select_call, lower_capability_call, lower_cookie_field_call,
-    lower_cross_capability_call, lower_d1_peek_call, lower_d1_select_call, lower_events_emit_call,
-    lower_signed_cookie_call,
+    lower_ai_generate_value_call, lower_analytics_select_call, lower_capability_call,
+    lower_cookie_field_call, lower_cross_capability_call, lower_d1_peek_call, lower_d1_select_call,
+    lower_events_emit_call, lower_signed_cookie_call,
 };
 use super::super::lower_call::statics::{
     lower_runtime_value_static_call, lower_scalar_static_call, lower_type_static_call,
@@ -118,6 +118,9 @@ pub(super) fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
         return pre.finish(built);
     }
     if let Some(built) = lower_analytics_select_call(e, args, cx, &mut pre) {
+        return pre.finish(built);
+    }
+    if let Some(built) = lower_ai_generate_value_call(e, args, cx, &mut pre) {
         return pre.finish(built);
     }
     if let Some(built) = lower_d1_select_call(e, args, cx, &mut pre) {
@@ -647,8 +650,11 @@ pub(super) fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCt
     if let Some(Callee::Fn(decl, witnesses)) = cx.commons().callee(e.id) {
         args_lowered.extend(cx.witness_args(decl, witnesses));
         // #2868: a function that declares `given` takes the caller's `deps`,
-        // which the checker has made carry its capabilities.
-        if !decl.given.is_empty() {
+        // which the checker has made carry its capabilities. #3959: one with
+        // capability parameters takes a `deps` built for the call.
+        if decl.given.iter().any(|g| g.is_parameter()) {
+            args_lowered.push(bound_deps(&decl.given, e, cx));
+        } else if !decl.given.is_empty() {
             args_lowered.push(cx.cap_deps_node());
         }
         // #2719: a function in the needs-context set takes the context last.
@@ -664,6 +670,42 @@ pub(super) fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCt
     pre.finish(built)
 }
 
+/// #3959: the `deps` a call to a function with capability parameters passes:
+/// one entry per entry of the callee's `given`, read from the caller's own
+/// `deps` — a parameter under its name from the capability the call binds it
+/// to (`{ Store: deps.Sessions, Logger: deps.Logger }`), a shared capability
+/// as itself. `__exec` is a separate parameter, so nothing else is dropped.
+fn bound_deps(given: &[bynk_syntax::ast::CapRef], e: &Expr, cx: &LowerCtx) -> bynk_ts::TsExpr {
+    let bindings: &[bynk_syntax::ast::CapBinding] = if let ExprKind::Call {
+        bindings: Some(b),
+        ..
+    } = &e.kind
+    {
+        b
+    } else {
+        &[]
+    };
+    let entries = given
+        .iter()
+        .map(|g| {
+            let from = bindings
+                .iter()
+                .find(|b| b.param.name == g.key())
+                .map_or(g.key(), |b| b.value.key());
+            let read = bynk_ts::TsExpr::Member {
+                object: Box::new(cx.cap_deps_node()),
+                property: from.to_string(),
+            };
+            bynk_ts::TsObjectEntry::prop(g.key(), read)
+        })
+        .collect();
+    bynk_ts::TsExpr::Object {
+        entries,
+        multiline: false,
+        end_span: None,
+    }
+}
+
 /// The binding read when `receiver.method(args)` is a collection `size()` in a
 /// predicate being lowered, else `None`.
 fn lower_predicate_size(
@@ -677,10 +719,9 @@ fn lower_predicate_size(
     }
     let (collections, step) = if let Some(c) = cx.invariant_collections() {
         (c, false)
-    } else if let Some(c) = cx.transition_collections() {
-        (c, true)
     } else {
-        return None;
+        let c = cx.transition_collections()?;
+        (c, true)
     };
     let (old, field) = super::super::lower_ctx::size_read(receiver, collections, step)?;
     Some(bynk_ts::TsExpr::Ident(
