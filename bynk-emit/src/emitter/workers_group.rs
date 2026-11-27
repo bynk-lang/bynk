@@ -51,10 +51,28 @@ pub struct GroupMember {
     pub classes: Vec<String>,
 }
 
+/// #3565: a context the group's Worker answers for by forwarding, in the receive phase of
+/// an agent move (`design/tracks/agent-context-moves.md` §3.2): every request no member
+/// claims goes, unchanged, to the context on the script it is moving from, and its classes
+/// are exported (from its member module) without being run.
+pub struct GroupForward {
+    /// The moving context's qualified name.
+    pub context: String,
+    /// The import specifier of its member module, which exports its classes.
+    pub specifier: String,
+    /// Its agent classes, exported as `expecting-transfer` until the move commits.
+    pub classes: Vec<String>,
+    /// The Service Binding to the script it is moving from.
+    pub binding: String,
+}
+
 /// The group as a whole.
 pub struct GroupEntry<'a> {
     pub key: &'a str,
     pub members: &'a [GroupMember],
+    /// #3565: the contexts forwarded to their old script, tried after every member;
+    /// empty outside an agent move's receive phase.
+    pub forwards: &'a [GroupForward],
     /// The container classes of `containers.ts`, exported once for the Worker.
     pub container_classes: &'a [String],
     /// Whether any member publishes events: the Worker exports the one events
@@ -400,7 +418,7 @@ fn dispatch() -> TsStmt {
 /// own exception. (The events fan-out's Durable Object runs elsewhere and keeps
 /// the Service Binding.)
 fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
-    if entry.members.len() < 2 {
+    if entry.members.len() + entry.forwards.len() < 2 {
         return vec![function(
             "__loopback",
             false,
@@ -415,7 +433,9 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
     let names: Vec<String> = entry
         .members
         .iter()
-        .map(|m| crate::emitter::bindings::service_binding(&m.context).name)
+        .map(|m| m.context.as_str())
+        .chain(entry.forwards.iter().map(|f| f.context.as_str()))
+        .map(|context| crate::emitter::bindings::service_binding(context).name)
         .collect();
     let record = || TsType::named_with_args("globalThis.Record", vec![ty("string"), ty("unknown")]);
     let answers_in_process = arrow_of(
@@ -807,6 +827,11 @@ fn imports_and_exports(entry: &GroupEntry<'_>, members: &[(usize, &GroupMember)]
             stmts.push(re_export(m.classes.clone(), &m.specifier));
         }
     }
+    for f in entry.forwards {
+        if !f.classes.is_empty() {
+            stmts.push(re_export(f.classes.clone(), &f.specifier));
+        }
+    }
     if entry.has_fanout {
         stmts.push(re_export(
             vec![crate::emitter::wrangler::EVENTS_FANOUT_CLASS_NAME.to_string()],
@@ -823,7 +848,7 @@ fn imports_and_exports(entry: &GroupEntry<'_>, members: &[(usize, &GroupMember)]
 }
 
 /// The handler types, each member's typed view of its entry, and the member table.
-fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
+fn member_table(members: &[(usize, &GroupMember)], forwards: &[GroupForward]) -> Vec<TsStmt> {
     let has = |f: &dyn Fn(&GroupMember) -> bool| members.iter().any(|(_, m)| f(m));
     let mut stmts = vec![
         TsStmt::decl(
@@ -904,6 +929,7 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
             },
         ),
     ]));
+    stmts.extend(forward_entries(forwards));
     let rows = members
         .iter()
         .map(|(i, _)| {
@@ -912,12 +938,96 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
                 ("isMiss".to_string(), ident(format!("__miss{i}"))),
             ])
         })
+        .chain((0..forwards.len()).map(|j| {
+            let (entry, miss) = forward_names(j);
+            TsExpr::object(vec![
+                ("entry".to_string(), ident(entry)),
+                ("isMiss".to_string(), ident(miss)),
+            ])
+        }))
         .collect();
     stmts.push(const_typed(
         "__members",
         Some(row_ty),
         TsExpr::multiline_array(rows),
     ));
+    stmts
+}
+
+/// #3565: the `j`th forward's entry and miss-test names (`__fwd0`, `__fwdMiss0`).
+fn forward_names(j: usize) -> (String, String) {
+    (format!("__fwd{j}"), format!("__fwdMiss{j}"))
+}
+
+/// #3565: each forwarded context as an entry of the member table. Its `fetch` hands the
+/// request to the old script's Service Binding; a forward that has others after it passes a
+/// clone (the body is read once) and misses on the old script's `404`, so the next one is
+/// tried, while the last forward's answer is the answer.
+///
+/// So the dispatcher's own fallback (`__withAllowed(held)`, `__unclaimed`) is unreachable in
+/// a receive entry. A member's held `405` (a route for the path, not the method) does not
+/// answer either: the request goes on to the old script, which may serve that method for the
+/// moving context, and the old script's answer, `404` included, is the answer. That differs
+/// from the ordinary entry's merged `405` with `Allow` only for the receive window, and only
+/// where a member and a moving context share no handler for the request.
+fn forward_entries(forwards: &[GroupForward]) -> Vec<TsStmt> {
+    if forwards.is_empty() {
+        return Vec::new();
+    }
+    let fetcher = TsType::Object(vec![TsTypeMember::method(
+        "fetch",
+        vec![TsParam::new("request", Some(ty("globalThis.Request")))],
+        promise(response_ty()),
+    )]);
+    let mut stmts = vec![tight(TsStmt::decl(
+        TsDecl::TypeAlias {
+            name: "__Forwards".to_string(),
+            type_params: Vec::new(),
+            ty: TsType::named_with_args("globalThis.Record", vec![ty("string"), fetcher]),
+        },
+        None,
+    ))];
+    let last = forwards.len() - 1;
+    for (j, f) in forwards.iter().enumerate() {
+        let (entry, miss_name) = forward_names(j);
+        let request = if j == last {
+            ident("request")
+        } else {
+            method_call(ident("request"), "clone", vec![])
+        };
+        let target = index(
+            paren(TsExpr::As {
+                expr: Box::new(ident("env")),
+                ty: ty("__Forwards"),
+            }),
+            str_lit(&f.binding),
+        );
+        stmts.push(tight(const_typed(
+            entry,
+            Some(ty("__Fetch")),
+            TsExpr::object(vec![(
+                "fetch".to_string(),
+                lambda(
+                    &["request", "env"],
+                    method_call(target, "fetch", vec![request]),
+                ),
+            )]),
+        )));
+        let miss = if j == last {
+            lambda(&[], TsExpr::Lit(TsLit::Bool(false)))
+        } else {
+            arrow_of(
+                vec![TsParam::new("response", Some(response_ty()))],
+                false,
+                TsArrowBody::Expr(Box::new(binary(
+                    TsBinaryOp::StrictEq,
+                    member(ident("response"), "status"),
+                    num_lit(404),
+                ))),
+            )
+        };
+        stmts.push(tight(const_typed(miss_name, None, miss)));
+    }
     stmts
 }
 
@@ -937,6 +1047,16 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
         ),
         None,
     ));
+    if !entry.forwards.is_empty() {
+        let forwarded: Vec<&str> = entry.forwards.iter().map(|f| f.context.as_str()).collect();
+        program.push(TsStmt::comment(
+            format!(
+                "Agent move, receive phase: {} forwarded to the script each is moving from, tried last.",
+                forwarded.join(", ")
+            ),
+            None,
+        ));
+    }
     let members: Vec<(usize, &GroupMember)> = entry.members.iter().enumerate().collect();
     let has = |f: &dyn Fn(&GroupMember) -> bool| members.iter().any(|(_, m)| f(m));
     let (has_cron, has_queue, has_email) = (
@@ -956,7 +1076,7 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
     for stmt in imports_and_exports(entry, &members) {
         program.push(stmt);
     }
-    for stmt in member_table(&members) {
+    for stmt in member_table(&members, entry.forwards) {
         program.push(stmt);
     }
     program.push(refused());
@@ -1006,6 +1126,7 @@ mod tests {
         GroupEntry {
             key: "core",
             members,
+            forwards: &[],
             container_classes: &[],
             has_fanout: false,
             has_events: false,
@@ -1136,5 +1257,74 @@ mod tests {
                 );
             }
         }
+    }
+
+    fn forward(context: &str, binding: &str) -> GroupForward {
+        GroupForward {
+            context: context.into(),
+            specifier: format!("./{context}.index.js"),
+            classes: vec![format!("{}Agent", context.replace('.', "_"))],
+            binding: binding.into(),
+        }
+    }
+
+    /// #3565 (agent-context moves): a fan-in receive phase. Each forward is tried after the
+    /// members; all but the last pass a clone and miss on the old script's `404`, the last
+    /// passes the request itself and its answer stands. Forwarded contexts keep their loopback
+    /// binding, so a member's call to one goes through the dispatcher to its old script.
+    #[test]
+    fn forwarded_contexts_are_tried_last_and_only_the_last_one_answers_for_sure() {
+        let members = [member("app.a")];
+        let forwards = [
+            forward("app.b", "BYNK_FORWARD_APP_B"),
+            forward("app.c", "BYNK_FORWARD_APP_C"),
+        ];
+        let mut entry = entry_of(&members);
+        entry.forwards = &forwards;
+        let text = printed(&entry);
+        assert!(
+            text.contains("(env as __Forwards)[\"BYNK_FORWARD_APP_B\"].fetch(request.clone())"),
+            "{text}"
+        );
+        assert!(
+            text.contains("(env as __Forwards)[\"BYNK_FORWARD_APP_C\"].fetch(request) }"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "const __fwdMiss0 = (response: globalThis.Response) => response.status === 404;"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("const __fwdMiss1 = () => false;"), "{text}");
+        let rows = text.find("{ entry: __m0, isMiss: __miss0 },\n  { entry: __fwd0, isMiss: __fwdMiss0 },\n  { entry: __fwd1, isMiss: __fwdMiss1 },");
+        assert!(rows.is_some(), "{text}");
+        assert!(
+            text.contains("export { app_bAgent } from \"./app.b.index.js\";"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "const __memberBindings: readonly string[] = [\"APP_A\", \"APP_B\", \"APP_C\"];"
+            ),
+            "{text}"
+        );
+        assert!(bynk_ts::unbound_names(&emit_group_entry(&entry)).is_empty());
+        // No member at all (a group formed by the move): the forwards alone.
+        let mut only = entry_of(&[]);
+        only.forwards = &forwards;
+        assert!(bynk_ts::unbound_names(&emit_group_entry(&only)).is_empty());
+    }
+
+    /// Without forwards the entry is what it was (no `__Forwards`, no forward rows).
+    #[test]
+    fn an_entry_without_forwards_says_nothing_of_them() {
+        let members = [member("app.a"), member("app.b")];
+        let text = printed(&entry_of(&members));
+        assert!(
+            !text.contains("__Forwards") && !text.contains("__fwd"),
+            "{text}"
+        );
+        assert!(!text.contains("Agent move"), "{text}");
     }
 }

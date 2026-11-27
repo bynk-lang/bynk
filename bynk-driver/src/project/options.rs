@@ -57,6 +57,10 @@ pub struct CompileOptions {
     /// build, for `bynk dev`. `false` for every other build, so a deploy build's
     /// output is byte-identical. Dev-only by construction: only `bynk dev` sets it.
     pub inspect_agents: bool,
+    /// #3565: the agent-move phase variants to write beside the Workers' own files
+    /// (`bynk_project::worker_moves`), which only `bynk deploy` sets, mid-move. Empty for
+    /// every other build, whose output is then unchanged.
+    pub moves: bynk_project::worker_moves::MoveVariants,
     /// #3945: `true` (`bynk test`) makes a call to a generic capability operation carry its
     /// type arguments' identity as a trailing argument, so a test's `stub Cap.op[T]` can tell
     /// the calls apart. Never set by a build for deploy, whose output is unchanged.
@@ -201,6 +205,7 @@ impl CompileOptions {
             contracts: false,
             trace_requests: false,
             inspect_agents: false,
+            moves: Default::default(),
             typed_capability_calls: false,
             tests: true,
             sources: None,
@@ -237,6 +242,7 @@ impl CompileOptions {
             contracts: false,
             trace_requests: false,
             inspect_agents: false,
+            moves: Default::default(),
             typed_capability_calls: false,
             tests: true,
             sources: None,
@@ -315,6 +321,12 @@ impl CompileOptions {
 
     pub fn inspect_agents(mut self, on: bool) -> Self {
         self.inspect_agents = on;
+        self
+    }
+
+    /// #3565: see [`Self::moves`].
+    pub fn moves(mut self, moves: bynk_project::worker_moves::MoveVariants) -> Self {
+        self.moves = moves;
         self
     }
 

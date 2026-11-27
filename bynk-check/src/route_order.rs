@@ -180,22 +180,34 @@ pub fn shadowed(routes: &[(&str, &str)]) -> Vec<(usize, Vec<usize>)> {
 /// each such route's index and the ordinary routes that cover it.
 pub fn pass_through_shadowed(routes: &[(&str, &str)]) -> Vec<(usize, Vec<usize>)> {
     let segs: Vec<Vec<Seg>> = routes.iter().map(|(_, p)| segments(p)).collect();
-    let mut out = Vec::new();
-    for r in (0..routes.len()).filter(|&r| routes[r].0 == "ANY") {
-        let covering: Vec<usize> = (0..routes.len())
-            .filter(|&a| {
-                routes[a].0 != "ANY"
-                    && overlaps(&segs[a], &segs[r])
-                    && precedes(&segs[a], &segs[r]) != Some(false)
-            })
-            .collect();
-        if !covering.is_empty()
-            && covered(&segs[r], 0, covering.iter().map(|&a| &segs[a]).collect())
-        {
-            out.push((r, covering));
-        }
-    }
-    out
+    pass_through_yields(routes)
+        .into_iter()
+        .filter(|(r, covering)| {
+            !covering.is_empty()
+                && covered(&segs[*r], 0, covering.iter().map(|&a| &segs[a]).collect())
+        })
+        .collect()
+}
+
+/// #3752 (D5): for each `ANY` route of `routes` (`(method, path)` pairs), the
+/// ordinary routes, of any method, that share a path with it and beat it there or
+/// tie it, so own every path the two share. The router answers such a path from
+/// the ordinary route (or its `405`), never the upstream.
+pub fn pass_through_yields(routes: &[(&str, &str)]) -> Vec<(usize, Vec<usize>)> {
+    let segs: Vec<Vec<Seg>> = routes.iter().map(|(_, p)| segments(p)).collect();
+    (0..routes.len())
+        .filter(|&r| routes[r].0 == "ANY")
+        .map(|r| {
+            let yields = (0..routes.len())
+                .filter(|&a| {
+                    routes[a].0 != "ANY"
+                        && overlaps(&segs[a], &segs[r])
+                        && precedes(&segs[a], &segs[r]) != Some(false)
+                })
+                .collect();
+            (r, yields)
+        })
+        .collect()
 }
 
 /// Whether the paths `route` matches from segment `at` on are all matched by one
