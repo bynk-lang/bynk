@@ -1,0 +1,8 @@
+// #3939 (track §10): an `ApiKey` key does not expire until `ttl` (a later slice), so the seam has
+// no expired key to refuse and `by Expired` on an `ApiKey` route is refused.
+suite acme.api as system {
+	case "an expired key" {
+		let r <- keys.GET("/key") by Expired
+		expect r is Rejected(Unauthorized)
+	}
+}
