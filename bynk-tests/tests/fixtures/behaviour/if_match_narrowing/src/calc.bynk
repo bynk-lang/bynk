@@ -1,0 +1,24 @@
+commons calc
+
+fn total(qty: Int, price: Int) -> Int {
+  qty * price
+}
+
+fn nested(a: Int) -> Int { if a == 7 { if a == 8 { 1 } else { 2 } } else { 3 } }
+fn conj(a: Int) -> Int { if a == 7 && a == 8 { 1 } else { 2 } }
+fn flagged(b: Bool) -> Int { if b { if b == false { 1 } else { 2 } } else { 3 } }
+fn matched(a: Int) -> Int { match a { 7 => { if a == 8 { 1 } else { 2 } } _ => 3 } }
+fn strs(s: String) -> Int { if s == "x" { if s == "y" { 1 } else { 2 } } else { 3 } }
+fn ors(a: Int) -> Int { if a == 7 || a == 8 { if a == 9 { 1 } else { 2 } } else { 3 } }
+fn neg(a: Int) -> Int { if a == -1 { if a == -2 { 1 } else { 2 } } else { 3 } }
+fn elsed(a: Int) -> Int { if a != 7 { 3 } else { if a == 8 { 1 } else { 2 } } }
+fn blocks(a: Int) -> Int {
+  if a == 7 {
+    let k = a + 1
+    if a == 8 { k } else { k + 1 }
+  } else { 0 }
+}
+fn valued(a: Int) -> Bool { if a == 7 { a == 8 } else { false } }
+fn boolelse(b: Bool) -> Int { if b { 1 } else { if b == true { 2 } else { 3 } } }
+fn matchstr(s: String) -> Int { match s { "x" => { if s == "y" { 1 } else { 2 } } _ => 3 } }
+fn matchbool(b: Bool) -> Int { match b { true => { if b == false { 1 } else { 2 } } false => 3 } }

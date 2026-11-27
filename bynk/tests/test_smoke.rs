@@ -13,10 +13,13 @@
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
+
+#[path = "support/dev_child.rs"]
+mod dev_child;
 
 fn have(tool: &str) -> bool {
-    Command::new(tool)
+    dev_child::tool_command(tool)
         .arg("--version")
         .output()
         .map(|o| o.status.success())
@@ -38,24 +41,22 @@ fn copy_dir(from: &Path, to: &Path) {
 
 struct Project {
     dir: PathBuf,
-    bynk: PathBuf,
 }
 
 impl Project {
     /// A fresh copy of the fixture.
     fn new(name: &str) -> Self {
-        let bynk = PathBuf::from(env!("CARGO_BIN_EXE_bynk"));
         let dir = std::env::temp_dir().join(format!("bynk-smoke-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         copy_dir(
             &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/smoke"),
             &dir.join("proj"),
         );
-        Project { dir, bynk }
+        Project { dir }
     }
 
     fn test(&self, args: &[&str]) -> Output {
-        Command::new(&self.bynk)
+        dev_child::bynk_command()
             .arg("test")
             .arg(self.dir.join("proj"))
             .arg("--output")
