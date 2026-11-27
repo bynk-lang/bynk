@@ -191,6 +191,24 @@ export function __makeSurface(deps: __ShopDeps) {
   };
 }
 
+export function __serialise_Frame(value: Frame): __JsonValue {
+  return {
+    text: value.text as __JsonValue,
+  };
+}
+
+export function __deserialise_Frame(json: __JsonValue, path: string = "$"): Result<Frame, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  return Ok({ text: __text } as Frame);
+}
+
 export function __serialise_UserId(value: UserId): __JsonValue {
   return value as unknown as string;
 }
