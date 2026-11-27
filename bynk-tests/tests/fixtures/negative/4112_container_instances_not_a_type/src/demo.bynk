@@ -1,0 +1,7 @@
+context demo
+
+// #4112: `@instances(by: …)` names a type declared in the context.
+
+consumes bynk.cloudflare { Container }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @instances(by: TenantId)

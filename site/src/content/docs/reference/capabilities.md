@@ -169,6 +169,17 @@ fn session(id: String) -> Effect[String] given Sessions, Logger {
   written out), or in a commons the caller's own parameter of that kind. One instance may
   bind two parameters; the aliasing is visible at the call. A Bynk-bodied provider may
   call a commons function and bind its own `given` capabilities.
+- **Forwarding.** A commons function calling another binds the callee's parameters to
+  its own, `middle(key, xs, given Mid = Store)`: the left name is the callee's, the right
+  the caller's. A commons body sees no instance, so it can bind only to its own
+  parameters. The rule is checked at each call, so it holds along a chain beside type
+  parameters and `Ord` bounds, through recursion (a recursive call may rebind its
+  parameters, `swap(n - 1, given A = B, B = A)`), and a binding missing deep in a chain is
+  reported at the function that leaves it out.
+- **Not a value.** A function with capability parameters cannot be named as a value
+  (`bynk.given.parameterised_fn_value`): a value would leave its bindings unchosen. Write a
+  lambda that binds instead, `keys.forEach((k) => evict(k, given Inner = Store))`. A
+  function with only shared capabilities may still be named as a value.
 - **Never inferred.** A binding is written at every call, even when the caller holds only
   one candidate, because reading the wrong instance is well-typed and nothing else would
   catch it. The fix for `bynk.given.binding_missing` offers one binding per instance of

@@ -1,0 +1,10 @@
+{
+  "blurb": "An `ApiKey` actor's key store answers the identity a key was minted for as a string, and the seam mints it through the identity type's `of` before the handler runs. So the identity must be a context-owned type built from a `String`: a refined or opaque `String`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.api_key_identity_not_string_constructible",
+  "constructs": [],
+  "example": "type Account = { id: Int }\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = Account }     // ✗ a record\n\ntype AccountId = String where NonEmpty\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }   // ✓",
+  "severity": "error",
+  "summary": "An `ApiKey` actor's identity is not a string-constructible type (#3939)."
+}

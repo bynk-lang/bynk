@@ -2283,6 +2283,9 @@ fn check_by_clause_contracts(
                     _ if contract.scheme == Scheme::Foreign => {
                         "a `Foreign` actor is admitted only on an `on call` handler or a queue consumer's `on message`"
                     }
+                    ServiceProtocol::WebSocket { .. } if contract.scheme == Scheme::ApiKey => {
+                        crate::api_key::WEBSOCKET_NOTE
+                    }
                     ServiceProtocol::Http => {
                         "public HTTP routes take an anonymous actor — write `by v: Visitor`"
                     }
@@ -2290,6 +2293,12 @@ fn check_by_clause_contracts(
                 }),
             );
         }
+        errors.extend(crate::api_key::by_member_refusal(
+            protocol,
+            by,
+            contract.scheme,
+            actor_ref.span,
+        ));
         // #3904: a WebSocket actor sum takes `None` and `Bearer` members; a cookie or an OIDC token is
         // a single actor (it needs the `Origin` check or the `bynk.oidc` pair, not the sum's first-wins).
         if matches!(protocol, ServiceProtocol::WebSocket { .. })
@@ -3699,6 +3708,10 @@ fn check_actor_contracts(
             // #3386: a signed session cookie.
             Some(Scheme::SignedCookie) => {
                 check_signed_cookie_actor(actor, auth, table, &resolved.types, errors);
+            }
+            // #3939: an API key actor.
+            Some(Scheme::ApiKey) => {
+                crate::api_key::check_api_key_actor(actor, auth, table, resolved, errors);
             }
             Some(_) => {}
         }
@@ -7836,7 +7849,7 @@ fn secret_at_boundary_error(span: Span, name: &str, what: &str) -> CompileError 
     )
 }
 
-/// #4111: which of `bynk`'s two secret-carrying opaque types a declaration is.
+/// #4111: which of `bynk`'s secret-carrying opaque types a declaration is (#3939 adds the third).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecretKind {
     /// `Secret`: a value from the platform's secret store, read with `reveal` and `matches`.
@@ -7844,6 +7857,9 @@ pub enum SecretKind {
     /// `Authorization`: a header credential built from a `Secret` (`bearer`, `basic`), which
     /// `Fetch` reveals when it sends and which has no reader of its own.
     Authorization,
+    /// #3939 (D2 D): `ApiKeyValue`, the key an `ApiKey` actor's `mint` answers. It has no reader:
+    /// its one way out is a handler returning the `ApiKeySecret` that `mint` answered.
+    ApiKeyValue,
 }
 
 /// #4111: the secret-carrying `bynk` type a declaration is, found by where it is declared and
@@ -7862,6 +7878,8 @@ pub fn secret_kind(decl: &TypeDecl) -> Option<SecretKind> {
         Some(SecretKind::Secret)
     } else if text.contains("type Authorization =") {
         Some(SecretKind::Authorization)
+    } else if text.contains("type ApiKeyValue =") {
+        Some(SecretKind::ApiKeyValue)
     } else {
         None
     }
@@ -8702,7 +8720,7 @@ fn validate_queue_handler(
 
 /// True when `r` resolves to `String`, a refined-base `String`, or an
 /// opaque-base `String`. v0.9 path parameter requirement.
-fn is_string_constructible(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+pub(crate) fn is_string_constructible(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     match r {
         TypeRef::Base(BaseType::String, _) => true,
         TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
@@ -9044,6 +9062,17 @@ pub fn reject_fn_types(
         // it would leak the value into storage, a wire body or a log. A capability
         // operation is where one is returned (`Secrets.get`), in-process, so its signature
         // is exempt.
+        // #3939 (D2 D): an `ApiKeyValue`, or a record or sum that holds one (the `ApiKeySecret` that
+        // `mint` answers), would carry the key into storage, a wire body or a log. Its one exit is an
+        // HTTP handler returning it (`api_key::reject_http_result`), which never reaches here.
+        TypeRef::Named(id)
+            if what != CAPABILITY_SIGNATURE
+                && crate::api_key::carries_api_key_value(&id.name, types) =>
+        {
+            errors.push(crate::api_key::key_at_boundary_error(
+                id.span, &id.name, what,
+            ));
+        }
         TypeRef::Named(id) if what != CAPABILITY_SIGNATURE && is_secret_type(&id.name, types) => {
             errors.push(secret_at_boundary_error(id.span, &id.name, what));
         }
@@ -9536,11 +9565,11 @@ service Api from http {
 mod secret_kind_tests {
     use super::*;
 
-    /// #4111: `secret_kind` finds `Secret` and `Authorization` by their declaration, so any other
+    /// #4111, #3939: `secret_kind` finds `Secret`, `Authorization` and `ApiKeyValue` by their declaration, so any other
     /// opaque type added to `bynk` would be neither restricted nor emitted as a secret. This pins
     /// the set: adding an opaque type to `bynk.bynk` fails here, pointing at `secret_kind`.
     #[test]
-    fn bynk_declares_exactly_two_opaque_types_and_secret_kind_names_each() {
+    fn bynk_declares_exactly_three_opaque_types_and_secret_kind_names_each() {
         let opaque: Vec<(&str, Option<SecretKind>)> = crate::checker::std_type_decls()
             .iter()
             .filter(|t| matches!(t.body, bynk_syntax::ast::TypeBody::Opaque { .. }))
@@ -9550,13 +9579,14 @@ mod secret_kind_tests {
         names.sort_unstable();
         assert_eq!(
             names,
-            ["Authorization", "Secret"],
+            ["ApiKeyValue", "Authorization", "Secret"],
             "`bynk` declares an opaque type that `secret_kind` does not know: decide whether it is \
              secret-carrying, and extend `secret_kind` and this test"
         );
         for (name, kind) in opaque {
             let want = match name {
                 "Secret" => SecretKind::Secret,
+                "ApiKeyValue" => SecretKind::ApiKeyValue,
                 _ => SecretKind::Authorization,
             };
             assert_eq!(kind, Some(want), "{name}");

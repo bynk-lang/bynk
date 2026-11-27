@@ -7159,6 +7159,10 @@
         {
           "type": "STRING",
           "value": "SignedCookie"
+        },
+        {
+          "type": "STRING",
+          "value": "ApiKey"
         }
       ]
     },

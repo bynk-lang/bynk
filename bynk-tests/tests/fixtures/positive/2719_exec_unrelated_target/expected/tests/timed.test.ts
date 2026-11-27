@@ -20,7 +20,11 @@ async function test_the_timed_target() {
   try {
     const deps = __makeTestDeps();
     const { tick, ticks } = __ns_timed;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -46,6 +50,7 @@ async function test_the_timed_target() {
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, ticks.call(3, deps));
     if (!(r === 3)) { throw __bynkExpectFailure("tests/timed.bynk:4:10", 75, 81, "expect r == 3\n  expected: r == 3\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((3))); }
