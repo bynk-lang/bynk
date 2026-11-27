@@ -301,13 +301,17 @@ fn emitted_event_roots(commons: &TypedCommons) -> Vec<TypeRef> {
     let names: std::collections::BTreeSet<&String> = commons
         .callees
         .values()
-        .filter_map(|c| match c {
-            bynk_check::checker::Callee::Capability {
+        .filter_map(|c| {
+            if let bynk_check::checker::Callee::Capability {
                 event: Some(name),
                 first_party: Some(bynk_check::firstparty::FirstPartyCap::Events),
                 ..
-            } => Some(name),
-            _ => None,
+            } = c
+            {
+                Some(name)
+            } else {
+                None
+            }
         })
         .collect();
     names
