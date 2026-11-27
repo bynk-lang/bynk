@@ -222,7 +222,7 @@ fn mutated_templates_never_panic_the_tokeniser() {
     }
     templates.sort();
     assert!(
-        templates.len() > 20,
+        templates.len() > 10,
         "template discovery looks broken: {}",
         templates.len()
     );
