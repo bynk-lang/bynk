@@ -358,7 +358,7 @@ mod write_tests {
 
     /// Readers in parallel with repeated blesses never find a snapshot missing, and never read a
     /// partly written one. The old `write`, which deleted the tree and rewrote it, fails this
-    /// within its first few rewrites.
+    /// within its first few rewrites, so fifty are enough.
     #[test]
     fn a_bless_never_hides_a_snapshot_from_a_parallel_reader() {
         let root = scratch("race");
@@ -386,15 +386,24 @@ mod write_tests {
                             );
                             reads += 1;
                         }
+                        thread::yield_now();
                     }
                     reads
                 })
             })
             .collect();
-        for generation in 1..=200 {
+        // Stop the readers even if a write panics, so a failure reports instead of hanging.
+        struct Stop(Arc<AtomicBool>);
+        impl Drop for Stop {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Relaxed);
+            }
+        }
+        let stop = Stop(Arc::clone(&done));
+        for generation in 1..=50 {
             write_snapshots(&root, regions(generation));
         }
-        done.store(true, Ordering::Relaxed);
+        drop(stop);
         for reader in readers {
             let reads = reader.join().expect("a reader failed during the blesses");
             assert!(reads > 0, "a reader never ran");
