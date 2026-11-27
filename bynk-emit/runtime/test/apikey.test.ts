@@ -280,19 +280,35 @@ test("§7 a missing pepper entry faults, naming the actor", async () => {
   assert.throws(() => apiKeyPeppersOf({}, "Client"), ApiKeyPepperFault);
 });
 
-// ---- D3 B: the comparison counter ------------------------------------------------------------
+// ---- §10: the test tier's keys and comparison counter ------------------------------------------
 
-test("D3 B counter: the key store's comparisons are counted, dummy ones apart", async () => {
-  const { apiKeyCountCompares, apiKeyDummyDigest, apiKeyEqual } = await import("../src/apikey.ts");
+test("§10 the failure keys: malformed fails parsing; the others parse, under the right handle", async () => {
+  const { apiKeyBadKey } = await import("../src/apikey.ts");
+  const real = sampleKey();
+  const r = parseApiKey(real, "acme")!;
+  assert.equal(parseApiKey(apiKeyBadKey("malformed", real, "acme"), "acme"), null);
+  const unknownKey = parseApiKey(apiKeyBadKey("unknownkey", real, "acme"), "acme")!;
+  assert.equal(unknownKey.handle, r.handle);
+  assert.notEqual(unknownKey.keyNo, r.keyNo);
+  const unknownHandle = parseApiKey(apiKeyBadKey("unknownhandle", real, "acme"), "acme")!;
+  assert.notEqual(unknownHandle.handle, r.handle);
+  const forged = parseApiKey(apiKeyBadKey("forged", real, "acme"), "acme")!;
+  assert.equal(forged.id, r.id);
+  assert.notDeepEqual(forged.secret, r.secret);
+});
+
+test("D3 B harness counter: the key store's comparisons are counted, dummy ones apart, and a mismatch fails", async () => {
+  const { apiKeyCountCompares, apiKeyExpectCompares, apiKeyDummyDigest, apiKeyEqual } = await import("../src/apikey.ts");
   const counts = apiKeyCountCompares();
   assert.equal(apiKeyCountCompares(), counts, "wrapped once");
   const before = { ...counts };
   assert.equal(await apiKeyEqual(apiKeyDummyDigest(), new Uint8Array(32).fill(1)), false);
-  assert.deepEqual({ all: counts.all - before.all, dummy: counts.dummy - before.dummy }, { all: 1, dummy: 1 });
+  apiKeyExpectCompares(counts, before, { all: 1, dummy: 1 }, "Unknown");
+  assert.throws(() => apiKeyExpectCompares(counts, before, { all: 1, dummy: 0 }, "Forged"), /dummy/);
   const again = { ...counts };
   const d = new Uint8Array(32).fill(7);
   assert.equal(await apiKeyEqual(d, d.slice()), true);
-  assert.deepEqual({ all: counts.all - again.all, dummy: counts.dummy - again.dummy }, { all: 1, dummy: 0 });
+  apiKeyExpectCompares(counts, again, { all: 1, dummy: 0 }, "Forged");
 });
 
 // ---- D3 B: the one constant-time comparison ---------------------------------------------------

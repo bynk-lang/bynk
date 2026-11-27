@@ -1,0 +1,3 @@
+# #3939: the `ApiKey` seam end to end through the real Worker; run by
+# bynk-tests/tests/system/behaviour_fixtures.rs (see that file for the format).
+passed=9 failed=0

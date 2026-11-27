@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.remote_unsupported_api_key",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A case acting as an `ApiKey` actor, or driving `by Malformed` or `by Unknown`, under `bynk test --against` (#3939)."
+}

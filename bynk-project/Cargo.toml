@@ -19,6 +19,8 @@ semver.workspace = true
 # the schema registry document.
 toml.workspace = true
 serde.workspace = true
+# Durable event delivery D2 (#3898): the hash in an event queue's name.
+sha2.workspace = true
 # The lowest leaf this sits on: AST/spans/CompileError, and the diagnostic
 # severity classification `AttributedError`'s sink needs.
 bynk-syntax.workspace = true

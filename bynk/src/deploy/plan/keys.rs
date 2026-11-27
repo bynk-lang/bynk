@@ -1,6 +1,7 @@
 use super::messages::foreign_binding_refusal;
 use super::run::DeployOptions;
 use crate::deploy::config::Resources;
+use crate::deploy::config::SessionKeyKind;
 use crate::deploy::config::deploy_command;
 use crate::deploy::config::deployed_worker_name;
 use crate::deploy::ledger::DeployLock;
@@ -11,6 +12,7 @@ use crate::deploy::secrets::ForeignKey;
 use crate::deploy::secrets::Presence;
 use crate::deploy::secrets::SecretSource;
 use crate::deploy::secrets::decide_foreign_key;
+use crate::deploy::secrets::decide_pepper;
 use crate::deploy::secrets::decide_session_key;
 use crate::deploy::secrets::mint_edge_key;
 use crate::deploy::secrets::mint_session_key;
@@ -91,19 +93,14 @@ impl ManagedKeys<'_> {
         source: &SecretSource,
         keys: &mut BTreeMap<(String, String), ForeignKey>,
     ) -> Result<(), String> {
-        let mut holders: BTreeMap<&str, Vec<(&String, &str)>> = BTreeMap::new();
-        for (worker, r) in self.resources {
-            for k in &r.session_keys {
-                holders
-                    .entry(k.binding.as_str())
-                    .or_default()
-                    .push((worker, k.actor.as_str()));
-            }
-        }
-        for (binding, all) in holders {
+        for (binding, all) in self.session_key_holders() {
+            // #3939: a pepper is kept under `--force` (`decide_pepper`); a signing key is not.
+            let pepper = all
+                .iter()
+                .any(|(_, _, kind)| *kind == SessionKeyKind::Pepper);
             let in_run: Vec<_> = all
                 .iter()
-                .filter(|(w, _)| self.order.contains(*w))
+                .filter(|(w, _, _)| self.order.contains(*w))
                 .collect();
             let supplied = value_from_source(binding, source);
             let mut minted: Option<String> = None;
@@ -116,18 +113,27 @@ impl ManagedKeys<'_> {
                 }
             };
             let mut decisions = Vec::new();
-            for (worker, actor) in &in_run {
+            for (worker, actor, _) in &in_run {
                 let presence = presence_of(
                     binding,
                     self.listed[*worker].as_ref(),
                     !lock.is_deployed(&opts.environment, worker),
                 );
-                let d = decide_session_key(supplied.clone(), presence, opts.force, &mut mint)
-                    .map_err(|e| {
-                        format!(
-                            "bynk: error: the session key `{binding}` of the `SignedCookie` actor `{actor}` on `{worker}`: {e}\n"
-                        )
-                    })?;
+                let d = if pepper {
+                    decide_pepper(supplied.clone(), presence, &mut mint)
+                } else {
+                    decide_session_key(supplied.clone(), presence, opts.force, &mut mint)
+                };
+                let what = if pepper {
+                    "pepper of the `ApiKey`"
+                } else {
+                    "session key of the `SignedCookie`"
+                };
+                let d = d.map_err(|e| {
+                    format!(
+                        "bynk: error: the {what} actor `{actor}` (`{binding}`) on `{worker}`: {e}\n"
+                    )
+                })?;
                 decisions.push(((*worker).clone(), d));
             }
             let fresh = decisions
@@ -135,7 +141,7 @@ impl ManagedKeys<'_> {
                 .any(|(_, d)| matches!(d, ForeignKey::Set { minted: true, .. }));
             let kept = decisions.iter().any(|(_, d)| *d == ForeignKey::Keep);
             if all.len() > 1 && fresh && (kept || in_run.len() < all.len()) {
-                let names: Vec<&str> = all.iter().map(|(w, _)| w.as_str()).collect();
+                let names: Vec<&str> = all.iter().map(|(w, _, _)| w.as_str()).collect();
                 return Err(format!(
                     "bynk: error: the session key `{binding}` is shared by {}, but this run would leave them with different values (one already holds a key, or not all of them are in this run) and Cloudflare never returns a secret's value.\n  Supply the same value for every one of them: set `{binding}` in the environment or `--secrets-file` (a base64url value of at least 32 bytes), then deploy again.\n",
                     names.join(", ")
@@ -146,6 +152,54 @@ impl ManagedKeys<'_> {
             }
         }
         Ok(())
+    }
+
+    /// Each session-key binding with the Workers, actors and kinds that list it.
+    fn session_key_holders(&self) -> BTreeMap<&str, Vec<(&String, &str, SessionKeyKind)>> {
+        let mut holders: BTreeMap<&str, Vec<(&String, &str, SessionKeyKind)>> = BTreeMap::new();
+        for (worker, r) in self.resources {
+            for k in &r.session_keys {
+                holders.entry(k.binding.as_str()).or_default().push((
+                    worker,
+                    k.actor.as_str(),
+                    k.kind,
+                ));
+            }
+        }
+        holders
+    }
+
+    /// #3939 (the maintainer's ruling on #4595): under `--force`, a note for each `ApiKey` pepper
+    /// a Worker in the run holds and this run keeps, since `--force` never replaces a set pepper.
+    /// A supplied value is set instead, so it has no note.
+    pub(crate) fn pepper_kept_under_force(
+        &self,
+        lock: &DeployLock,
+        opts: &DeployOptions,
+        source: &SecretSource,
+    ) -> Vec<String> {
+        if !opts.force {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for (binding, all) in self.session_key_holders() {
+            if value_from_source(binding, source).is_some() {
+                continue;
+            }
+            for (worker, actor, kind) in all {
+                let held = presence_of(
+                    binding,
+                    self.listed.get(worker.as_str()).and_then(Option::as_ref),
+                    !lock.is_deployed(&opts.environment, worker),
+                ) != Presence::Absent;
+                if kind == SessionKeyKind::Pepper && held && self.order.contains(worker) {
+                    out.push(format!(
+                        "bynk: note: kept the pepper `{binding}` of the `ApiKey` actor `{actor}` on `{worker}`: `--force` never replaces a set pepper, because a new one ends every key issued under it. To replace it, supply the new value (`{binding}` in the environment or `--secrets-file`).\n"
+                    ));
+                }
+            }
+        }
+        out
     }
 }
 
