@@ -16,9 +16,10 @@
 //! - **commit** (`wrangler.commit.toml`): the source's own build with a `transferred` tombstone
 //!   (`transferred_to`) for each class it gives up, which reassigns the namespace. A source the
 //!   build no longer has gets a stub Worker (`index.commit.ts`, which answers `503`) carrying
-//!   only the tombstones. The class is not exported in code: the scratch-account probe showed
-//!   the transfer commits without it (#3562's V0); whether Cloudflare wants it is live check
-//!   S4, and an export-only member would be added here if it does.
+//!   only the tombstones. The class is not exported in code: the transfer commits without it
+//!   (#3562's V0, and live check S4 found both forms commit). That is a choice, not the
+//!   documented form (track doc §3.2, D14); if Cloudflare comes to refuse it, the phase 2 push
+//!   is refused before anything commits, and an export-only member would be added here.
 //!
 //! Script names are the unqualified ones the ordinary `wrangler.toml` uses; `bynk deploy`
 //! environment-qualifies them as it does every other name. With no move, nothing here runs and
@@ -355,6 +356,72 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("[exports.Payment]"), "{text}");
+    }
+
+    /// Fan-in: two contexts from two scripts into one receiver, each with its own forward and
+    /// its own `transfer_from`.
+    #[test]
+    fn a_receiver_of_two_contexts_forwards_and_expects_each_from_its_own_script() {
+        let mut doc = ordinary();
+        let second = Incoming {
+            context: "shop.billing".into(),
+            classes: vec!["Payment".into()],
+            from_script: "shop-billing".into(),
+        };
+        receive_config(&mut doc, &[incoming(), second]);
+        let text = print_toml_document(&doc);
+        assert!(!text.contains("[[durable_objects.bindings]]"), "{text}");
+        for (binding, script) in [
+            ("BYNK_FORWARD_SHOP_ORDERS", "shop-orders"),
+            ("BYNK_FORWARD_SHOP_BILLING", "shop-billing"),
+        ] {
+            assert!(
+                text.contains(&format!(
+                    "binding = \"{binding}\"\nservice = \"{script}\"\n"
+                )),
+                "{text}"
+            );
+        }
+        for (class, script) in [("Cart", "shop-orders"), ("Payment", "shop-billing")] {
+            assert!(
+                text.contains(&format!(
+                    "[exports.{class}]\ntype = \"durable-object\"\nstate = \"expecting-transfer\"\nstorage = \"sqlite\"\ntransfer_from = \"{script}\"\n"
+                )),
+                "{text}"
+            );
+        }
+        assert_eq!(text.matches("[exports.").count(), 2, "{text}");
+    }
+
+    /// Fan-out: one source giving up two classes to two receivers, each tombstone naming its
+    /// own receiver.
+    #[test]
+    fn a_source_giving_up_two_classes_tombstones_each_to_its_receiver() {
+        let mut doc = ordinary();
+        commit_config(
+            &mut doc,
+            &[
+                Outgoing {
+                    class: "Cart".into(),
+                    to_script: "shop-orders".into(),
+                },
+                Outgoing {
+                    class: "Payment".into(),
+                    to_script: "shop-billing".into(),
+                },
+            ],
+        );
+        let text = print_toml_document(&doc);
+        assert!(!text.contains("[[durable_objects.bindings]]"), "{text}");
+        assert!(!text.contains("storage = \"sqlite\""), "{text}");
+        for (class, script) in [("Cart", "shop-orders"), ("Payment", "shop-billing")] {
+            assert!(
+                text.contains(&format!(
+                    "[exports.{class}]\ntype = \"durable-object\"\nstate = \"transferred\"\ntransferred_to = \"{script}\"\n"
+                )),
+                "{text}"
+            );
+        }
     }
 
     #[test]

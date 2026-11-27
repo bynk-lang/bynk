@@ -2776,6 +2776,70 @@ mod tests {
         );
     }
 
+    /// #3565: a context moving between two groups, the source group keeping a member: the
+    /// receiver forwards to the source group's script, and the source's commit variant is its
+    /// own build (without the moving context's cron) plus the tombstone.
+    #[test]
+    fn a_context_moving_between_groups_writes_both_groups_variants() {
+        use bynk_project::worker_moves::{Incoming, MoveVariants, Outgoing};
+        let dir = moving_project(
+            "moves_between_groups",
+            "\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.pricing\"]\n\n[deploy.workers.back]\ncontexts = [\"shop.billing\"]\n",
+        );
+        fs::write(
+            dir.0.join("src/shop/billing.bynk"),
+            "context shop.billing\n\nservice bapi from http {\n  on GET(\"/bill\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"2\")\n  }\n}\n",
+        )
+        .unwrap();
+        let plain = built_with(&dir, MoveVariants::default());
+        let moves = MoveVariants {
+            receive: [(
+                "core".to_string(),
+                vec![Incoming {
+                    context: "shop.orders".into(),
+                    classes: vec!["Cart".into()],
+                    from_script: "back".into(),
+                }],
+            )]
+            .into(),
+            commit: [(
+                "back".to_string(),
+                vec![Outgoing {
+                    class: "Cart".into(),
+                    to_script: "core".into(),
+                }],
+            )]
+            .into(),
+            ..MoveVariants::default()
+        };
+        let moved = built_with(&dir, moves);
+        for file in [
+            "workers/core/wrangler.toml",
+            "workers/core/index.ts",
+            "workers/back/wrangler.toml",
+            "workers/back/index.ts",
+        ] {
+            assert_eq!(doc(&moved, file), doc(&plain, file), "{file}");
+        }
+        let receive = doc(&moved, "workers/core/wrangler.receive.toml").unwrap();
+        assert!(
+            receive.contains("binding = \"BYNK_FORWARD_SHOP_ORDERS\"\nservice = \"back\""),
+            "{receive}"
+        );
+        assert!(receive.contains("transfer_from = \"back\""), "{receive}");
+        let commit = doc(&moved, "workers/back/wrangler.commit.toml").unwrap();
+        let own = doc(&plain, "workers/back/wrangler.toml").unwrap();
+        assert!(
+            commit.starts_with(own.trim_end()),
+            "the commit variant is the source's own build plus the tombstone:\n{commit}\n---\n{own}"
+        );
+        assert!(
+            commit.contains("[exports.Cart]\ntype = \"durable-object\"\nstate = \"transferred\"\ntransferred_to = \"core\"\n"),
+            "{commit}"
+        );
+        assert!(!commit.contains("0 * * * *"), "{commit}");
+    }
+
     /// #3565: a context leaving a group for a Worker of its own (the receiver is that Worker),
     /// the group it left giving up the class, and a dissolved source's stub.
     #[test]
