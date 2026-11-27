@@ -64,6 +64,7 @@ const MODULES = [
   "postgres",
   "mysql",
   "testing/pglite",
+  "testing/websocket",
   "agent",
   "testing/bindings",
   "container",
