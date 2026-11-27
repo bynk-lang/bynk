@@ -85,7 +85,15 @@ fn claim(port: u16) -> bool {
     let _ = std::fs::create_dir_all(&dir);
     let me = std::process::id();
     let mine = dir.join(me.to_string());
-    if std::fs::File::create(&mine).is_err() {
+    // `create_new`: the file is also this process's own record of the port. The harness is compiled
+    // into the one test binary once per module that includes it, each copy with its own `issued`
+    // set, so a port another copy issued is found here, not in `issued`, and is refused (#4578).
+    if std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&mine)
+        .is_err()
+    {
         return false;
     }
     let mine_key = (made(&mine).unwrap_or(0), me);
