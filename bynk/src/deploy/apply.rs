@@ -129,6 +129,10 @@ pub(crate) fn apply_kind<K: ResourceKind>(
         for commit in applied.commits {
             writer.commit(site.environment, commit)?;
         }
+        // Said once the step's work is on the account and recorded (#4602).
+        for note in &applied.notes {
+            note.print();
+        }
         bound.extend(applied.bound);
     }
     Ok(bound)

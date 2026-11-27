@@ -414,6 +414,9 @@ pub(crate) struct Applied<K: ResourceKind> {
     pub(crate) bound: Vec<(String, K::Bound)>,
     /// What to record, each written in order before anything else is asked of the account.
     pub(crate) commits: Vec<Commit<K::Change>>,
+    /// #4602: what to tell the user the step did that its plan line did not forecast (a namespace
+    /// made again, a queue adopted), printed once its commits are written.
+    pub(crate) notes: Vec<Notice>,
 }
 
 impl<K: ResourceKind> Applied<K> {
@@ -422,6 +425,7 @@ impl<K: ResourceKind> Applied<K> {
         Applied {
             bound: Vec::new(),
             commits: Vec::new(),
+            notes: Vec::new(),
         }
     }
 
@@ -430,7 +434,14 @@ impl<K: ResourceKind> Applied<K> {
         Applied {
             bound: vec![(binding.to_string(), bound)],
             commits: Vec::new(),
+            notes: Vec::new(),
         }
+    }
+
+    /// And `note` to print after the step's commits are written (#4602).
+    pub(crate) fn noting(mut self, note: Notice) -> Self {
+        self.notes.push(note);
+        self
     }
 
     /// And `commit` to write.
