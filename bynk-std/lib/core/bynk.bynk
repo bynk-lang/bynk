@@ -38,6 +38,7 @@ adapter bynk {
 		Claim,
 		EventEnvelope,
 		ApiKeyId,
+		ApiKeyInfo,
 		ApiKeyLabel,
 		ApiKeySecret,
 		TooManyKeys,
@@ -101,6 +102,19 @@ adapter bynk {
 		label: ApiKeyLabel,
 		created: Instant,
 		expires: Option[Instant],
+	}
+
+	---
+	One of an identity's keys, as an `ApiKey` actor's `list` answers it: never the
+	key itself or its hash. `id` names it, for `revoke`. `expires` and `lastUsed`
+	are `None`: keys do not expire, and their use is not recorded, yet.
+	---
+	type ApiKeyInfo = {
+		id: ApiKeyId,
+		label: ApiKeyLabel,
+		created: Instant,
+		expires: Option[Instant],
+		lastUsed: Option[Instant],
 	}
 
 	---

@@ -1371,6 +1371,7 @@
 /reference/diagnostics/bynk.actor.api_key_bad_arg/
 /reference/diagnostics/bynk.actor.api_key_identity_not_string_constructible/
 /reference/diagnostics/bynk.actor.api_key_internal/
+/reference/diagnostics/bynk.actor.api_key_member_in_provider/
 /reference/diagnostics/bynk.actor.api_key_mint_outside_handler/
 /reference/diagnostics/bynk.actor.api_key_missing_secret/
 /reference/diagnostics/bynk.actor.api_key_prefix_shared/

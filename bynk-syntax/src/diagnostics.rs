@@ -124,6 +124,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "let same <- ApiKey.equal(a, b)   // ✗ internal to the generated key store\n\nlet same <- Crypto.equal(a, b)   // ✓",
     },
     Explain {
+        code: "bynk.actor.api_key_member_in_provider",
+        blurb: "An `ApiKey` actor's `list`, `revoke` and `revokeAll` read and change the key store the compiler generates for it, two agents. A service handler or an agent's handler can call an agent; a provider or a function cannot. So call the member in the handler, and pass the result on.",
+        example: "provides Keys = ClientKeys {\n    fn forget(id: AccountId, key: ApiKeyId) -> Effect[Bool] {\n        Client.revoke(id, key)   // ✗ in a provider\n    }\n}\n\non DELETE(\"/accounts/:id/keys/:key\") (id: AccountId, key: ApiKeyId) -> Effect[HttpResult[()]] by Visitor {\n    let gone <- Client.revoke(id, key)   // ✓ in a service handler\n    if gone { NoContent } else { NotFound }\n}",
+    },
+    Explain {
         code: "bynk.actor.api_key_mint_outside_handler",
         blurb: "`Actor.mint(identity, label)` hashes the new key under the pepper, and the pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's. So `mint` is legal only in a service handler. Mint the key there and return it; a provider or agent gets what it needs from the handler.",
         example: "agent Accounts {\n    key id: AccountId\n}\n\non call open(label: ApiKeyLabel) -> Effect[()] given Clock {\n    let _ <- Client.mint(self.id, label)   // ✗ in an agent\n}\n\non POST(\"/accounts/:id/keys\") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {\n    let r <- Client.mint(id, body.label)   // ✓ in a service handler\n}",
@@ -3013,7 +3018,7 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.rate_limit_key_unavailable",
-        blurb: "`key: identity` counts requests by the verified caller: the router verifies the credential first, asks the limiter about the caller's identity (`sub`), and only then reads the body. That needs a route whose `by` is a single actor that carries an identity: a `Bearer`, `Oidc` or `SignedCookie` actor. A `Visitor` has no caller to count, a `Signature` sender is a service, not a person, and an actor sum has no one identity, so `identity` is refused on them. Use `key: clientIp` for the address, or call the limiter's `allow(key)` in the handler for a limit keyed on something only the handler knows.",
+        blurb: "`key: identity` counts requests by the verified caller: the router verifies the credential first, asks the limiter about the caller's identity (`sub`), and only then reads the body. That needs a route whose `by` is a single actor that carries an identity: a `Bearer`, `Oidc`, `SignedCookie` or `ApiKey` actor. A `Visitor` has no caller to count, a `Signature` sender is a service, not a person, and an actor sum has no one identity, so `identity` is refused on them. Use `key: clientIp` for the address, or call the limiter's `allow(key)` in the handler for a limit keyed on something only the handler knows.",
         example: "@rateLimit(SignupLimit, key: identity)   // ✗ a Visitor has no identity\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓ count by address\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
@@ -5850,10 +5855,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "`by Revoked` sends a cookie for a session that was issued and then \
                 revoked in the session agent, so it needs a route whose seam \
                 checks one: a `SignedCookie` actor declared with `sessions = true`. \
-                A stateless cookie keeps no session to revoke, a route guarded by \
-                another scheme has no cookie, and a public route has no seam. \
-                Declare `sessions = true` on the actor, or test the cookie's \
-                signature and expiry with `by Forged` and `by Expired`.",
+                On a route an `ApiKey` actor guards, it sends a key that was minted \
+                and then revoked. A stateless cookie keeps no session to revoke, a \
+                route guarded by another scheme has nothing to revoke, and a public \
+                route has no seam. Declare `sessions = true` on the actor, or test \
+                the cookie's signature and expiry with `by Forged` and `by Expired`.",
         example: "// demo/api.bynk\n\
                   actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours), identity = UserId }\n\
                   actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours, sessions = true), identity = UserId }\n\n\
@@ -7673,6 +7679,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.api_key_internal",
         "A program names `ApiKey.equal`, the generated key store's internal comparison (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_member_in_provider",
+        "An `ApiKey` actor's `list`, `revoke` or `revokeAll` is called outside a service or agent handler (#3939).",
     ),
     d(
         "bynk.actor.api_key_mint_outside_handler",
@@ -11507,7 +11517,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.revoked_needs_sessions_route",
-        "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it.",
+        "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true` or a single `ApiKey` actor; it sends a revoked session's correctly signed cookie, or a revoked key, so only a seam that keeps sessions or keys can refuse it.",
         &["case"],
     ),
     dg(

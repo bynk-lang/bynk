@@ -157,6 +157,42 @@ agent {agent} {{\n\
 \t\t\tEffect.pure(0)\n\
 \t\t}}\n\
 \t}}\n\
+\n\
+\ton call labelsOf() -> Effect[Map[String, String]] {{\n\
+\t\tlet es <- labels.entries.collect()\n\
+\t\tEffect.pure(Map.of(es))\n\
+\t}}\n\
+\n\
+\ton call createdOf() -> Effect[Map[String, Int]] {{\n\
+\t\tlet es <- created.entries.collect()\n\
+\t\tEffect.pure(Map.of(es))\n\
+\t}}\n\
+\n\
+\ton call revoke(keyNo: String) -> Effect[Bool] {{\n\
+\t\tlet held <- digests.contains(keyNo)\n\
+\t\tif held && !retired {{\n\
+\t\t\tlet _ <- digests.remove(keyNo)\n\
+\t\t\tlet _ <- kids.remove(keyNo)\n\
+\t\t\tlet _ <- labels.remove(keyNo)\n\
+\t\t\tlet _ <- created.remove(keyNo)\n\
+\t\t\tlet _ <- scopes.remove(keyNo)\n\
+\t\t\tEffect.pure(true)\n\
+\t\t}} else {{\n\
+\t\t\tEffect.pure(false)\n\
+\t\t}}\n\
+\t}}\n\
+\n\
+\ton call clear() -> Effect[Int] {{\n\
+\t\tlet ks <- digests.keys.collect()\n\
+\t\tlet n <- digests.size()\n\
+\t\tlet _ <- ks.forEach((k: String) => digests.remove(k))\n\
+\t\tlet _ <- ks.forEach((k: String) => kids.remove(k))\n\
+\t\tlet _ <- ks.forEach((k: String) => labels.remove(k))\n\
+\t\tlet _ <- ks.forEach((k: String) => created.remove(k))\n\
+\t\tlet _ <- ks.forEach((k: String) => scopes.remove(k))\n\
+\t\tretired := true\n\
+\t\tEffect.pure(n)\n\
+\t}}\n\
 }}\n"
     )
 }
@@ -191,6 +227,33 @@ agent {agent} {{\n\
 \t\t\t}}\n\
 \t\t}} else {{\n\
 \t\t\tEffect.pure(Err(r))\n\
+\t\t}}\n\
+\t}}\n\
+\n\
+\ton call current() -> Effect[Option[String]] {{\n\
+\t\tEffect.pure(handle)\n\
+\t}}\n\
+\n\
+\ton call revoke(of: String, keyNo: String) -> Effect[Bool] {{\n\
+\t\tlet mine = match handle {{\n\
+\t\t\tSome(h) => h == of,\n\
+\t\t\tNone => false,\n\
+\t\t}}\n\
+\t\tif mine {{\n\
+\t\t\t{keys}(of).revoke(keyNo)\n\
+\t\t}} else {{\n\
+\t\t\tEffect.pure(false)\n\
+\t\t}}\n\
+\t}}\n\
+\n\
+\ton call revokeAll(fresh: String) -> Effect[Int] {{\n\
+\t\tmatch handle {{\n\
+\t\t\tSome(h) => {{\n\
+\t\t\t\tlet n <- {keys}(h).clear()\n\
+\t\t\t\thandle := Some(fresh)\n\
+\t\t\t\tEffect.pure(n)\n\
+\t\t\t}},\n\
+\t\t\tNone => Effect.pure(0),\n\
 \t\t}}\n\
 \t}}\n\
 }}\n"

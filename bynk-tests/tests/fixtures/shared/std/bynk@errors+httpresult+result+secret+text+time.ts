@@ -116,6 +116,22 @@ export const ApiKeySecret = {
 };
 
 /**
+ * One of an identity's keys, as an `ApiKey` actor's `list` answers it: never the
+ * key itself or its hash. `id` names it, for `revoke`. `expires` and `lastUsed`
+ * are `None`: keys do not expire, and their use is not recorded, yet.
+ */
+export interface ApiKeyInfo {
+  readonly id: ApiKeyId;
+  readonly label: ApiKeyLabel;
+  readonly created: number;
+  readonly expires: Option<number>;
+  readonly lastUsed: Option<number>;
+}
+
+export const ApiKeyInfo = {
+};
+
+/**
  * The refusal of `mint` when the identity already holds the most live keys it
  * may (`limit`, 100).
  */
