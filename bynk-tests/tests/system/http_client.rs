@@ -1894,3 +1894,153 @@ fn a_browser_connects_a_cookie_service_with_the_session_it_signed_in_with() {
     );
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// #3900, #3901: a real browser connects to a `Bearer` service with `["bynk.bearer", token]`. Only a browser
+/// enforces the standard's rule that a response must select one of the subprotocols the page offered, so only a
+/// browser can show that the Worker's `101` selects `bynk.bearer`, and only that: the credential is never echoed
+/// back in a response header, where proxies and logs may record it. It also shows what a browser does with the
+/// refusals: the old single-element `[token]` form, a forged token and no credential at all never open.
+const BEARER_BROWSER_DRIVER: &str = r#"
+import http from "node:http";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { chromium } = require("playwright");
+const [pagePort, base] = [process.env.PAGE_PORT, process.env.BASE];
+const [token, forged] = [process.env.TOKEN, process.env.FORGED];
+const WAIT_MS = 60000;
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { "content-type": "text/html" }).end("<!doctype html><meta charset=utf-8><title>ws</title>");
+});
+await new Promise((resolve) => server.listen(Number(pagePort), "127.0.0.1", resolve));
+
+const browser = await chromium.launch({ timeout: WAIT_MS });
+try {
+  const tab = await browser.newPage();
+  await tab.goto(`http://127.0.0.1:${pagePort}/`, { timeout: WAIT_MS });
+  const seen = await tab.evaluate(async ({ base, token, forged, waitMs }) => {
+    const url = `${base.replace("http", "ws")}/?room=lobby`;
+    const attempt = (protocols) => new Promise((resolve) => {
+      const ws = protocols === undefined ? new WebSocket(url) : new WebSocket(url, protocols);
+      const done = (r) => { try { ws.close(); } catch { /* already closed */ } resolve(r); };
+      ws.onopen = () => done({ opened: true, protocol: ws.protocol });
+      ws.onerror = () => done({ opened: false });
+      setTimeout(() => done({ timedOut: true }), waitMs);
+    });
+    return {
+      valid: await attempt(["bynk.bearer", token]),
+      legacy: await attempt([token]),
+      forged: await attempt(["bynk.bearer", forged]),
+      none: await attempt(undefined),
+    };
+  }, { base, token, forged, waitMs: WAIT_MS });
+  console.log("RESULT " + JSON.stringify(seen));
+} finally {
+  await browser.close();
+  server.close();
+}
+process.exit(0);
+"#;
+
+#[test]
+fn a_browser_connects_a_bearer_service_and_the_response_selects_only_the_marker() {
+    if skip_without_tools() {
+        return;
+    }
+    let has_playwright = Command::new("node")
+        .args(["-e", "require('playwright').chromium"])
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !has_playwright {
+        eprintln!("\n!!! WS BROWSER VERIFICATION SKIPPED !!!\nPlaywright is not installed\n");
+        if std::env::var("BYNK_REQUIRE_BROWSER").is_ok() {
+            panic!("BYNK_REQUIRE_BROWSER is set but Playwright is not installed");
+        }
+        return;
+    }
+    if !tools::tool_exists("npx") && skip_workerd("`npx` is not on PATH") {
+        return;
+    }
+    let page_port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let dir = scratch("ws-bearer-browser");
+    let proj = dir.join("project");
+    copy_project(&fixture("ws"), &proj);
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the `ws` client");
+    fs::write(
+        dir.join("out/workers/chat/.dev.vars"),
+        "CHAT_SECRET=ws-test-secret\n",
+    )
+    .unwrap();
+    let Some((mut wranglers, port)) = boot_workerd(&dir, "chat", "/health", 4) else {
+        return;
+    };
+    // The tokens are minted here, with Node's own HMAC: the page only offers them.
+    fs::write(
+        dir.join("mint.mjs"),
+        r#"
+import { createHmac } from "node:crypto";
+const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+const token = (secret) => {
+  const head = b64({ alg: "HS256", typ: "JWT" });
+  const body = b64({ sub: "ada", exp: Math.floor(Date.now() / 1000) + 3600 });
+  return `${head}.${body}.${createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url")}`;
+};
+console.log(JSON.stringify({ token: token("ws-test-secret"), forged: token("another-secret") }));
+"#,
+    )
+    .unwrap();
+    let minted = Command::new("node")
+        .arg("mint.mjs")
+        .current_dir(&dir)
+        .output()
+        .expect("mint the tokens");
+    let tokens: serde_json::Value =
+        serde_json::from_slice(&minted.stdout).expect("the minted tokens");
+    let token = tokens["token"].as_str().unwrap().to_string();
+    fs::write(dir.join("browser.mjs"), BEARER_BROWSER_DRIVER).unwrap();
+    let run = Command::new("node")
+        .arg("browser.mjs")
+        .current_dir(&dir)
+        .env("PAGE_PORT", page_port.to_string())
+        .env("BASE", format!("http://127.0.0.1:{port}"))
+        .env("TOKEN", &token)
+        .env("FORGED", tokens["forged"].as_str().unwrap())
+        .output()
+        .expect("run node");
+    wrangler::stop_all(&mut wranglers);
+    let log = format!(
+        "{}{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(run.status.success(), "the browser driver failed:\n{log}");
+    let line = log
+        .lines()
+        .find_map(|l| l.strip_prefix("RESULT "))
+        .unwrap_or_else(|| panic!("the driver printed no result:\n{log}"));
+    let seen: serde_json::Value = serde_json::from_str(line).unwrap();
+    assert_eq!(
+        seen["valid"],
+        serde_json::json!({ "opened": true, "protocol": "bynk.bearer" }),
+        "the 101 selects the marker, so the browser accepts it, and selects nothing else\n{log}"
+    );
+    assert!(
+        !line.contains(&token),
+        "the credential is never echoed back in the response\n{log}"
+    );
+    for refused in ["legacy", "forged", "none"] {
+        assert_eq!(
+            seen[refused],
+            serde_json::json!({ "opened": false }),
+            "the `{refused}` upgrade is refused and never opens in a browser\n{log}"
+        );
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
