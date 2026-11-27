@@ -1,0 +1,2 @@
+bynk.queue.reserved_name
+`bynk-ev-audit` starts with `bynk-ev-`, which Bynk reserves for its event queues
