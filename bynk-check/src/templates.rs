@@ -34,6 +34,7 @@ pub const TEMPLATE_ITEM: &str = "bynk.html.typed.template";
 pub const HTML_ITEM: &str = "bynk.html.Html";
 
 pub const AT_BOUNDARY: &str = "bynk.html.at_boundary";
+pub const NO_CONSTRUCTOR: &str = "bynk.html.no_constructor";
 pub const UNKNOWN_PLACEHOLDER: &str = "bynk.template.unknown_placeholder";
 pub const UNUSED_FIELD: &str = "bynk.template.unused_field";
 pub const AMBIGUOUS_PLACEHOLDER: &str = "bynk.template.ambiguous_placeholder";

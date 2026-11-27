@@ -3230,7 +3230,8 @@ through the escape its context needs.
 | `footer` | `Html` | a template with no fields |
 | `h.toString()` | `String` | the markup, for a test or another kind of body |
 
-`Html` is not data: a type that holds one has no codec, and is refused as a request parameter
+`Html` has no constructor: `Html.of` is `bynk.html.no_constructor`, because no string becomes markup
+unchecked. `Html` is not data: a type that holds one has no codec, and is refused as a request parameter
 and in an agent's `store` (`bynk.html.at_boundary`). Naming `Html`, or declaring a `template`,
 without the gate is `bynk.stability.experimental`. `escapeText` and `escapeAttr` keep their
 names and behaviour, and need no gate.

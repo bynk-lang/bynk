@@ -4027,7 +4027,8 @@ related location at the declaration. A template with fields is emitted as an exp
 of its fields record returning `Html`, the file's text with each placeholder replaced by its
 field's escaped text; one with no fields as an exported `Html` constant.
 
-`Html` is `bynk.html`'s opaque type, known by its declaration, never by its name. A type that
+`Html` is `bynk.html`'s opaque type, known by its declaration, never by its name. Outside
+`bynk.html` it has no constructor: `Html.of` is `bynk.html.no_constructor`. A type that
 is or holds `Html` MUST NOT be a request parameter, an agent `store` field, a cross-context
 signature or a codec's subject (`bynk.html.at_boundary`).
 

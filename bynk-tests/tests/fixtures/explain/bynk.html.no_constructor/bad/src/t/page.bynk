@@ -1,0 +1,10 @@
+commons t.page
+
+uses bynk.html
+
+fn quote(text: String) -> Option[Html] {
+	match Html.of(text) {
+		Ok(h) => Some(h),
+		Err(_) => None,
+	}
+}

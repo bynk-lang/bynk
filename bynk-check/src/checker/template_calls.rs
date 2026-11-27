@@ -100,3 +100,35 @@ fn give_up(args: &[Expr], ctx: &mut Ctx) -> Option<TyId> {
     }
     None
 }
+
+/// `bynk.html.no_constructor`: `Html.of(s)` outside `bynk.html`. `Html` is opaque, and an opaque
+/// type's `of` is open to every unit, but `Html` has no predicate, so its `of` would accept any
+/// string: a raw door to unescaped markup that nothing lists or audits. Markup comes from a
+/// template (and, with the literals, from `html"…"` and the one audited `Html.unsafe`). `None`
+/// when the call is not `Html.of` on `bynk.html`'s `Html`, or is inside `bynk.html` itself.
+pub(crate) fn refuse_html_of(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    ctx: &mut Ctx,
+) -> Option<Option<TyId>> {
+    let ExprKind::Ident(id) = &receiver.kind else {
+        return None;
+    };
+    if method.name != "of"
+        || ctx.lookup(id.name.as_str()).is_some()
+        || !crate::templates::is_html_type(&id.name, &ctx.input.types)
+        || ctx.input.is_local_type(&id.name)
+    {
+        return None;
+    }
+    ctx.errors.push(
+        CompileError::new(
+            crate::templates::NO_CONSTRUCTOR,
+            method.span,
+            format!("`{}` has no `of` constructor: no string becomes markup unchecked", id.name),
+        )
+        .with_note("markup comes from a `template`'s `fill`, or a template with no fields; pass text as a `String` field and the template escapes it for where it sits"),
+    );
+    Some(give_up(args, ctx))
+}

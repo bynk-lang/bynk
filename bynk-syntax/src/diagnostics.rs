@@ -2588,6 +2588,11 @@ agent Cart {
         example: "// t/page.bynk\nfn parse(s: String) -> Result[Card, DecodeError] {\n    Json.decode[Card](s)   // ✗ `Card` holds `Html`\n}\n\nfn show(c: Card) -> String {\n    c.body.toString()   // ✓\n}",
     },
     Explain {
+        code: "bynk.html.no_constructor",
+        blurb: "`Html` is markup the compiler built: a template's `fill`, or a template with no fields. An opaque type's `of` would turn any `String` into one with no check, a door to unescaped markup that nothing audits, so `Html` has none. Pass the text as a `String` field of a template, which escapes it for where it sits.",
+        example: "// t/page.bynk\nfn quote(text: String) -> Option[Html] {   // ✗\n    match Html.of(text) {   // ✗ any string, unchecked\n        Ok(h) => Some(h),\n        Err(_) => None,\n    }\n}\n\nfn quote(text: String) -> Html {   // ✓\n    card.fill(Card { title: text })   // ✓ escaped for its place\n}",
+    },
+    Explain {
         code: "bynk.http.body_cap_defaulted",
         blurb: "Every body-taking HTTP route has a request-body cap, 1 MiB (1,048,576 bytes) unless the route's `@limit(maxBody: …)` or the service's `limits { maxBody: … }` says otherwise. This hint lists, once per service, the routes that take the default, so a service that used to accept larger bodies finds out at build and not in production: a larger body is answered `413`, and its `details` say that `@limit(maxBody: …)` raises the cap. It is a hint, not an error: if 1 MiB is what you want, leave it, or state it with `limits { maxBody: 1_048_576 }` to silence the hint. A `@raw` route has no default and must declare its cap (`bynk.http.raw_body_unbounded`).",
         example: "type Import = { rows: List[String] }\n\nservice api from http {\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }   // hint: takes the default 1 MiB cap\n}\n\nservice api from http {\n    @limit(maxBody: 26_214_400)   // ✓ the cap is stated\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
@@ -9341,6 +9346,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.html.at_boundary",
         "A type that is or holds `Html` is decoded, stored, received or sent (#3927).",
+    ),
+    d(
+        "bynk.html.no_constructor",
+        "`Html.of(s)` is called outside `bynk.html` (#3927).",
     ),
     hint(d(
         "bynk.http.body_cap_defaulted",

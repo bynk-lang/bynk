@@ -155,6 +155,8 @@ fn render(title: String) -> Html {
 - **Errors at the template's line.** A placeholder or markup error points at
   the line and column in the template file, with a related location at the
   declaration, in the terminal and in the editor.
+- **No constructor.** A string never becomes `Html` unchecked: `Html.of` is
+  `bynk.html.no_constructor`. Pass text as a `String` field instead.
 - **Not data.** `Html`, and any type that holds one, has no codec and is
   refused as a request parameter and in an agent's `store`
   (`bynk.html.at_boundary`): a template's escaping would be skipped by markup
