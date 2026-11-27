@@ -50,7 +50,7 @@ const __entryFieldsOfLogins = [] as const;
 
 function __rehydrateLoginsState(s: LoginsState, stored: LoginsState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "n")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.n as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.n as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Logins", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).n = __r.value as unknown as (typeof s)["n"];
   }
@@ -114,7 +114,7 @@ export class Logins {
 
 const __LoginsWire: __AgentWire = {
   bump: { args: [], result: { enc: (__v: void) => null, dec: (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError> } },
-  count: { args: [], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) } },
+  count: { args: [], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
 };
 
 export function __makeLogins(key: string, env?: { LOGINS?: __DurableObjectNamespace }): Logins {

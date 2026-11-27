@@ -480,21 +480,21 @@ export function __deserialise_Keyword(json: __JsonValue, path: string = "$"): Re
         return Err({ kind: "StructuralMismatch", path: `${path}.class`, expected: "number", actual: typeof obj["class"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["class"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.class`, expected: "safe integer", actual: String(obj["class"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.class`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["class"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __class = obj["class"];
       if (typeof obj["arguments"] !== "number") {
         return Err({ kind: "StructuralMismatch", path: `${path}.arguments`, expected: "number", actual: typeof obj["arguments"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["arguments"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.arguments`, expected: "safe integer", actual: String(obj["arguments"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.arguments`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["arguments"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __arguments = obj["arguments"];
       if (typeof obj["deps"] !== "number") {
         return Err({ kind: "StructuralMismatch", path: `${path}.deps`, expected: "number", actual: typeof obj["deps"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["deps"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.deps`, expected: "safe integer", actual: String(obj["deps"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.deps`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["deps"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __deps = obj["deps"];
       return Ok({ tag: "Kw", class: __class, arguments: __arguments, deps: __deps } as __ns_demo_hygiene.Keyword);
@@ -502,7 +502,7 @@ export function __deserialise_Keyword(json: __JsonValue, path: string = "$"): Re
     case "Bare":
       return Ok({ tag: "Bare" } as __ns_demo_hygiene.Keyword);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

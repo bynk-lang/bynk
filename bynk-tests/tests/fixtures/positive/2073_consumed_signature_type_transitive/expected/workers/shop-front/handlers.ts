@@ -10,13 +10,13 @@ import type * as shop_order from "../shop-order/handlers.js";
 export const check = {
   async call(id: string, deps: { env: { SHOP_LEDGER: __ServiceBinding; SHOP_ORDER: __ServiceBinding } }): globalThis.Promise<number> {
     const o = await __callService(deps.env.SHOP_ORDER, "place", id as __JsonValue, __deserialise_Order, "shop.front", "8168b2b203446bfe", deps.env, "shop.order");
-    return __callService(deps.env.SHOP_LEDGER, "take", __serialise_shop_ledger__Order((o as unknown as shop_order.Order)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "shop.front", "0cb3df41e793ac30", deps.env, "shop.ledger");
+    return __callService(deps.env.SHOP_LEDGER, "take", __serialise_shop_ledger__Order((o as unknown as shop_order.Order)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "shop.front", "0cb3df41e793ac30", deps.env, "shop.ledger");
   },
 };
 
 export const direct = {
   async call(id: string, deps: { env: { SHOP_LEDGER: __ServiceBinding } }): globalThis.Promise<number> {
-    return __callService(deps.env.SHOP_LEDGER, "take", __serialise_shop_ledger__Order(({ id: id, b: { n: 3 } } as unknown as shop_order.Order)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "shop.front", "0cb3df41e793ac30", deps.env, "shop.ledger");
+    return __callService(deps.env.SHOP_LEDGER, "take", __serialise_shop_ledger__Order(({ id: id, b: { n: 3 } } as unknown as shop_order.Order)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "shop.front", "0cb3df41e793ac30", deps.env, "shop.ledger");
   },
 };
 
@@ -35,7 +35,7 @@ export function __deserialise_shop_ledger__Base(json: __JsonValue, path: string 
     return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["n"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["n"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __n = obj["n"];
   return Ok({ n: __n } as shop_base.Base);
@@ -101,7 +101,7 @@ export function __deserialise_shop_order__Base(json: __JsonValue, path: string =
     return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["n"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["n"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __n = obj["n"];
   return Ok({ n: __n } as shop_base.Base);

@@ -44,7 +44,7 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.placedAt`, expected: "number", actual: typeof __placedAt$ms });
   }
   if (!globalThis.Number.isSafeInteger(__placedAt$ms)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.placedAt`, expected: "safe integer", actual: String(__placedAt$ms) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.placedAt`, expected: "safe integer", actual: globalThis.Number.isInteger(__placedAt$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __placedAt = __placedAt$ms;
   return Ok({ sku: __sku, placedAt: __placedAt } as Order);

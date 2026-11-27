@@ -88,7 +88,16 @@ test("result: Ok and Err arms, and an unknown kind", () => {
   });
   assert.deepEqual(c.decode({ kind: "Maybe" }, "$"), {
     tag: "Err",
-    error: { kind: "StructuralMismatch", path: "$", expected: "Ok | Err", actual: "Maybe" },
+    error: { kind: "StructuralMismatch", path: "$", expected: "Ok | Err", actual: "unrecognised variant" },
+  });
+  // #4604: a tag that names no variant is never echoed (it can be personal data); a non-string is its typeof.
+  assert.deepEqual(c.decode({ kind: "hunter2-secret" }, "$"), {
+    tag: "Err",
+    error: { kind: "StructuralMismatch", path: "$", expected: "Ok | Err", actual: "unrecognised variant" },
+  });
+  assert.deepEqual(c.decode({ kind: 42 }, "$"), {
+    tag: "Err",
+    error: { kind: "StructuralMismatch", path: "$", expected: "Ok | Err", actual: "number" },
   });
 });
 

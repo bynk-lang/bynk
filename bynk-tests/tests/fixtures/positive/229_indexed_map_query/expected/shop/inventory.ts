@@ -179,7 +179,7 @@ export function __deserialise_Reservation(json: __JsonValue, path: string = "$")
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["qty"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["qty"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __qty = obj["qty"];
   return Ok({ id: __id, orderId: __orderId, qty: __qty } as Reservation);

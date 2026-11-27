@@ -2196,8 +2196,8 @@ with each vector's metadata read as `M` on its own, for what `upsertValue` write
 `VectorMatchOf[M]` (a `VectorReadOf[M]` for `getByIdsValue`) has `metadata: Option[Result[M,
 DecodeError]]`, `None` when the vector has none or the query omitted it, `Some(Ok(m))` when it
 reads and `Some(Err(e))` when it does not (a vector stored by an older shape of `M`), so one stale
-vector is one `Err` and the rest still read. The error names the path and what was expected, but its message can quote part of the stored
-value, so do not log it unredacted. Use `returnMetadata: All` with them: an `Indexed` read returns only the
+vector is one `Err` and the rest still read. The error names the path, what was expected and the JSON kind found, never the stored value, so
+it is safe to log. Use `returnMetadata: All` with them: an `Indexed` read returns only the
 filterable properties, which decode as `M` only when `M` has just those fields. `query` and
 `getByIds` are unchanged, for metadata written outside Bynk. They are experimental with the rest of
 `Vectorize`, and compiler-lowered over `query` and `getByIds`, so `stub Docs.query(_, _) returns …`

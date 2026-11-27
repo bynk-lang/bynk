@@ -45,7 +45,7 @@ export default {
               } catch {
                 return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
               }
-              const __r_cents = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(args);
+              const __r_cents = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(args);
               if (__r_cents.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_cents.error)), { status: 400, headers: { "content-type": "application/json" } });
               const cents = __r_cents.value;
               const result = await surface.authorise(cents);

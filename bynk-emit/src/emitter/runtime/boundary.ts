@@ -57,6 +57,18 @@ function wireRule(r: ValidationRule): Record<string, unknown> {
   }
 }
 
+/**
+ * #4604: why JSON text did not parse, as the offset the parser reported and never its own text
+ * (V8 quotes part of the input, which can be personal data; a `DecodeError` is logged). Where the
+ * engine gives no offset the message is just `not valid JSON`.
+ */
+export function jsonParseMessage(e: unknown): string {
+  const at = /(?:in|after) JSON at position (\d+)(?: \(line \d+ column \d+\))?$/.exec(
+    e instanceof Error ? e.message : "",
+  );
+  return at === null ? "not valid JSON" : `not valid JSON at offset ${at[1]}`;
+}
+
 export function wireRefusal(body: Record<string, unknown>): Record<string, unknown> {
   const violation = body.violation as ValidationError | undefined;
   if (body.kind !== "RefinementViolation" || violation === undefined) return body;
@@ -699,7 +711,7 @@ async function callServiceCore<R>(
   try {
     responseJson = (await response.json()) as JsonValue;
   } catch (e) {
-    return { kind: "error", error: { kind: "MalformedJson", details: String(e) } };
+    return { kind: "error", error: { kind: "MalformedJson", details: jsonParseMessage(e) } };
   }
   const result = deserialiseResult(responseJson);
   if (result.tag === "Err") {
@@ -932,5 +944,5 @@ export function deserialiseEventEnvelope(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { boundaryError as __boundaryError, callOutcome as __callOutcome, callService as __callService, callServiceOutcome as __callServiceOutcome, checkStoredLayout as __checkStoredLayout, checkStoredSchemaVersion as __checkStoredSchemaVersion, deliverEvent as __deliverEvent, deserialiseEventEnvelope as __deserialiseEventEnvelope, eventEnvelopeOf as __eventEnvelopeOf, faultResponse as __faultResponse, migrationFailed as __migrationFailed, rehydrationViolation as __rehydrationViolation, readCapped as __readBodyCapped, renameStoredFields as __renameStoredFields, reportUnknownStoredKeys as __reportUnknownStoredKeys, verifyCall as __verifyCall, wireRefusal as __wireRefusal };
+export { boundaryError as __boundaryError, jsonParseMessage as __bynkJsonParseMessage, callOutcome as __callOutcome, callService as __callService, callServiceOutcome as __callServiceOutcome, checkStoredLayout as __checkStoredLayout, checkStoredSchemaVersion as __checkStoredSchemaVersion, deliverEvent as __deliverEvent, deserialiseEventEnvelope as __deserialiseEventEnvelope, eventEnvelopeOf as __eventEnvelopeOf, faultResponse as __faultResponse, migrationFailed as __migrationFailed, rehydrationViolation as __rehydrationViolation, readCapped as __readBodyCapped, renameStoredFields as __renameStoredFields, reportUnknownStoredKeys as __reportUnknownStoredKeys, verifyCall as __verifyCall, wireRefusal as __wireRefusal };
 export type { BoundaryError as __BoundaryError, JsonValue as __JsonValue, ServiceBinding as __ServiceBinding };

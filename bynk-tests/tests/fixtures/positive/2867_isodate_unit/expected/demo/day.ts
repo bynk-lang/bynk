@@ -4,7 +4,7 @@
 import { Ok, Err, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkInstantFromIso, __bynkIsIsoDate } from "../__bynk_runtime/time.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 
 /**
  * #2867: `IsoDate` admits exactly the `YYYY-MM-DD` dates that exist, in a literal,
@@ -43,7 +43,7 @@ export function decodeDay(json: string): Result<Day, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Day(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Day);
@@ -58,7 +58,7 @@ export function decodeBooking(json: string): Result<Booking, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Booking(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Booking);

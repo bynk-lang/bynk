@@ -276,7 +276,7 @@ export function __deserialise_P(json: __JsonValue, path: string = "$"): Result<_
     return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "number", actual: typeof obj["x"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["x"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "safe integer", actual: String(obj["x"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["x"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __x = obj["x"];
   return Ok({ x: __x } as __ns_demo_boxes.P);

@@ -6,7 +6,7 @@ import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../../__bynk_runtime/boundary.js";
 import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
 
@@ -31,7 +31,7 @@ export function roundTrip(t: Tree): Result<Tree, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Tree(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Tree);

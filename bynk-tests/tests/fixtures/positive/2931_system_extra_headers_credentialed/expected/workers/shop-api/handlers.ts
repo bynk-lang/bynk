@@ -62,7 +62,7 @@ export function __deserialise_Page(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.limit`, expected: "number", actual: typeof __d_limit });
   }
   if (!globalThis.Number.isSafeInteger(__d_limit)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.limit`, expected: "safe integer", actual: String(__d_limit) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.limit`, expected: "safe integer", actual: globalThis.Number.isInteger(__d_limit) ? "integer outside the safe range" : "non-integer number" });
   }
   const __limit = __d_limit;
   return Ok({ limit: __limit } as Page);

@@ -792,7 +792,7 @@ const __entryFieldsOfPanel = [] as const;
 
 function __rehydratePanelState(s: PanelState, stored: PanelState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "level")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "level", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "level", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.level as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "level", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "level", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.level as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Panel", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).level = __r.value as unknown as (typeof s)["level"];
   }
@@ -1003,7 +1003,7 @@ export function __deserialise_Light(json: __JsonValue, path: string = "$"): Resu
       case "Green":
         return Ok({ tag: "Green" } as Light);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -1017,7 +1017,7 @@ export function __deserialise_Light(json: __JsonValue, path: string = "$"): Resu
     case "Green":
       return Ok({ tag: "Green" } as Light);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -1044,7 +1044,7 @@ export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Resu
         return Err({ kind: "StructuralMismatch", path: `${path}.r`, expected: "number", actual: typeof obj["r"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["r"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.r`, expected: "safe integer", actual: String(obj["r"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.r`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["r"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __r = obj["r"];
       return Ok({ tag: "Circle", r: __r } as Shape);
@@ -1054,13 +1054,13 @@ export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Resu
         return Err({ kind: "StructuralMismatch", path: `${path}.side`, expected: "number", actual: typeof obj["side"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["side"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.side`, expected: "safe integer", actual: String(obj["side"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.side`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["side"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __side = obj["side"];
       return Ok({ tag: "Square", side: __side } as Shape);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -1094,7 +1094,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);
@@ -1143,7 +1143,7 @@ export function __deserialise_Result_Int_String(json: __JsonValue, path: string 
       return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["value"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = obj["value"];
     return Ok(Ok(__v) as Result<number, string>);
@@ -1154,5 +1154,5 @@ export function __deserialise_Result_Int_String(json: __JsonValue, path: string 
     const __e = obj["error"];
     return Ok(Err(__e) as Result<number, string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

@@ -11,7 +11,7 @@ import { Packed, enc } from "./a.js";
  */
 
 export function seven(): string {
-  return enc(7, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } });
+  return enc(7, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } });
 }
 
 export function packed(): string {

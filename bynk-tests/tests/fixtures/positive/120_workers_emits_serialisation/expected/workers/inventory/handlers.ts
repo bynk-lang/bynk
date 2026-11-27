@@ -74,7 +74,7 @@ export function __deserialise_StockError(json: __JsonValue, path: string = "$"):
       case "OutOfStock":
         return Ok({ tag: "OutOfStock" } as StockError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -88,7 +88,7 @@ export function __deserialise_StockError(json: __JsonValue, path: string = "$"):
     case "OutOfStock":
       return Ok({ tag: "OutOfStock" } as StockError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -111,7 +111,7 @@ export function __deserialise_StockItem(json: __JsonValue, path: string = "$"): 
     return Err({ kind: "StructuralMismatch", path: `${path}.quantity`, expected: "number", actual: typeof obj["quantity"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["quantity"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.quantity`, expected: "safe integer", actual: String(obj["quantity"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.quantity`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["quantity"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __quantity = obj["quantity"];
   if (!(__quantity >= 0)) {
@@ -142,5 +142,5 @@ export function __deserialise_Result_StockItem_StockError(json: __JsonValue, pat
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<StockItem, StockError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

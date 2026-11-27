@@ -47,7 +47,7 @@ export default {
               } catch {
                 return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
               }
-              const __r_total = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(args);
+              const __r_total = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(args);
               if (__r_total.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_total.error)), { status: 400, headers: { "content-type": "application/json" } });
               const total = __r_total.value;
               const result = await surface.bounded(total);
@@ -72,7 +72,7 @@ export default {
               const __r_sku = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.sku", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["sku"]);
               if (__r_sku.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_sku.error)), { status: 400, headers: { "content-type": "application/json" } });
               const sku = __r_sku.value;
-              const __r_total = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.total", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["total"]);
+              const __r_total = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.total", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(argsObj["total"]);
               if (__r_total.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_total.error)), { status: 400, headers: { "content-type": "application/json" } });
               const total = __r_total.value;
               const result = await surface.placeOrder(sku, total);

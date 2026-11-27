@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 import * as __ns_demo_clk from "./../demo/clk.js";
 
 <<bynk-shared: testing/expectation>>
@@ -33,7 +33,7 @@ class __Stub_Clock {
           return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
         }
         if (!globalThis.Number.isSafeInteger(obj["a"])) {
-          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
         }
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
@@ -120,7 +120,7 @@ class __Stub_Clock {
           const __e = obj["error"];
           return Ok(Err(__e) as Result<Pair, string>);
         }
-        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
       }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
@@ -148,7 +148,7 @@ class __Stub_Clock {
           return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
         }
         if (!globalThis.Number.isSafeInteger(obj["a"])) {
-          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
         }
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
@@ -235,7 +235,7 @@ class __Stub_Clock {
           const __e = obj["error"];
           return Ok(Err(__e) as Result<Pair, string>);
         }
-        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
       }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
@@ -263,7 +263,7 @@ class __Stub_Clock {
           return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
         }
         if (!globalThis.Number.isSafeInteger(obj["a"])) {
-          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
         }
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
@@ -350,7 +350,7 @@ class __Stub_Clock {
           const __e = obj["error"];
           return Ok(Err(__e) as Result<Pair, string>);
         }
-        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
       }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
@@ -378,7 +378,7 @@ class __Stub_Clock {
           return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
         }
         if (!globalThis.Number.isSafeInteger(obj["a"])) {
-          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
         }
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
@@ -465,7 +465,7 @@ class __Stub_Clock {
           const __e = obj["error"];
           return Ok(Err(__e) as Result<Pair, string>);
         }
-        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
       }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
@@ -493,7 +493,7 @@ class __Stub_Clock {
           return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
         }
         if (!globalThis.Number.isSafeInteger(obj["a"])) {
-          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
         }
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
@@ -580,7 +580,7 @@ class __Stub_Clock {
           const __e = obj["error"];
           return Ok(Err(__e) as Result<Pair, string>);
         }
-        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
       }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
@@ -608,7 +608,7 @@ class __Stub_Clock {
           return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
         }
         if (!globalThis.Number.isSafeInteger(obj["a"])) {
-          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
         }
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
@@ -695,7 +695,7 @@ class __Stub_Clock {
           const __e = obj["error"];
           return Ok(Err(__e) as Result<Pair, string>);
         }
-        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
       }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
@@ -706,7 +706,7 @@ class __Stub_Clock {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Result_Pair_String(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>);
@@ -747,7 +747,7 @@ class __Stub_Clock {
           return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
         }
         if (!globalThis.Number.isSafeInteger(obj["a"])) {
-          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+          return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
         }
         const __a = obj["a"];
         return Ok({ a: __a } as Pair);
@@ -834,7 +834,7 @@ class __Stub_Clock {
           const __e = obj["error"];
           return Ok(Err(__e) as Result<Pair, string>);
         }
-        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+        return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
       }
       function encoded(): string {
         const r: Result<Pair, string> = Ok({ a: 5 });
@@ -876,7 +876,7 @@ async function test_a_stub_value_names_a_suite_type_and_constant() {
         return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["a"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __a = obj["a"];
       return Ok({ a: __a } as Pair);
@@ -967,7 +967,7 @@ async function test_a_stub_value_names_a_suite_type_and_constant() {
         const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
-      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
     }
     const r = await ping.call(deps);
     if (!(r === 7)) { throw __bynkExpectFailure("tests/demo/clk.bynk:27:9", 727, 733, "expect r == 7\n  expected: r == 7\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((7))); }
@@ -1004,7 +1004,7 @@ async function test_a_stub_argument_pattern_and_value_name_suite_constants() {
         return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["a"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __a = obj["a"];
       return Ok({ a: __a } as Pair);
@@ -1095,7 +1095,7 @@ async function test_a_stub_argument_pattern_and_value_name_suite_constants() {
         const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
-      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
     }
     const r = await tag.call("t-", deps);
     if (!(r === "n")) { throw __bynkExpectFailure("tests/demo/clk.bynk:32:9", 834, 842, "expect r == \"n\"\n  expected: r == \"n\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("n"))); }
@@ -1132,7 +1132,7 @@ async function test_a_suite_type_round_trips_through_Result() {
         return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["a"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __a = obj["a"];
       return Ok({ a: __a } as Pair);
@@ -1223,7 +1223,7 @@ async function test_a_suite_type_round_trips_through_Result() {
         const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
-      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
     }
     const r: Result<Pair, string> = Ok({ a: 1 });
     if (!(__bynkEq(((__s: string): Result<Result<Pair, string>, DecodeError> => {
@@ -1231,7 +1231,7 @@ async function test_a_suite_type_round_trips_through_Result() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Result_Pair_String(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>);
@@ -1243,7 +1243,7 @@ async function test_a_suite_type_round_trips_through_Result() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Result_Pair_String(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>);
@@ -1284,7 +1284,7 @@ async function test_a_suite_type_round_trips_through_a_nested_generic() {
         return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["a"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __a = obj["a"];
       return Ok({ a: __a } as Pair);
@@ -1375,7 +1375,7 @@ async function test_a_suite_type_round_trips_through_a_nested_generic() {
         const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
-      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
     }
     function __serialise_List_Result_Pair_String(value: readonly Result<Pair, string>[]): __JsonValue {
       return value.map((v) => __serialise_Result_Pair_String(v));
@@ -1400,7 +1400,7 @@ async function test_a_suite_type_round_trips_through_a_nested_generic() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_List_Result_Pair_String(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as readonly Result<Pair, string>[]);
@@ -1412,7 +1412,7 @@ async function test_a_suite_type_round_trips_through_a_nested_generic() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_Result_Pair_String(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Result<Pair, string>[]);
@@ -1453,7 +1453,7 @@ async function test_a_suite_type_round_trips_through_Result_at_the_integration_t
         return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["a"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __a = obj["a"];
       return Ok({ a: __a } as Pair);
@@ -1544,7 +1544,7 @@ async function test_a_suite_type_round_trips_through_Result_at_the_integration_t
         const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
-      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
     }
     const r: Result<Pair, string> = Ok({ a: 3 });
     if (!(__bynkEq(((__s: string): Result<Result<Pair, string>, DecodeError> => {
@@ -1552,7 +1552,7 @@ async function test_a_suite_type_round_trips_through_Result_at_the_integration_t
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Result_Pair_String(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>);
@@ -1564,7 +1564,7 @@ async function test_a_suite_type_round_trips_through_Result_at_the_integration_t
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Result_Pair_String(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>);
@@ -1607,7 +1607,7 @@ async function test_a_stub_value_reaches_a_suite_type_under_Result_through_a_hel
         return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["a"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __a = obj["a"];
       return Ok({ a: __a } as Pair);
@@ -1698,7 +1698,7 @@ async function test_a_stub_value_reaches_a_suite_type_under_Result_through_a_hel
         const __e = obj["error"];
         return Ok(Err(__e) as Result<Pair, string>);
       }
-      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+      return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
     }
     const a = await tag.call("j-", deps);
     if (!(a === encoded())) { throw __bynkExpectFailure("tests/demo/clk.bynk:61:9", 1786, 1800, "expect a == encoded()\n  expected: a == encoded()\n  actual:   " + __bynkShow((a)) + " == " + __bynkShow((encoded()))); }
@@ -1738,7 +1738,7 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
       return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "number", actual: typeof obj["a"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["a"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: String(obj["a"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.a`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["a"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __a = obj["a"];
     return Ok({ a: __a } as Pair);
@@ -1830,7 +1830,7 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
       const __e = obj["error"];
       return Ok(Err(__e) as Result<Pair, string>);
     }
-    return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+    return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
   }
   function __serialise_Result_Pair_Int(value: Result<Pair, number>): __JsonValue {
     if (value.tag === "Ok") return { kind: "Ok", value: __serialise_Pair(value.value) };
@@ -1851,12 +1851,12 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
         return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "number", actual: typeof obj["error"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["error"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: String(obj["error"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["error"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __e = obj["error"];
       return Ok(Err(__e) as Result<Pair, number>);
     }
-    return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+    return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
   }
   const __body = async (__vals: any[]) => {
     const n = globalThis.Number(__vals[0]);
@@ -1866,7 +1866,7 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Result_Pair_Int(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, number>);
@@ -1878,7 +1878,7 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Result_Pair_Int(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, number>);

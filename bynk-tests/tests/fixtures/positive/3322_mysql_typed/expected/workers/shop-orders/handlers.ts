@@ -5,7 +5,7 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import { __bynkPgRow, __bynkInstantFromWire } from "../../__bynk_runtime/time.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 import { MySqlValue } from "../../bynk/cloudflare.js";
@@ -47,7 +47,7 @@ export const api = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, ["placed"], ["id", "wait"], true);
         if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
@@ -81,7 +81,7 @@ export const api = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, ["placed"], ["id", "wait"], true);
         if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
@@ -147,7 +147,7 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "number", actual: typeof obj["id"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["id"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: String(obj["id"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["id"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __id = obj["id"];
   if (typeof obj["name"] !== "string") {
@@ -159,14 +159,14 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "number", actual: typeof __placed$ms });
   }
   if (!globalThis.Number.isSafeInteger(__placed$ms)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "safe integer", actual: String(__placed$ms) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "safe integer", actual: globalThis.Number.isInteger(__placed$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __placed = __placed$ms;
   if (typeof obj["wait"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.wait`, expected: "number", actual: typeof obj["wait"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["wait"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.wait`, expected: "safe integer", actual: String(obj["wait"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.wait`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["wait"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __wait = obj["wait"];
   if (typeof obj["total"] !== "string") {
@@ -207,7 +207,7 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
       case "Shipped":
         return Ok({ tag: "Shipped" } as Status);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -221,7 +221,7 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
     case "Shipped":
       return Ok({ tag: "Shipped" } as Status);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

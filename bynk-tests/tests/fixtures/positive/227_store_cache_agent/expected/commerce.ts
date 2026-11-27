@@ -35,7 +35,7 @@ const __entryFieldsOfSessions = [{ name: "live", kind: "cache" }] as const;
 function __rehydrateSessionsState(s: SessionsState, stored: SessionsState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "live")) {
     for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).live as globalThis.Record<string, { v: unknown }>)) {
-      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue));
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((__e.v as unknown as __JsonValue));
       if (__r.tag === "Err") throw __rehydrationViolation("Sessions", __r.error);
       __e.v = __r.value;
     }
@@ -56,7 +56,7 @@ function __encodeSessionsState(s: SessionsState): globalThis.Record<string, unkn
   return { ...s, live: __wireMap(s.live, (__e) => ({ ...__e, v: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__e.v) })) };
 }
 
-const __lazyFieldsOfSessions = [{ name: "live", kind: "cache", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sessions", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); } }] as const;
+const __lazyFieldsOfSessions = [{ name: "live", kind: "cache", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "live", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Sessions", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); } }] as const;
 
 export class Sessions {
   state: __DurableObjectState;

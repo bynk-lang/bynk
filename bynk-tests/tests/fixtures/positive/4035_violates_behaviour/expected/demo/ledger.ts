@@ -36,12 +36,12 @@ const __entryFieldsOfAccount = [{ name: "contacts", kind: "map", indexes: [{ ind
 
 function __rehydrateAccountState(s: AccountState, stored: AccountState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.balance as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "balance", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.balance as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).balance = __r.value as unknown as (typeof s)["balance"];
   }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "entries")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "entries", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "entries", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.entries as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "entries", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "entries", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.entries as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).entries = __r.value as unknown as (typeof s)["entries"];
   }

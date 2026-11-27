@@ -149,7 +149,7 @@ export function __deserialise_TokenError(json: __JsonValue, path: string = "$"):
       case "Expired":
         return Ok({ tag: "Expired" } as TokenError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -163,7 +163,7 @@ export function __deserialise_TokenError(json: __JsonValue, path: string = "$"):
     case "Expired":
       return Ok({ tag: "Expired" } as TokenError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -189,5 +189,5 @@ export function __deserialise_Result_Grant_TokenError(json: __JsonValue, path: s
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<Grant, TokenError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

@@ -83,7 +83,7 @@ export function __deserialise_Answer(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.tokens`, expected: "number", actual: typeof obj["tokens"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["tokens"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.tokens`, expected: "safe integer", actual: String(obj["tokens"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.tokens`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["tokens"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __tokens = obj["tokens"];
   return Ok({ text: __text, tokens: __tokens } as Answer);

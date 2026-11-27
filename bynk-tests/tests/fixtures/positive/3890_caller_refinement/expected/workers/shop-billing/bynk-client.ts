@@ -118,5 +118,5 @@ export function __deserialise_Result_String_String(json: __JsonValue, path: stri
     const __e = obj["error"];
     return Ok(Err(__e) as Result<string, string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

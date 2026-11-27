@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 
 /**
  * #2690: a field whose type applies a user generic may declare a default. At a
@@ -77,7 +77,7 @@ export function decodedSearch(json: string): Search {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Search(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Search);
@@ -102,7 +102,7 @@ export function decodedCache(json: string): Cache<number> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Cache_Int(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Cache<number>);
@@ -127,7 +127,7 @@ export function decodedCacheOf<T>(json: string, __codec_T: { encode: (v: T) => _
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __codecOf_Cache(__codec_T).decode(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Cache<T>);
@@ -241,7 +241,7 @@ export function __deserialise_List_Int(json: __JsonValue, path: string = "$"): R
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
     }
     if (!globalThis.Number.isSafeInteger(item)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: globalThis.Number.isInteger(item) ? "integer outside the safe range" : "non-integer number" });
     }
     const __el = item;
     out.push(__el as number);
@@ -313,7 +313,7 @@ export function __deserialise_Outcome_Int(json: __JsonValue, path: string = "$")
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "Done", value: __value } as Outcome<number>);
@@ -326,7 +326,7 @@ export function __deserialise_Outcome_Int(json: __JsonValue, path: string = "$")
       return Ok({ tag: "Pending", reason: __reason } as Outcome<number>);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -471,7 +471,7 @@ function __codecOf_Cache<__P_T>(__codec___P_T: { encode: (v: __P_T) => __JsonVal
         return Ok({ tag: "Pending", reason: __reason } as Outcome<__P_T>);
       }
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
     }
   }
   return { encode: __serialise_Cache___P_T, decode: __deserialise_Cache___P_T };

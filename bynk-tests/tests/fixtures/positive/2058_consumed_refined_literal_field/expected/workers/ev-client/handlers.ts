@@ -10,7 +10,7 @@ import type * as ev_store from "../ev-store/handlers.js";
 export const bound = {
   async call(deps: { env: { EV_STORE: __ServiceBinding } }): globalThis.Promise<number> {
     const i = { code: (1 as ev_store.Code), name: "a" };
-    return __callService(deps.env.EV_STORE, "put", __serialise_Item((i as unknown as ev_store.Item)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "ev.client", "8e24320cd24578cb", deps.env, "ev.store");
+    return __callService(deps.env.EV_STORE, "put", __serialise_Item((i as unknown as ev_store.Item)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "ev.client", "8e24320cd24578cb", deps.env, "ev.store");
   },
 };
 
@@ -23,7 +23,7 @@ export const tagged = {
 
 export const direct = {
   async call(deps: { env: { EV_STORE: __ServiceBinding } }): globalThis.Promise<number> {
-    return __callService(deps.env.EV_STORE, "put", __serialise_Item(({ code: (2 as ev_store.Code), name: "b" } as unknown as ev_store.Item)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "ev.client", "8e24320cd24578cb", deps.env, "ev.store");
+    return __callService(deps.env.EV_STORE, "put", __serialise_Item(({ code: (2 as ev_store.Code), name: "b" } as unknown as ev_store.Item)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "ev.client", "8e24320cd24578cb", deps.env, "ev.store");
   },
 };
 

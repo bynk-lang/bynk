@@ -1484,8 +1484,8 @@ export const VectorMatch = {
  * read as `M`, on its own. `metadata` is `None` when the vector has none or the
  * query omitted it, `Some(Ok(m))` when it reads as `M`, and `Some(Err(e))` when it
  * does not (a vector written by an older shape of `M`): the match is still here
- * and the rest are unaffected. The error names the path and what was expected, but
- * its message can quote part of the stored value, so do not log it unredacted.
+ * and the rest are unaffected. The error names the path, what was expected and the
+ * JSON kind found, never the stored value, so it is safe to log.
  */
 export interface VectorMatchOf<M> {
   readonly id: string;
@@ -2597,7 +2597,7 @@ export function __deserialise_AiError(json: __JsonValue, path: string = "$"): Re
       return Ok({ tag: "AiFailed", message: __message } as AiError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -2630,7 +2630,7 @@ export function __deserialise_AnalyticsReadError(json: __JsonValue, path: string
       return Ok({ tag: "AnalyticsDecode", error: __error } as AnalyticsReadError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -2667,7 +2667,7 @@ export function __deserialise_AnalyticsSqlError(json: __JsonValue, path: string 
       return Ok({ tag: "SqlRejected", message: __message } as AnalyticsSqlError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -2692,7 +2692,7 @@ export function __deserialise_AnalyticsSqlResult(json: __JsonValue, path: string
     return Err({ kind: "StructuralMismatch", path: `${path}.rows`, expected: "number", actual: typeof obj["rows"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["rows"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.rows`, expected: "safe integer", actual: String(obj["rows"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.rows`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["rows"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __rows = obj["rows"];
   const __r_statistics = __deserialise_AnalyticsSqlStatistics(obj["statistics"], `${path}.statistics`);
@@ -2718,21 +2718,21 @@ export function __deserialise_AnalyticsSqlStatistics(json: __JsonValue, path: st
     return Err({ kind: "StructuralMismatch", path: `${path}.elapsedMs`, expected: "number", actual: typeof obj["elapsedMs"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["elapsedMs"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.elapsedMs`, expected: "safe integer", actual: String(obj["elapsedMs"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.elapsedMs`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["elapsedMs"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __elapsedMs = obj["elapsedMs"];
   if (typeof obj["rowsRead"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.rowsRead`, expected: "number", actual: typeof obj["rowsRead"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["rowsRead"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.rowsRead`, expected: "safe integer", actual: String(obj["rowsRead"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.rowsRead`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["rowsRead"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __rowsRead = obj["rowsRead"];
   if (typeof obj["bytesRead"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.bytesRead`, expected: "number", actual: typeof obj["bytesRead"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["bytesRead"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.bytesRead`, expected: "safe integer", actual: String(obj["bytesRead"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.bytesRead`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["bytesRead"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __bytesRead = obj["bytesRead"];
   return Ok({ elapsedMs: __elapsedMs, rowsRead: __rowsRead, bytesRead: __bytesRead } as AnalyticsSqlStatistics);
@@ -2781,7 +2781,7 @@ export function __deserialise_ChatRole(json: __JsonValue, path: string = "$"): R
       case "Assistant":
         return Ok({ tag: "Assistant" } as ChatRole);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -2797,7 +2797,7 @@ export function __deserialise_ChatRole(json: __JsonValue, path: string = "$"): R
     case "Assistant":
       return Ok({ tag: "Assistant" } as ChatRole);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -2858,7 +2858,7 @@ export function __deserialise_ContainerError(json: __JsonValue, path: string = "
     case "Network":
       return Ok({ tag: "Network" } as ContainerError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -2908,7 +2908,7 @@ export function __deserialise_DmarcVerdict(json: __JsonValue, path: string = "$"
       case "DmarcNone":
         return Ok({ tag: "DmarcNone" } as DmarcVerdict);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -2924,7 +2924,7 @@ export function __deserialise_DmarcVerdict(json: __JsonValue, path: string = "$"
     case "DmarcNone":
       return Ok({ tag: "DmarcNone" } as DmarcVerdict);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -3033,7 +3033,7 @@ export function __deserialise_EmailError(json: __JsonValue, path: string = "$"):
       return Ok({ tag: "SendFailed", message: __message } as EmailError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -3205,7 +3205,7 @@ export function __deserialise_EmailVerdict(json: __JsonValue, path: string = "$"
       return Ok({ tag: "Route", actions: __actions } as EmailVerdict);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -3294,7 +3294,7 @@ export function __deserialise_FilterOp(json: __JsonValue, path: string = "$"): R
       return Ok({ tag: "FilterNoneOf", values: __values } as FilterOp);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -3390,7 +3390,7 @@ export function __deserialise_ImageFit(json: __JsonValue, path: string = "$"): R
       case "Squeeze":
         return Ok({ tag: "Squeeze" } as ImageFit);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -3412,7 +3412,7 @@ export function __deserialise_ImageFit(json: __JsonValue, path: string = "$"): R
     case "Squeeze":
       return Ok({ tag: "Squeeze" } as ImageFit);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -3449,7 +3449,7 @@ export function __deserialise_ImageFormat(json: __JsonValue, path: string = "$")
       case "Heic":
         return Ok({ tag: "Heic" } as ImageFormat);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -3471,7 +3471,7 @@ export function __deserialise_ImageFormat(json: __JsonValue, path: string = "$")
     case "Heic":
       return Ok({ tag: "Heic" } as ImageFormat);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -3500,21 +3500,21 @@ export function __deserialise_ImageInfo(json: __JsonValue, path: string = "$"): 
         return Err({ kind: "StructuralMismatch", path: `${path}.width`, expected: "number", actual: typeof obj["width"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["width"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.width`, expected: "safe integer", actual: String(obj["width"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.width`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["width"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __width = obj["width"];
       if (typeof obj["height"] !== "number") {
         return Err({ kind: "StructuralMismatch", path: `${path}.height`, expected: "number", actual: typeof obj["height"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["height"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.height`, expected: "safe integer", actual: String(obj["height"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.height`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["height"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __height = obj["height"];
       if (typeof obj["size"] !== "number") {
         return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "number", actual: typeof obj["size"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["size"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: String(obj["size"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["size"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __size = obj["size"];
       return Ok({ tag: "Raster", format: __format, width: __width, height: __height, size: __size } as ImageInfo);
@@ -3522,7 +3522,7 @@ export function __deserialise_ImageInfo(json: __JsonValue, path: string = "$"): 
     case "Svg":
       return Ok({ tag: "Svg" } as ImageInfo);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -3594,7 +3594,7 @@ export function __deserialise_ImagesError(json: __JsonValue, path: string = "$")
       return Ok({ tag: "ImagesFailed", message: __message } as ImagesError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -3725,7 +3725,7 @@ export function __deserialise_InboundEmail(json: __JsonValue, path: string = "$"
     return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "number", actual: typeof __d_size });
   }
   if (!globalThis.Number.isSafeInteger(__d_size)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: String(__d_size) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: globalThis.Number.isInteger(__d_size) ? "integer outside the safe range" : "non-integer number" });
   }
   const __size = __d_size;
   const __d_subaddress: __JsonValue = "subaddress" in obj ? obj["subaddress"] : { kind: "None" };
@@ -3751,7 +3751,7 @@ export function __deserialise_IndexInfo(json: __JsonValue, path: string = "$"): 
     return Err({ kind: "StructuralMismatch", path: `${path}.dimensions`, expected: "number", actual: typeof obj["dimensions"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["dimensions"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.dimensions`, expected: "safe integer", actual: String(obj["dimensions"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.dimensions`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["dimensions"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __dimensions = obj["dimensions"];
   const __r_metric = __deserialise_Option_String(obj["metric"], `${path}.metric`);
@@ -3833,13 +3833,13 @@ export function __deserialise_KvExpiration(json: __JsonValue, path: string = "$"
         return Err({ kind: "StructuralMismatch", path: `${path}.instant`, expected: "number", actual: typeof __instant$ms });
       }
       if (!globalThis.Number.isSafeInteger(__instant$ms)) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.instant`, expected: "safe integer", actual: String(__instant$ms) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.instant`, expected: "safe integer", actual: globalThis.Number.isInteger(__instant$ms) ? "integer outside the safe range" : "non-integer number" });
       }
       const __instant = __instant$ms;
       return Ok({ tag: "At", instant: __instant } as KvExpiration);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -4006,7 +4006,7 @@ export function __deserialise_MetaValue(json: __JsonValue, path: string = "$"): 
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isFinite(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: "non-finite number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "MetaNumber", value: __value } as MetaValue);
@@ -4019,7 +4019,7 @@ export function __deserialise_MetaValue(json: __JsonValue, path: string = "$"): 
       return Ok({ tag: "MetaFlag", value: __value } as MetaValue);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -4044,7 +4044,7 @@ export function __deserialise_MetadataScope(json: __JsonValue, path: string = "$
       case "All":
         return Ok({ tag: "All" } as MetadataScope);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -4060,7 +4060,7 @@ export function __deserialise_MetadataScope(json: __JsonValue, path: string = "$
     case "All":
       return Ok({ tag: "All" } as MetadataScope);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -4111,7 +4111,7 @@ export function __deserialise_MySqlError(json: __JsonValue, path: string = "$"):
         return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "number", actual: typeof obj["code"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["code"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: String(obj["code"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["code"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __code = obj["code"];
       if (typeof obj["message"] !== "string") {
@@ -4125,7 +4125,7 @@ export function __deserialise_MySqlError(json: __JsonValue, path: string = "$"):
         return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "number", actual: typeof obj["code"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["code"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: String(obj["code"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["code"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __code = obj["code"];
       if (typeof obj["message"] !== "string") {
@@ -4146,7 +4146,7 @@ export function __deserialise_MySqlError(json: __JsonValue, path: string = "$"):
         return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "number", actual: typeof obj["code"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["code"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: String(obj["code"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["code"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __code = obj["code"];
       if (typeof obj["message"] !== "string") {
@@ -4156,7 +4156,7 @@ export function __deserialise_MySqlError(json: __JsonValue, path: string = "$"):
       return Ok({ tag: "MySqlFailed", code: __code, message: __message } as MySqlError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -4189,7 +4189,7 @@ export function __deserialise_MySqlReadError(json: __JsonValue, path: string = "
       return Ok({ tag: "MySqlDecode", error: __error } as MySqlReadError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -4209,14 +4209,14 @@ export function __deserialise_MySqlRun(json: __JsonValue, path: string = "$"): R
     return Err({ kind: "StructuralMismatch", path: `${path}.rowCount`, expected: "number", actual: typeof obj["rowCount"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["rowCount"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.rowCount`, expected: "safe integer", actual: String(obj["rowCount"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.rowCount`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["rowCount"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __rowCount = obj["rowCount"];
   if (typeof obj["insertId"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.insertId`, expected: "number", actual: typeof obj["insertId"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["insertId"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.insertId`, expected: "safe integer", actual: String(obj["insertId"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.insertId`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["insertId"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __insertId = obj["insertId"];
   return Ok({ rowCount: __rowCount, insertId: __insertId } as MySqlRun);
@@ -4295,7 +4295,7 @@ export function __deserialise_MySqlValue(json: __JsonValue, path: string = "$"):
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "MySqlInteger", value: __value } as MySqlValue);
@@ -4312,7 +4312,7 @@ export function __deserialise_MySqlValue(json: __JsonValue, path: string = "$"):
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isFinite(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: "non-finite number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "MySqlReal", value: __value } as MySqlValue);
@@ -4348,7 +4348,7 @@ export function __deserialise_MySqlValue(json: __JsonValue, path: string = "$"):
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof __value$ms });
       }
       if (!globalThis.Number.isSafeInteger(__value$ms)) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(__value$ms) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(__value$ms) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = __value$ms;
       return Ok({ tag: "MySqlTimestamp", value: __value } as MySqlValue);
@@ -4379,7 +4379,7 @@ export function __deserialise_MySqlValue(json: __JsonValue, path: string = "$"):
       return Ok({ tag: "MySqlDecimal", value: __value } as MySqlValue);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -4519,7 +4519,7 @@ export function __deserialise_PgError(json: __JsonValue, path: string = "$"): Re
       return Ok({ tag: "PgFailed", sqlstate: __sqlstate, message: __message } as PgError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -4552,7 +4552,7 @@ export function __deserialise_PgReadError(json: __JsonValue, path: string = "$")
       return Ok({ tag: "PgDecode", error: __error } as PgReadError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -4571,7 +4571,7 @@ export function __deserialise_PgRun(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.rowCount`, expected: "number", actual: typeof obj["rowCount"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["rowCount"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.rowCount`, expected: "safe integer", actual: String(obj["rowCount"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.rowCount`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["rowCount"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __rowCount = obj["rowCount"];
   return Ok({ rowCount: __rowCount } as PgRun);
@@ -4644,7 +4644,7 @@ export function __deserialise_PgValue(json: __JsonValue, path: string = "$"): Re
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "PgInteger", value: __value } as PgValue);
@@ -4654,7 +4654,7 @@ export function __deserialise_PgValue(json: __JsonValue, path: string = "$"): Re
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isFinite(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: "non-finite number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "PgReal", value: __value } as PgValue);
@@ -4690,7 +4690,7 @@ export function __deserialise_PgValue(json: __JsonValue, path: string = "$"): Re
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof __value$ms });
       }
       if (!globalThis.Number.isSafeInteger(__value$ms)) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(__value$ms) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(__value$ms) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = __value$ms;
       return Ok({ tag: "PgTimestamp", value: __value } as PgValue);
@@ -4714,7 +4714,7 @@ export function __deserialise_PgValue(json: __JsonValue, path: string = "$"): Re
       return Ok({ tag: "PgNumeric", value: __value } as PgValue);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -4738,7 +4738,7 @@ export function __deserialise_QueryOptions(json: __JsonValue, path: string = "$"
     return Err({ kind: "StructuralMismatch", path: `${path}.topK`, expected: "number", actual: typeof __d_topK });
   }
   if (!globalThis.Number.isSafeInteger(__d_topK)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.topK`, expected: "safe integer", actual: String(__d_topK) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.topK`, expected: "safe integer", actual: globalThis.Number.isInteger(__d_topK) ? "integer outside the safe range" : "non-integer number" });
   }
   const __topK = __d_topK;
   const __d_returnValues: __JsonValue = "returnValues" in obj ? obj["returnValues"] : false;
@@ -4794,7 +4794,7 @@ export function __deserialise_QueueDelivery(json: __JsonValue, path: string = "$
     return Err({ kind: "StructuralMismatch", path: `${path}.attempts`, expected: "number", actual: typeof obj["attempts"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["attempts"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.attempts`, expected: "safe integer", actual: String(obj["attempts"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.attempts`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["attempts"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __attempts = obj["attempts"];
   const __sentAt$ms = __bynkInstantFromWire(obj["sentAt"]);
@@ -4802,7 +4802,7 @@ export function __deserialise_QueueDelivery(json: __JsonValue, path: string = "$
     return Err({ kind: "StructuralMismatch", path: `${path}.sentAt`, expected: "number", actual: typeof __sentAt$ms });
   }
   if (!globalThis.Number.isSafeInteger(__sentAt$ms)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.sentAt`, expected: "safe integer", actual: String(__sentAt$ms) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.sentAt`, expected: "safe integer", actual: globalThis.Number.isInteger(__sentAt$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __sentAt = __sentAt$ms;
   return Ok({ attempts: __attempts, sentAt: __sentAt } as QueueDelivery);
@@ -4857,7 +4857,7 @@ export function __deserialise_R2Condition(json: __JsonValue, path: string = "$")
       return Ok({ tag: "EtagMatches", etag: __etag } as R2Condition);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -4898,7 +4898,7 @@ export function __deserialise_R2GetIf(json: __JsonValue, path: string = "$"): Re
       return Ok({ tag: "IfEtagDiffers", etag: __etag } as R2GetIf);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -4979,7 +4979,7 @@ export function __deserialise_R2Object(json: __JsonValue, path: string = "$"): R
     return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "number", actual: typeof obj["size"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["size"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: String(obj["size"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["size"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __size = obj["size"];
   if (typeof obj["etag"] !== "string") {
@@ -4991,7 +4991,7 @@ export function __deserialise_R2Object(json: __JsonValue, path: string = "$"): R
     return Err({ kind: "StructuralMismatch", path: `${path}.uploaded`, expected: "number", actual: typeof __uploaded$ms });
   }
   if (!globalThis.Number.isSafeInteger(__uploaded$ms)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.uploaded`, expected: "safe integer", actual: String(__uploaded$ms) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.uploaded`, expected: "safe integer", actual: globalThis.Number.isInteger(__uploaded$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __uploaded = __uploaded$ms;
   const __r_contentType = __deserialise_Option_String(obj["contentType"], `${path}.contentType`);
@@ -5019,7 +5019,7 @@ export function __deserialise_R2Part(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.partNumber`, expected: "number", actual: typeof obj["partNumber"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["partNumber"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.partNumber`, expected: "safe integer", actual: String(obj["partNumber"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.partNumber`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["partNumber"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __partNumber = obj["partNumber"];
   if (typeof obj["etag"] !== "string") {
@@ -5080,7 +5080,7 @@ export function __deserialise_R2Range(json: __JsonValue, path: string = "$"): Re
         return Err({ kind: "StructuralMismatch", path: `${path}.offset`, expected: "number", actual: typeof obj["offset"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["offset"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.offset`, expected: "safe integer", actual: String(obj["offset"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.offset`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["offset"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __offset = obj["offset"];
       const __r_length = __deserialise_Option_Int(obj["length"], `${path}.length`);
@@ -5093,13 +5093,13 @@ export function __deserialise_R2Range(json: __JsonValue, path: string = "$"): Re
         return Err({ kind: "StructuralMismatch", path: `${path}.length`, expected: "number", actual: typeof obj["length"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["length"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.length`, expected: "safe integer", actual: String(obj["length"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.length`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["length"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __length = obj["length"];
       return Ok({ tag: "Suffix", length: __length } as R2Range);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -5256,7 +5256,7 @@ export function __deserialise_RetrievalType(json: __JsonValue, path: string = "$
       case "Hybrid":
         return Ok({ tag: "Hybrid" } as RetrievalType);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -5272,7 +5272,7 @@ export function __deserialise_RetrievalType(json: __JsonValue, path: string = "$
     case "Hybrid":
       return Ok({ tag: "Hybrid" } as RetrievalType);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -5343,7 +5343,7 @@ export function __deserialise_SearchError(json: __JsonValue, path: string = "$")
       return Ok({ tag: "SearchFailed", message: __message } as SearchError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -5371,7 +5371,7 @@ export function __deserialise_SearchHit(json: __JsonValue, path: string = "$"): 
     return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "number", actual: typeof obj["score"] });
   }
   if (!globalThis.Number.isFinite(obj["score"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: String(obj["score"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: "non-finite number" });
   }
   const __score = obj["score"];
   if (typeof obj["text"] !== "string") {
@@ -5491,7 +5491,7 @@ export function __deserialise_SqlError(json: __JsonValue, path: string = "$"): R
       return Ok({ tag: "Failed", message: __message } as SqlError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -5524,7 +5524,7 @@ export function __deserialise_SqlReadError(json: __JsonValue, path: string = "$"
       return Ok({ tag: "Decode", error: __error } as SqlReadError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -5544,14 +5544,14 @@ export function __deserialise_SqlRun(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.changes`, expected: "number", actual: typeof obj["changes"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["changes"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.changes`, expected: "safe integer", actual: String(obj["changes"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.changes`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["changes"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __changes = obj["changes"];
   if (typeof obj["lastRowId"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.lastRowId`, expected: "number", actual: typeof obj["lastRowId"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["lastRowId"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.lastRowId`, expected: "safe integer", actual: String(obj["lastRowId"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.lastRowId`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["lastRowId"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __lastRowId = obj["lastRowId"];
   return Ok({ changes: __changes, lastRowId: __lastRowId } as SqlRun);
@@ -5621,7 +5621,7 @@ export function __deserialise_SqlValue(json: __JsonValue, path: string = "$"): R
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "Integer", value: __value } as SqlValue);
@@ -5631,7 +5631,7 @@ export function __deserialise_SqlValue(json: __JsonValue, path: string = "$"): R
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isFinite(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: "non-finite number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "Real", value: __value } as SqlValue);
@@ -5678,13 +5678,13 @@ export function __deserialise_SqlValue(json: __JsonValue, path: string = "$"): R
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof __value$ms });
       }
       if (!globalThis.Number.isSafeInteger(__value$ms)) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(__value$ms) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(__value$ms) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = __value$ms;
       return Ok({ tag: "Timestamp", value: __value } as SqlValue);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -5704,14 +5704,14 @@ export function __deserialise_TokenUsage(json: __JsonValue, path: string = "$"):
     return Err({ kind: "StructuralMismatch", path: `${path}.promptTokens`, expected: "number", actual: typeof obj["promptTokens"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["promptTokens"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.promptTokens`, expected: "safe integer", actual: String(obj["promptTokens"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.promptTokens`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["promptTokens"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __promptTokens = obj["promptTokens"];
   if (typeof obj["completionTokens"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.completionTokens`, expected: "number", actual: typeof obj["completionTokens"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["completionTokens"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.completionTokens`, expected: "safe integer", actual: String(obj["completionTokens"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.completionTokens`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["completionTokens"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __completionTokens = obj["completionTokens"];
   return Ok({ promptTokens: __promptTokens, completionTokens: __completionTokens } as TokenUsage);
@@ -5839,7 +5839,7 @@ export function __deserialise_VectorError(json: __JsonValue, path: string = "$")
       return Ok({ tag: "VectorFailed", message: __message } as VectorError);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -5866,7 +5866,7 @@ export function __deserialise_VectorMatch(json: __JsonValue, path: string = "$")
     return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "number", actual: typeof obj["score"] });
   }
   if (!globalThis.Number.isFinite(obj["score"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: String(obj["score"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: "non-finite number" });
   }
   const __score = obj["score"];
   const __r_values = __deserialise_Option_List_Float(obj["values"], `${path}.values`);
@@ -5906,7 +5906,7 @@ export function __deserialise_WorkerVersion(json: __JsonValue, path: string = "$
     return Err({ kind: "StructuralMismatch", path: `${path}.deployed`, expected: "number", actual: typeof __deployed$ms });
   }
   if (!globalThis.Number.isSafeInteger(__deployed$ms)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.deployed`, expected: "safe integer", actual: String(__deployed$ms) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.deployed`, expected: "safe integer", actual: globalThis.Number.isInteger(__deployed$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __deployed = __deployed$ms;
   return Ok({ id: __id, tag: __tag, deployed: __deployed } as WorkerVersion);
@@ -5989,7 +5989,7 @@ export function __deserialise_List_Float(json: __JsonValue, path: string = "$"):
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
     }
     if (!globalThis.Number.isFinite(item)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "finite number", actual: String(item) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "finite number", actual: "non-finite number" });
     }
     const __el = item;
     out.push(__el as number);
@@ -6143,7 +6143,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);
@@ -6187,7 +6187,7 @@ function __option_value_Float(raw: __JsonValue, at: string): Result<unknown, __B
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isFinite(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "finite number", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "finite number", actual: "non-finite number" });
   }
   const __v = raw;
   return Ok(__v);
@@ -6272,7 +6272,7 @@ function __option_value_Instant(raw: __JsonValue, at: string): Result<unknown, _
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof __v$ms });
   }
   if (!globalThis.Number.isSafeInteger(__v$ms)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(__v$ms) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(__v$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = __v$ms;
   return Ok(__v);

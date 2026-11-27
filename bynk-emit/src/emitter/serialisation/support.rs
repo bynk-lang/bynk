@@ -144,6 +144,33 @@ pub(super) fn err_structural_mismatch_top(expected: &str, actual: TsExpr) -> TsE
     )
 }
 
+/// #4604: the `actual` of a number that passed its `typeof` check and failed its integrality
+/// (`integral`) or finiteness check: a class from a closed set, never the number itself (it can be
+/// personal data, and a `DecodeError` is logged).
+pub(super) fn number_failure_class(integral: bool, v: &TsExpr) -> TsExpr {
+    if !integral {
+        return str_lit("non-finite number");
+    }
+    TsExpr::Conditional {
+        test: Box::new(call(
+            member(ident("globalThis.Number"), "isInteger"),
+            vec![v.clone()],
+        )),
+        consequent: Box::new(str_lit("integer outside the safe range")),
+        alternate: Box::new(str_lit("non-integer number")),
+    }
+}
+
+/// #4604: the `actual` of a variant tag that names no variant: `unrecognised variant` for a
+/// string (the stored text is never echoed), the `typeof` for anything else.
+pub(super) fn tag_failure_class(v: &TsExpr) -> TsExpr {
+    TsExpr::Conditional {
+        test: Box::new(strict_eq(typeof_expr(v.clone()), str_lit("string"))),
+        consequent: Box::new(str_lit("unrecognised variant")),
+        alternate: Box::new(typeof_expr(v.clone())),
+    }
+}
+
 /// The TS token a [`JsonKind`] spells as. `json_kind_of` (`bynk_check::wire`)
 /// replaces `ts_base_for_serialisation`'s *classification* of a `BaseType`;
 /// this is the TS-spelling half the wire.rs seam keeps in `bynk-emit`. Also

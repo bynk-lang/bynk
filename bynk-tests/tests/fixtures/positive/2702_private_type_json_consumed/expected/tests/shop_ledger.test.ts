@@ -3,7 +3,7 @@
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 import * as __ns_shop_ledger from "./../shop/ledger.js";
 import * as __ns_shop_order from "./../shop/order.js";
 import * as __ns_labels from "./../labels.js";
@@ -37,7 +37,7 @@ async function test_decodes_the_visible_Tag() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Tag(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_labels.Tag);

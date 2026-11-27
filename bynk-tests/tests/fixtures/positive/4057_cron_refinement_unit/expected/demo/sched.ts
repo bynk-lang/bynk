@@ -4,7 +4,7 @@
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkIsCron } from "../__bynk_runtime/time.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 
 /**
  * #3873: the `Cron` predicate admits exactly Cloudflare's cron syntax, in a
@@ -40,7 +40,7 @@ export function decodeSchedule(json: string): Result<Schedule, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Schedule(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Schedule);
@@ -55,7 +55,7 @@ export function decodeJob(json: string): Result<Job, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Job(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Job);

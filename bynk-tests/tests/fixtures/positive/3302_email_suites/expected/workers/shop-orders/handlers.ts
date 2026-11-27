@@ -93,5 +93,5 @@ export function __deserialise_Result_String_EmailError(json: __JsonValue, path: 
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<string, EmailError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

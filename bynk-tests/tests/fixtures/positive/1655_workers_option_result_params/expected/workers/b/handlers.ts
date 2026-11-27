@@ -42,7 +42,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);
@@ -91,7 +91,7 @@ export function __deserialise_Result_Int_String(json: __JsonValue, path: string 
       return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["value"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = obj["value"];
     return Ok(Ok(__v) as Result<number, string>);
@@ -102,5 +102,5 @@ export function __deserialise_Result_Int_String(json: __JsonValue, path: string 
     const __e = obj["error"];
     return Ok(Err(__e) as Result<number, string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

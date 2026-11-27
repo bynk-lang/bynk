@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { DecodeError } from "./__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "./__bynk_runtime/boundary.js";
 import { __bynkCapabilityReply } from "./__bynk_runtime/codec.js";
 
 import { KvExpiration, KvKey } from "./bynk/cloudflare.js";
@@ -89,7 +89,7 @@ export const readBack = {
           try {
             __j = globalThis.JSON.parse(__s) as __JsonValue;
           } catch (__e) {
-            return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+            return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
           }
           const __r = __deserialise_Session(__j, "$");
           if (__r.tag === "Ok") return Ok(__r.value as Session);
@@ -147,7 +147,7 @@ export function __deserialise_Other(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.count`, expected: "number", actual: typeof obj["count"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["count"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.count`, expected: "safe integer", actual: String(obj["count"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.count`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["count"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __count = obj["count"];
   return Ok({ count: __count } as Other);
@@ -170,7 +170,7 @@ export function __deserialise_Role(json: __JsonValue, path: string = "$"): Resul
       case "Member":
         return Ok({ tag: "Member" } as Role);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -184,7 +184,7 @@ export function __deserialise_Role(json: __JsonValue, path: string = "$"): Resul
     case "Member":
       return Ok({ tag: "Member" } as Role);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
