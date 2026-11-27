@@ -124,11 +124,40 @@ pub enum Token {
 /// What the tokeniser found: each hole's context or refusal (by hole index;
 /// `None` for a hole after the markup was refused, which is not judged), the
 /// refusals of the markup itself, and the tokens.
+///
+/// A hole's context is only good when the markup was accepted, so the judgements
+/// are read through [`Analysis::holes`], which refuses them otherwise; the
+/// refused holes alone can always be read, through [`Analysis::refused_holes`].
 #[derive(Debug, Clone, Default)]
 pub struct Analysis {
-    pub holes: Vec<Option<Result<Context, Refusal>>>,
+    pub(super) holes: Vec<Option<Result<Context, Refusal>>>,
     pub markup: Vec<Refusal>,
     pub tokens: Vec<Token>,
+}
+
+/// One hole's judgement: its context, or why it was refused, or `None` when the
+/// markup was refused before the tokeniser reached it.
+pub type Judgement = Option<Result<Context, Refusal>>;
+
+impl Analysis {
+    /// Each hole's judgement, by hole index, or the markup's refusals when there
+    /// are any: a context found in markup that was refused is not a context.
+    pub fn holes(&self) -> Result<&[Judgement], &[Refusal]> {
+        if self.markup.is_empty() {
+            Ok(&self.holes)
+        } else {
+            Err(&self.markup)
+        }
+    }
+
+    /// The holes that were refused, by hole index, whether or not the markup
+    /// was: a refusal stays good when the markup around it is refused too.
+    pub fn refused_holes(&self) -> impl Iterator<Item = (usize, &Refusal)> {
+        self.holes.iter().enumerate().filter_map(|(n, j)| match j {
+            Some(Err(r)) => Some((n, r)),
+            _ => None,
+        })
+    }
 }
 
 /// The tokeniser states a run can start in. A template or fragment starts in
@@ -246,6 +275,8 @@ const FOREIGN_BREAKOUT: &[&str] = &[
 
 /// The attributes whose literal value decides how another part of the element
 /// is read, so a placeholder in one could change another's context.
+/// A `<template>`'s `shadowroot*` attributes decide whether its content becomes
+/// a live declarative shadow root, and how.
 fn decides_another(element: &str, attr: &str) -> bool {
     matches!(
         (element, attr),
@@ -255,7 +286,7 @@ fn decides_another(element: &str, attr: &str) -> bool {
             | ("meta", "charset")
             | ("link", "rel")
             | ("iframe", "sandbox")
-    )
+    ) || (element == "template" && attr.starts_with("shadowroot"))
 }
 
 /// URL attributes (§5.2): Go's `html/template` list, with its rule that a name
@@ -415,6 +446,21 @@ impl<'a> Tok<'a> {
     }
 
     fn run(&mut self) {
+        // Input-stream preprocessing happens before the tokeniser (§10): a CR
+        // here means a caller skipped it, and a CR is not whitespace to this
+        // tokeniser, so the run fails closed rather than misreading a tag.
+        if let Some(k) = self
+            .units
+            .iter()
+            .position(|u| matches!(u, Unit::Char('\r', _)))
+        {
+            self.refuse_at(
+                k,
+                Kind::Unsupported,
+                "a carriage return reached the tokeniser unnormalised",
+            );
+            return;
+        }
         while self.i < self.units.len() && !self.failed {
             match self.state {
                 State::Data => self.data(),

@@ -311,3 +311,99 @@ fn tokens_are_what_a_browser_tokenises() {
         ]
     );
 }
+
+#[test]
+fn line_breaks_are_normalised_before_tokenising() {
+    // A browser's input-stream preprocessing turns CRLF and a lone CR into LF
+    // before it tokenises (§10), so each CR below is whitespace to it.
+    for nl in ["\r", "\r\n"] {
+        let t = |s: &str| s.replace('|', nl);
+        assert_eq!(only(&t("<script|>\\(a)</script>")), Err(Kind::InScript));
+        assert_eq!(
+            only(&t("<a x|onclick=\"\\(a)\">")),
+            Err(Kind::InCodeAttribute)
+        );
+        assert_eq!(
+            only(&t("<a href=\"x\"|onclick=\"\\(a)\">")),
+            Err(Kind::InCodeAttribute)
+        );
+        assert_eq!(only(&t("<a x|href=\"\\(a)\">")), Err(Kind::Unsupported));
+        assert_eq!(
+            only(&t("<title|>\\(a)</title>")),
+            Ok(Context::Rcdata {
+                element: "title".into()
+            })
+        );
+        assert_eq!(only(&t("<style|>\\(a)</style>")), Err(Kind::InStyle));
+        assert_eq!(
+            only(&t("<noscript|>\\(a)</noscript>")),
+            Err(Kind::InRawText)
+        );
+        assert_eq!(only(&t("<plaintext|>\\(a)")), Err(Kind::InRawText));
+        assert_eq!(
+            only(&t("<select|><option>\\(a)</option></select>")),
+            Ok(Context::SelectText)
+        );
+        assert_eq!(
+            markup(&t("<select|><xmp></xmp></select>")),
+            Kind::Unsupported
+        );
+        assert_eq!(judge(&t("<svg|>\\(a)</svg>")).0, vec![Err(Kind::Position)]);
+        // An attribute's name ends at the line break.
+        assert_eq!(only(&t("<p|class=\"\\(a)\">")), Ok(attr("p", "class")));
+        // A raw-text end tag may end with a line break before `>`.
+        assert_eq!(
+            only(&t("<textarea>x</textarea|><p>\\(a)</p>")),
+            Ok(Context::Text)
+        );
+    }
+}
+
+#[test]
+fn offsets_stay_offsets_into_the_file_as_written() {
+    let a = analyse_template("<p>\r\n\r\n<\\(n)>");
+    assert_eq!(a.split.placeholders[0].start, 8);
+    let r = a.analysis.refused_holes().next().unwrap().1;
+    assert_eq!(r.at, At::Hole(0));
+    let a = analyse_template("\r\n<!-- x");
+    assert_eq!(a.analysis.markup[0].at, At::Offset(2));
+    // The pieces are normalised, ready to emit.
+    let a = analyse_template("<p>a\r\nb\rc\\(t)\r</p>");
+    assert_eq!(a.split.pieces[0].1, "<p>a\nb\nc");
+    assert_eq!(a.split.pieces[1].1, "\n</p>");
+}
+
+#[test]
+fn a_carriage_return_that_reaches_the_tokeniser_is_refused() {
+    let a = tokeniser::analyse(&tokeniser::chars("<script\r>x</script>"));
+    assert_eq!(a.markup[0].code, Kind::Unsupported);
+    assert!(a.holes().is_err());
+}
+
+#[test]
+fn a_hole_is_not_accepted_in_refused_markup() {
+    let a = analyse_template("<p>\\(t)</p><!-- never closed");
+    assert!(a.analysis.holes().is_err());
+    assert_eq!(a.analysis.refused_holes().count(), 0);
+}
+
+#[test]
+fn declarative_shadow_root_attributes_decide_the_template() {
+    for a in [
+        "shadowrootmode",
+        "shadowrootdelegatesfocus",
+        "shadowrootclonable",
+        "shadowrootserializable",
+    ] {
+        assert_eq!(
+            only(&format!("<template {a}=\"\\(a)\"></template>")),
+            Err(Kind::InCodeAttribute),
+            "{a}"
+        );
+    }
+    // Static, they are ordinary markup.
+    assert_eq!(
+        only("<template shadowrootmode=\"open\"><p>\\(t)</p></template>"),
+        Ok(Context::Text)
+    );
+}

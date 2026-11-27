@@ -2,7 +2,9 @@
 //!
 //! A `proptest` property generates HTML-like templates with placeholders: elements of every
 //! kind the context model treats differently, quoted and unquoted attributes, comments, raw text,
-//! foreign content and `<select>`, with placeholders anywhere. For every template the tokeniser
+//! foreign content and `<select>`, with placeholders anywhere. Tag names come in any case, and
+//! whitespace, raw-text end tags and text include CR, CRLF, tab and form feed, which a browser
+//! normalises or treats as whitespace before the tokeniser decides anything. For every template the tokeniser
 //! accepts, the oracle (`support/html_oracle.rs`) parses it with `html5ever`, scripting on, and
 //! checks that each placeholder is where its context says, and that adversarial values each stay
 //! one whole text or attribute value and add no element or attribute.
@@ -17,11 +19,62 @@ use proptest::prelude::*;
 enum Piece {
     Text(String),
     Hole,
-    Open(String, Vec<(String, Vec<Option<String>>, char)>),
-    Close(String),
+    /// An element, the case of its name, and its attributes, each after its
+    /// whitespace, with a value quoted by its quote (a space for unquoted).
+    Open(
+        String,
+        Case,
+        Vec<(&'static str, String, Vec<Option<String>>, char)>,
+    ),
+    Close(String, Case),
     Comment(Vec<Option<String>>),
-    Raw(String, Vec<Option<String>>),
+    /// A raw-text element, its contents, and how its end tag is written.
+    Raw(String, Vec<Option<String>>, &'static str),
 }
+
+/// How a tag name is written: HTML tag names are case-insensitive.
+#[derive(Debug, Clone, Copy)]
+enum Case {
+    Lower,
+    Upper,
+    Title,
+}
+
+fn cased(name: &str, case: Case) -> String {
+    match case {
+        Case::Lower => name.to_string(),
+        Case::Upper => name.to_ascii_uppercase(),
+        Case::Title => {
+            let mut c = name.chars();
+            c.next()
+                .map(|f| f.to_ascii_uppercase().to_string() + c.as_str())
+                .unwrap_or_default()
+        }
+    }
+}
+
+fn case() -> impl Strategy<Value = Case> {
+    prop_oneof![3 => Just(Case::Lower), 1 => Just(Case::Upper), 1 => Just(Case::Title)]
+}
+
+/// Whitespace as a template might hold it, before input-stream preprocessing.
+const WS: &[&str] = &[" ", " ", "\t", "\n", "\r", "\r\n", "\x0C"];
+
+/// The ways a raw-text element's end tag is written (`{}` is its name): all
+/// end it but the last two, which a browser reads as text.
+const RAW_END: &[&str] = &[
+    "</{}>",
+    "</{}>",
+    "</{U}>",
+    "</{T} >",
+    "</{}\t>",
+    "</{}\r\n>",
+    "</{}\r>",
+    "</{} x>",
+    "</{}/>",
+    "</{}x>",
+    "</ {}>",
+];
 
 const ELEMENTS: &[&str] = &[
     "p", "div", "span", "b", "a", "img", "ul", "li", "table", "tr", "td", "form", "input",
@@ -49,10 +102,11 @@ const ATTRS: &[&str] = &[
     "http-equiv",
     "srcdoc",
     "lang",
+    "shadowrootmode",
 ];
 
 fn text() -> impl Strategy<Value = String> {
-    proptest::string::string_regex("[a-z <>&;\"'/=!\\-\\\\(#\n]{0,6}").unwrap()
+    proptest::string::string_regex("[a-zA-Z <>&;\"'/=!\\-\\\\(#\n\r\t\x0C]{0,6}").unwrap()
 }
 
 fn value_parts() -> impl Strategy<Value = Vec<Option<String>>> {
@@ -64,20 +118,22 @@ fn value_parts() -> impl Strategy<Value = Vec<Option<String>>> {
 
 fn piece() -> impl Strategy<Value = Piece> {
     let attr = (
+        prop::sample::select(WS),
         prop::sample::select(ATTRS),
         value_parts(),
         prop::sample::select(&['"', '\'', ' '][..]),
     )
-        .prop_map(|(n, v, q)| (n.to_string(), v, q));
+        .prop_map(|(w, n, v, q)| (w, n.to_string(), v, q));
     prop_oneof![
         4 => text().prop_map(Piece::Text),
         3 => Just(Piece::Hole),
-        4 => (prop::sample::select(ELEMENTS), prop::collection::vec(attr, 0..3))
-            .prop_map(|(e, a)| Piece::Open(e.to_string(), a)),
-        3 => prop::sample::select(ELEMENTS).prop_map(|e| Piece::Close(e.to_string())),
+        4 => (prop::sample::select(ELEMENTS), case(), prop::collection::vec(attr, 0..3))
+            .prop_map(|(e, c, a)| Piece::Open(e.to_string(), c, a)),
+        3 => (prop::sample::select(ELEMENTS), case())
+            .prop_map(|(e, c)| Piece::Close(e.to_string(), c)),
         1 => value_parts().prop_map(Piece::Comment),
-        2 => (prop::sample::select(RAW), value_parts())
-            .prop_map(|(e, v)| Piece::Raw(e.to_string(), v)),
+        2 => (prop::sample::select(RAW), value_parts(), prop::sample::select(RAW_END))
+            .prop_map(|(e, v, end)| Piece::Raw(e.to_string(), v, end)),
     ]
 }
 
@@ -100,11 +156,11 @@ fn render(pieces: &[Piece]) -> String {
         match p {
             Piece::Text(t) => out.push_str(t),
             Piece::Hole => out.push_str(&hole()),
-            Piece::Open(e, attrs) => {
+            Piece::Open(e, c, attrs) => {
                 out.push('<');
-                out.push_str(e);
-                for (name, v, q) in attrs {
-                    out.push(' ');
+                out.push_str(&cased(e, *c));
+                for (ws, name, v, q) in attrs {
+                    out.push_str(ws);
                     out.push_str(name);
                     out.push('=');
                     if *q != ' ' {
@@ -117,9 +173,9 @@ fn render(pieces: &[Piece]) -> String {
                 }
                 out.push('>');
             }
-            Piece::Close(e) => {
+            Piece::Close(e, c) => {
                 out.push_str("</");
-                out.push_str(e);
+                out.push_str(&cased(e, *c));
                 out.push('>');
             }
             Piece::Comment(v) => {
@@ -127,14 +183,16 @@ fn render(pieces: &[Piece]) -> String {
                 parts(&mut out, v, &mut hole);
                 out.push_str("-->");
             }
-            Piece::Raw(e, v) => {
+            Piece::Raw(e, v, end) => {
                 out.push('<');
                 out.push_str(e);
                 out.push('>');
                 parts(&mut out, v, &mut hole);
-                out.push_str("</");
-                out.push_str(e);
-                out.push('>');
+                out.push_str(
+                    &end.replace("{U}", &cased(e, Case::Upper))
+                        .replace("{T}", &cased(e, Case::Title))
+                        .replace("{}", e),
+                );
             }
         }
     }

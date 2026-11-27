@@ -149,15 +149,23 @@ fn expected_place(found: &Found, context: &Context) -> bool {
     }
 }
 
+/// The start tags the tree builder can ignore, with their attributes, where they cannot go:
+/// table parts outside a table, a nested `<form>`, a `<select>` in a `<select>`, and a second
+/// `<html>` or `<body>`, whose attributes merge only where the first lacks them.
+const IGNORABLE: &[&str] = &[
+    "tr", "td", "th", "tbody", "thead", "tfoot", "caption", "col", "colgroup", "form", "select",
+    "html", "body", "head", "frame",
+];
+
 /// Whether `found` is an acceptable outcome for a placeholder in `context`: every place it is
-/// found is the one the context names, and it is found at least once, or, for an attribute, none
-/// at all. Two tree-builder effects are not escapes: it ignores some start tags where they cannot
-/// go (`<tr>` outside a table, a second `<form>` or `<html>`), and their attributes with them, so a
-/// value can vanish; and it clones a formatting element it reopens (`<b class="…">` after a `<p>`
-/// closed it), attributes and all, so a value can appear twice, each time in its own context.
+/// found is the one the context names, and it is found at least once. Two tree-builder effects
+/// are not escapes: it ignores some start tags where they cannot go ([`IGNORABLE`]), and their
+/// attributes with them, so an attribute value of one of those, and only those, can vanish; and
+/// it clones a formatting element it reopens (`<b class="…">` after a `<p>` closed it),
+/// attributes and all, so a value can appear twice, each time in its own context.
 fn acceptable(found: &[Found], context: &Context) -> bool {
     if found.is_empty() {
-        return matches!(context, Context::Attr { .. });
+        return matches!(context, Context::Attr { element, .. } if IGNORABLE.contains(&element.as_str()));
     }
     found.iter().all(|f| expected_place(f, context))
 }
@@ -166,12 +174,10 @@ fn acceptable(found: &[Found], context: &Context) -> bool {
 /// context, or `None` when the tokeniser did not accept the template.
 fn fill(text: &str, value: &dyn Fn(usize) -> String) -> Option<(String, Vec<Context>)> {
     let a = analyse_template(text);
-    if !a.analysis.markup.is_empty() {
-        return None;
-    }
+    let holes = a.analysis.holes().ok()?;
     let mut contexts = Vec::new();
     for n in 0..a.split.placeholders.len() {
-        match a.analysis.holes.get(n).cloned().flatten() {
+        match holes.get(n).cloned().flatten() {
             Some(Ok(c)) => contexts.push(c),
             _ => return None,
         }
