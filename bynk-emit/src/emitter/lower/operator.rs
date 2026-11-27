@@ -357,6 +357,15 @@ pub(in crate::emitter) fn build_value_bin_op(
         let cmp = cx.comparator(operand);
         ordered_comparison(op, cmp, children)
     } else {
+        // #4520: a read an enclosing `if` or `match` narrowed to a literal is widened, so
+        // re-testing it against another literal is not TS2367.
+        let children = if matches!(op, BinOp::Eq | BinOp::NotEq) {
+            let (l, r) = two(children);
+            let (l, r) = super::expect_narrowing::widen_narrowed(l, r, cx);
+            vec![l, r]
+        } else {
+            children
+        };
         plain_binary(op, children)
     }
 }
