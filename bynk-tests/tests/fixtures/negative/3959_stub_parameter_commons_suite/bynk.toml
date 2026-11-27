@@ -1,0 +1,9 @@
+[project]
+name = "3959-stub-parameter-commons-suite"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[unstable]
+allow = ["bynk.given.parameters"]

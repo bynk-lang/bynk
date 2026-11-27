@@ -1,0 +1,2 @@
+bynk.test.pass_through_address
+addresses the pass-through route `ANY /blog/*path`, which a suite case can't drive yet

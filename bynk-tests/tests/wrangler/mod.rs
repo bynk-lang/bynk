@@ -117,6 +117,19 @@ pub fn wait_until_ready(
     port: u16,
     probe: &dyn Fn() -> bool,
 ) -> Result<(), String> {
+    wait_until_ready_or_exit(log_path, port, probe, &mut || None)
+}
+
+/// [`wait_until_ready`] for a smoke that can tell its wrangler has already exited (#4174): a
+/// wrangler that is gone will never serve, so `exited` (`Some(how)` once it has) ends the wait at
+/// once with that in the error, not after the whole boot deadline.
+#[allow(dead_code)]
+pub fn wait_until_ready_or_exit(
+    log_path: &std::path::Path,
+    port: u16,
+    probe: &dyn Fn() -> bool,
+    exited: &mut dyn FnMut() -> Option<String>,
+) -> Result<(), String> {
     let ready = ready_line(port);
     let deadline = std::time::Instant::now() + BOOT_DEADLINE;
     let mut logged_ready = false;
@@ -127,6 +140,9 @@ pub fn wait_until_ready(
         }
         if logged_ready && probe() {
             return Ok(());
+        }
+        if let Some(how) = exited() {
+            return Err(format!("wrangler exited ({how}) before serving"));
         }
         if std::time::Instant::now() > deadline {
             return Err(if logged_ready {
@@ -143,6 +159,81 @@ pub fn wait_until_ready(
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
+}
+
+/// [`wait_until_ready`] for a smoke that boots several Workers: each of `others` (a log and the
+/// port its Worker serves) must have logged its own Ready line, then the `entry` Worker must have
+/// logged its and answer `probe`. The probe is a request that reaches the others through a Service
+/// Binding, so it also waits out the binding connecting; `others` are gated first because the
+/// entry's probe needs them up. The error names the Worker that did not come up.
+#[allow(dead_code)]
+pub fn wait_until_all_ready(
+    others: &[(&std::path::Path, u16)],
+    entry: (&std::path::Path, u16),
+    probe: &dyn Fn() -> bool,
+) -> Result<(), String> {
+    for (log_path, port) in others {
+        wait_until_ready(log_path, *port, &|| true)?;
+    }
+    wait_until_ready(entry.0, entry.1, probe)
+}
+
+/// Who has `port` bound right now, for the message of an `Address already in use` (Linux only;
+/// empty elsewhere): each listening or connected socket on the port, with the process that holds it
+/// and its command line. A port from the shared allocator that wrangler then cannot bind is held by
+/// something that did not go through the allocator, and this names it while it is still held.
+#[allow(dead_code)]
+pub fn port_holders(port: u16) -> String {
+    use std::fmt::Write;
+    let mut sockets = Vec::new();
+    for table in ["/proc/net/tcp", "/proc/net/tcp6"] {
+        let Ok(text) = std::fs::read_to_string(table) else {
+            continue;
+        };
+        for line in text.lines().skip(1) {
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            let local_port = cols
+                .get(1)
+                .and_then(|a| a.rsplit(':').next())
+                .and_then(|p| u16::from_str_radix(p, 16).ok());
+            let remote_port = cols
+                .get(2)
+                .and_then(|a| a.rsplit(':').next())
+                .and_then(|p| u16::from_str_radix(p, 16).ok());
+            if local_port == Some(port) || remote_port == Some(port) {
+                sockets.push(format!(
+                    "{table} local {} remote {} state {} inode {}",
+                    cols[1], cols[2], cols[3], cols[9]
+                ));
+            }
+        }
+    }
+    let mut out = String::new();
+    for socket in &sockets {
+        let inode = socket.rsplit(' ').next().unwrap_or_default();
+        let target = format!("socket:[{inode}]");
+        let mut owners = Vec::new();
+        for proc in std::fs::read_dir("/proc").into_iter().flatten().flatten() {
+            let name = proc.file_name().to_string_lossy().to_string();
+            if !name.bytes().all(|b| b.is_ascii_digit()) {
+                continue;
+            }
+            let held = std::fs::read_dir(proc.path().join("fd"))
+                .into_iter()
+                .flatten()
+                .flatten()
+                .any(|fd| {
+                    std::fs::read_link(fd.path()).is_ok_and(|l| l.to_string_lossy() == target)
+                });
+            if held {
+                let cmd = std::fs::read(proc.path().join("cmdline")).unwrap_or_default();
+                let cmd = String::from_utf8_lossy(&cmd).replace('\0', " ");
+                owners.push(format!("pid {name}: {}", cmd.trim()));
+            }
+        }
+        let _ = writeln!(out, "{socket} held by {owners:?}");
+    }
+    out
 }
 
 /// I2 (#1971): the `--var`s a workerd smoke passes `wrangler dev` so its
