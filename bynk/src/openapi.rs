@@ -280,22 +280,13 @@ pub(crate) struct Selected<'a> {
     pub info: &'a ContextBoundaryInfo,
 }
 
-/// The `from http` services of `analysis` named by `want` (`Name` or
+/// The services of `analysis` that `accepts`, named by `want` (`Name` or
 /// `unit.Name`), every one when `want` is empty, ordered by unit and name. The
 /// selection `bynk openapi` and `bynk client` share.
 pub(crate) fn select_services<'a>(
     analysis: &'a ProjectDiagnostics,
     want: &[&str],
-) -> Result<Vec<Selected<'a>>, Error> {
-    select_where(analysis, want, |p| matches!(p, ServiceProtocol::Http))
-}
-
-/// [`select_services`] over the services whose protocol `accepts`: `bynk client` also takes the
-/// `from websocket` ones (#3906).
-pub(crate) fn select_where<'a>(
-    analysis: &'a ProjectDiagnostics,
-    want: &[&str],
-    accepts: fn(&ServiceProtocol) -> bool,
+    accepts: fn(&ServiceProtocol) -> bool, // `bynk client` also takes the `from websocket` ones (#3906)
 ) -> Result<Vec<Selected<'a>>, Error> {
     let mut all: Vec<Selected> = Vec::new();
     for (unit, ctx) in &analysis.boundary_info {
@@ -350,7 +341,7 @@ pub fn document(
         return Err(Error::Invalid(errors));
     }
 
-    let selected = select_services(analysis, &service)?;
+    let selected = select_services(analysis, &service, |p| matches!(p, ServiceProtocol::Http))?;
 
     let context_count = real_context_count(&analysis.boundary_info, &analysis.unit_sources);
     let mut models: Vec<(&Selected, &Handler, WireContractModel)> = Vec::new();

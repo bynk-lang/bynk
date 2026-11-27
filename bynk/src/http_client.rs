@@ -333,7 +333,7 @@ pub fn generate(
     if !errors.is_empty() {
         return Err(Error::Project(ProjectError::Invalid(errors)));
     }
-    let selected = openapi::select_where(analysis, want, |p| {
+    let selected = openapi::select_services(analysis, want, |p| {
         matches!(p, ServiceProtocol::Http | ServiceProtocol::WebSocket { .. })
     })
     .map_err(Error::Project)?;

@@ -1665,6 +1665,7 @@ mod tests {
                 doc: None,
                 types: HashMap::new(),
                 routes,
+                ws: None,
             }],
             compiler_version: "0".to_string(),
         };
