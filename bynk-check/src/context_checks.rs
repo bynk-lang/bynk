@@ -3870,6 +3870,7 @@ fn check_service_decls(
 
     // v0.45: actor-contract well-formedness and the handler `by`-clause checks.
     check_actor_contracts(table, resolved, refs, errors);
+    errors.extend(crate::actors::reserved_principal_names(&table.actors));
 
     // #2341 (decision C): the shape of each service's `on rejected`.
     check_rejected_handlers(table, errors);
