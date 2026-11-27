@@ -531,6 +531,19 @@ pub enum ActorSeamIr {
 }
 
 impl ActorSeamIr {
+    /// The binder a single-actor seam threads its identity into (`deps.identity`): the `by`
+    /// clause's binder, if any. A sum threads `deps.who` instead, so it has none here.
+    pub fn deps_identity_binder(&self) -> Option<String> {
+        match self {
+            ActorSeamIr::Caller(binder) | ActorSeamIr::Sender(binder) => Some(binder.clone()),
+            ActorSeamIr::Bearer(s) => s.binder.clone(),
+            ActorSeamIr::Oidc(s) => s.binder.clone(),
+            ActorSeamIr::SignedCookie(s) => s.binder.clone(),
+            ActorSeamIr::ApiKey(s) => s.binder.clone(),
+            ActorSeamIr::Sum(_) | ActorSeamIr::CallSum(_) | ActorSeamIr::None => None,
+        }
+    }
+
     /// The identity type a Bearer or `SignedCookie` seam mints from the verified `sub`
     /// and threads into `deps.identity`, when the handler's `by` clause binds it.
     pub fn captured_identity_type(&self) -> Option<&str> {

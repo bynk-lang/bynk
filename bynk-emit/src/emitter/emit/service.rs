@@ -229,14 +229,7 @@ pub(crate) fn emit_service(
         // tried first (it can otherwise collide with Bearer) and why the
         // other three are mutually exclusive by construction.
         let seam = lower_actor_seam_ir(handler, &ctx.actors);
-        let deps_identity_binder = match &seam {
-            ActorSeamIr::Caller(binder) | ActorSeamIr::Sender(binder) => Some(binder.clone()),
-            ActorSeamIr::Bearer(s) => s.binder.clone(),
-            ActorSeamIr::Oidc(s) => s.binder.clone(),
-            ActorSeamIr::SignedCookie(s) => s.binder.clone(),
-            ActorSeamIr::ApiKey(s) => s.binder.clone(),
-            ActorSeamIr::Sum(_) | ActorSeamIr::CallSum(_) | ActorSeamIr::None => None,
-        };
+        let deps_identity_binder = seam.deps_identity_binder();
         let actor_sum_binder = if matches!(seam, ActorSeamIr::Sum(_) | ActorSeamIr::CallSum(_)) {
             handler
                 .by_clause
