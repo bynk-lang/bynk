@@ -1,0 +1,18 @@
+context shop
+
+// Durable event delivery D2 (#3898): `shop/notify23278` and `shop/notify24925` share the
+// first 8 hex digits of their SHA-256 (`7c6e4fd6`), and their slugs agree once truncated
+// for a long environment name, so their event queues would coincide there.
+event Paid = { id: String }
+
+service notify23278 from Events(Paid) {
+  on event(e: Paid) -> Effect[()] {
+    Effect.pure(())
+  }
+}
+
+service notify24925 from Events(Paid) {
+  on event(e: Paid) -> Effect[()] {
+    Effect.pure(())
+  }
+}

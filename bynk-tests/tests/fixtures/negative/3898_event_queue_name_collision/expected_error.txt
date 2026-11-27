@@ -1,0 +1,2 @@
+bynk.event.queue_name_collision
+event subscribers `shop.notify23278` and `shop.notify24925` would share an event queue

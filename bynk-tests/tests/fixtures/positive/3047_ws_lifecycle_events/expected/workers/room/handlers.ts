@@ -9,6 +9,7 @@ import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } from "../../__bynk_runtime/store.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __registerFrameEncoder, __webSocketAdmit, __webSocketAuthExpired, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
 
@@ -135,7 +136,7 @@ export class Room {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Said", payload: { text: text }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "room", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Said", payload: { text: text }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "room", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return undefined;
     })();
