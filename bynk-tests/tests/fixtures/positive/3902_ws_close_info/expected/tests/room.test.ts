@@ -21,7 +21,11 @@ async function test_a_client_that_leaves_with_a_code_is_released_with_that_code(
     type Frame = __ns_room.Frame;
     type RoomId = __ns_room.RoomId;
     type UserId = __ns_room.UserId;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -47,10 +51,11 @@ async function test_a_client_that_leaves_with_a_code_is_released_with_that_code(
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
     type Uuid = __ns_bynk.Uuid;
     const tc = new TestConnection<Frame>();
     const id = RoomId.unsafe("r1");
-    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Gateway.open> = [__c, id, { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([id], __a[__a.length - 1], Gateway.maxFrame); return Gateway.open(...__a); })();
+    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Gateway.open> = [__c, id, { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([id], __a[__a.length - 1], Gateway.maxFrame, Gateway.encodeOut); return Gateway.open(...__a); })();
     const __r1 = await (async () => { const __c = tc; const __o = __c.opened(); const __a: Parameters<typeof Gateway.close> = [__c, __o.route[0] as Parameters<typeof Gateway.close>[1], { code: 4002, reason: "bye", clean: false }, __o.deps as Parameters<typeof Gateway.close>[3]]; return Gateway.close(...__a); })();
     const code = await __makeRoom(id).code(deps);
     const clean = await __makeRoom(id).clean(deps);
@@ -74,7 +79,11 @@ async function test_a_bare_close_is_a_normal__clean_closure() {
     type Frame = __ns_room.Frame;
     type RoomId = __ns_room.RoomId;
     type UserId = __ns_room.UserId;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -100,10 +109,11 @@ async function test_a_bare_close_is_a_normal__clean_closure() {
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
     type Uuid = __ns_bynk.Uuid;
     const tc = new TestConnection<Frame>();
     const id = RoomId.unsafe("r2");
-    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Gateway.open> = [__c, id, { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([id], __a[__a.length - 1], Gateway.maxFrame); return Gateway.open(...__a); })();
+    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Gateway.open> = [__c, id, { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([id], __a[__a.length - 1], Gateway.maxFrame, Gateway.encodeOut); return Gateway.open(...__a); })();
     const __r1 = await (async () => { const __c = tc; const __o = __c.opened(); const __a: Parameters<typeof Gateway.close> = [__c, __o.route[0] as Parameters<typeof Gateway.close>[1], { code: 1000, reason: "", clean: true }, __o.deps as Parameters<typeof Gateway.close>[3]]; return Gateway.close(...__a); })();
     const code = await __makeRoom(id).code(deps);
     const clean = await __makeRoom(id).clean(deps);
@@ -127,7 +137,11 @@ async function test_the_server_closes_a_connection_with_a_code_and_reason() {
     type Frame = __ns_room.Frame;
     type RoomId = __ns_room.RoomId;
     type UserId = __ns_room.UserId;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -153,9 +167,10 @@ async function test_the_server_closes_a_connection_with_a_code_and_reason() {
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
     type Uuid = __ns_bynk.Uuid;
     const tc = new TestConnection<Frame>();
-    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Gateway.open> = [__c, RoomId.unsafe("r3"), { ...deps, identity: (UserId.unsafe("banned") as any) }]; __c.remember([RoomId.unsafe("r3")], __a[__a.length - 1], Gateway.maxFrame); return Gateway.open(...__a); })();
+    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Gateway.open> = [__c, RoomId.unsafe("r3"), { ...deps, identity: (UserId.unsafe("banned") as any) }]; __c.remember([RoomId.unsafe("r3")], __a[__a.length - 1], Gateway.maxFrame, Gateway.encodeOut); return Gateway.open(...__a); })();
     if (!(tc.closed === true)) { throw __bynkExpectFailure("tests/room.bynk:32:12", 1279, 1298, "expect tc.closed() == true\n  expected: tc.closed() == true\n  actual:   " + __bynkShow((tc.closed)) + " == " + __bynkShow((true))); }
     if (!(__bynkEq(tc.closeCodeOption(), Some(4001)))) { throw __bynkExpectFailure("tests/room.bynk:33:12", 1310, 1338, "expect tc.closeCode() == Some(4001)\n  expected: tc.closeCode() == Some(4001)\n  actual:   " + __bynkShow((tc.closeCodeOption())) + " == " + __bynkShow((Some(4001)))); }
     if (!(__bynkEq(tc.closeReasonOption(), Some("banned")))) { throw __bynkExpectFailure("tests/room.bynk:34:12", 1350, 1384, "expect tc.closeReason() == Some(\"banned\")\n  expected: tc.closeReason() == Some(\"banned\")\n  actual:   " + __bynkShow((tc.closeReasonOption())) + " == " + __bynkShow((Some("banned")))); }
@@ -177,7 +192,11 @@ async function test_a_connection_the_server_did_not_close_has_no_close_code() {
     type Frame = __ns_room.Frame;
     type RoomId = __ns_room.RoomId;
     type UserId = __ns_room.UserId;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -203,9 +222,10 @@ async function test_a_connection_the_server_did_not_close_has_no_close_code() {
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
     type Uuid = __ns_bynk.Uuid;
     const tc = new TestConnection<Frame>();
-    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Gateway.open> = [__c, RoomId.unsafe("r4"), { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([RoomId.unsafe("r4")], __a[__a.length - 1], Gateway.maxFrame); return Gateway.open(...__a); })();
+    const __r0 = await (async () => { const __c = tc; const __a: Parameters<typeof Gateway.open> = [__c, RoomId.unsafe("r4"), { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([RoomId.unsafe("r4")], __a[__a.length - 1], Gateway.maxFrame, Gateway.encodeOut); return Gateway.open(...__a); })();
     if (!(tc.closed === false)) { throw __bynkExpectFailure("tests/room.bynk:40:12", 1605, 1625, "expect tc.closed() == false\n  expected: tc.closed() == false\n  actual:   " + __bynkShow((tc.closed)) + " == " + __bynkShow((false))); }
     if (!(__bynkEq(tc.closeCodeOption(), None))) { throw __bynkExpectFailure("tests/room.bynk:41:12", 1637, 1659, "expect tc.closeCode() == None\n  expected: tc.closeCode() == None\n  actual:   " + __bynkShow((tc.closeCodeOption())) + " == " + __bynkShow((None))); }
     return { pass: true };

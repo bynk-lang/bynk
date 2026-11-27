@@ -49,6 +49,7 @@ export const ClientFrame = {
 
 export const ChatGateway = {
   maxFrame: 1048576,
+  encodeOut: (frame: ServerFrame) => __serialise_ServerFrame(frame),
   async open(connection: Connection<ServerFrame>, roomId: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
     const __r0 = await connection.send({ text: "welcome" });
     const __r1 = await __makeRoom(roomId).join(deps.identity, connection, deps);
@@ -198,6 +199,24 @@ export interface __ChatDeps {
 export function __makeSurface(deps: __ChatDeps) {
   return {
   };
+}
+
+export function __serialise_ServerFrame(value: ServerFrame): __JsonValue {
+  return {
+    text: value.text as __JsonValue,
+  };
+}
+
+export function __deserialise_ServerFrame(json: __JsonValue, path: string = "$"): Result<ServerFrame, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  return Ok({ text: __text } as ServerFrame);
 }
 
 export function __serialise_UserId(value: UserId): __JsonValue {

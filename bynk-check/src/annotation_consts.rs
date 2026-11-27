@@ -188,6 +188,8 @@ fn rewrite_instance_options(
                 OptionKind::Duration => {
                     changed |= resolve_arg(arg, BaseType::Duration, scope, refs)
                 }
+                // A type's name is not a constant (#4112).
+                OptionKind::Type => {}
                 OptionKind::StrList => {
                     if let ExprKind::ListLit(items, ..) = &mut arg.value.kind {
                         for item in items {

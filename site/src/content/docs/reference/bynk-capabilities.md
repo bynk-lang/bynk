@@ -2401,7 +2401,8 @@ shortly after the instance goes inactive, and Bynk states no figure. `@instanceT
 starts. `@forward(["NAME", …])` names Worker secrets passed to the container's process
 as environment variables. Their values stay in the Worker's secrets: they are never
 written into source, config or the lock file, but every process and dependency in the
-image can read them and Bynk cannot scope them further. There is no `@maxInstances`:
+image can read them and Bynk cannot scope them further. `@instances(by: K)` types
+the instance's names (see below). There is no `@maxInstances`:
 the platform has no per-application ceiling for these containers, so only the account's
 own limits apply, and `@sleepAfter` and a small `@instanceType` are the levers an
 author has.
@@ -2444,12 +2445,43 @@ containers as they have values to send, and `bynk check` warns
 follows the handler's parameters, and the locals bound from them, into the first
 argument of `send`, `receiveBytes` and `sendBytes`. It does not warn when the name
 comes from a constant, from the authenticated identity, from a closed set (a
-`match` over an enum's names), or from a route served `by` an actor that
-authenticates; and it does not follow a name through a function, which is where
+`match` over an enum's names), from a route served `by` an actor that
+authenticates, or from an instance's own key type (below); and it does not follow a name through a function, which is where
 an author bounds the set, so a name laundered through one is not warned about,
 rather than warned about wrongly. A refined type limits what a name looks like, not
 how many there are: bound the count with an authenticated actor, a `RateLimit`, or
 a closed set.
+
+**A typed key.** `@instances(by: K)` makes the instance's operations take a `K`
+where they take a `String`: `send`, `receiveBytes` and `sendBytes` then refuse a
+bare `String`, and the key's construction is where the author decides which names
+exist.
+
+```bynk,fragment
+type TenantId = String where Matches(r"[a-z0-9-]{3,32}")
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @instances(by: TenantId)
+
+service render from http {
+	on GET("/render/:tenant") (tenant: TenantId) -> Effect[HttpResult[String]] by m: Member given Renderer {
+		let res <- Renderer.send(tenant, req)
+		Ok("done")
+	}
+}
+```
+
+`K` is a type declared in the context: a refined type with a refinement, or an
+opaque type, over `String`; any other is `bynk.capability.invalid_option`, as is
+writing the option without `by:`. The key's string form is the instance's name,
+so the limits on a name above (1 to 256 bytes, no control character) still apply
+to it. A refined type limits what a name looks like, not how many there are: a
+route anyone can call that takes a `TenantId` still lets a caller send any
+`TenantId`, so pair a key with an authenticated actor, a `RateLimit`, or a closed
+set (a `match` over an enum that builds the key). A keyed instance is not warned
+about, because the key's construction is where the author bounds the names; that
+is the author's claim, and `bynk check` does not verify it, so a key on a route
+anyone can call, with nothing else limiting how many names are sent, bounds only
+their shape.
 
 A running container costs money. See Cloudflare's
 [Containers pricing](https://developers.cloudflare.com/containers/pricing/) and

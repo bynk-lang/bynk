@@ -1,0 +1,46 @@
+context acme.api
+
+consumes bynk { Clock, ApiKeyLabel, ApiKeySecret }
+consumes bynk.cloudflare { RateLimit }
+
+type AccountId = String where NonEmpty && MaxLength(64)
+
+type NewKey = { label: ApiKeyLabel }
+
+// #3939: an API key actor. Keys look like `acme_<id>_<secret><checksum>` and are read from
+// `Authorization: Bearer <key>`.
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"), identity = AccountId }
+
+capability PerIp = RateLimit @limit(1000) @period(60.seconds)
+
+service api from http {
+	cors { origins: ["https://console.example.com"] }
+
+	// The seam verifies the key before the body runs; the binder carries the identity.
+	@rateLimit(PerIp, key: clientIp)
+	on GET("/me") () -> Effect[HttpResult[String]] by c: Client {
+		Ok(c.identity)
+	}
+
+	// The handler's `headers` view hides the key's header (ADR 0899).
+	@rateLimit(PerIp, key: clientIp)
+	on GET("/auth-header") (headers: RequestHeaders) -> Effect[HttpResult[String]] by c: Client {
+		Ok(headers.get("authorization").getOrElse("none"))
+	}
+
+	// The binder is optional: verify the key, capture nothing.
+	@rateLimit(PerIp, key: clientIp)
+	on DELETE("/session") () -> Effect[HttpResult[()]] by Client {
+		NoContent
+	}
+
+	// `mint` answers the key once.
+	@rateLimit(PerIp, key: clientIp)
+	on POST("/accounts/:id/keys") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {
+		let r <- Client.mint(id, body.label)
+		match r {
+			Ok(key) => Created(key),
+			Err(_) => Conflict("too many keys"),
+		}
+	}
+}

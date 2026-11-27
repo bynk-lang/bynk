@@ -268,6 +268,8 @@ fn self_call_args<'e>(
         | Callee::Kernel { .. }
         | Callee::SignedCookie { .. }
         | Callee::SessionRevokeAll { .. }
+        | Callee::ApiKeyMint { .. }
+        | Callee::ApiKeyEqual
         | Callee::CookieField { .. }
         | Callee::Intrinsic { .. }
         | Callee::Fault { .. }

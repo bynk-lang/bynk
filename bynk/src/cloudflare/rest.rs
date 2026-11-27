@@ -19,6 +19,7 @@ use super::retry::{Idempotent, Policy};
 
 pub(crate) mod d1;
 pub(crate) mod kv;
+pub(crate) mod queues;
 pub(crate) mod r2;
 pub(crate) mod vectorize;
 
@@ -192,6 +193,7 @@ pub(crate) enum Purpose {
     R2,
     D1,
     Vectorize,
+    Queues,
 }
 
 impl Purpose {
@@ -202,6 +204,7 @@ impl Purpose {
             Purpose::R2 => "create the account's R2 buckets",
             Purpose::D1 => "create the account's D1 databases",
             Purpose::Vectorize => "check, create or delete the account's Vectorize indexes",
+            Purpose::Queues => "check, create or delete the account's queues",
         }
     }
 
@@ -212,6 +215,7 @@ impl Purpose {
             Purpose::R2 => "Workers R2 Storage: Edit",
             Purpose::D1 => "D1: Edit",
             Purpose::Vectorize => "Vectorize: Edit",
+            Purpose::Queues => "Queues: Edit",
         }
     }
 

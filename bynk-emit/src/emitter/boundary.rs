@@ -270,6 +270,31 @@ pub(super) fn emit_json_codec_helpers(
     stmts
 }
 
+/// #4549: the `out` frame type of each `from websocket` service. It is written by its codec (on `workers`, by the
+/// socket's `send`; on `bundle`, by the `TestConnection` a case opens), so it is a boundary type too: the `in` type
+/// already is, as `on message`'s parameter. In service-name order.
+fn ws_out_roots(commons: &TypedCommons) -> Vec<TypeRef> {
+    let mut services: Vec<&ServiceDecl> = commons
+        .commons
+        .items
+        .iter()
+        .filter_map(CommonsItem::as_service)
+        .collect();
+    services.sort_by(|a, b| a.name.name.cmp(&b.name.name));
+    services
+        .into_iter()
+        .filter_map(|s| match &s.protocol {
+            bynk_syntax::ast::ServiceProtocol::WebSocket { out_type, .. } => Some(out_type.clone()),
+            bynk_syntax::ast::ServiceProtocol::Call
+            | bynk_syntax::ast::ServiceProtocol::Http
+            | bynk_syntax::ast::ServiceProtocol::Cron
+            | bynk_syntax::ast::ServiceProtocol::Queue { .. }
+            | bynk_syntax::ast::ServiceProtocol::Events { .. }
+            | bynk_syntax::ast::ServiceProtocol::Email { .. } => None,
+        })
+        .collect()
+}
+
 /// Emit boundary serialise/deserialise helpers (v0.8 §3.4 / §5.2) for
 /// every named type declared in this file that flows through a
 /// cross-context call, plus the specialised generic helpers for any
@@ -369,11 +394,12 @@ pub(super) fn emit_boundary_helpers(
         // #1678: on `workers` an agent call crosses a Durable Object `fetch`, so
         // every agent handler's parameter and return types are boundary types
         // too. On `bundle` the call is in-process and needs no codec.
-        let agent_call_roots: Vec<TypeRef> = if workers {
+        let mut agent_call_roots: Vec<TypeRef> = if workers {
             agent_call_boundary_roots(&agents, ctx.inspect_agents)
         } else {
             Vec::new()
         };
+        agent_call_roots.extend(ws_out_roots(commons));
         let boundary_types_all =
             collect_boundary_types(&commons.types, &services, &agents, &agent_call_roots);
         // Locally-declared boundary types get full helpers in this module. On

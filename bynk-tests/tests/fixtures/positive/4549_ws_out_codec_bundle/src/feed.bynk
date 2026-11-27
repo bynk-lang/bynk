@@ -1,0 +1,39 @@
+context feed
+
+type DeskId = opaque String
+type Reading = { price: Decimal, marks: List[Option[Int]] }
+type Tick = | Quote(reading: Reading) | Gone
+
+actor Public { auth = None }
+
+// #4549: an `out` frame that is a sum holding a `Decimal` and a `List[Option[Int]]`. On the bundle target
+// a `TestConnection` runs the frame's serialisation codec, so the helpers for the sum, the record and the
+// generic instantiations must be emitted and must type-check where the test tier calls them.
+service Ticker from websocket(in: String, out: Tick) {
+  on open (desk: DeskId) -> Effect[()] by who: Public {
+    let _ <- Desk(desk).join(desk, connection)
+    ()
+  }
+
+  on close (desk: DeskId) -> Effect[()] by who: Public {
+    let _ <- Desk(desk).leave(desk)
+    ()
+  }
+}
+
+agent Desk {
+  key id: DeskId
+  store conns: Map[DeskId, Connection[Tick]]
+
+  on call join(k: DeskId, c: Connection[Tick]) -> Effect[()] {
+    let _ <- c.send(Quote(Reading { price: 1.50d, marks: [Some(1), None] }))
+    let _ <- c.send(Gone)
+    let _ <- conns.put(k, c)
+    ()
+  }
+
+  on call leave(k: DeskId) -> Effect[()] {
+    let _ <- conns.remove(k)
+    ()
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "Each `ApiKey` key takes one kind of value. `secret` names the environment variable holding the pepper, as a string. `prefix` is 2 to 16 lower-case letters and digits starting with a letter, and every key starts with it. `header` is an HTTP header name to read the key from; omit it to read `Authorization: Bearer <key>`, and it cannot be `Authorization`, `Cookie`, `Host`, `Content-Length` or `Content-Type`. A key given twice is refused too, since the first would win quietly.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.api_key_bad_arg",
+  "constructs": [],
+  "example": "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"Acme\"), identity = AccountId }   // ✗ upper case\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"acme\"), identity = AccountId }   // ✓",
+  "severity": "error",
+  "summary": "An `ApiKey` config value has the wrong kind, or a key is repeated (#3939)."
+}

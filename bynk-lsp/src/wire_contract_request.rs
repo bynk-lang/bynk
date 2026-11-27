@@ -45,7 +45,7 @@ use bynk_ide::wire_contract::{
     BoundaryKind, Envelope, HttpResponse, NoCrossContextReason, REDIRECT_HEADER, ResponseBody,
     ResponseOrigin, WireContractModel, response_body,
 };
-use bynk_syntax::ast::{PredKind, TypeDecl};
+use bynk_syntax::ast::{AgentDecl, PredKind, TypeDecl};
 use tower_lsp::lsp_types::Range;
 
 pub use crate::architecture_request::WireLoc as WcLoc;
@@ -426,7 +426,7 @@ fn expected_wire(e: &Expected) -> WcExpected {
     }
 }
 
-fn wc_ref(r: &WireRef) -> WcRef {
+pub(crate) fn wc_ref(r: &WireRef) -> WcRef {
     match r {
         WireRef::Base {
             base,
@@ -542,7 +542,7 @@ fn resolve_type_loc(
     None
 }
 
-fn wc_type(
+pub(crate) fn wc_type(
     t: &WireType,
     project_root: &Path,
     index: &ProjectIndex,
@@ -560,6 +560,37 @@ fn wc_type(
     }
 }
 
+/// #3803: the wire contract's type table for one agent's `store` fields, so a client classifies a
+/// stored value's type the way it classifies a wire type. The agent's store kinds' element types
+/// are boundary positions (an agent's state is validated on load), so the same walk that
+/// `wire_contract_for_service` uses over services roots here at the agent.
+pub fn store_type_table(
+    agent: &AgentDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    project_root: &Path,
+    index: &ProjectIndex,
+    snapshots: &HashMap<PathBuf, String>,
+    search_order: &[String],
+) -> (Vec<WcType>, Vec<WcInst>) {
+    let services = HashMap::new();
+    let agents = HashMap::from([(agent.name.name.clone(), agent.clone())]);
+    let names = wire::collect_boundary_types(types, &services, &agents, &[]);
+    let insts = wire::collect_generic_instantiations(&services, &agents, &names, types, &[]);
+    let model = wire::boundary_model(&names, types, insts, |_| Provenance::Owned);
+    (
+        model
+            .types
+            .iter()
+            .map(|t| wc_type(t, project_root, index, snapshots, search_order))
+            .collect(),
+        model
+            .instantiations
+            .iter()
+            .map(|i| wc_inst(i, types))
+            .collect(),
+    )
+}
+
 /// Lower one boundary occurrence of a generic instantiation. `WireInst`
 /// (`bynk-check/src/wire.rs`) carries raw `TypeRef`s for its type
 /// arguments — the same "shape, not TS" IR the emitter's codec generation
@@ -568,7 +599,7 @@ fn wc_type(
 /// `wire_contract_for_service` uses for envelope params) before lowering,
 /// which is why `types` (the owning unit's combined type table) threads
 /// through here.
-fn wc_inst(inst: &WireInst, types: &HashMap<String, Arc<TypeDecl>>) -> WcInst {
+pub(crate) fn wc_inst(inst: &WireInst, types: &HashMap<String, Arc<TypeDecl>>) -> WcInst {
     let key = inst.ts_name();
     match inst {
         WireInst::ResultInst { ok, err } => WcInst::ResultInst {

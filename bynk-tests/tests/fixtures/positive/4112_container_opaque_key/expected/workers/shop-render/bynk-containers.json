@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "containers": [
+    { "capability": "Archiver", "class": "__Container_Archiver", "build": "containers/renderer", "instance_type": null }
+  ]
+}
