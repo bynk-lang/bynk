@@ -1,0 +1,20 @@
+---
+#3959, capability parameters slice 1: a commons function declares a capability parameter
+(`Store: Kv`) beside a shared capability (`Logger`), and uses both in its body.
+---
+commons lib.cache
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+fn remember(key: String, value: String) -> Effect[String] given Store: Kv, Logger {
+	let hit <- Store.get(key)
+	match hit {
+		Some(text) => Effect.pure(text),
+		None => {
+			let _ <- Store.put(key, value)
+			let _ <- Logger.info("stored \(key)")
+			Effect.pure(value)
+		},
+	}
+}

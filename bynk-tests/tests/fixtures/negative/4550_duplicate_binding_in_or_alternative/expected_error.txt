@@ -1,0 +1,2 @@
+bynk.types.duplicate_pattern_binding
+`x` is bound more than once in this pattern

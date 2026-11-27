@@ -1,0 +1,12 @@
+{
+  "blurb": "A commons function names a capability with no instances bare, as a shared capability: `given Logger` means the caller's one `Logger`, which the caller's own `given` supplies, exactly as between context functions. There is nothing to choose, so a shared capability is never bound at a call. Remove the binding; only capability parameters (`given Store: Kv`) are bound.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.binding_shared",
+  "constructs": [
+    "call"
+  ],
+  "example": "fn remember(key: String) -> Effect[()] given Store: Kv, Logger { … }\n\nremember(key, given Store = Sessions, Logger = Logger)   // ✗ `Logger` is shared\n\nremember(key, given Store = Sessions)                    // ✓ the caller's `given Logger` supplies it",
+  "severity": "error",
+  "summary": "A call binds a shared capability of its callee (`given Logger = Logger`); only capability parameters are bound."
+}

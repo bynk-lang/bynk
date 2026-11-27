@@ -1,0 +1,12 @@
+{
+  "blurb": "A call binds each of its callee's capability parameters exactly once, inside the argument list after `given`. Binding one twice leaves the call with two meanings for the parameter. Remove the repeat. Binding one instance to two different parameters is allowed, because the aliasing is written where a reader sees it.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.binding_duplicate",
+  "constructs": [
+    "call"
+  ],
+  "example": "copy(key, given From = Sessions, To = Archive, From = Archive)   // ✗ `From` is bound twice\n\ncopy(key, given From = Sessions, To = Archive)                   // ✓ each parameter once",
+  "severity": "error",
+  "summary": "A call binds one of its callee's capability parameters more than once."
+}

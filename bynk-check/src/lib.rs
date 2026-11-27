@@ -48,6 +48,7 @@ pub mod builtin_names;
 #[cfg(test)]
 mod callee_tests;
 pub mod caller_admission;
+pub mod cap_params;
 pub mod capability_paths;
 pub mod check_pipeline;
 pub mod checker;
@@ -59,6 +60,7 @@ pub mod contract_compat;
 pub mod cors_origin;
 pub mod d1_migrations;
 pub mod d1_sql;
+pub(crate) mod duplicate_bindings;
 pub mod email;
 pub mod email_fallback;
 pub mod email_route;

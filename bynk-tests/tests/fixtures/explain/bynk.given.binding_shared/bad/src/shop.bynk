@@ -1,0 +1,11 @@
+context shop
+
+uses lib.cache
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+capability Sessions = Kv
+
+fn save(key: String) -> Effect[()] given Sessions, Logger {
+	remember(key, given Store = Sessions, Logger = Logger)
+}

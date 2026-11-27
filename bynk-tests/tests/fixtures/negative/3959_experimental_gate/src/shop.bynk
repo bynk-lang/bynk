@@ -1,0 +1,17 @@
+---
+#3959, track §12: every new form is experimental, so without `[unstable] allow`
+the capability in a commons' `consumes`, the parameter and the binding are each refused.
+---
+context shop
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv, D1 }
+uses lib.cache
+
+capability Sessions = Kv
+capability Archive = Kv
+capability Orders = D1
+
+fn save(key: String) -> Effect[String] given Sessions, Logger {
+	remember(key, "v", given Store = Sessions)
+}
