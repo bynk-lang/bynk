@@ -130,7 +130,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.actor.api_key_mint_outside_handler",
-        blurb: "`Actor.mint(identity, label)` hashes the new key under the pepper, and the pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's. So `mint` is legal only in a service handler. Mint the key there and return it; a provider or agent gets what it needs from the handler.",
+        blurb: "`Actor.mint(identity, label)` hashes the new key under the pepper, and `Actor.sweep(identity)` tells the keys under the live pepper from the rest, which also takes the pepper. The pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's, so `mint` and `sweep` are legal only in a service handler. Call them there and return what they answer; a provider or agent gets what it needs from the handler.",
         example: "agent Accounts {\n    key id: AccountId\n}\n\non call open(label: ApiKeyLabel) -> Effect[()] given Clock {\n    let _ <- Client.mint(self.id, label)   // ✗ in an agent\n}\n\non POST(\"/accounts/:id/keys\") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {\n    let r <- Client.mint(id, body.label)   // ✓ in a service handler\n}",
     },
     Explain {
@@ -5605,10 +5605,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 seam checks one: a `Bearer` or `Oidc` actor. A public route, or \
                 one guarded by a `Signature` actor, has no token to expire; for a \
                 `Signature` route `by Stale` sends a stale signature. An `ApiKey` \
-                actor's keys do not expire yet (its `ttl` is a later release), so \
-                its seam has no expired key to refuse; test it with `by Malformed`, \
-                `by Unknown` or `by Forged`. Drive a route guarded by a `Bearer` \
-                or `Oidc` actor. See \
+                actor's keys expire only when it declares a `ttl`; on an `ApiKey` \
+                route without one, give the actor a `ttl` or test it with \
+                `by Malformed`, `by Unknown`, `by Forged` or `by Revoked`. Drive a \
+                route guarded by a `Bearer`, `Oidc` or `ttl`-bearing `ApiKey` \
+                actor. See \
                 `bynk.test.nobody_needs_secured_route` for the same limit on \
                 `Nobody`.",
         example: "// demo/api.bynk\n\
@@ -7676,7 +7677,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.actor.api_key_mint_outside_handler",
-        "`Actor.mint` on an `ApiKey` actor is called outside a service handler, where the pepper is not (#3939).",
+        "`Actor.mint` or `Actor.sweep` on an `ApiKey` actor is called outside a service handler, where the pepper is not (#3939).",
     ),
     d(
         "bynk.actor.api_key_missing_secret",
@@ -11358,7 +11359,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.expired_needs_bearer_route",
-        "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum) or an `Oidc` actor; it sends a correctly signed token whose `exp` has passed, so only a `Bearer` or `Oidc` seam can refuse it. An `ApiKey` route's keys do not expire yet (#3939).",
+        "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum) or an `Oidc` actor; it sends a correctly signed token whose `exp` has passed, so only a `Bearer` or `Oidc` seam, or an `ApiKey` seam whose actor declares a `ttl`, can refuse it (#3939).",
         &["case"],
     ),
     dg(

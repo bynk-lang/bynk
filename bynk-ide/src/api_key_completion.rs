@@ -77,6 +77,10 @@ pub fn members(a: &bynk_syntax::ast::ActorDecl) -> Vec<(&'static str, String)> {
             "revokeAll",
             format!("revokeAll(identity: {identity}) -> Effect[Int]"),
         ),
+        (
+            "sweep",
+            format!("sweep(identity: {identity}) -> Effect[Int]"),
+        ),
     ]
 }
 
