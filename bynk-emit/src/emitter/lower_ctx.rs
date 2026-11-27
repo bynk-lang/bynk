@@ -1355,13 +1355,6 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    /// #3807: [`UnitFacts::rebrands_commons_type`] for a type of this unit's commons.
-    pub(crate) fn rebrands_commons_type(&self, name: &str) -> bool {
-        self.module
-            .unit
-            .rebrands_commons_type(&self.module.commons.types, name)
-    }
-
     /// #2058: the type names a consumed context declares, each with the
     /// namespace this module names that context's types under.
     pub(crate) fn consumed_type_ns(&self) -> &HashMap<String, String> {

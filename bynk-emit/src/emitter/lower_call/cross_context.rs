@@ -70,7 +70,7 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
                 cx.cross_context(),
                 &CallerView {
                     types: &cx.commons().types,
-                    rebrands: &|n| cx.rebrands_commons_type(n),
+                    rebrands: &|n| cx.module.unit.rebrands_commons_type(&cx.commons().types, n),
                 },
                 cx.consumed_type_ns(),
                 method,
