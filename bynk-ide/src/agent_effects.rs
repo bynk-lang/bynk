@@ -96,16 +96,23 @@ impl PartialEq for StoredType {
     }
 }
 
+/// Which of a store kind's type arguments a write by `op` stores, or `None` for a write that
+/// stores no value (`remove`). `:=` is a cell assignment. Every mutating operation of the
+/// checker's store-op registry is classified: a test walks the registry, so a new one cannot be
+/// missed silently.
+fn stored_arg(head: &str, op: &str) -> Option<usize> {
+    match (head, op) {
+        ("Cell", ":=" | "update") => Some(0),
+        ("Map" | "Cache", "put" | "update" | "upsert") => Some(1),
+        ("Set", "add") | ("Log", "append") => Some(0),
+        _ => None,
+    }
+}
+
 /// What a write to `field` by `op` stores, per the agent's declared store kinds.
 fn stored_type(kinds: &HashMap<String, StoreKind>, field: &str, op: &str) -> Option<StoredType> {
     let kind = kinds.get(field)?;
-    let arg = |i: usize| kind.args.get(i).cloned();
-    let value = match (kind.head.name.as_str(), op) {
-        ("Cell", ":=" | "update") => arg(0),
-        ("Map" | "Cache", "put" | "update") => arg(1),
-        ("Set", "add") | ("Log", "append") => arg(0),
-        _ => None,
-    };
+    let value = stored_arg(&kind.head.name, op).and_then(|i| kind.args.get(i).cloned());
     Some(StoredType {
         value,
         kind: kind.clone(),
@@ -416,6 +423,26 @@ fn simple_text(arg: &Expr) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    /// #3803: every mutating store operation either stores one of the kind's arguments or is a
+    /// `remove`, so a new operation in the registry has to be classified here.
+    #[test]
+    fn every_mutating_store_op_is_classified() {
+        for head in ["Map", "Cache", "Set", "Cell", "Log"] {
+            for op in bynk_check::store_ops::ops_for(head)
+                .iter()
+                .filter(|o| o.mutates)
+            {
+                let stores = stored_arg(head, op.name).is_some();
+                assert_eq!(
+                    stores,
+                    op.name != "remove",
+                    "{head}.{} is not classified by `stored_arg`",
+                    op.name
+                );
+            }
+        }
+    }
+
     use super::*;
 
     fn effects(src: &str, agent: &str, agents: &[&str]) -> Vec<HandlerEffects> {

@@ -422,8 +422,9 @@ agent Cart {
   store files: Map[String, Bytes]
   store skus: Set[String]
   store audit: Log[Line]
+  store sessions: Cache[String, Line] @ttl(30.minutes)
 
-  on call add(line: Line, data: Bytes) -> Effect[()] {
+  on call add(line: Line, data: Bytes) -> Effect[()] given Clock {
     latest := line
     lines := [line]
     blob := data
@@ -431,6 +432,11 @@ agent Cart {
     let _ <- files.put(line.sku, data)
     let _ <- skus.add(line.sku)
     let _ <- audit.append(line)
+    let _ <- prices.upsert(line.sku, line.qty, (q) => q + line.qty)
+    let _ <- prices.update(line.sku, (q) => q + 1)
+    let _ <- sessions.put(line.sku, line)
+    let _ <- sessions.upsert(line.sku, line, (l) => l)
+    let _ <- sessions.update(line.sku, (l) => l)
     let _ <- prices.remove(line.sku)
     ()
   }
@@ -500,6 +506,20 @@ fn writes_report_the_type_they_store() {
     let skus = by("skus", "add");
     assert_eq!(skus["valueType"], "String");
     assert_eq!(skus["fieldType"], "Set[String]");
+
+    // `upsert` and `update` store the map's or cache's value type too: the starting value and the
+    // combiner's result are both a `V`.
+    for (field, value, kind) in [
+        ("prices", "Int", "Map[String, Int]"),
+        ("sessions", "Line", "Cache[String, Line]"),
+    ] {
+        for op in ["upsert", "update"] {
+            let w = by(field, op);
+            assert_eq!(w["valueType"], value, "{field}.{op}: {w}");
+            assert_eq!(w["fieldType"], kind, "{field}.{op}: {w}");
+        }
+    }
+    assert_eq!(by("sessions", "put")["valueType"], "Line");
 
     // A remove stores no value, and says what the field still is.
     let removed = by("prices", "remove");
