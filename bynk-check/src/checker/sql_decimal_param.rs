@@ -7,6 +7,8 @@
 use bynk_syntax::ast::{Expr, ExprKind};
 use bynk_syntax::error::{Applicability, CompileError};
 
+use super::{TyId, Types};
+
 /// The variants whose payload changed from a `String` to a `Decimal`.
 fn is_decimal_param(variant: &str) -> bool {
     matches!(variant, "PgNumeric" | "MySqlDecimal")
@@ -44,6 +46,35 @@ pub(crate) fn with_decimal_fix(
             "`{variant}` takes a `Decimal` since #4046: parse the text with `Decimal.parse(s)`, which gives an `Option[Decimal]`"
         )),
     }
+}
+
+/// Report `bynk.types.variant_payload_mismatch` for argument `i` (0-based) of `variant`. This
+/// lives here, out of line, so the recursive expression checker that calls it keeps a small
+/// stack frame (a 64-term chain is checked on a 2 MiB test thread).
+#[inline(never)]
+pub(crate) fn push_payload_mismatch(
+    errors: &mut Vec<CompileError>,
+    (arg, i, variant, field): (&Expr, usize, &str, &str),
+    (actual, expected): (TyId, TyId),
+    tys: &Types,
+) {
+    let err = CompileError::new(
+        "bynk.types.variant_payload_mismatch",
+        arg.span,
+        format!(
+            "argument {} to variant `{variant}` has type `{}`, but field `{field}` expects `{}`",
+            i + 1,
+            actual.display(tys),
+            expected.display(tys)
+        ),
+    );
+    errors.push(with_decimal_fix(
+        err,
+        variant,
+        &expected.display(tys),
+        &actual.display(tys),
+        arg,
+    ));
 }
 
 #[cfg(test)]
