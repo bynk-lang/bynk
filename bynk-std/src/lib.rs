@@ -679,6 +679,8 @@ pub enum OptionKind {
     /// A list literal of string literals: `@allowedSenders(["a@b.example"])`
     /// (#3302).
     StrList,
+    /// A type's name, written `by: Name`: `@instances(by: TenantId)` (#4112).
+    Type,
 }
 
 /// The Worker binding prefix of a `Service` instance (interop I5, #1972):
@@ -892,6 +894,11 @@ pub const CONTAINER_INSTANCE_TYPE_OPTION: &str = "instanceType";
 /// The names of the Worker secrets passed to the container's process at start
 /// (#3477 J).
 pub const CONTAINER_FORWARD_OPTION: &str = "forward";
+
+/// The type that names a container's instances (#4112): `@instances(by: TenantId)` makes `send`,
+/// `receiveBytes` and `sendBytes` take a `TenantId` where they take a `String`, so the key's
+/// constructor is where an author bounds the set of names.
+pub const CONTAINER_INSTANCES_OPTION: &str = "instances";
 
 /// The instance types a `Container` can start with under the `durable_object`
 /// scheduling policy. There is no `basic` under it.
@@ -1241,6 +1248,7 @@ pub const UNITS: &[Unit] = &[
                     (CONTAINER_SLEEP_AFTER_OPTION, OptionKind::Duration),
                     (CONTAINER_INSTANCE_TYPE_OPTION, OptionKind::Str),
                     (CONTAINER_FORWARD_OPTION, OptionKind::StrList),
+                    (CONTAINER_INSTANCES_OPTION, OptionKind::Type),
                 ],
                 required: &[CONTAINER_BUILD_OPTION, CONTAINER_PORT_OPTION],
                 bare: false,
@@ -2145,7 +2153,14 @@ mod tests {
             instantiable("bynk.cloudflare", "Container").expect("Container is instantiable");
         assert_eq!(
             container.option_names().collect::<Vec<_>>(),
-            ["build", "port", "sleepAfter", "instanceType", "forward"]
+            [
+                "build",
+                "port",
+                "sleepAfter",
+                "instanceType",
+                "forward",
+                "instances"
+            ]
         );
         assert_eq!(
             container.option_kind("sleepAfter"),
