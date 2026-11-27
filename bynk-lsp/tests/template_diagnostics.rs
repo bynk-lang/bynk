@@ -53,7 +53,10 @@ fn an_unsaved_template_buffer_is_what_the_editor_checks() {
     let mut sources =
         bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
     // The buffer fixes the misspelling: the template error goes, and with it the unused field.
-    sources.insert(root.join("embeds/page.html"), "<h1>\\(title)</h1>\n".to_string());
+    sources.insert(
+        root.join("embeds/page.html"),
+        "<h1>\\(title)</h1>\n".to_string(),
+    );
     let r = bynk_ide::diagnose_project(&root, &sources);
     let template_errors: Vec<_> = r
         .files
