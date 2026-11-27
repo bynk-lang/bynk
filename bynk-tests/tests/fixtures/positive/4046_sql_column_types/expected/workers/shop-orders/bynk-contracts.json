@@ -1,14 +1,14 @@
 {
   "version": 1,
   "provides": {
-    "logs": "638afa9204f6f8a4",
-    "save": "9042a9b8eb2829f5",
-    "since": "ad725ad24839234f"
+    "logs": "827f0ee8589ead84",
+    "save": "e6927afb78239577",
+    "since": "160f30b2203977d3"
   },
   "expects": {},
   "provides_shapes": {
-    "logs": "Svc(\"logs\",Ret(R(L(Rec(\"Logged\",F(\"id\",B(\"String\")),F(\"logged\",B(\"Instant\")))),N(\"SqlReadError\"))))",
-    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"total\",B(\"Decimal\")),P(\"placed\",B(\"Instant\")),P(\"wait\",B(\"Duration\")),P(\"status\",Sum(\"Status\",V(\"Open\"),V(\"Shipped\"))),Ret(R(N(\"SqlRun\"),N(\"SqlError\"))))",
-    "since": "Svc(\"since\",P(\"at\",B(\"Instant\")),Ret(R(L(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"placed\",B(\"Instant\")),F(\"status\",Sum(\"Status\",V(\"Open\"),V(\"Shipped\"))),F(\"total\",B(\"Decimal\")),F(\"wait\",B(\"Duration\")))),N(\"SqlReadError\"))))"
+    "logs": "Svc(\"logs\",Ret(R(L(Rec(\"Logged\",F(\"id\",B(\"String\")),F(\"logged\",B(\"Instant\")))),Sum(\"SqlReadError\",V(\"Decode\",F(\"error\",N(\"DecodeError\"))),V(\"Sql\",F(\"error\",Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\"))))))))))",
+    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"total\",B(\"Decimal\")),P(\"placed\",B(\"Instant\")),P(\"wait\",B(\"Duration\")),P(\"status\",Sum(\"Status\",V(\"Open\"),V(\"Shipped\"))),Ret(R(Rec(\"SqlRun\",F(\"changes\",B(\"Int\")),F(\"lastRowId\",B(\"Int\"))),Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\")))))))",
+    "since": "Svc(\"since\",P(\"at\",B(\"Instant\")),Ret(R(L(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"placed\",B(\"Instant\")),F(\"status\",Sum(\"Status\",V(\"Open\"),V(\"Shipped\"))),F(\"total\",B(\"Decimal\")),F(\"wait\",B(\"Duration\")))),Sum(\"SqlReadError\",V(\"Decode\",F(\"error\",N(\"DecodeError\"))),V(\"Sql\",F(\"error\",Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\"))))))))))"
   }
 }
