@@ -48,6 +48,19 @@ impl Page {
     pub(crate) fn done_if(self, done: bool) -> Page {
         Page { done, ..self }
     }
+
+    /// Whether the account says there is more after this, page `page`: `total_pages` beyond it,
+    /// or, without one, what `missing_total` reads into a full page. The one rule
+    /// [`Numbered::follow`] and the sites that tell a listing cut short from its end share.
+    pub(crate) fn more(&self, page: u64, missing_total: MissingTotal) -> bool {
+        match (self.total_pages, missing_total) {
+            (Some(total), _) => page < total,
+            (None, MissingTotal::AssumeLast) => false,
+            (None, MissingTotal::WhileFull) => self
+                .per_page
+                .is_some_and(|per| self.entries as u64 >= per && self.entries > 0),
+        }
+    }
 }
 
 /// How a numbered listing without `total_pages` is read.
@@ -89,13 +102,7 @@ impl Numbered {
     pub(crate) fn follow<E>(self, mut each: impl FnMut(u64) -> Result<Page, E>) -> Result<(), E> {
         for page in 1..=self.cap.unwrap_or(u64::MAX) {
             let read = each(page)?;
-            let more = match (read.total_pages, self.missing_total) {
-                (Some(total), _) => page < total,
-                (None, MissingTotal::AssumeLast) => false,
-                (None, MissingTotal::WhileFull) => read
-                    .per_page
-                    .is_some_and(|per| read.entries as u64 >= per && read.entries > 0),
-            };
+            let more = read.more(page, self.missing_total);
             if read.done || (self.stop_on_empty && read.entries == 0) || !more {
                 break;
             }
