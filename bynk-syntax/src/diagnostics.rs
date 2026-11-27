@@ -1373,7 +1373,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 will then not warn; that is not available yet.",
         example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\n\
                   service api from http {\n    on GET(\"/render/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {\n        let res <- Renderer.send(\"tenant-\\(tenant)\", req)   // ⚠ any caller picks the instance\n        …\n    }\n}\n\n\
-                  service api from http {\n    on GET(\"/render\") () -> Effect[HttpResult[String]] by m: Member given Renderer {\n        let res <- Renderer.send(m.tenant, req)         // ✓ the authenticated identity chooses\n        …\n    }\n}",
+                  service api from http {\n    on GET(\"/render\") () -> Effect[HttpResult[String]] by m: Member given Renderer {\n        let res <- Renderer.send(m.identity, req)       // ✓ the authenticated identity chooses\n        …\n    }\n}",
     },
     Explain {
         code: "bynk.context.consumes_cycle",

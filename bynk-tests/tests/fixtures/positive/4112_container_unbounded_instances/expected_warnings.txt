@@ -1,2 +1,7 @@
 bynk.container.unbounded_instances `Renderer.send` names a container instance from `tenant`
 bynk.container.unbounded_instances `Renderer.receiveBytes` names a container instance from `name`
+bynk.container.unbounded_instances `Renderer.sendBytes` names a container instance from `name`
+bynk.container.unbounded_instances `Renderer.send` names a container instance from `headers`
+bynk.container.unbounded_instances `Renderer.send` names a container instance from `cookies`
+bynk.container.unbounded_instances `Renderer.send` names a container instance from `body`
+bynk.container.unbounded_instances `Renderer.send` names a container instance from `team`
