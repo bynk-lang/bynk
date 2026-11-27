@@ -149,14 +149,37 @@ service chat from http {
 A refusal before the stream starts (an unknown model, a usage limit) is the
 `Err`, so the handler can answer with an ordinary response. A failure after the
 first event faults the stream and aborts the response, as a failing producer does
-for any stream. A handler that wants text rather than events maps the stream and
-decodes each event. The shape of an event is the model's: for a chat model, a
+for any stream. A handler that wants text rather than events uses `generateStream`, below. The shape of an event is the model's: for a chat model, a
 run on a real account showed each event as a JSON object with a `response` text
 delta (and a padding field `p`), the last JSON event also carrying the
 cumulative `usage`, and the stream ending with `data: [DONE]`. That is observed,
 not documented by Cloudflare, so check the model's page and do not build on
 fields it does not name. A stream is read once and cannot cross a service boundary, so the handler
 that calls `runStream` is the one that serves it.
+
+For a chat UI, `generateStream` is `generate` streamed: the same `GenerateRequest`,
+and a stream of the text each event added, with no events to decode:
+
+```bynk,fragment
+service chat from http {
+	on POST("/chat") (body: String) -> Effect[HttpResult[String]] by Visitor given Ai {
+		let request = GenerateRequest {
+			messages: [ChatMessage { role: ChatRole.User, content: body }],
+		}
+		let started <- Ai.generateStream("@cf/meta/llama-3.2-1b-instruct", request)
+		match started {
+			Ok(deltas) => Streaming(deltas),
+			Err(Overloaded) => ServiceUnavailable("try again shortly"),
+			Err(_) => ServerError("the model is unavailable"),
+		}
+	}
+}
+```
+
+Events that add no text (a usage report, a role-only chunk) are skipped. An event
+that is neither text nor one of those faults the stream, naming its keys and never
+its values, so a shape Cloudflare adds shows up as a fault and not as silent empty
+text. Token usage is not in the stream.
 
 ## Answer the errors
 
