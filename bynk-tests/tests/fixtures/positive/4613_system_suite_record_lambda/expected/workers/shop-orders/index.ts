@@ -32,6 +32,25 @@ export default {
           if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
           const servicePath = path.slice("/_bynk/call/".length);
           switch (servicePath) {
+            case "close": {
+              __route = "call close";
+              const __contract = request.headers.get("X-Bynk-Contract");
+              if (__contract !== "3abd65d2c88fd7d3") {
+                globalThis.console.error("ContractMismatch shop.orders call close", { service: "close", expected: "3abd65d2c88fd7d3", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "close", expected: "3abd65d2c88fd7d3", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              }
+              let args: __JsonValue;
+              try {
+                args = globalThis.JSON.parse(__body) as __JsonValue;
+              } catch {
+                return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
+              }
+              if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
+              const argsObj = args as { [k: string]: __JsonValue };
+              const result = await surface.close();
+              const body = handlers.__serialise_CloseInfo(result);
+              return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+            }
             case "items": {
               __route = "call items";
               const __contract = request.headers.get("X-Bynk-Contract");

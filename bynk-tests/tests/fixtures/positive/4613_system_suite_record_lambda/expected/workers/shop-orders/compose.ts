@@ -11,6 +11,9 @@ export interface Env {
 export function compose(env: Env) {
   const deps = { env };
   return {
+    async close() {
+      return handlers.close.call(deps);
+    },
     async items() {
       return handlers.items.call(deps);
     },

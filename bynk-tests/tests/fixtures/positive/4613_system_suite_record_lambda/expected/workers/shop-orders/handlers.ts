@@ -4,7 +4,9 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
+import { CloseInfo } from "../../bynk.js";
 import { Line as __CommonsLine } from "../../shop/values.js";
+import { __serialise_CloseInfo, __deserialise_CloseInfo } from "../../bynk.js";
 import { __serialise_Line, __deserialise_Line } from "../../shop/values.js";
 
 export type Line = __CommonsLine & { readonly __ctxBrand?: "shop.orders" };
@@ -35,6 +37,12 @@ export const lines = {
   },
 };
 
+export const close = {
+  async call(deps: {}): globalThis.Promise<CloseInfo> {
+    return { code: 1000, reason: "done", clean: true };
+  },
+};
+
 export function __serialise_Item(value: Item): __JsonValue {
   return {
     sku: value.sku as __JsonValue,
@@ -61,6 +69,8 @@ export function __deserialise_Item(json: __JsonValue, path: string = "$"): Resul
   return Ok({ sku: __sku, qty: __qty } as Item);
 }
 
+
+export { __serialise_CloseInfo, __deserialise_CloseInfo };
 
 export { __serialise_Line, __deserialise_Line };
 

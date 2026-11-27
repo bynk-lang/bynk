@@ -1,6 +1,7 @@
 {
   "version": 1,
   "provides": {
+    "close": "3abd65d2c88fd7d3",
     "items": "f0e73e758b1a9983",
     "lines": "c3ff436acb812a4f",
     "pay": "78316fd6c3748998"
@@ -11,6 +12,7 @@
     }
   },
   "provides_shapes": {
+    "close": "Svc(\"close\",Ret(N(\"CloseInfo\")))",
     "items": "Svc(\"items\",Ret(L(Rec(\"Item\",F(\"qty\",B(\"Int\")),F(\"sku\",B(\"String\"))))))",
     "lines": "Svc(\"lines\",Ret(L(Rec(\"Line\",F(\"qty\",B(\"Int\")),F(\"sku\",B(\"String\"))))))",
     "pay": "Svc(\"pay\",P(\"amount\",B(\"Int\")),Ret(B(\"Bool\")))"

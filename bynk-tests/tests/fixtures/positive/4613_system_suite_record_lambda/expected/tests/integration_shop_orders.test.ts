@@ -7,6 +7,7 @@ import worker___ns_shop_orders from "../workers/shop-orders/index.js";
 import * as __ns_shop_payment from "../workers/shop-payment/handlers.js";
 import worker___ns_shop_payment from "../workers/shop-payment/index.js";
 import * as __ns_shop_values from "./../shop/values.js";
+import * as __ns_bynk from "./../bynk.js";
 
 <<bynk-shared: testing/expectation>>
 
@@ -102,9 +103,59 @@ async function test_any_over_a_commons_record() {
   }
 }
 
+async function test_any_over_a_prelude_record() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const { Line } = __ns_shop_values;
+    type Line = __ns_shop_values.Line;
+    function hasQty(xs: readonly Item[], q: number): boolean {
+      return (xs).some((__x: Item) => ((i: Item) => i.qty === q)(__x));
+    }
+    const { Item } = __ns_shop_orders;
+    type Item = __ns_shop_orders.Item;
+    const { CloseInfo } = __ns_bynk;
+    type CloseInfo = __ns_bynk.CloseInfo;
+    const cs = [{ code: 1000, reason: "done", clean: true }, { code: 1006, reason: "gone", clean: false }];
+    if (!((cs).some((__x: CloseInfo) => ((c: CloseInfo) => c.code === 1006)(__x)))) { throw __bynkExpectFailure("tests/orders.bynk:21:12", 627, 656, "expect cs.any((c) => c.code == 1006)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_all_over_a_prelude_record() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const { Line } = __ns_shop_values;
+    type Line = __ns_shop_values.Line;
+    function hasQty(xs: readonly Item[], q: number): boolean {
+      return (xs).some((__x: Item) => ((i: Item) => i.qty === q)(__x));
+    }
+    const { Item } = __ns_shop_orders;
+    type Item = __ns_shop_orders.Item;
+    const { CloseInfo } = __ns_bynk;
+    type CloseInfo = __ns_bynk.CloseInfo;
+    const cs = [{ code: 1000, reason: "done", clean: true }];
+    if (!((cs).every((__x: CloseInfo) => ((c: CloseInfo) => c.clean)(__x)))) { throw __bynkExpectFailure("tests/orders.bynk:26:12", 779, 801, "expect cs.all((c) => c.clean)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["any over a context record", "a suite helper's lambda over a context record", "any over a commons record"];
+export const __bynkCases: readonly string[] = ["any over a context record", "a suite helper's lambda over a context record", "any over a commons record", "any over a prelude record", "all over a prelude record"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -124,6 +175,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("any over a commons record")) {
     const started = __bynkCaseNow();
     const r = { name: "any over a commons record", ...(await test_any_over_a_commons_record()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("any over a prelude record")) {
+    const started = __bynkCaseNow();
+    const r = { name: "any over a prelude record", ...(await test_any_over_a_prelude_record()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("all over a prelude record")) {
+    const started = __bynkCaseNow();
+    const r = { name: "all over a prelude record", ...(await test_all_over_a_prelude_record()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

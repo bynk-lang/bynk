@@ -15,4 +15,14 @@ suite shop.orders as system {
     let ls <- shop.orders.lines()
     expect ls.any((l) => l.qty == 4)
   }
+
+  case "any over a prelude record" {
+    let cs = [CloseInfo { code: 1000, reason: "done", clean: true }, CloseInfo { code: 1006, reason: "gone", clean: false }]
+    expect cs.any((c) => c.code == 1006)
+  }
+
+  case "all over a prelude record" {
+    let cs = [CloseInfo { code: 1000, reason: "done", clean: true }]
+    expect cs.all((c) => c.clean)
+  }
 }
