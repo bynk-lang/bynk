@@ -6,7 +6,7 @@
 
 use bynk_check::checker::{Callee, Ty, TyId};
 use bynk_check::kernel_op::{
-    EffectOp, EffectResultOp, HttpResultOp, KernelOp, OrdOp, TestConnectionOp,
+    EffectOp, EffectResultOp, EnumOp, HttpResultOp, KernelOp, OrdOp, TestConnectionOp,
 };
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsLit, TsObjectEntry, TsType};
 
@@ -334,6 +334,15 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             KernelOp::Ord(OrdOp::Compare) => {
                 if let [other] = args {
                     return Some(lower_ord_compare(kernel_recv, receiver, other, cx, pre));
+                }
+                return mismatch(kop);
+            }
+            // #4560: `wireName` on an enum, from the wire names the codecs use.
+            KernelOp::Enum(EnumOp::WireName) => {
+                if let Some(built) =
+                    super::enum_wire::lower_wire_name(kernel_recv, receiver, cx, pre)
+                {
+                    return Some(built);
                 }
                 return mismatch(kop);
             }
