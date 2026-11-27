@@ -4,6 +4,7 @@
 //! managed keys. Each returns `Err` with the code `run` exits with, after printing what it always
 //! printed, in the order it always printed it.
 
+use super::edge_slots::{EdgeDecisions, Expired, decide_edge_keys, now_secs};
 use super::*;
 use bynk_driver::{colour, emsg};
 
@@ -373,6 +374,10 @@ pub(crate) struct KeysCx<'a> {
 pub(crate) struct Keys {
     pub(crate) listed: BTreeMap<String, Option<BTreeSet<String>>>,
     pub(crate) edge_keys: BTreeMap<Edge, EdgeKey>,
+    /// #4526: the retiring edge-key slots whose window has passed, by callee Worker, to clean up.
+    pub(crate) expired: BTreeMap<String, Vec<Expired>>,
+    /// #4526: the retiring slots (worker, first-slot name) the run cleaned up, as it goes.
+    pub(crate) cleaned: std::cell::RefCell<BTreeSet<(String, String)>>,
     pub(crate) foreign_secrets: BTreeSet<String>,
     pub(crate) foreign_keys: BTreeMap<(String, String), ForeignKey>,
 }
@@ -412,40 +417,10 @@ pub(crate) fn decide_keys(cx: &KeysCx<'_>, secret_source: &SecretSource) -> Resu
             (worker.to_string(), answer)
         })
         .collect();
-    let mut edge_keys: BTreeMap<Edge, EdgeKey> = BTreeMap::new();
-    for edge in &edges {
-        let names = match edge.keys() {
-            Ok(names) => names,
-            Err(e) => {
-                emsg!("bynk: error: {e}");
-                return Err(ExitCode::FAILURE);
-            }
-        };
-        let held = |worker: &str, keys: &[String]| {
-            end_presence(edge, worker, keys, &listed, lock, &opts.environment)
-        };
-        let callee = held(&edge.callee, &names.on_callee);
-        let caller = held(&edge.caller, &names.on_caller);
-        let both_in_run =
-            in_run.contains(edge.caller.as_str()) && in_run.contains(edge.callee.as_str());
-        match decide_edge_key(
-            edge,
-            caller,
-            callee,
-            both_in_run,
-            opts.force,
-            &mut mint_edge_key,
-            &opts.environment,
-        ) {
-            Ok(decision) => {
-                edge_keys.insert(edge.clone(), decision);
-            }
-            Err(e) => {
-                emsg!("bynk: error: {e}");
-                return Err(ExitCode::FAILURE);
-            }
-        }
-    }
+    let EdgeDecisions {
+        keys: edge_keys,
+        expired,
+    } = decide_edge_keys(&edges, &in_run, &listed, lock, opts, now_secs())?;
     // I3 (#1971): each foreign caller's secret, and (#3386) each `SignedCookie` actor's signing
     // key, on the context in the run that holds it. Only that end is ours, so a `--context` run
     // decides them too.
@@ -465,6 +440,8 @@ pub(crate) fn decide_keys(cx: &KeysCx<'_>, secret_source: &SecretSource) -> Resu
     Ok(Keys {
         listed,
         edge_keys,
+        expired,
+        cleaned: std::cell::RefCell::new(BTreeSet::new()),
         foreign_secrets,
         foreign_keys,
     })

@@ -1,0 +1,12 @@
+{
+  "blurb": "A `Float` cannot be matched against a literal. Floating-point equality is exact and `NaN` never equals itself, so an arm such as `0.1 =>` rarely means what it seems: the value a calculation produces is seldom exactly `0.1`. The same holds for a `Float` field of a record pattern or a payload. A `Float` is not a `match` scrutinee at all, so compare it with `<`, `>=` or a tolerance in an `if`: `if x < 0.5 { … }`. A `Decimal` has none of this trouble: its literal patterns match by value (`20d`, `20.0d` and `20.00d` are one pattern), so a price tier or a VAT rate is written as a `Decimal` literal arm.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.float_literal_pattern",
+  "constructs": [
+    "literal_pattern"
+  ],
+  "example": "fn band(x: Float) -> String {\n    match x {\n        0.1 => \"tenth\"    // ✗ a `Float` can't be matched against a literal\n        _ => \"other\"\n    }\n}\n\nfn band(x: Float) -> String {\n    if x < 0.5 { \"low\" } else { \"other\" }    // ✓ compare instead\n}",
+  "severity": "error",
+  "summary": "A `Float` literal is used as a pattern, at any depth; floating-point equality is exact and `NaN` never equals itself."
+}

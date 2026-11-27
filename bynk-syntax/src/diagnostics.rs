@@ -6282,6 +6282,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "consumes bynk { File }\n\nagent Gallery {\n    key id: String\n    store photo: Cell[Option[File]]     // ✗ an upload is not kept as a `File`\n}\n\nagent Gallery {\n    key id: String\n    store photo: Cell[Option[Bytes]]    // ✓ keep its bytes\n}",
     },
     Explain {
+        code: "bynk.types.float_literal_pattern",
+        blurb: "A `Float` cannot be matched against a literal. Floating-point equality is exact and `NaN` never equals itself, so an arm such as `0.1 =>` rarely means what it seems: the value a calculation produces is seldom exactly `0.1`. The same holds for a `Float` field of a record pattern or a payload. A `Float` is not a `match` scrutinee at all, so compare it with `<`, `>=` or a tolerance in an `if`: `if x < 0.5 { … }`. A `Decimal` has none of this trouble: its literal patterns match by value (`20d`, `20.0d` and `20.00d` are one pattern), so a price tier or a VAT rate is written as a `Decimal` literal arm.",
+        example: "fn band(x: Float) -> String {\n    match x {\n        0.1 => \"tenth\"    // ✗ a `Float` can't be matched against a literal\n        _ => \"other\"\n    }\n}\n\nfn band(x: Float) -> String {\n    if x < 0.5 { \"low\" } else { \"other\" }    // ✓ compare instead\n}",
+    },
+    Explain {
         code: "bynk.types.form_uncodable",
         blurb: "`Form.decode[T]` and `Form.encode` read and write the flat `key=value` text a `@form` route handles, so `T` must be a record of fields a form can carry: a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`. Form keys have no nesting, so a nested record, or a type that is not a record, is refused. Put the nested record's fields in `T` itself. A `@form` route's own body has the same rule: `bynk.http.form_field_not_stringy`.",
         example: "type Address = { city: String }\ntype Signup = { email: String, address: Address }\n\nForm.decode[Signup](text)    // ✗ `address` is a nested record\n\ntype Signup = { email: String, city: String }\n\nForm.decode[Signup](text)    // ✓",
@@ -11566,6 +11571,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.file_at_boundary",
         "A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned.",
+    ),
+    dg(
+        "bynk.types.float_literal_pattern",
+        "A `Float` literal is used as a pattern, at any depth; floating-point equality is exact and `NaN` never equals itself.",
+        &["literal_pattern"],
     ),
     d(
         "bynk.types.form_uncodable",

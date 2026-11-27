@@ -1342,6 +1342,12 @@
       "summary": "A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`)."
     }
   ],
+  "literal_pattern": [
+    {
+      "code": "bynk.types.float_literal_pattern",
+      "summary": "A `Float` literal is used as a pattern, at any depth; floating-point equality is exact and `NaN` never equals itself."
+    }
+  ],
   "match_arm": [
     {
       "code": "bynk.types.duplicate_literal_arm",

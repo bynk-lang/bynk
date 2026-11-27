@@ -8,7 +8,7 @@
 // redelivery of a message that failed is admitted again and nothing is lost. A claim whose instance
 // dies lapses with its lease, for the same reason.
 
-import { EDGE_FROM_PREFIX, edgeKeyOf } from "./boundary.ts";
+import { edgeVerifyKeysOf } from "./boundary.ts";
 import { QUEUE_DEDUP_WINDOW_SECONDS, queueReplayKey, verifyQueueMessage, type QueueRefusal } from "./queue_signing.ts";
 
 /** How long a claim is held while the handler runs, in seconds: a Worker's longest run is 15 minutes. */
@@ -121,6 +121,7 @@ export function queueForeignKeys(
   env: unknown,
   secrets: Readonly<Record<string, string>>,
   admitsContext?: (context: string) => boolean,
+  now: () => number = Date.now,
 ): (from: string) => readonly string[] {
   const read = (name: string): string | undefined => {
     const value = env !== null && typeof env === "object" ? (env as Record<string, unknown>)[name] : undefined;
@@ -130,9 +131,11 @@ export function queueForeignKeys(
     if (!Object.prototype.hasOwnProperty.call(secrets, from)) {
       // A Bynk context a `Producer` refinement admits signs under the key of its edge to this Worker's
       // context, which `bynk deploy` sets. No key, or a name outside the edge domain, admits nobody.
+      // #4526: after a rotation the edge holds two keys, the new one and the old one until its window
+      // ends (`edgeVerifyKeysOf`), so a message signed under the old key before the rotation is still
+      // admitted rather than refused as `bad_signature` and acknowledged away.
       if (admitsContext === undefined || !admitsContext(from)) return [];
-      const edge = edgeKeyOf(env, EDGE_FROM_PREFIX, from);
-      return edge === undefined ? [] : [edge];
+      return edgeVerifyKeysOf(env, from, now() / 1000);
     }
     const name = secrets[from]!;
     const current = read(name);
@@ -202,9 +205,11 @@ export async function admitQueueBody(
   env: unknown,
   secrets: Readonly<Record<string, string>>,
   admitsContext?: (context: string) => boolean,
+  now?: () => number,
 ): Promise<QueueAdmission> {
   const ports: QueueAdmitPorts = {
-    keysFor: queueForeignKeys(env, secrets, admitsContext),
+    now,
+    keysFor: queueForeignKeys(env, secrets, admitsContext, now),
     claim: (key, ttl) => claimQueueMessage(env, key, ttl),
     confirm: (key, ttl) => confirmQueueMessage(env, key, ttl),
     release: (key) => releaseQueueMessage(env, key),

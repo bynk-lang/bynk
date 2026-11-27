@@ -1,0 +1,24 @@
+commons demo
+
+type Reading = { celsius: Float }
+
+fn top(x: Float) -> Int {
+  match x {
+    0.1 => 1
+    _ => 2
+  }
+}
+
+fn nested(o: Option[Float]) -> Int {
+  match o {
+    Some(0.5) => 1
+    _ => 2
+  }
+}
+
+fn negative(x: Float) -> Int {
+  match x {
+    -1.5 => 1
+    _ => 2
+  }
+}
