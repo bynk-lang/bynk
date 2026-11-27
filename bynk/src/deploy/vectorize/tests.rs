@@ -63,11 +63,12 @@ impl Account {
             VectorizeOp::CreateMetadataIndex { .. } => {
                 self.created = true;
                 if self.exists {
-                    // The reference documents no code for it: a refusal, whatever its code.
+                    // The reference documents no code for it: a refusal, whatever its code. Cloudflare
+                    // answered 400 `40004` for a duplicate, whatever its type (#4056, #4600).
                     return Err(crate::cloudflare::RestError::answered(
                         "POST",
                         "/vectorize/v2/indexes/shop-docs/metadata_index/create",
-                        409,
+                        400,
                         r#"[{"code":40004,"message":"metadata index already exists for this name"}]"#,
                     )
                     .into());

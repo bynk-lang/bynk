@@ -529,7 +529,7 @@
 == R2 create (REST) · conflict, another account's bucket
    request: POST /accounts/acct/r2/buckets
    request: GET /accounts/acct/r2/buckets/shop-files
-   -> error POST /r2/buckets: Cloudflare answered 409 [{"code":10073,"message":"Bucket name already exists."}]
+   -> error POST /r2/buckets: Cloudflare answered 409 [{"code":10004,"message":"Bucket name already exists."}]
 
 == R2 create (REST, jurisdiction eu) · unreachable
    -> error POST /r2/buckets: io: Connection refused (os error N)
@@ -681,7 +681,7 @@
    -> ok None
 == Vectorize create metadata index (REST) · refused, left to the listing wait
    request: POST /accounts/acct/vectorize/v2/indexes/docs/metadata_index/create {"indexType":"string","propertyName":"category"}
-   -> ok Some("POST /vectorize/v2/indexes/docs/metadata_index/create: Cloudflare answered 409 [{\"code\":40004,\"message\":\"metadata index already exists\"}]")
+   -> ok Some("POST /vectorize/v2/indexes/docs/metadata_index/create: Cloudflare answered 400 [{\"code\":40004,\"message\":\"metadata index already exists\"}]")
 
 == Vectorize delete (REST) · unreachable
    -> error GET /vectorize/v2/indexes?page=1: io: Connection refused (os error N)
@@ -747,7 +747,7 @@
 == Queues create (REST) · refused, no queue of exactly that name
    request: POST /accounts/acct/queues
    request: GET /accounts/acct/queues?per_page=100&page=1
-   -> error POST /queues: Cloudflare answered 400 [{"code":11009,"message":"A queue with this name already exists"}]
+   -> error POST /queues: Cloudflare answered 409 [{"code":11009,"message":"A queue with this name already exists"}]
 
 == Queues find (REST) · unreachable
    -> false
@@ -802,6 +802,10 @@
    -> ok ()
 == Queues delete (REST) · already gone
    request: GET /accounts/acct/queues?per_page=100&page=1
+   -> ok ()
+== Queues delete (REST) · not found, code 11000
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: DELETE /accounts/acct/queues/4e5f6a7b
    -> ok ()
 == Queues delete (REST) · not found, code 10104
    request: GET /accounts/acct/queues?per_page=100&page=1
