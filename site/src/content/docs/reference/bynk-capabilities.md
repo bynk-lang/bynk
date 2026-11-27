@@ -2469,9 +2469,11 @@ set (a `match` over an enum that builds the key). A key does not make a route
 anyone can call safe, so a keyed instance is checked like any other:
 `bynk.container.unbounded_instances` warns when its name comes from request input
 on a route whose `by` has an open member (`Visitor`, or a sum that includes one),
-and does not warn on a route served by an authenticated actor. A `RateLimit` limits
-how fast a caller can ask for new names, but `bynk check` does not take it into
-account, so it does not clear the warning.
+and does not warn on a route served by an authenticated actor. A `RateLimit` reduces
+the rate but does not bound the number of instances (it is usually keyed per client,
+so it slows each caller without limiting how many distinct names arrive across many
+callers), so `bynk check` does not take it into account and it does not clear the
+warning.
 
 A running container costs money. See Cloudflare's
 [Containers pricing](https://developers.cloudflare.com/containers/pricing/) and
