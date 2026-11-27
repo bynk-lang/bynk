@@ -665,4 +665,55 @@ mod tests {
         assert!(on_disk.contains("a-jobs"), "{on_disk}");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// #4612 review: when the queues made before a failed create cannot be recorded either, both
+    /// failures are reported, the create's first, so neither is lost.
+    #[test]
+    fn a_stopped_step_whose_record_fails_reports_both_failures() {
+        use crate::cloudflare::{CloudflareError, Op, fake::Recording};
+        let declared = Resources::default().consumes(&["a-jobs", "b-jobs"]);
+        let api = Recording::new(|op: &Op<'_>| match op {
+            Op::QueueInfo { .. } => Ok("absent".to_string()),
+            Op::QueueCreate { name: "b-jobs" } => Err(CloudflareError::from(
+                crate::cloudflare::rest::RestError::answered("POST", "/queues", 500, "[]"),
+            )),
+            _ => Ok(String::new()),
+        });
+        let project = BTreeMap::new();
+        // A lock file in a directory that does not exist: every write fails.
+        let path = std::env::temp_dir()
+            .join(format!("bynk-queue-4612-missing-{}", std::process::id()))
+            .join("nested")
+            .join(LOCK_FILE);
+        let site = Site {
+            tools: Tools {
+                api: &api,
+                project_root: Path::new("/nonexistent"),
+            },
+            environment: "default",
+            worker: "shop",
+            project: &project,
+        };
+        let mut lock = DeployLock::default();
+        let failed = provision_kind::<Queue>(
+            site,
+            &declared,
+            &mut LedgerWriter::new(&mut lock, &path),
+            Lives::default(),
+        )
+        .unwrap_err();
+        let created = failed
+            .message
+            .find("could not create the queue `b-jobs`")
+            .expect(&failed.message);
+        let recorded = failed
+            .message
+            .find("could not record it in")
+            .expect(&failed.message);
+        assert!(
+            created < recorded,
+            "the create's failure first: {}",
+            failed.message
+        );
+    }
 }

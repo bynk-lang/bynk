@@ -116,7 +116,8 @@ impl<'a> Site<'a> {
 /// Apply each of `steps` of `K` at `site`, in order, writing each step's commits before the next
 /// step is applied (ADR 0180: an interrupted run never makes a second). A step that failed
 /// before changing the account returns no commit; one stopped part-way returns what it did, which
-/// is written before its failure is returned (#3999). What the push binds, by binding.
+/// is written before its failure is returned (#3999). If that write fails too, both are reported,
+/// the stopping failure first, so neither is lost. What the push binds, by binding.
 pub(crate) fn apply_kind<K: ResourceKind>(
     site: Site<'_>,
     steps: &[K::Step<'_>],
@@ -128,7 +129,12 @@ pub(crate) fn apply_kind<K: ResourceKind>(
     for step in steps {
         let applied = K::apply(&site.cx::<K>(writer.lock(), live), step)?;
         for commit in applied.commits {
-            writer.commit(site.environment, commit)?;
+            if let Err(written) = writer.commit(site.environment, commit) {
+                return Err(match applied.stopped {
+                    Some(stopped) => both_failures(stopped, written),
+                    None => written,
+                });
+            }
         }
         if let Some(failure) = applied.stopped {
             return Err(failure);
@@ -136,6 +142,15 @@ pub(crate) fn apply_kind<K: ResourceKind>(
         bound.extend(applied.bound);
     }
     Ok(bound)
+}
+
+/// A stopped step whose record could not be written either (#4612 review): the failure that
+/// stopped it, then the write's, with the stopping failure's exit code.
+fn both_failures(stopped: DeployFailure, written: DeployFailure) -> DeployFailure {
+    DeployFailure {
+        message: format!("{}; and then {}", stopped.message, written.message),
+        code: stopped.code,
+    }
 }
 
 /// `declared`'s steps of `K` at `site`, decided from the ledger as `writer` holds it, then
