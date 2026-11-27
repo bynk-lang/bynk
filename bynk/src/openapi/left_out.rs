@@ -5,6 +5,7 @@ use super::{Selected, select_services};
 use bynk_driver::emsg;
 use bynk_ide::ProjectDiagnostics;
 use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
+use bynk_syntax::ast::ServiceProtocol;
 
 /// #3752 (D6): why a route with a `*name` rest is left out. An OpenAPI path
 /// parameter can't contain `/`, and a client that sent the rest as one segment
@@ -58,7 +59,7 @@ pub(super) fn not_described(h: &bynk_syntax::ast::Handler) -> bool {
 /// Names each route of the selected services the document leaves out on stderr.
 pub(super) fn warn(analysis: &ProjectDiagnostics, service: Option<&str>) {
     let want: Vec<&str> = service.into_iter().collect();
-    if let Ok(selected) = select_services(analysis, &want) {
+    if let Ok(selected) = select_services(analysis, &want, |p| matches!(p, ServiceProtocol::Http)) {
         for s in routes_left_out(&selected) {
             emsg!("bynk: warning: skipped {s}");
         }

@@ -57,8 +57,13 @@ pub fn npx_command() -> std::process::Command {
     } else {
         std::process::Command::new("npx")
     };
+    // #4578: miniflare fetches `Request.cf` from Cloudflare at start-up, through whatever proxy the
+    // machine has, and wrangler logs `Ready` only after it answers or times out; behind a sandbox
+    // proxy that fetch was cancelled and wrangler never became ready. No test reads `Request.cf`,
+    // so it is told not to fetch and uses its placeholder.
     c.args(["-y", SPEC])
-        .env(warm::TELEMETRY_OFF.0, warm::TELEMETRY_OFF.1);
+        .env(warm::TELEMETRY_OFF.0, warm::TELEMETRY_OFF.1)
+        .env("CLOUDFLARE_CF_FETCH_ENABLED", "false");
     c
 }
 
