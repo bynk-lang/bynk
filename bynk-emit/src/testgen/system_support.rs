@@ -57,6 +57,8 @@ pub(super) struct SystemHttpSupport {
     /// #2019: the refinement-guarded routes and each refinement actor's
     /// witness claims, so a call acting as a refinement signs its claims.
     pub(super) claims: emitter::ctx::SystemHttpClaims,
+    /// #3901: the WebSocket services driven through a real upgrade, and the drivers each has.
+    pub(super) ws: HashMap<String, emitter::ctx::SystemWsService>,
 }
 
 /// #2135: what a `Signature`-secured route's drivers sign with — the actor's
@@ -173,6 +175,7 @@ pub(super) fn emit_system_http_support(
             route_body,
             type_ns: String::new(),
             claims: emitter::ctx::SystemHttpClaims::default(),
+            ws: HashMap::new(),
         };
     };
     let ns = test_ns(target);
@@ -210,10 +213,20 @@ pub(super) fn emit_system_http_support(
     // How a driver reads an actor's secret: the case's `env` entry (#2134),
     // else the fixed test secret in `process.env`.
     let secret_read_of = |secret: &str| secret_read(secret, with_env, remote);
+    let mut ws: HashMap<String, emitter::ctx::SystemWsService> = HashMap::new();
     let mut svc_names: Vec<&String> = table.services.keys().collect();
     svc_names.sort();
     for sname in svc_names {
         let decl = &table.services[sname];
+        // #3901: a WebSocket service is driven through a real upgrade, by the drivers of `system_ws`.
+        if let Some(drivers) =
+            ws_service_drivers(sname, decl, target, table, runtime_use, &secret_read_of)
+        {
+            secrets.extend(drivers.secret);
+            routes.extend(drivers.code);
+            ws.insert(sname.clone(), drivers.service);
+            continue;
+        }
         // M-1's domain clause (ADR 0735; crate-hygiene B4, #3012): this
         // function holds the target's symbol table, not its `TypedCommons`, so it
         // doesn't hold `bynk_model::lower_protocol_ir`'s input.
@@ -1047,7 +1060,7 @@ pub(super) fn emit_system_http_support(
         routes.push(wrong_method_driver(sname, &binding));
     }
 
-    if http_services.is_empty() {
+    if http_services.is_empty() && ws.is_empty() {
         return SystemHttpSupport {
             code: Vec::new(),
             http_services,
@@ -1055,6 +1068,7 @@ pub(super) fn emit_system_http_support(
             route_body,
             type_ns: String::new(),
             claims: emitter::ctx::SystemHttpClaims::default(),
+            ws: HashMap::new(),
         };
     }
 
@@ -1065,6 +1079,12 @@ pub(super) fn emit_system_http_support(
     // treatment `expectation_runtime_helpers`/`stub_runtime_helpers` already
     // get, rather than an unexplained raw string literal with `\`-continuations.
     let mut code = vec![TestRuntimeModule::JwtSigner.splice()];
+    // #3901: the client half of a WebSocket address, for a target with a service to drive.
+    if !ws.is_empty() {
+        let mut client = TestRuntimeModule::WsClient.splice();
+        client.no_blank_before = true;
+        code.push(client);
+    }
     // #3052: the test issuer an `Oidc` route's drivers mint tokens with.
     if has_oidc {
         // The remote flag is the first line of the issuer's text, so the two print as one block.
@@ -1145,6 +1165,7 @@ pub(super) fn emit_system_http_support(
         route_body,
         type_ns,
         claims,
+        ws,
     }
 }
 

@@ -515,6 +515,17 @@ pub struct SystemJobServices {
     /// #3328: the email services, driven as raw MIME through the Worker's
     /// `email()` entry (`__sysdrive_message_<svc>(mail)`).
     pub email: HashSet<String>,
+    /// #3901: the WebSocket services a `system` case drives by address through a real upgrade
+    /// (`__sysdrive_ws_<what>_<svc>`, `testgen::system_ws`).
+    pub ws: HashMap<String, SystemWsService>,
+}
+
+/// #3901: what a `system` case can drive on one WebSocket service: the drivers beside the valid
+/// `open`, named for the credential kind a case's `by Nobody`, `by Forged`, `by Expired`,
+/// `by WrongIssuer` or `by WrongAudience` presents.
+#[derive(Debug, Clone, Default)]
+pub struct SystemWsService {
+    pub variants: Vec<&'static str>,
 }
 
 /// #2019: what a `system`-tier call needs to sign the claims a refinement

@@ -104,6 +104,9 @@ export class TestWebSocket {
   private readonly listeners = new Map<string, Set<Listener>>();
   /** What this end has been told, kept for a test to read: frames it received as events. */
   readonly received: (string | ArrayBuffer)[] = [];
+  // Frames that arrived before any `message` listener, and whether the close event has been fired to one.
+  private readonly held: (string | ArrayBuffer)[] = [];
+  private closeTold = false;
   closeEvent: { code: number; reason: string; wasClean: boolean } | undefined;
 
   constructor(side: "client" | "server") {
@@ -120,6 +123,31 @@ export class TestWebSocket {
     const set = this.listeners.get(type) ?? new Set<Listener>();
     set.add(listener);
     this.listeners.set(type, set);
+    // A client end the Worker's upgrade answered with is held by the case until it attaches: the frames the server
+    // wrote while it ran `on open`, and a close it already made, wait for the first listener of their kind.
+    if (type === "message" && this.held.length > 0) {
+      const held = this.held.splice(0);
+      inflight += 1;
+      queueMicrotask(() => {
+        try {
+          for (const data of held) this.fire("message", { type: "message", data });
+        } finally {
+          inflight -= 1;
+        }
+      });
+    }
+    if (type === "close" && this.closeEvent !== undefined && !this.closeTold) {
+      this.closeTold = true;
+      const event = this.closeEvent;
+      inflight += 1;
+      queueMicrotask(() => {
+        try {
+          this.fire("close", { type: "close", ...event });
+        } finally {
+          inflight -= 1;
+        }
+      });
+    }
   }
 
   removeEventListener(type: string, listener: Listener): void {
@@ -164,6 +192,25 @@ export class TestWebSocket {
     });
   }
 
+  /**
+   * A browser closing its page or navigating away: a close frame whose code a script could not send itself
+   * (`1001`, say), which `close` refuses of a page's end. A case driving `svc.close(tc, info)` stands for that
+   * client going away, so it sends the code it names.
+   */
+  closeFrame(code: number, reason: string): void {
+    if (this.readyState !== 1) return;
+    this.readyState = 2;
+    const peer = this.peer;
+    inflight += 1;
+    queueMicrotask(() => {
+      try {
+        peer.receiveClose(code, reason, true, this);
+      } finally {
+        inflight -= 1;
+      }
+    });
+  }
+
   /** The network dropped: no close frame is exchanged, and both ends are told `1006`. Client-side only. */
   terminate(): void {
     if (this.readyState === 3) return;
@@ -200,6 +247,10 @@ export class TestWebSocket {
       return;
     }
     this.received.push(data);
+    if ((this.listeners.get("message")?.size ?? 0) === 0) {
+      this.held.push(data);
+      return;
+    }
     this.fire("message", { type: "message", data });
   }
 
@@ -220,7 +271,10 @@ export class TestWebSocket {
     this.readyState = 3;
     if (this.closeEvent !== undefined) return;
     this.closeEvent = { code, reason, wasClean };
-    this.fire("close", { type: "close", code, reason, wasClean });
+    if ((this.listeners.get("close")?.size ?? 0) > 0) {
+      this.closeTold = true;
+      this.fire("close", { type: "close", code, reason, wasClean });
+    }
   }
 }
 

@@ -1150,6 +1150,26 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// #3901: the drivers of the WebSocket service `service`, driven in a `system` case through a real
+    /// upgrade (`__sysdrive_ws_<what>_<service>`).
+    pub(crate) fn system_ws_service(&self, service: &str) -> Option<&super::ctx::SystemWsService> {
+        match &self.mode {
+            BodyMode::IntegrationCase { system_jobs, .. } => system_jobs.ws.get(service),
+            BodyMode::Method
+            | BodyMode::FreeFn
+            | BodyMode::GivenFn { .. }
+            | BodyMode::StaticInit
+            | BodyMode::Invariant { .. }
+            | BodyMode::Transition { .. }
+            | BodyMode::ServiceHandler { .. }
+            | BodyMode::ProviderOp { .. }
+            | BodyMode::AgentHandler { .. }
+            | BodyMode::WsDoMethod { .. }
+            | BodyMode::PredicateScaffold { .. }
+            | BodyMode::TestCase { .. } => None,
+        }
+    }
+
     /// #3899: whether the queue service `service` admits only signed messages, so its driver
     /// takes the foreign actor a case acts as.
     pub(crate) fn system_queue_signed(&self, service: &str) -> bool {

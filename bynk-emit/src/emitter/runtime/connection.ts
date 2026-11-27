@@ -133,6 +133,8 @@ export class TestConnection<F> implements Connection<F> {
   // #3902: the code and reason the server closed with, when it gave them.
   closeCode: number | undefined = undefined;
   closeReason: string | undefined = undefined;
+  // #3901: at `system`, the status the Worker refused the upgrade with (`401`, `403`, `400`); never set below it.
+  refused: number | undefined = undefined;
 
   // #3905: the service's `maxFrame`, handed over by `svc.open(tc, …)`; a frame over it faults the send.
   maxFrame: number | undefined = undefined;
@@ -163,6 +165,11 @@ export class TestConnection<F> implements Connection<F> {
   /** The reason the server closed with, as `Option[String]`. */
   closeReasonOption(): Option<string> {
     return this.closeReason === undefined ? None : Some(this.closeReason);
+  }
+
+  /** The status the upgrade was refused with, as `Option[Int]`: `None` when it was not refused. */
+  refusedWithOption(): Option<number> {
+    return this.refused === undefined ? None : Some(this.refused);
   }
 
   // #3051: what a case's `svc.open(tc, …)` records so a later `svc.message(tc, …)`

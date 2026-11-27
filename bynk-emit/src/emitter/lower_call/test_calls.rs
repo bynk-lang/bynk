@@ -357,6 +357,60 @@ pub(in crate::emitter) fn lower_system_schedule_call(
     None
 }
 
+// ---- The `system`-tier WebSocket call ----
+
+/// Lower a `system`-tier WebSocket address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`),
+/// driven through a real upgrade against the participant Worker, or `None` when the call is not one (#3901).
+/// `open` names the driver of the credential the case's `by` presents (`by Nobody` offers none, `by Forged`
+/// signs with the wrong key, and so on), and passes the identity the case acts as; `message` and `close`
+/// write on the connection `open` made.
+pub(in crate::emitter) fn lower_system_ws_call(
+    e: &Expr,
+    receiver: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    let ExprKind::Ident(svc) = &receiver.kind else {
+        return None;
+    };
+    if cx.is_local(&svc.name) || cx.system_ws_service(&svc.name).is_none() {
+        return None;
+    }
+    let Some(HandlerAddress::Ws(shape)) = test_address(cx, e) else {
+        return None;
+    };
+    let tc = match args.first() {
+        Some(a) => pre.lower_node(a, cx),
+        None => cx.missing_fact(e.span, "`TestConnection` argument of a websocket call"),
+    };
+    let driver = |what: &str| ident(format!("__sysdrive_ws_{what}_{}", svc.name));
+    Some(match shape {
+        WsAddress::Open => {
+            let kind = system_driver(cx, false).kind;
+            let what = if kind.is_empty() { "open" } else { kind };
+            let mut all = vec![tc];
+            all.extend(args[1..].iter().map(|a| pre.lower_node(a, cx)));
+            all.push(cx.call_site_identity.clone().unwrap_or_else(|| str_lit("")));
+            call(driver(what), all)
+        }
+        WsAddress::Message { .. } => {
+            let frame = match args.get(1) {
+                Some(a) => pre.lower_node(a, cx),
+                None => cx.missing_fact(e.span, "frame argument of a websocket `message` call"),
+            };
+            call(driver("message"), vec![tc, frame])
+        }
+        WsAddress::Close { .. } => {
+            let info = match args.get(1) {
+                Some(a) => pre.lower_node(a, cx),
+                None => default_close_info(),
+            };
+            call(driver("close"), vec![tc, info])
+        }
+    })
+}
+
 // ---- The `system`-tier HTTP call ----
 
 /// #707: a `(method, path)` whose path is a declared route but whose method has no handler is a

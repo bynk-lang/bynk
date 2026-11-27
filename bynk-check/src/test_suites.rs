@@ -945,7 +945,7 @@ pub fn phase_integration_bodies(
         // context that exposes an `http` service has a real edge (the public
         // boundary: deserialise → handler → serialise), so it qualifies.
         //
-        // `http`, `queue` and `email` qualify; see [`has_serialisation_edge`].
+        // `http`, `queue`, `email` and `from websocket` qualify; see [`has_serialisation_edge`].
         let has_serialisation_edge = unit_tables
             .get(&suite_target)
             .is_some_and(has_serialisation_edge);
@@ -955,7 +955,7 @@ pub fn phase_integration_bodies(
                     "bynk.tier.system_needs_wire",
                     decl.target.span,
                     format!(
-                        "`system`-tier suite for `{suite_target}` has no serialisation edge — the target consumes no other context and exposes no `http`, `queue` or `email` service",
+                        "`system`-tier suite for `{suite_target}` has no serialisation edge — the target consumes no other context and exposes no `http`, `queue`, `email` or `from websocket` service",
                     ),
                 )
                 .with_note(
@@ -1451,6 +1451,9 @@ fn has_serialisation_edge(target: &UnitTable) -> bool {
             bynk_syntax::ast::ServiceProtocol::Http
                 | bynk_syntax::ast::ServiceProtocol::Queue { .. }
                 | bynk_syntax::ast::ServiceProtocol::Email { .. }
+                // #3901: a deployed WebSocket is a real upgrade through the Worker, and its frames cross the
+                // same serialise, JSON, deserialise boundary.
+                | bynk_syntax::ast::ServiceProtocol::WebSocket { .. }
         )
     })
 }

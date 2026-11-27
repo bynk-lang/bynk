@@ -27,8 +27,8 @@ use super::super::lower_call::statics::{
 };
 use super::super::lower_call::store::lower_store_method_call;
 use super::super::lower_call::test_calls::{
-    lower_system_http_call, lower_system_schedule_call, lower_test_asset_fetch_call,
-    lower_test_service_call,
+    lower_system_http_call, lower_system_schedule_call, lower_system_ws_call,
+    lower_test_asset_fetch_call, lower_test_service_call,
 };
 use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_type_ref_to_ts_type;
@@ -151,6 +151,9 @@ pub(super) fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     }
     // Test-case and system-tier service addresses (1A.26, #3727), then agent invocations (#3167).
     if let Some(built) = lower_test_asset_fetch_call(e, receiver, args, cx, &mut pre) {
+        return pre.finish(built);
+    }
+    if let Some(built) = lower_system_ws_call(e, receiver, args, cx, &mut pre) {
         return pre.finish(built);
     }
     if let Some(built) = lower_system_schedule_call(e, receiver, args, cx, &mut pre) {
