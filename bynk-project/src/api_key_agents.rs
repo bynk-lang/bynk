@@ -48,10 +48,18 @@ pub fn with_api_key_agents(source: &str, units: &[SourceUnit]) -> Option<String>
             let key_owner = format!("{owner}KeyOwner");
             // The two are one store: when the author takes either name, neither is generated, so
             // the checker reports the declaration once rather than a cascade through the other.
-            if is_taken(&ctx.items, &keys) || is_taken(&ctx.items, &key_owner) {
+            if is_taken(&ctx.items, &keys)
+                || is_taken(&ctx.items, &key_owner)
+                || is_taken(&ctx.items, &format!("{owner}KeyCheck"))
+            {
                 continue;
             }
-            text.push_str(&keys_agent_text(owner, &keys, &identity));
+            text.push_str(&keys_agent_text(
+                owner,
+                &keys,
+                &identity,
+                &format!("{owner}KeyCheck"),
+            ));
             text.push_str(&key_owner_agent_text(owner, &key_owner, &keys, &identity));
         }
         if text.is_empty() {
@@ -95,9 +103,11 @@ fn api_key_identity(actor: &ActorDecl) -> Option<String> {
 
 /// `<Actor>Keys`. `verify` answers the identity a key was minted for, or `None`; `insert` answers
 /// 0 (stored), 1 (the identity holds the most keys it may) or 2 (the store is retired).
-fn keys_agent_text(actor: &str, agent: &str, identity: &str) -> String {
+fn keys_agent_text(actor: &str, agent: &str, identity: &str, check: &str) -> String {
     format!(
-        "\n---\n{GENERATED_MARKER} `{actor}`: one identity's keys, addressed by the random handle in each key's id.\n---\n\
+        "\n---\n{GENERATED_MARKER} `{actor}`: what `{agent}.verify` answers for an admitted key, its identity and whether `touch` must record its use, re-hash it or note the `kid`s now live.\n---\n\
+type {check} = {{ identity: {identity}, touch: Bool }}\n\
+\n---\n{GENERATED_MARKER} `{actor}`: one identity's keys, addressed by the random handle in each key's id.\n---\n\
 agent {agent} {{\n\
 \tkey handle: String\n\
 \n\
@@ -110,11 +120,13 @@ agent {agent} {{\n\
 \tstore expires: Map[String, Int]\n\
 \tstore used: Map[String, Int]\n\
 \tstore scopes: Map[String, Set[String]]\n\
+\tstore known: Cell[List[String]] = []\n\
 \n\
-\ton call verify(keyNo: String, presented: Map[String, Bytes], first: Bytes, current: String, dummy: Bytes, now: Int) -> Effect[Option[{identity}]] {{\n\
+\ton call verify(keyNo: String, presented: Map[String, Bytes], first: Bytes, current: String, dummy: Bytes, now: Int) -> Effect[Option[{check}]] {{\n\
 \t\tlet stored <- digests.get(keyNo)\n\
 \t\tlet kid <- kids.get(keyNo)\n\
 \t\tlet until <- expires.get(keyNo)\n\
+\t\tlet seen <- used.get(keyNo)\n\
 \t\tlet nothing: Option[Bytes] = None\n\
 \t\tlet candidate = match kid {{\n\
 \t\t\tSome(k) => presented.get(k),\n\
@@ -140,8 +152,31 @@ agent {agent} {{\n\
 \t\t\tNone => true,\n\
 \t\t}}\n\
 \t\tlet same <- ApiKey.equal(expected, actual)\n\
-\t\tlet who = owner\n\
-\t\tif same && real && live && !retired {{\n\
+\t\tlet rotated = match kid {{\n\
+\t\t\tSome(k) => k != current,\n\
+\t\t\tNone => false,\n\
+\t\t}}\n\
+\t\tlet stale = match seen {{\n\
+\t\t\tSome(t) => now - t >= 3600000,\n\
+\t\t\tNone => true,\n\
+\t\t}}\n\
+\t\tlet moved = presented.keys() != known\n\
+\t\tlet admitted = same && real && live && !retired\n\
+\t\tlet nobody: Option[{check}] = None\n\
+\t\tmatch owner {{\n\
+\t\t\tSome(who) => if admitted {{\n\
+\t\t\t\tEffect.pure(Some({check} {{ identity: who, touch: rotated || stale || moved }}))\n\
+\t\t\t}} else {{\n\
+\t\t\t\tEffect.pure(nobody)\n\
+\t\t\t}},\n\
+\t\t\tNone => Effect.pure(nobody),\n\
+\t\t}}\n\
+\t}}\n\
+\n\
+\ton call touch(keyNo: String, current: String, first: Bytes, live: List[String], now: Int) -> Effect[Bool] {{\n\
+\t\tlet held <- digests.contains(keyNo)\n\
+\t\tif held && !retired {{\n\
+\t\t\tlet kid <- kids.get(keyNo)\n\
 \t\t\tlet rotated = match kid {{\n\
 \t\t\t\tSome(k) => k != current,\n\
 \t\t\t\tNone => false,\n\
@@ -162,9 +197,10 @@ agent {agent} {{\n\
 \t\t\t}} else {{\n\
 \t\t\t\tEffect.pure(())\n\
 \t\t\t}}\n\
-\t\t\tEffect.pure(who)\n\
+\t\t\tknown := live\n\
+\t\t\tEffect.pure(true)\n\
 \t\t}} else {{\n\
-\t\t\tEffect.pure(None)\n\
+\t\t\tEffect.pure(false)\n\
 \t\t}}\n\
 \t}}\n\
 \n\
@@ -172,6 +208,7 @@ agent {agent} {{\n\
 \t\tif retired {{\n\
 \t\t\tEffect.pure(2)\n\
 \t\t}} else {{\n\
+\t\t\tknown := live\n\
 \t\t\tlet ks <- kids.entries.collect()\n\
 \t\t\tlet es <- expires.entries.collect()\n\
 \t\t\tlet unkeyed = ks.filter((e) => !live.any((l: String) => l == e.value)).map((e) => e.key)\n\

@@ -111,12 +111,17 @@ pub(super) fn api_key_seam_stmts(
         crate::emitter::agent_factory_name(&agent),
     );
     stmts.push(const_(
-        "__owner",
+        "__now",
+        await_expr(call(ident("__apiKeyNow"), vec![ident("env")])),
+    ));
+    let store = call(
+        factory,
+        vec![member(ident("__key"), "handle"), ident("env")],
+    );
+    stmts.push(const_(
+        "__check",
         await_expr(method_call(
-            call(
-                factory,
-                vec![member(ident("__key"), "handle"), ident("env")],
-            ),
+            store.clone(),
             "verify",
             vec![
                 member(ident("__key"), "keyNo"),
@@ -124,14 +129,32 @@ pub(super) fn api_key_seam_stmts(
                 call(ident("__apiKeyFirstDigest"), vec![ident("__digests")]),
                 call(ident("__apiKeyCurrentKid"), vec![ident("__digests")]),
                 call(ident("__apiKeyDummyDigest"), vec![]),
-                await_expr(call(ident("__apiKeyNow"), vec![ident("env")])),
+                ident("__now"),
                 ident("deps"),
             ],
         )),
     ));
     stmts.push(if_(
-        strict_neq(member(ident("__owner"), "tag"), str_lit("Some")),
+        strict_neq(member(ident("__check"), "tag"), str_lit("Some")),
         refused(failure, "Unauthorized"),
+    ));
+    // #3939 (slice 3): `verify` only reads, so a refused key writes nothing. An admitted one whose
+    // last use is an hour old, whose record is under `previous`, or whose store last saw other
+    // peppers, is touched in a second call: last use recorded, re-hashed under `secret`.
+    stmts.push(if_(
+        member(member(ident("__check"), "value"), "touch"),
+        crate::ts_build::expr_stmt(await_expr(method_call(
+            store,
+            "touch",
+            vec![
+                member(ident("__key"), "keyNo"),
+                call(ident("__apiKeyCurrentKid"), vec![ident("__digests")]),
+                call(ident("__apiKeyFirstDigest"), vec![ident("__digests")]),
+                call(ident("__apiKeyLiveKids"), vec![ident("__digests")]),
+                ident("__now"),
+                ident("deps"),
+            ],
+        ))),
     ));
     // 5. The identity, minted through its own `of`.
     stmts.push(const_(
@@ -141,7 +164,7 @@ pub(super) fn api_key_seam_stmts(
             "of",
             vec![call(
                 ident("String"),
-                vec![member(ident("__owner"), "value")],
+                vec![member(member(ident("__check"), "value"), "identity")],
             )],
         ),
     ));

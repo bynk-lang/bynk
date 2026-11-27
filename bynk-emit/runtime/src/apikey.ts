@@ -395,6 +395,11 @@ export function apiKeyCurrentKid(digests: readonly ApiKeyDigest[]): string {
   return digests[0].kid;
 }
 
+/** #3939 (slice 3): the `kid`s of the peppers now held, `secret`'s first, as the store records them. */
+export function apiKeyLiveKids(digests: readonly ApiKeyDigest[]): string[] {
+  return digests.map((d) => d.kid);
+}
+
 /** #3939 (slice 3): the time the seam passes the key store, for expiry and last use: the harness
  *  clock when the run sets one (`env.__bynkClock`), else the wall clock. */
 export async function apiKeyNow(env: unknown): Promise<number> {

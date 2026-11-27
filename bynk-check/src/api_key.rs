@@ -70,6 +70,11 @@ pub fn keys_agent_name(actor: &str) -> String {
     format!("{actor}Keys")
 }
 
+/// #3939 (slice 3): the name of the record `<Actor>Keys.verify` answers for an admitted key.
+pub fn key_check_type_name(actor: &str) -> String {
+    format!("{actor}KeyCheck")
+}
+
 /// The name of the agent mapping an identity to its handle, used only by the members (D1 B).
 pub fn key_owner_agent_name(actor: &str) -> String {
     format!("{actor}KeyOwner")
@@ -426,13 +431,18 @@ pub(crate) const WEBSOCKET_NOTE: &str = "a WebSocket upgrade does not ask the ke
 /// generated agent is the author's.
 fn check_reserved_names(actor: &ActorDecl, table: &UnitTable, errors: &mut Vec<CompileError>) {
     let owner = &actor.name.name;
-    for reserved in [keys_agent_name(owner), key_owner_agent_name(owner)] {
+    for reserved in [
+        keys_agent_name(owner),
+        key_owner_agent_name(owner),
+        key_check_type_name(owner),
+    ] {
         let taken: Option<Span> = if let Some(agent) = table.agents.get(&reserved) {
             (!is_generated_agent(agent)).then_some(agent.name.span)
         } else {
             table
                 .types
                 .get(&reserved)
+                .filter(|t| !is_generated_doc(t.documentation.as_ref()))
                 .map(|t| t.name.span)
                 .or_else(|| table.fns.get(&reserved).map(|f| f.name.ident().span))
                 .or_else(|| table.services.get(&reserved).map(|s| s.name.span))
@@ -449,9 +459,10 @@ fn check_reserved_names(actor: &ActorDecl, table: &UnitTable, errors: &mut Vec<C
                 ),
             )
             .with_note(format!(
-                "an `ApiKey` actor's keys live in generated agents named `{}` and `{}`: rename this declaration",
+                "an `ApiKey` actor's keys live in generated agents named `{}` and `{}`, with a generated type `{}`: rename this declaration",
                 keys_agent_name(owner),
-                key_owner_agent_name(owner)
+                key_owner_agent_name(owner),
+                key_check_type_name(owner)
             )),
         );
     }
@@ -469,10 +480,12 @@ pub fn in_generated_agent(span: Span, items: &[bynk_syntax::ast::CommonsItem]) -
 
 /// Whether `agent` is one the compiler generated for an `ApiKey` actor.
 pub fn is_generated_agent(agent: &bynk_syntax::ast::AgentDecl) -> bool {
-    agent
-        .documentation
-        .as_ref()
-        .is_some_and(|d| d.as_str().trim_start().starts_with(GENERATED_MARKER))
+    is_generated_doc(agent.documentation.as_ref())
+}
+
+/// Whether a declaration's documentation marks it as generated for an `ApiKey` actor.
+fn is_generated_doc(doc: Option<&bynk_syntax::ast::Doc>) -> bool {
+    doc.is_some_and(|d| d.as_str().trim_start().starts_with(GENERATED_MARKER))
 }
 
 /// #3939 (D3 F, track §12): `bynk.actor.api_key_unlimited`, a warning on an HTTP route an `ApiKey`

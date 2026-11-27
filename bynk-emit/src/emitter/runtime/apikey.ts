@@ -395,6 +395,11 @@ export function apiKeyCurrentKid(digests: readonly ApiKeyDigest[]): string {
   return digests[0].kid;
 }
 
+/** #3939 (slice 3): the `kid`s of the peppers now held, `secret`'s first, as the store records them. */
+export function apiKeyLiveKids(digests: readonly ApiKeyDigest[]): string[] {
+  return digests.map((d) => d.kid);
+}
+
 /** #3939 (slice 3): the time the seam passes the key store, for expiry and last use: the harness
  *  clock when the run sets one (`env.__bynkClock`), else the wall clock. */
 export async function apiKeyNow(env: unknown): Promise<number> {
@@ -692,4 +697,4 @@ export function apiKeyExpectCompares(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { apiKeyEqual as __apiKeyEqual, apiKeyList as __apiKeyList, apiKeyRevoke as __apiKeyRevoke, apiKeyBadKey as __apiKeyBadKey, apiKeyRevokedForTest as __apiKeyRevokedForTest, apiKeyCountCompares as __apiKeyCountCompares, apiKeyExpectCompares as __apiKeyExpectCompares, apiKeyForTest as __apiKeyForTest, apiKeyPeppersOf as __apiKeyPeppersOf, mintApiKey as __mintApiKey, apiKeyCurrentKid as __apiKeyCurrentKid, apiKeyDummyDigest as __apiKeyDummyDigest, apiKeyNow as __apiKeyNow, apiKeyFirstDigest as __apiKeyFirstDigest, apiKeyPresented as __apiKeyPresented, apiKeyCredentialOf as __apiKeyCredentialOf, apiKeyDigests as __apiKeyDigests, apiKeyIdOf as __apiKeyIdOf, formatApiKey as __formatApiKey, freshApiKey as __freshApiKey, loadApiKeyPeppers as __loadApiKeyPeppers, newApiKeyHandle as __newApiKeyHandle, newApiKeyPepper as __newApiKeyPepper, parseApiKey as __parseApiKey, parseApiKeyId as __parseApiKeyId };
+export { apiKeyEqual as __apiKeyEqual, apiKeyList as __apiKeyList, apiKeyRevoke as __apiKeyRevoke, apiKeyBadKey as __apiKeyBadKey, apiKeyRevokedForTest as __apiKeyRevokedForTest, apiKeyCountCompares as __apiKeyCountCompares, apiKeyExpectCompares as __apiKeyExpectCompares, apiKeyForTest as __apiKeyForTest, apiKeyPeppersOf as __apiKeyPeppersOf, mintApiKey as __mintApiKey, apiKeyCurrentKid as __apiKeyCurrentKid, apiKeyDummyDigest as __apiKeyDummyDigest, apiKeyLiveKids as __apiKeyLiveKids, apiKeyNow as __apiKeyNow, apiKeyFirstDigest as __apiKeyFirstDigest, apiKeyPresented as __apiKeyPresented, apiKeyCredentialOf as __apiKeyCredentialOf, apiKeyDigests as __apiKeyDigests, apiKeyIdOf as __apiKeyIdOf, formatApiKey as __formatApiKey, freshApiKey as __freshApiKey, loadApiKeyPeppers as __loadApiKeyPeppers, newApiKeyHandle as __newApiKeyHandle, newApiKeyPepper as __newApiKeyPepper, parseApiKey as __parseApiKey, parseApiKeyId as __parseApiKeyId };
