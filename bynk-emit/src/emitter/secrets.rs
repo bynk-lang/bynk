@@ -119,17 +119,17 @@ pub(crate) fn declared_secrets(table: &UnitTable) -> BTreeSet<String> {
 ///
 /// Each is `(actor, binding, pepper)`: `pepper` marks an `ApiKey` actor's, which the manifest
 /// records as `"kind": "pepper"` so that `deploy` keeps a set one under `--force`.
-pub(crate) fn session_keys(table: &UnitTable) -> Vec<(String, String, bool)> {
+pub(crate) fn session_keys(table: &UnitTable) -> Vec<(String, String, bool, Option<String>)> {
     let peppers = table
         .actors
         .values()
         .filter_map(|a| bynk_check::api_key::api_key_seam_of(a, None))
-        .map(|s| (s.actor, s.secret, true));
-    let mut keys: Vec<(String, String, bool)> = table
+        .map(|s| (s.actor, s.secret, true, s.previous));
+    let mut keys: Vec<(String, String, bool, Option<String>)> = table
         .actors
         .values()
         .filter_map(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
-        .map(|s| (s.actor, s.secret, false))
+        .map(|s| (s.actor, s.secret, false, None))
         .chain(peppers)
         .collect();
     keys.sort();
@@ -220,7 +220,7 @@ pub struct SecretsParts {
     /// Whether `names` is every name read (a vacuous `true` for none).
     complete: bool,
     foreign: Vec<bynk_check::actors::ForeignCaller>,
-    session: Vec<(String, String, bool)>,
+    session: Vec<(String, String, bool, Option<String>)>,
 }
 
 impl SecretsParts {
@@ -282,7 +282,7 @@ fn render(
     declared: &BTreeSet<String>,
     reads: &SecretReads,
     foreign: &[bynk_check::actors::ForeignCaller],
-    session: &[(String, String, bool)],
+    session: &[(String, String, bool, Option<String>)],
 ) -> Option<String> {
     // `complete` is the third thing worth saying: a context that reads one
     // computed name and nothing else knows something — that it does not know —
@@ -301,12 +301,16 @@ fn render(
     } else {
         let rendered: Vec<String> = session
             .iter()
-            .map(|(actor, secret, pepper)| {
-                // #3939: additive, so a manifest of signing keys alone stays byte-identical.
-                let kind = if *pepper {
-                    ", \"kind\": \"pepper\""
-                } else {
-                    ""
+            .map(|(actor, secret, pepper, previous)| {
+                // #3939: additive, so a manifest of signing keys alone stays byte-identical. A
+                // pepper's `previous` (slice 3) is listed so `deploy` can say a minted pepper
+                // cannot be rotated.
+                let kind = match (pepper, previous) {
+                    (true, Some(p)) => {
+                        format!(", \"kind\": \"pepper\", \"previous\": {}", json_string(p))
+                    }
+                    (true, None) => ", \"kind\": \"pepper\"".to_string(),
+                    (false, _) => String::new(),
                 };
                 format!(
                     "    {{ \"actor\": {}, \"secret\": {}{kind} }}",
@@ -375,7 +379,7 @@ mod tests {
 
     #[test]
     fn a_session_key_is_listed_beside_the_declared_secrets_not_among_them() {
-        let session = [("User".to_string(), "SESSION_KEY".to_string(), false)];
+        let session = [("User".to_string(), "SESSION_KEY".to_string(), false, None)];
         let text =
             render(&set(&[]), &reads(&[], true), &[], &session).expect("a session key renders");
         assert_eq!(
@@ -391,14 +395,35 @@ mod tests {
     #[test]
     fn a_pepper_is_listed_as_a_session_key_of_kind_pepper() {
         let session = [
-            ("Client".to_string(), "CLIENT_KEY_PEPPER".to_string(), true),
-            ("User".to_string(), "SESSION_KEY".to_string(), false),
+            (
+                "Client".to_string(),
+                "CLIENT_KEY_PEPPER".to_string(),
+                true,
+                None,
+            ),
+            ("User".to_string(), "SESSION_KEY".to_string(), false, None),
         ];
         let text = render(&set(&[]), &reads(&[], true), &[], &session).expect("it renders");
         assert!(text.contains(
             "{ \"actor\": \"Client\", \"secret\": \"CLIENT_KEY_PEPPER\", \"kind\": \"pepper\" }"
         ));
         assert!(text.contains("{ \"actor\": \"User\", \"secret\": \"SESSION_KEY\" }"));
+    }
+
+    /// #3939 (slice 3): a pepper's declared `previous` is listed beside it, so `deploy` can say that
+    /// a pepper it minted cannot be rotated.
+    #[test]
+    fn a_peppers_previous_variable_is_listed_with_it() {
+        let session = [(
+            "Client".to_string(),
+            "CLIENT_KEY_PEPPER".to_string(),
+            true,
+            Some("CLIENT_KEY_PEPPER_PREV".to_string()),
+        )];
+        let text = render(&set(&[]), &reads(&[], true), &[], &session).expect("it renders");
+        assert!(text.contains(
+            "{ \"actor\": \"Client\", \"secret\": \"CLIENT_KEY_PEPPER\", \"kind\": \"pepper\", \"previous\": \"CLIENT_KEY_PEPPER_PREV\" }"
+        ));
     }
 
     #[test]

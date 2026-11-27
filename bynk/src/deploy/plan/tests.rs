@@ -1494,6 +1494,45 @@ fn k1_a_supplied_pepper_is_listed_once_as_supplied() {
     );
 }
 
+/// #3939 (slice 3): a managed pepper whose actor declares `previous` gets a note that rotation needs
+/// a supplied pepper, since a minted one cannot be moved into `previous`. A supplied pepper does not.
+#[test]
+fn a_managed_pepper_with_previous_declared_notes_that_rotation_needs_a_supplied_pepper() {
+    let mut keys = Resources::default().api_key_peppers(&[("Client", "CLIENT_KEY_PEPPER")]);
+    keys.session_keys[0].previous = Some("CLIENT_KEY_PEPPER_PREV".to_string());
+    let resources = project(vec![("acme-api", keys)]);
+    let order = names(&["acme-api"]);
+    let managed = derive_plan(
+        &order,
+        &resources,
+        &deployed_acme_api(),
+        &SecretSource::default(),
+        false,
+        "default",
+    );
+    let text = plan_report(&managed, DeployFormat::Short);
+    assert!(
+        text.contains("note CLIENT_KEY_PEPPER: rotation needs a supplied pepper; `previous` names `CLIENT_KEY_PEPPER_PREV`"),
+        "{text}"
+    );
+    let json: serde_json::Value =
+        serde_json::from_str(&plan_report(&managed, DeployFormat::Json)).unwrap();
+    assert_eq!(
+        json["contexts"][0]["secrets"][0]["rotation_needs_supplied_pepper"],
+        "CLIENT_KEY_PEPPER_PREV"
+    );
+    let source = SecretSource::of_values(&[("CLIENT_KEY_PEPPER", "a-supplied-pepper")]);
+    let supplied = derive_plan(
+        &order,
+        &resources,
+        &deployed_acme_api(),
+        &source,
+        false,
+        "default",
+    );
+    assert!(!plan_report(&supplied, DeployFormat::Short).contains("rotation needs"));
+}
+
 /// K1 step 1: on a first deploy the pepper is minted, so the line is `set`.
 #[test]
 fn k1_a_first_deploy_plans_to_set_the_pepper() {
