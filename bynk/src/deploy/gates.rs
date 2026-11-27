@@ -437,6 +437,10 @@ pub(crate) fn decide_keys(cx: &KeysCx<'_>, secret_source: &SecretSource) -> Resu
             return Err(ExitCode::FAILURE);
         }
     };
+    // #3939: `--force` keeps a set `ApiKey` pepper, and the plan says so.
+    for note in managed.pepper_kept_under_force(lock, opts, secret_source) {
+        colour::eprint(&note);
+    }
     Ok(Keys {
         listed,
         edge_keys,

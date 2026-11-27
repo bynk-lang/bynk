@@ -463,15 +463,48 @@ pub(crate) fn prune_plan(
     // only after every selected context has pushed cleanly: a failed deploy
     // above already returned, so a mid-flight ledger never reaches this.
     if opts.prune && plan.orphans.has_prunable() {
-        if !confirm_prune(opts.yes, &plan.orphans, &opts.environment) {
+        prune_vetted(
+            tools,
+            writer,
+            &opts.environment,
+            &plan.orphans,
+            opts.yes,
+            lives,
+        )?;
+    }
+    Ok(())
+}
+
+/// #4601: read each orphaned queue's consumers before asking. A queue someone else reads is
+/// refused (nothing deleted for it, and the run fails once the rest are pruned); the other
+/// orphans are confirmed and pruned as before.
+pub(crate) fn prune_vetted(
+    tools: Tools<'_>,
+    writer: &mut LedgerWriter<'_>,
+    environment: &str,
+    orphans: &Orphans,
+    yes: bool,
+    lives: Lives<'_>,
+) -> Result<(), ExitCode> {
+    let (orphans, refused) =
+        super::kind::vet_orphan_queues(tools.api, writer.lock(), environment, orphans);
+    for why in &refused {
+        emsg!("bynk: error: not pruned: {why}");
+    }
+    if orphans.has_prunable() {
+        if !confirm_prune(yes, &orphans, environment) {
             return Err(ExitCode::FAILURE);
         }
-        if let Err(e) = prune_orphans(tools, writer, &opts.environment, &plan.orphans, lives) {
+        if let Err(e) = prune_orphans(tools, writer, environment, &orphans, lives) {
             emsg!("bynk: error: {}", e.message);
             return Err(ExitCode::from(e.code));
         }
     }
-    Ok(())
+    if refused.is_empty() {
+        Ok(())
+    } else {
+        Err(ExitCode::FAILURE)
+    }
 }
 
 /// What a run applies every Worker with (1D.2b, #4001 Decision D): the tools, the ledger's one
@@ -954,6 +987,60 @@ mod tests {
             .unwrap();
         assert_eq!(lock, DeployLock::default());
         assert!(path.exists(), "the ledger was written, as before");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #4601: a `--prune` run with two orphaned queues, one with no consumers and one a foreign
+    /// Worker reads. The clean one is deleted and forgotten; the other is refused before anything
+    /// is deleted for it, stays recorded (so it is reported again), and the run fails.
+    #[test]
+    fn a_mixed_prune_deletes_the_clean_queue_and_refuses_the_foreign_consumed_one() {
+        use crate::cloudflare::Op;
+        use crate::cloudflare::fake::Recording;
+        let dir = scratch("mixed-prune");
+        let path = dir.join(LOCK_FILE);
+        let mut lock = DeployLock::default();
+        let env = lock.environments.entry("default".into()).or_default();
+        env.queues = BTreeSet::from(["clean".to_string(), "theirs".to_string()]);
+        let api = Recording::new(|op: &Op<'_>| {
+            Ok::<_, crate::cloudflare::CloudflareError>(
+                match op {
+                    Op::QueueConsumers { name: "theirs" } => "c1=billing",
+                    _ => "",
+                }
+                .to_string(),
+            )
+        });
+        let orphans = Orphans {
+            queues: vec!["clean".to_string(), "theirs".to_string()],
+            ..Orphans::default()
+        };
+        let result = prune_vetted(
+            Tools {
+                api: &api,
+                project_root: &dir,
+            },
+            &mut LedgerWriter::new(&mut lock, &path),
+            "default",
+            &orphans,
+            true,
+            Lives::default(),
+        );
+        assert!(result.is_err(), "a refused queue fails the run");
+        assert_eq!(
+            api.calls(),
+            [
+                "queues consumers clean",
+                "queues consumers theirs",
+                "queues delete clean",
+            ],
+            "nothing is deleted for the refused queue"
+        );
+        assert_eq!(
+            lock.environments["default"].queues,
+            BTreeSet::from(["theirs".to_string()]),
+            "the clean queue is forgotten; the refused one stays recorded"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

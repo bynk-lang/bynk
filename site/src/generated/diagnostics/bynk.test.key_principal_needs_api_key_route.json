@@ -1,0 +1,10 @@
+{
+  "blurb": "`by Malformed` and `by Unknown` are an `ApiKey` seam's own refusals: `Malformed` sends a key with the actor's prefix and a bad checksum, which the seam refuses before any lookup, and `Unknown` sends well-formed keys that were never minted, which it refuses after comparing against a dummy digest. Only a route guarded by an `ApiKey` actor has that seam. On another route, test its own seam with `by Nobody`, `by Forged` or `by Expired`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.key_principal_needs_api_key_route",
+  "constructs": [],
+  "example": "let r <- api.GET(\"/me\") by Malformed    // ✗ `api` is a `Bearer` service\n\nlet r <- keys.GET(\"/key\") by Malformed  // ✓ `keys` is guarded by an `ApiKey` actor",
+  "severity": "error",
+  "summary": "`by Malformed` or `by Unknown` on a route no `ApiKey` actor guards (#3939)."
+}
