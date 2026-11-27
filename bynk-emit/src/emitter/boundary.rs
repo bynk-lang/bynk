@@ -296,6 +296,58 @@ fn ws_out_roots(commons: &TypedCommons) -> Vec<TypeRef> {
         .collect()
 }
 
+/// #4632: the events this unit emits through `Events.emit`, as types, in name order. The checker records the
+/// event on each call's callee (#4113).
+fn emitted_event_roots(commons: &TypedCommons) -> Vec<TypeRef> {
+    let names: std::collections::BTreeSet<&String> = commons
+        .callees
+        .values()
+        .filter_map(|c| {
+            if let bynk_check::checker::Callee::Capability {
+                event: Some(name),
+                first_party: Some(bynk_check::firstparty::FirstPartyCap::Events),
+                ..
+            } = c
+            {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect();
+    names
+        .into_iter()
+        .map(|n| {
+            TypeRef::Named(Ident {
+                name: n.clone(),
+                span: Default::default(),
+            })
+        })
+        .collect()
+}
+
+/// The type positions beyond the services' own that cross a wire in this unit: on `workers`, every agent
+/// handler's parameters and return type (#1678) and each event the unit emits (#4632); on both targets, a
+/// websocket service's `out` frame (#4549). On `bundle` an agent call and an event dispatch are in-process,
+/// and need no codec.
+fn wire_boundary_roots(
+    commons: &TypedCommons,
+    agents: &HashMap<String, AgentDecl>,
+    workers: bool,
+    inspect_agents: bool,
+) -> Vec<TypeRef> {
+    let mut roots = if workers {
+        agent_call_boundary_roots(agents, inspect_agents)
+    } else {
+        Vec::new()
+    };
+    roots.extend(ws_out_roots(commons));
+    if workers {
+        roots.extend(emitted_event_roots(commons));
+    }
+    roots
+}
+
 /// Emit boundary serialise/deserialise helpers (v0.8 §3.4 / §5.2) for
 /// every named type declared in this file that flows through a
 /// cross-context call, plus the specialised generic helpers for any
@@ -395,12 +447,7 @@ pub(super) fn emit_boundary_helpers(
         // #1678: on `workers` an agent call crosses a Durable Object `fetch`, so
         // every agent handler's parameter and return types are boundary types
         // too. On `bundle` the call is in-process and needs no codec.
-        let mut agent_call_roots: Vec<TypeRef> = if workers {
-            agent_call_boundary_roots(&agents, ctx.inspect_agents)
-        } else {
-            Vec::new()
-        };
-        agent_call_roots.extend(ws_out_roots(commons));
+        let agent_call_roots = wire_boundary_roots(commons, &agents, workers, ctx.inspect_agents);
         let boundary_types_all =
             collect_boundary_types(&commons.types, &services, &agents, &agent_call_roots);
         // Locally-declared boundary types get full helpers in this module. On

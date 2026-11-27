@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "provides": {
+    "fireAll": "606ee4a225de0f47",
+    "fireBytes": "125ff04333c91f97",
+    "fireDecimal": "617b03d8bc64f24f",
+    "fireMap": "3512e6a59d380726",
+    "fireMixed": "fc0ba9b4f6050203",
+    "fireOption": "41fd7c9c452c030f",
+    "firePlain": "7bed023aff9f5f9c",
+    "fireSet": "f9b9337c894ea8c8"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "fireAll": "Svc(\"fireAll\",P(\"id\",B(\"String\")),Ret(U()))",
+    "fireBytes": "Svc(\"fireBytes\",P(\"id\",B(\"String\")),Ret(U()))",
+    "fireDecimal": "Svc(\"fireDecimal\",P(\"id\",B(\"String\")),Ret(U()))",
+    "fireMap": "Svc(\"fireMap\",P(\"id\",B(\"String\")),Ret(U()))",
+    "fireMixed": "Svc(\"fireMixed\",P(\"id\",B(\"String\")),Ret(U()))",
+    "fireOption": "Svc(\"fireOption\",P(\"id\",B(\"String\")),Ret(U()))",
+    "firePlain": "Svc(\"firePlain\",P(\"id\",B(\"String\")),Ret(U()))",
+    "fireSet": "Svc(\"fireSet\",P(\"id\",B(\"String\")),Ret(U()))"
+  }
+}

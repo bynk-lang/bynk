@@ -136,7 +136,7 @@ export class Room {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push(__bynkMeasureEvent({ type: "Said", payload: { text: text }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "room", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
+        __events.push(__bynkMeasureEvent({ type: "Said", payload: __serialise_Said({ text: text }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "room", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return undefined;
     })();
@@ -281,5 +281,23 @@ export function __deserialise_RoomKey(json: __JsonValue, path: string = "$"): Re
     return Err({ kind: "RefinementViolation", path, violation: validated.error });
   }
   return Ok(validated.value as RoomKey);
+}
+
+export function __serialise_Said(value: Said): __JsonValue {
+  return {
+    text: value.text as __JsonValue,
+  };
+}
+
+export function __deserialise_Said(json: __JsonValue, path: string = "$"): Result<Said, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  return Ok({ text: __text } as Said);
 }
 

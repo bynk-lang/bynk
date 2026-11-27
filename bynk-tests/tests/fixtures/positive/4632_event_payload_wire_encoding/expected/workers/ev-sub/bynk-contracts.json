@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {},
+  "expects": {
+    "ev.ledger": {
+      "note": "30a07120d171ca72"
+    }
+  },
+  "expects_shapes": {
+    "ev.ledger": {
+      "note": "Svc(\"note\",P(\"key\",B(\"String\")),Ret(U()))"
+    }
+  }
+}

@@ -1,0 +1,64 @@
+// #4632: one event per field type is emitted, each from a handler of its own and then all of them from one;
+// each subscriber records, in `ev.ledger`, whether its
+// field arrived equal to what was sent. `Plain` carries only a String: the control for delivery itself.
+suite ev.pub as system {
+  case "a plain payload is delivered" {
+    let _ <- ev.pub.firePlain("p1")
+    let v <- ev.ledger.read("plain:p1")
+    expect v == Some("seen")
+  }
+
+  case "a Map field arrives intact" {
+    let _ <- ev.pub.fireMap("p1")
+    let v <- ev.ledger.read("map:true")
+    expect v == Some("seen")
+  }
+
+  case "a Set field arrives intact" {
+    let _ <- ev.pub.fireSet("p1")
+    let v <- ev.ledger.read("set:true")
+    expect v == Some("seen")
+  }
+
+  case "a Bytes field arrives intact" {
+    let _ <- ev.pub.fireBytes("p1")
+    let v <- ev.ledger.read("bytes:true")
+    expect v == Some("seen")
+  }
+
+  case "an Option field arrives intact" {
+    let _ <- ev.pub.fireOption("p1")
+    let v <- ev.ledger.read("option:true")
+    expect v == Some("seen")
+  }
+
+  case "a Decimal field arrives intact" {
+    let _ <- ev.pub.fireDecimal("p1")
+    let v <- ev.ledger.read("decimal:true")
+    expect v == Some("seen")
+  }
+
+  case "a handler's events are delivered together" {
+    let _ <- ev.pub.fireAll("p1")
+    let plain <- ev.ledger.read("plain:p1")
+    expect plain == Some("seen")
+    let m <- ev.ledger.read("map:true")
+    expect m == Some("seen")
+    let s <- ev.ledger.read("set:true")
+    expect s == Some("seen")
+    let b <- ev.ledger.read("bytes:true")
+    expect b == Some("seen")
+    let o <- ev.ledger.read("option:true")
+    expect o == Some("seen")
+    let d <- ev.ledger.read("decimal:true")
+    expect d == Some("seen")
+  }
+
+  case "a Decimal event does not take a plain event of the same handler with it" {
+    let _ <- ev.pub.fireMixed("p2")
+    let plain <- ev.ledger.read("plain:p2")
+    expect plain == Some("seen")
+    let d <- ev.ledger.read("decimal:true")
+    expect d == Some("seen")
+  }
+}

@@ -1,0 +1,74 @@
+context ev.pub
+
+consumes bynk { Events }
+consumes ev.ledger
+exports transparent { Plain, WithMap, WithSet, WithBytes, WithOption, WithDecimal }
+
+// #4632: payloads whose in-memory form is not their wire form: a `Map`, a `Set`, `Bytes`, an `Option`
+// and a `Decimal`. The publisher has to encode each before it reaches the fan-out. One event per field
+// type, so a field that breaks delivery cannot hide the others; `Plain` is the control.
+event Plain = { id: String }
+event WithMap = { id: String, m: Map[String, Int] }
+event WithSet = { id: String, s: Set[String] }
+event WithBytes = { id: String, b: Bytes }
+event WithOption = { id: String, o: Option[Int] }
+event WithDecimal = { id: String, d: Decimal }
+
+// One handler per event, so a payload that cannot be delivered cannot take the others with it.
+service firePlain {
+  on call(id: String) -> Effect[()] by Caller given Events {
+    Events.emit[Plain](Plain { id: id })
+  }
+}
+
+service fireMap {
+  on call(id: String) -> Effect[()] by Caller given Events {
+    let m: Map[String, Int] = Map.empty().insert("k", 7)
+    Events.emit[WithMap](WithMap { id: id, m: m })
+  }
+}
+
+service fireSet {
+  on call(id: String) -> Effect[()] by Caller given Events {
+    Events.emit[WithSet](WithSet { id: id, s: Set.of(["x", "y"]) })
+  }
+}
+
+service fireBytes {
+  on call(id: String) -> Effect[()] by Caller given Events {
+    Events.emit[WithBytes](WithBytes { id: id, b: Bytes.fromUtf8("hi") })
+  }
+}
+
+service fireOption {
+  on call(id: String) -> Effect[()] by Caller given Events {
+    Events.emit[WithOption](WithOption { id: id, o: Some(3) })
+  }
+}
+
+service fireDecimal {
+  on call(id: String) -> Effect[()] by Caller given Events {
+    Events.emit[WithDecimal](WithDecimal { id: id, d: 1.25d })
+  }
+}
+
+// A handler's events are handed to the fan-out as one batch: every one of them is delivered.
+service fireAll {
+  on call(id: String) -> Effect[()] by Caller given Events {
+    let m: Map[String, Int] = Map.empty().insert("k", 7)
+    let _ <- Events.emit[Plain](Plain { id: id })
+    let _ <- Events.emit[WithMap](WithMap { id: id, m: m })
+    let _ <- Events.emit[WithSet](WithSet { id: id, s: Set.of(["x", "y"]) })
+    let _ <- Events.emit[WithBytes](WithBytes { id: id, b: Bytes.fromUtf8("hi") })
+    let _ <- Events.emit[WithOption](WithOption { id: id, o: Some(3) })
+    Events.emit[WithDecimal](WithDecimal { id: id, d: 1.25d })
+  }
+}
+
+// The smallest mixed batch: an event whose payload had no JSON form beside one that did.
+service fireMixed {
+  on call(id: String) -> Effect[()] by Caller given Events {
+    let _ <- Events.emit[WithDecimal](WithDecimal { id: id, d: 1.25d })
+    Events.emit[Plain](Plain { id: id })
+  }
+}
