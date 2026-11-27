@@ -2437,7 +2437,7 @@ pub(crate) fn check_variant_construction(
             continue;
         };
         if !compatible(actual, expected, tys) {
-            ctx.errors.push(CompileError::new(
+            let err = CompileError::new(
                 "bynk.types.variant_payload_mismatch",
                 arg.span,
                 format!(
@@ -2448,6 +2448,13 @@ pub(crate) fn check_variant_construction(
                     field.name.name,
                     expected.display(tys)
                 ),
+            );
+            ctx.errors.push(super::sql_decimal_param::with_decimal_fix(
+                err,
+                variant_name,
+                &expected.display(tys),
+                &actual.display(tys),
+                arg,
             ));
             ok = false;
         }

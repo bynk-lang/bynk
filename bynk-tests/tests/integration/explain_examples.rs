@@ -130,6 +130,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/4058_cron_schedule_warnings` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.d1.column_affinity",
+        "a warning; `positive/4046_sql_column_types` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.d1.decimal_numeric_affinity",
         "a warning; `positive/4200_d1_decimal_row` holds it with `expected_warnings.txt`",
     ),

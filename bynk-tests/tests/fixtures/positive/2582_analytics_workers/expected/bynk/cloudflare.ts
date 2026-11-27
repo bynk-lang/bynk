@@ -1,1 +1,1 @@
-<<bynk-shared: std/bynk/cloudflare.ts#boundary+bytes+errors+result+time>>
+<<bynk-shared: std/bynk/cloudflare.ts#boundary+bytes+decimal+errors+result+time>>

@@ -98,7 +98,7 @@ mod native {
     use rusqlite::{Connection, DropBehavior, config::DbConfig};
 
     use crate::checker::Callee;
-    use crate::checker::{D1DecodeSite, D1SqlSite};
+    use crate::checker::{Conventions, D1DecodeSite, D1SqlSite};
     use crate::d1_migrations::{D1Migrations, d1_database_name, is_d1};
     use crate::project_model::ErrorSink;
     use crate::symbols::UnitTable;
@@ -427,6 +427,12 @@ mod native {
                         &site.decimals,
                         site.span,
                     ));
+                    out.extend(check_column_affinity(
+                        &conn,
+                        site,
+                        &site.conventions,
+                        site.span,
+                    ));
                 }
             }
             // #3139: each linked decode's required fields against the columns
@@ -444,6 +450,12 @@ mod native {
                 let conn = conn.lock().unwrap_or_else(|e| e.into_inner());
                 out.extend(check_decode(&conn, d));
                 out.extend(check_decimal_affinity(&conn, &d.site, &d.decimals, d.span));
+                out.extend(check_column_affinity(
+                    &conn,
+                    &d.site,
+                    &d.conventions,
+                    d.span,
+                ));
             }
             out
         }
@@ -584,6 +596,58 @@ mod native {
                 })
             })
             .collect()
+    }
+
+    /// #4046: an `Instant` or `Duration` row field is `INTEGER` milliseconds, and a
+    /// payload-less enum field is the variant's name as `TEXT`. A column declared with
+    /// the other affinity stores the value in a form the field does not read, so the
+    /// decode fails naming the field. Only a column read straight from a table has a
+    /// declared type, so this is a warning on the common case, not a proof.
+    pub(super) fn check_column_affinity(
+        conn: &Connection,
+        site: &D1SqlSite,
+        conventions: &Conventions,
+        span: Span,
+    ) -> Vec<CompileError> {
+        if conventions.integers.is_empty() && conventions.texts.is_empty() {
+            return Vec::new();
+        }
+        let Ok(stmt) = conn.prepare(&site.text) else {
+            return Vec::new();
+        };
+        let what = site_name(site);
+        stmt.columns()
+            .filter_map(|c| {
+                let declared = c.decl_type()?;
+                let (field, wants, convention) = if conventions.integers.iter().any(|f| f == c.name())
+                {
+                    ("an `Instant` or `Duration`", is_integer_affinity(declared), "`INTEGER` milliseconds")
+                } else if conventions.texts.iter().any(|f| f == c.name()) {
+                    ("an enum", is_text_affinity(declared) && !declared.is_empty(), "`TEXT`, the variant's name")
+                } else {
+                    return None;
+                };
+                (!wants).then(|| {
+                    CompileError::new(
+                        "bynk.d1.column_affinity",
+                        span,
+                        format!(
+                            "`{}` of {what} is read as {field}, which D1 stores as {convention}, but the column is declared `{declared}`",
+                            c.name()
+                        ),
+                    )
+                    .with_note(format!(
+                        "declare the column to match ({convention}), or read it into {} field and convert",
+                        if conventions.texts.iter().any(|f| f == c.name()) { "an `Int`" } else { "a `String`" }
+                    ))
+                })
+            })
+            .collect()
+    }
+
+    /// Whether a declared column type has `INTEGER` affinity, by SQLite's first rule: it contains `INT`.
+    fn is_integer_affinity(declared: &str) -> bool {
+        declared.to_ascii_uppercase().contains("INT")
     }
 
     /// Whether a declared column type has `TEXT` affinity, by SQLite's rules: it
@@ -899,6 +963,7 @@ fn unescape(s: &str) -> Option<(char, usize)> {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
+    use crate::checker::Conventions;
     use crate::d1_migrations::{D1Migrations, MigrationFile};
     use crate::project_model::ErrorSink;
     use rusqlite::Connection;
@@ -945,6 +1010,7 @@ mod tests {
             span: bynk_syntax::span::Span::default(),
             row: None,
             decimals: Vec::new(),
+            conventions: Conventions::default(),
             passed: None,
             literal: None,
             batch: None,
@@ -1225,6 +1291,7 @@ mod tests {
     ) -> crate::checker::D1SqlSite {
         crate::checker::D1SqlSite {
             decimals: Vec::new(),
+            conventions: Conventions::default(),
             cap: "Orders".into(),
             op: "select".into(),
             text: text.into(),

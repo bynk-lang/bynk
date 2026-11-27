@@ -402,8 +402,10 @@ pub(in crate::emitter) fn lower_d1_select_call(
     // Hyperdrive H5 (#3322): a `MySql` read decodes the same text forms for
     // `Int` (a `BIGINT` arrives as text) and fails as a `MySqlReadError`
     // (`MySqlSql`, `MySqlDecode`).
-    let source = if pg || mysql {
+    let source = if pg {
         DecodeSource::Pg
+    } else if mysql {
+        DecodeSource::MySql
     } else {
         DecodeSource::Sql
     };

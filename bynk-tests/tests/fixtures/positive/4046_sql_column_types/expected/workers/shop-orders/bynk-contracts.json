@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {
+    "logs": "638afa9204f6f8a4",
+    "save": "9042a9b8eb2829f5",
+    "since": "ad725ad24839234f"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "logs": "Svc(\"logs\",Ret(R(L(Rec(\"Logged\",F(\"id\",B(\"String\")),F(\"logged\",B(\"Instant\")))),N(\"SqlReadError\"))))",
+    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"total\",B(\"Decimal\")),P(\"placed\",B(\"Instant\")),P(\"wait\",B(\"Duration\")),P(\"status\",Sum(\"Status\",V(\"Open\"),V(\"Shipped\"))),Ret(R(N(\"SqlRun\"),N(\"SqlError\"))))",
+    "since": "Svc(\"since\",P(\"at\",B(\"Instant\")),Ret(R(L(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"placed\",B(\"Instant\")),F(\"status\",Sum(\"Status\",V(\"Open\"),V(\"Shipped\"))),F(\"total\",B(\"Decimal\")),F(\"wait\",B(\"Duration\")))),N(\"SqlReadError\"))))"
+  }
+}

@@ -5,6 +5,7 @@ import type { BytesResponse, FetchError, FetchOptions, Request as FetchRequest, 
 import { Secret } from "../bynk.js";
 import { FetchProvider } from "../bynk-cloudflare.js";
 import { Err, None, Ok, Some, type Option, type Result } from "../__bynk_runtime/result.js";
+import { __bynkDecimalToString } from "../__bynk_runtime/decimal.js";
 import type { AnalyticsDataset, D1Database, D1PreparedStatement, D1Result, KVNamespace, QueueProducer, R2Bucket, R2MultipartUpload, R2ObjectMeta, RateLimiter, SecretsStoreSecret, SendEmail, WorkerAiBinding, WorkerImagesBinding, AnalyticsSqlBinding, AiSearchInstance, WorkerVersionMetadata } from "../__bynk_runtime/storage.js";
 import type { VectorizeIndex } from "../__bynk_runtime/vectorize.js";
 import { EDGE_TO_PREFIX, edgeKeyOf } from "../__bynk_runtime/boundary.js";
@@ -1068,6 +1069,8 @@ export class WorkersD1 implements D1 {
         return null;
       case "Boolean":
         return v.value ? 1 : 0;
+      case "Numeric":
+        return __bynkDecimalToString(v.value);
       default:
         return v.value;
     }

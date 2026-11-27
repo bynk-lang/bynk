@@ -445,7 +445,10 @@ export const DataPoint = {
 
 /**
  * A value bound to a `?n` parameter of a `D1` statement, by SQLite storage
- * class. `Boolean` binds as `1` or `0`, as SQLite has no boolean.
+ * class. `Boolean` binds as `1` or `0`, as SQLite has no boolean. `Decimal` binds
+ * as its canonical text, and `Timestamp` an `Instant` as integer milliseconds,
+ * the forms a typed read reads them back from (`Duration` binds as `Integer`
+ * milliseconds, an enum as `Text` of its variant's name).
  */
 export type SqlValue =
     { readonly tag: "Null" }
@@ -453,7 +456,9 @@ export type SqlValue =
   | { readonly tag: "Real"; readonly value: number }
   | { readonly tag: "Text"; readonly value: string }
   | { readonly tag: "Blob"; readonly value: globalThis.Uint8Array }
-  | { readonly tag: "Boolean"; readonly value: boolean };
+  | { readonly tag: "Boolean"; readonly value: boolean }
+  | { readonly tag: "Numeric"; readonly value: { readonly coefficient: bigint; readonly scale: number } }
+  | { readonly tag: "Timestamp"; readonly value: number };
 
 export const SqlValue = {
   Null: { tag: "Null" } as SqlValue,
@@ -462,6 +467,8 @@ export const SqlValue = {
   Text: (value: string): SqlValue => ({ tag: "Text", value }),
   Blob: (value: globalThis.Uint8Array): SqlValue => ({ tag: "Blob", value }),
   Boolean: (value: boolean): SqlValue => ({ tag: "Boolean", value }),
+  Numeric: (value: { readonly coefficient: bigint; readonly scale: number }): SqlValue => ({ tag: "Numeric", value }),
+  Timestamp: (value: number): SqlValue => ({ tag: "Timestamp", value }),
 };
 
 /**
@@ -760,7 +767,7 @@ export const SenderIdentity = {
  * A value bound to a `$n` parameter of a `Postgres` statement. `PgInteger`
  * binds a whole number and `PgReal` a float; `PgText` binds text, `PgBytea` bytes
  * and `PgBoolean` a flag. `PgTimestamp` binds an `Instant` as a `timestamptz`.
- * `PgJson` binds JSON text and `PgNumeric` a decimal as text, each as text
+ * `PgJson` binds JSON text and `PgNumeric` a `Decimal` as its canonical text, each as text
  * the server types from the column or cast it meets (`$1::jsonb`,
  * `$2::numeric`), so neither loses a digit to a float. The variants carry the
  * `Pg` prefix because a bare `Null`, `Integer`, `Real`, `Text` or `Boolean`
@@ -775,7 +782,7 @@ export type PgValue =
   | { readonly tag: "PgBoolean"; readonly value: boolean }
   | { readonly tag: "PgTimestamp"; readonly value: number }
   | { readonly tag: "PgJson"; readonly value: string }
-  | { readonly tag: "PgNumeric"; readonly value: string };
+  | { readonly tag: "PgNumeric"; readonly value: { readonly coefficient: bigint; readonly scale: number } };
 
 export const PgValue = {
   PgNull: { tag: "PgNull" } as PgValue,
@@ -786,7 +793,7 @@ export const PgValue = {
   PgBoolean: (value: boolean): PgValue => ({ tag: "PgBoolean", value }),
   PgTimestamp: (value: number): PgValue => ({ tag: "PgTimestamp", value }),
   PgJson: (value: string): PgValue => ({ tag: "PgJson", value }),
-  PgNumeric: (value: string): PgValue => ({ tag: "PgNumeric", value }),
+  PgNumeric: (value: { readonly coefficient: bigint; readonly scale: number }): PgValue => ({ tag: "PgNumeric", value }),
 };
 
 /**
@@ -888,7 +895,7 @@ export type MySqlValue =
   | { readonly tag: "MySqlTimestamp"; readonly value: number }
   | { readonly tag: "MySqlDateTime"; readonly value: string }
   | { readonly tag: "MySqlJson"; readonly value: string }
-  | { readonly tag: "MySqlDecimal"; readonly value: string };
+  | { readonly tag: "MySqlDecimal"; readonly value: { readonly coefficient: bigint; readonly scale: number } };
 
 export const MySqlValue = {
   MySqlNull: { tag: "MySqlNull" } as MySqlValue,
@@ -901,7 +908,7 @@ export const MySqlValue = {
   MySqlTimestamp: (value: number): MySqlValue => ({ tag: "MySqlTimestamp", value }),
   MySqlDateTime: (value: string): MySqlValue => ({ tag: "MySqlDateTime", value }),
   MySqlJson: (value: string): MySqlValue => ({ tag: "MySqlJson", value }),
-  MySqlDecimal: (value: string): MySqlValue => ({ tag: "MySqlDecimal", value }),
+  MySqlDecimal: (value: { readonly coefficient: bigint; readonly scale: number }): MySqlValue => ({ tag: "MySqlDecimal", value }),
 };
 
 /**

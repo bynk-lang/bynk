@@ -4,7 +4,7 @@ import type { Ai, AiError, AiSearch, SearchAnswer, Analytics, AnalyticsSql, Anal
 import type { BytesResponse, FetchError, FetchOptions, Request as FetchRequest, Response as FetchResponse } from "../bynk.js";
 import { Secret } from "../bynk.js";
 import { FetchProvider } from "../bynk-cloudflare.js";
-import { claimStream, EDGE_TO_PREFIX, edgeKeyOf, Err, None, Ok, signQueueMessage, Some, type AnalyticsDataset, type D1Database, type D1PreparedStatement, type D1Result, type KVNamespace, type Option, type QueueProducer, type R2Bucket, type R2MultipartUpload, type R2ObjectMeta, type RateLimiter, type Result, type SecretsStoreSecret, type SendEmail, type VectorizeIndex, type WorkerAiBinding, type WorkerImagesBinding, type AnalyticsSqlBinding, type AiSearchInstance, type WorkerVersionMetadata } from "../runtime.js";
+import { __bynkDecimalToString, claimStream, EDGE_TO_PREFIX, edgeKeyOf, Err, None, Ok, signQueueMessage, Some, type AnalyticsDataset, type D1Database, type D1PreparedStatement, type D1Result, type KVNamespace, type Option, type QueueProducer, type R2Bucket, type R2MultipartUpload, type R2ObjectMeta, type RateLimiter, type Result, type SecretsStoreSecret, type SendEmail, type VectorizeIndex, type WorkerAiBinding, type WorkerImagesBinding, type AnalyticsSqlBinding, type AiSearchInstance, type WorkerVersionMetadata } from "../runtime.js";
 
 // The integration doubles mark the fault they throw for an unstubbed call
 // (`bynkNotStubbed`, #3589). Every catch that maps a platform failure to an
@@ -1063,6 +1063,8 @@ export class WorkersD1 implements D1 {
         return null;
       case "Boolean":
         return v.value ? 1 : 0;
+      case "Numeric":
+        return __bynkDecimalToString(v.value);
       default:
         return v.value;
     }

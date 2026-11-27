@@ -1747,18 +1747,20 @@ and `expect` apply to it unchanged. The rules:
   string literal or constant that continues from `FROM`
   (`bynk.types.select_tail_has_select`, `bynk.types.sql_not_literal`), `T` MUST
   be a row record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`,
-  `Decimal` or `Instant` (or a refined or opaque type over one, or an `Option`
-  of either) (`bynk.types.sql_row_shape`), and the call has type
+  `Decimal`, `Instant`, `Duration` or a payload-less enum (or a refined or opaque
+  type over a scalar one, or an `Option` of either), the same set for `D1`,
+  `Postgres` and `MySql` (`bynk.types.sql_row_shape`), and the call has type
   `Effect[Result[List[T], PgReadError]]` (`firstAs`: `Option[T]`). The compiler
   writes the column list from `T`'s field names as Postgres quoted identifiers.
   A derived `MySql` instance (Hyperdrive H5, #3322) is the same with `?`
   placeholders, `MySqlValue`, `MySqlStatement` and `MySqlReadError`, MySQL's
-  backtick-quoted identifiers, and no `Instant` row field (a MySQL date or time
-  arrives as text without a zone). Its optional `@tls` MUST be `"required"`,
+  backtick-quoted identifiers, and an `Instant` row field read from a `DATETIME` or
+  `TIMESTAMP`'s text as UTC. Its optional `@tls` MUST be `"required"`,
   `"verify-ca"` or `"verify-identity"` (`bynk.capability.invalid_option`).
   The rows decode through the boundary codec, with an `Int` field read from the
-  text of an `int8` and an `Instant` field from the ISO-8601 text of a
-  `timestamptz` (normalised to UTC) before it runs; `Json.decode` reads neither.
+  text of an `int8` (a `Duration` field likewise) and an `Instant` field from the
+  ISO-8601 text of a `timestamptz` (normalised to UTC) before it runs; `Json.decode`
+  reads neither.
 - A kind used only through instances MUST NOT be named bare in a `given`
   clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit`,
   `Queue`, `Analytics`, `EdgeCache`, `Email`, `Postgres` and `MySql` are such kinds.
