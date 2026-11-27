@@ -5678,7 +5678,7 @@ export function __deserialise_SqlValue(json: __JsonValue, path: string = "$"): R
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof __value$ms });
       }
       if (!globalThis.Number.isSafeInteger(__value$ms)) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(__value$ms) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(__value$ms) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = __value$ms;
       return Ok({ tag: "Timestamp", value: __value } as SqlValue);

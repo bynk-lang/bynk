@@ -5,7 +5,7 @@ import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import { __bynkInstantFromWire } from "../../__bynk_runtime/time.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../../__bynk_runtime/boundary.js";
 
 import { SqlError, SqlReadError, SqlRun, SqlValue } from "../../bynk/cloudflare.js";
 
@@ -68,7 +68,7 @@ export const since = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_Order(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]);
@@ -91,7 +91,7 @@ export const logs = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_Logged(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Logged[]);
@@ -127,7 +127,7 @@ export function __deserialise_Logged(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.logged`, expected: "number", actual: typeof __logged$ms });
   }
   if (!globalThis.Number.isSafeInteger(__logged$ms)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.logged`, expected: "safe integer", actual: String(__logged$ms) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.logged`, expected: "safe integer", actual: globalThis.Number.isInteger(__logged$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __logged = __logged$ms;
   return Ok({ id: __id, logged: __logged } as Logged);
@@ -165,14 +165,14 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "number", actual: typeof __placed$ms });
   }
   if (!globalThis.Number.isSafeInteger(__placed$ms)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "safe integer", actual: String(__placed$ms) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "safe integer", actual: globalThis.Number.isInteger(__placed$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __placed = __placed$ms;
   if (typeof obj["wait"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.wait`, expected: "number", actual: typeof obj["wait"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["wait"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.wait`, expected: "safe integer", actual: String(obj["wait"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.wait`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["wait"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __wait = obj["wait"];
   const __r_status = __deserialise_Status(obj["status"], `${path}.status`);
@@ -198,7 +198,7 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
       case "Shipped":
         return Ok({ tag: "Shipped" } as Status);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -212,7 +212,7 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
     case "Shipped":
       return Ok({ tag: "Shipped" } as Status);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -240,7 +240,7 @@ export function __deserialise_Result_List_Logged_SqlReadError(json: __JsonValue,
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<readonly Logged[], SqlReadError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_List_Logged(value: readonly Logged[]): __JsonValue {
@@ -283,7 +283,7 @@ export function __deserialise_Result_SqlRun_SqlError(json: __JsonValue, path: st
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<SqlRun, SqlError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Result_List_Order_SqlReadError(value: Result<readonly Order[], SqlReadError>): __JsonValue {
@@ -307,7 +307,7 @@ export function __deserialise_Result_List_Order_SqlReadError(json: __JsonValue, 
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<readonly Order[], SqlReadError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_List_Order(value: readonly Order[]): __JsonValue {
