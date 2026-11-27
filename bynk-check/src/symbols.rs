@@ -3047,7 +3047,7 @@ pub fn resolve_given_cap_ref(
 /// #4618: the types a service signature names from a first-party unit the
 /// context consumes (`consumes bynk { CloseInfo, Cookie }`), directly or through
 /// one of its own types, are added too, as those units are not contexts and a
-/// signature naming one otherwise did not resolve ([`add_adapter_signature_types`]).
+/// signature naming one otherwise did not resolve (`add_adapter_signature_types`).
 ///
 /// Both sides of a cross-context call build the contract hash from this one
 /// table, so they agree by construction.
