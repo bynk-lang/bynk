@@ -1,0 +1,3 @@
+bynk.given.binding_unknown `note` has no capability parameter named `Store`
+bynk.given.binding_unknown `remember` has no capability parameter named `Cache`
+# exact

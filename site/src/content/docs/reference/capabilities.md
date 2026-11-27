@@ -70,11 +70,10 @@ fn warn(what: String) -> Effect[()] given Logger {
 }
 ```
 
-- **Where.** Only a free function that returns `Effect[T]`, in a context. A function in a
-  `commons` or a suite cannot: those are shared by contexts that may consume different
-  capabilities, so they keep the function-value style (`log: (String) -> Effect[()]`). A
-  method cannot, and `Events` cannot be named (`bynk.given.fn_outside_context`,
-  `bynk.given.fn_unsupported`).
+- **Where.** Only a free function that returns `Effect[T]`, in a context, a commons
+  ([capability parameters](#capability-parameters), below) or a suite (a helper's `given`
+  names the target's capabilities). An adapter's helpers are pure, a method cannot, and
+  `Events` cannot be named (`bynk.given.fn_unsupported`).
 - **Calling it.** The caller's `given` MUST include the callee's. A call, or a reference
   to the function as a value, from a body that lacks one is
   `bynk.given.missing_for_call`, naming the capabilities missing. This is checked at
@@ -87,6 +86,100 @@ fn warn(what: String) -> Effect[()] given Logger {
 - **Emission.** The function takes a hidden trailing `deps` parameter that carries
   exactly the capabilities it names (before the execution context of
   [`detach`, `within` and `race`](#within)), and every call passes the caller's `deps` on.
+
+## Capability parameters in a commons {#capability-parameters}
+
+:::caution[Experimental]
+Capability parameters, the binding at a call, a capability in a commons' `consumes`
+and a commons suite's suite-local instances are experimental. A project opts in with
+`[unstable] allow = ["bynk.given.parameters"]`; without it each is
+`bynk.stability.experimental`.
+:::
+
+A commons is shared by contexts that hold different capabilities, and most
+`bynk.cloudflare` kinds (`D1`, `R2`, `Queue`, `Service`, …) are used only through a
+context's own derived instances. A **free function in a commons** therefore takes
+the instance it needs as a **capability parameter**, and every call names it:
+
+```bynk,fragment
+commons shop.cache
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+fn remember(key: String, value: String) -> Effect[String] given Store: Kv, Logger {
+	let hit <- Store.get(key)
+	match hit {
+		Some(text) => Effect.pure(text),
+		None => {
+			let _ <- Store.put(key, value)
+			let _ <- Logger.info("stored \(key)")
+			Effect.pure(value)
+		},
+	}
+}
+```
+
+```bynk,fragment
+context shop
+
+uses shop.cache
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+capability Sessions = Kv
+
+fn session(id: String) -> Effect[String] given Sessions, Logger {
+	remember(id, "fresh", given Store = Sessions)
+}
+```
+
+- **Selecting a kind.** A commons names a first-party capability by listing it in its
+  braced `consumes`, beside any types: `consumes bynk.cloudflare { Kv, KvEntry }`. The
+  selection imports the contract only: nothing is provided or bound, and a unit that
+  `uses` the commons gets no capability through it. A capability of a project's own
+  adapter is still `bynk.commons.consumes_not_types`, and one that no function's `given`
+  names is the warning `bynk.commons.capability_unused`. Naming a `bynk` capability is an
+  explicit `consumes bynk`, so the file then lists every `bynk` type it names too.
+- **Parameter or shared.** An **instantiable** kind (one a context may declare instances
+  of: `Kv`, `D1`, `R2`, `Queue`, `Service`, …) is always a parameter, `given Store: Kv`;
+  named bare it is `bynk.given.kind_needs_parameter`, so a library never silently means
+  "the caller's default instance". Any other first-party capability (`Clock`, `Random`,
+  `Logger`, `Fetch`, `Secrets`, `Locale`, `Idempotency`, the Cloudflare singletons,
+  `Crypto`) is **shared** and named bare, `given Logger`: it means the caller's one, and
+  the caller's `given` must hold it, as between context functions. As a bound it is
+  `bynk.given.shared_as_parameter`. `Events` stays refused.
+- **Naming.** A parameter is capitalised and is called like a capability
+  (`Store.get(key)`), lambdas in the body included. It may not shadow a capability or kind
+  the commons selects, a type parameter, or another parameter
+  (`bynk.given.parameter_name_conflict`), and it is never a value. Only a commons free
+  function, a test-only commons' included, takes parameters: anywhere else `given Name:
+  Kind` is `bynk.given.parameter_outside_commons`.
+- **Binding.** Every call binds every parameter, inside its argument list after the
+  ordinary arguments, behind `given`: `f(x, given Store = Sessions)`, or `f(given Store =
+  Sessions)` with no other arguments. The binding is part of the call, so it works in a
+  `<-`, `do`, `par`, a lambda and a method chain alike. Each parameter is bound exactly
+  once, in any order; a missing, unknown or repeated one is `bynk.given.binding_missing`,
+  `bynk.given.binding_unknown` or `bynk.given.binding_duplicate`, and a shared capability
+  is never bound (`bynk.given.binding_shared`).
+- **What may be bound.** The right-hand side is a capability in the caller's own `given`
+  (`bynk.given.missing_for_call` otherwise) of exactly the parameter's kind
+  (`bynk.given.binding_kind_mismatch` otherwise): a derived instance of it, the bare kind
+  where it allows a bare use (only `Kv` today: `given Store = Kv`, the caller's choice,
+  written out), or in a commons the caller's own parameter of that kind. One instance may
+  bind two parameters; the aliasing is visible at the call. A Bynk-bodied provider may
+  call a commons function and bind its own `given` capabilities.
+- **Never inferred.** A binding is written at every call, even when the caller holds only
+  one candidate, because reading the wrong instance is well-typed and nothing else would
+  catch it. The fix for `bynk.given.binding_missing` offers one binding per instance of
+  the kind the caller holds, and is applied by `bynk check --fix` only when there is
+  exactly one.
+- **Emission.** The function takes the same hidden `deps` as a context function, typed by
+  parameter and shared names (`deps: { Store: Kv; Logger: Logger }`), and a call builds it
+  from the caller's: `remember(id, "fresh", { Store: deps.Sessions, Logger: deps.Logger })`
+  (`this.deps` in a provider). It costs one object per call, and no runtime or binding
+  changes. In a test build `deps.Sessions` is already the recording proxy, so `expect
+  Sessions.put called` observes a call made through `Store`.
 
 ## Joining independent effects — `par` {#par}
 

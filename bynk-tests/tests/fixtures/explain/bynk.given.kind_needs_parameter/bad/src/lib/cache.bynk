@@ -1,0 +1,7 @@
+commons lib.cache
+
+consumes bynk.cloudflare { Kv }
+
+fn forget(id: String) -> Effect[()] given Kv {
+	Kv.delete(id)
+}

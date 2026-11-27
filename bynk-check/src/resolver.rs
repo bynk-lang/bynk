@@ -230,6 +230,10 @@ pub struct ResolvedCommons {
     /// check (#907): only a context's emission rebrands a `uses`-sourced
     /// commons sum type's variant constructors out of value scope.
     pub is_context: bool,
+    /// #3959: true iff this unit is a `commons` (a test-only one included),
+    /// whose free functions may declare capability parameters and shared
+    /// capabilities. Set with [`ResolvedCommons::with_is_commons`].
+    pub(crate) is_commons: bool,
     /// Names of types brought into scope via `uses` of a *commons*
     /// specifically (as opposed to a local declaration, or a type surfaced
     /// via `consumes`) — every name [`compute_is_uses_commons_type`] accepts
@@ -544,6 +548,7 @@ impl ResolvedCommons {
             extensible_enums: HashSet::new(),
             unselected_types: HashSet::new(),
             stability: Default::default(),
+            is_commons: false,
         }
     }
 
@@ -613,6 +618,13 @@ impl ResolvedCommons {
     /// S3 (#1963): set [`ResolvedCommons::stability`].
     pub fn with_stability(mut self, stability: crate::stability::UnitStability) -> Self {
         self.stability = stability;
+        self
+    }
+
+    /// #3959: mark the unit a `commons`, whose free functions may declare
+    /// `given` (capability parameters and shared capabilities).
+    pub fn with_is_commons(mut self, is_commons: bool) -> Self {
+        self.is_commons = is_commons;
         self
     }
 
@@ -1053,6 +1065,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             extensible_enums: HashSet::new(),
             unselected_types: HashSet::new(),
             stability: Default::default(),
+            is_commons: false,
         };
         (resolved, errors)
     }

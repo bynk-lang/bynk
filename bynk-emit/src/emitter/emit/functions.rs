@@ -433,8 +433,12 @@ pub(super) fn emit_free_fn_in(
             Some(bynk_ts::TsType::Object(
                 given_ir
                     .iter()
-                    .map(|c| {
-                        bynk_ts::TsTypeMember::prop(c.name.clone(), cap_ref_ty(c, cross_context))
+                    .zip(&f.given)
+                    .map(|(c, g)| {
+                        bynk_ts::TsTypeMember::prop(
+                            c.name.clone(),
+                            given_entry_ty(c, g, cross_context),
+                        )
                     })
                     .collect(),
             )),
@@ -768,6 +772,26 @@ fn contract_guard_if_stmt(pred: bynk_ts::TsExpr, msg: &str) -> bynk_ts::TsStmt {
     let throw_e = bynk_ts::TsStmt::throw_stmt(bynk_ts::TsExpr::Ident("__e".to_string()), None);
     let then_branch = bynk_ts::TsStmt::inline_block(vec![const_e, assign_name, throw_e], None);
     bynk_ts::TsStmt::if_stmt(cond, then_branch, None)
+}
+
+/// The type of one entry of a `given` function's hidden `deps`: the
+/// capability's interface, or (#3959) for a capability parameter
+/// (`Store: Kv`) its bound kind's, so any instance of the kind satisfies it.
+fn given_entry_ty(
+    c: &bynk_model::CapRefIr,
+    g: &bynk_syntax::ast::CapRef,
+    cross_context: &bynk_check::resolver::CrossContextInfo,
+) -> bynk_ts::TsType {
+    match &g.bound {
+        Some(bound) => cap_ref_ty(
+            &bynk_model::CapRefIr {
+                context: None,
+                name: bound.name.clone(),
+            },
+            cross_context,
+        ),
+        None => cap_ref_ty(c, cross_context),
+    }
 }
 
 #[cfg(test)]
