@@ -270,10 +270,11 @@ struct PlanSecret {
     /// skip at wire time — see the type's note. #3939: `keep` for an `ApiKey`
     /// actor's pepper on a redeploy, which nothing sets.
     action: &'static str,
-    /// #3939: why a `keep` line keeps its secret (`already set`), shown beside
-    /// the origin; absent on every other line.
+    /// #3939: what the run does if a `keep` line's secret turns out to be missing (`mint`), shown
+    /// beside the origin as `minted only if missing`; absent on every other line. The plan states
+    /// the rule, not presence, which it cannot observe offline.
     #[serde(skip_serializing_if = "Option::is_none")]
-    state: Option<&'static str>,
+    on_missing: Option<&'static str>,
 }
 
 /// One context's secret lines: the wanted secrets as the run will attempt them (presence is not
@@ -283,9 +284,9 @@ struct PlanSecret {
 ///
 /// A pepper is never overwritten by `deploy`, `--force` included (the maintainer's ruling on
 /// #4595), so on a Worker the lock records as deployed (its first deploy minted the pepper) its
-/// line is `keep … (managed, already set)`, with or without `--force`. On a first deploy it is
-/// `set`. The lock is no proof of presence: if the pepper turns out to be gone, the run mints it,
-/// as `decide_pepper` does for any absent pepper.
+/// line is `keep … (managed; minted only if missing)`, with or without `--force`. On a first deploy
+/// it is `set`. The line states the rule rather than presence, which the plan cannot observe: if
+/// the pepper is gone, the run mints it, as `decide_pepper` does for any absent pepper.
 fn plan_secrets(
     wanted: Vec<WantedSecret>,
     session_keys: &[crate::deploy::config::SessionKey],
@@ -298,7 +299,7 @@ fn plan_secrets(
             name: want.name,
             origin: want.origin,
             action: attempt,
-            state: None,
+            on_missing: None,
         })
         .collect();
     for key in session_keys {
@@ -306,8 +307,8 @@ fn plan_secrets(
             continue;
         }
         let pepper = key.kind == crate::deploy::config::SessionKeyKind::Pepper;
-        let (action, state) = match (pepper, deployed) {
-            (true, true) => ("keep", Some("already set")),
+        let (action, on_missing) = match (pepper, deployed) {
+            (true, true) => ("keep", Some("mint")),
             (true, false) => ("set", None),
             (false, _) => (attempt, None),
         };
@@ -315,7 +316,7 @@ fn plan_secrets(
             name: key.binding.clone(),
             origin: Origin::Managed,
             action,
-            state,
+            on_missing,
         });
     }
     out
@@ -802,7 +803,10 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         secret.action,
                         secret.name,
                         secret.origin.label(),
-                        secret.state.map(|s| format!(", {s}")).unwrap_or_default()
+                        secret
+                            .on_missing
+                            .map(|_| "; minted only if missing")
+                            .unwrap_or_default()
                     ));
                 }
                 out.push_str(&format!("{} {}\n", context.action, context.worker));

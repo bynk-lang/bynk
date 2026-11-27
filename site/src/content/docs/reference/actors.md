@@ -310,8 +310,9 @@ experimental: list the types in `[unstable] allow`.
   value must be unpadded base64url of at least 32 bytes.
 
 The plan shows which: `secret set CLIENT_KEY_PEPPER (managed)` on a Worker's first deploy, `secret
-keep CLIENT_KEY_PEPPER (managed, already set)` on every redeploy, `--force` included, and `secret
-set CLIENT_KEY_PEPPER (supplied)` when you supply a value.
+keep CLIENT_KEY_PEPPER (managed; minted only if missing)` on every redeploy, `--force` included, and
+`secret set CLIENT_KEY_PEPPER (supplied)` when you supply a value. The plan runs before `deploy`
+signs in, so it cannot see whether the pepper is set; it states the rule instead.
 
 Each environment (`--env`) holds its own pepper and its own key store, so a key works only in the
 environment that issued it.

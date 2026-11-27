@@ -1426,7 +1426,8 @@ fn a_session_key_is_a_managed_secret_in_the_plan() {
 
 /// K1 (track §18, #3939): the plan's line for an `ApiKey` actor's pepper. `deploy` never replaces a
 /// set pepper, `--force` included, so on a redeploy (the first deploy minted it) the line is `keep`,
-/// never `set` or `overwrite`; a pepper supplied with `--secrets-file` is listed once, `supplied`.
+/// never `set` or `overwrite`, and states the rule (`minted only if missing`) rather than a presence
+/// the plan cannot observe; a pepper supplied with `--secrets-file` is listed once, `supplied`.
 fn pepper_plan_text(lock: &DeployLock, source: &SecretSource, force: bool) -> String {
     let resources = project(vec![(
         "acme-api",
@@ -1447,12 +1448,30 @@ fn deployed_acme_api() -> DeployLock {
     lock
 }
 
-/// K1 step 2: a plain redeploy keeps the pepper the first deploy minted.
+/// K1 step 2: a plain redeploy keeps the pepper the first deploy minted. The JSON plan carries the
+/// same rule as `on_missing: "mint"`.
 #[test]
 fn k1_a_redeploy_plans_to_keep_the_pepper() {
     assert_eq!(
         pepper_plan_text(&deployed_acme_api(), &SecretSource::default(), false),
-        "secret keep CLIENT_KEY_PEPPER (managed, already set)"
+        "secret keep CLIENT_KEY_PEPPER (managed; minted only if missing)"
+    );
+    let resources = project(vec![(
+        "acme-api",
+        Resources::default().api_key_peppers(&[("Client", "CLIENT_KEY_PEPPER")]),
+    )]);
+    let order = names(&["acme-api"]);
+    let plan = plan_of(&order, &resources, &deployed_acme_api());
+    let json: serde_json::Value =
+        serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+    assert_eq!(
+        json["contexts"][0]["secrets"],
+        serde_json::json!([{
+            "name": "CLIENT_KEY_PEPPER",
+            "origin": "managed",
+            "action": "keep",
+            "on_missing": "mint"
+        }])
     );
 }
 
@@ -1461,7 +1480,7 @@ fn k1_a_redeploy_plans_to_keep_the_pepper() {
 fn k1_a_forced_redeploy_plans_to_keep_the_pepper() {
     assert_eq!(
         pepper_plan_text(&deployed_acme_api(), &SecretSource::default(), true),
-        "secret keep CLIENT_KEY_PEPPER (managed, already set)"
+        "secret keep CLIENT_KEY_PEPPER (managed; minted only if missing)"
     );
 }
 
