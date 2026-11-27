@@ -938,10 +938,11 @@ fn member_table(members: &[(usize, &GroupMember)], forwards: &[GroupForward]) ->
                 ("isMiss".to_string(), ident(format!("__miss{i}"))),
             ])
         })
-        .chain(forwards.iter().enumerate().map(|(j, _)| {
+        .chain((0..forwards.len()).map(|j| {
+            let (entry, miss) = forward_names(j);
             TsExpr::object(vec![
-                ("entry".to_string(), ident(format!("__fwd{j}"))),
-                ("isMiss".to_string(), ident(format!("__fwdMiss{j}"))),
+                ("entry".to_string(), ident(entry)),
+                ("isMiss".to_string(), ident(miss)),
             ])
         }))
         .collect();
@@ -951,6 +952,11 @@ fn member_table(members: &[(usize, &GroupMember)], forwards: &[GroupForward]) ->
         TsExpr::multiline_array(rows),
     ));
     stmts
+}
+
+/// #3565: the `j`th forward's entry and miss-test names (`__fwd0`, `__fwdMiss0`).
+fn forward_names(j: usize) -> (String, String) {
+    (format!("__fwd{j}"), format!("__fwdMiss{j}"))
 }
 
 /// #3565: each forwarded context as an entry of the member table. Its `fetch` hands the
@@ -976,6 +982,7 @@ fn forward_entries(forwards: &[GroupForward]) -> Vec<TsStmt> {
     ))];
     let last = forwards.len() - 1;
     for (j, f) in forwards.iter().enumerate() {
+        let (entry, miss_name) = forward_names(j);
         let request = if j == last {
             ident("request")
         } else {
@@ -989,7 +996,7 @@ fn forward_entries(forwards: &[GroupForward]) -> Vec<TsStmt> {
             str_lit(&f.binding),
         );
         stmts.push(tight(const_typed(
-            format!("__fwd{j}"),
+            entry,
             Some(ty("__Fetch")),
             TsExpr::object(vec![(
                 "fetch".to_string(),
@@ -1012,7 +1019,7 @@ fn forward_entries(forwards: &[GroupForward]) -> Vec<TsStmt> {
                 ))),
             )
         };
-        stmts.push(tight(const_typed(format!("__fwdMiss{j}"), None, miss)));
+        stmts.push(tight(const_typed(miss_name, None, miss)));
     }
     stmts
 }

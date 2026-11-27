@@ -45,17 +45,15 @@ pub use bynk_project::worker_moves::{Incoming, MoveVariants, Outgoing};
 /// The Service Binding a receiving Worker forwards `context`'s requests over:
 /// `BYNK_FORWARD_SHOP_ORDERS` for `shop.orders`.
 pub fn forward_binding(context: &str) -> String {
-    let name: String = context
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() {
-                c.to_ascii_uppercase()
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    format!("BYNK_FORWARD_{name}")
+    let mut binding = String::from("BYNK_FORWARD_");
+    binding.extend(context.chars().map(|c| {
+        if c.is_ascii_alphanumeric() {
+            c.to_ascii_uppercase()
+        } else {
+            '_'
+        }
+    }));
+    binding
 }
 
 /// Whether `block` binds or plainly declares one of `classes`.
