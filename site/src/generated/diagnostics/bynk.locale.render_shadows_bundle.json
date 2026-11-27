@@ -1,0 +1,10 @@
+{
+  "blurb": "A message bundle's `render` belongs to the unit that declares it, so a `uses` of that unit does not bring it in. A unit that also `uses bynk.locale` gets `bynk.locale`'s `render`, which reads no bundle and returns the code, so a bare `render` there is probably not the one meant. The warning names the unit or units that declare a bundle. To render a bundle's messages, call a function the unit that declares it exports: the bundle's own `render` is not importable, and `Messages.render` is `bynk.messages.cross_unit_render`. If the code-echo is what you want, the warning is the one thing to leave, or name it with `bynk.locale`'s alias (`Locale.render`).",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.locale.render_shadows_bundle",
+  "constructs": [],
+  "example": "// shop/cart.bynk\ncommons shop.cart\n\nuses bynk.locale\nuses shop.messages\n\nfn banner(tag: LocaleTag, name: String) -> String {\n  render(tag, message(\"cart.greeting\"))     // ✗ `bynk.locale`'s `render`: it returns the code\n  greet(tag, name)                           // ✓ call what shop.messages exports\n}",
+  "severity": "warning",
+  "summary": "A unit that `uses bynk.locale` and also `uses` a unit that declares a message bundle calls a bare `render`, which is `bynk.locale`'s: it reads no bundle and returns the code (warning)."
+}

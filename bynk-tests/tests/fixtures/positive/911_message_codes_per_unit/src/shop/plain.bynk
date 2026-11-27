@@ -1,0 +1,10 @@
+commons shop.plain
+
+uses bynk.locale
+uses bynk.locale.types
+
+// A unit with no bundle has nothing to check a literal code against: its `render` is
+// `bynk.locale`'s, which returns the code and its parameters.
+fn echo(tag: LocaleTag) -> String {
+  render(tag, message("anything.at.all"))
+}

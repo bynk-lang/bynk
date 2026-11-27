@@ -2486,8 +2486,8 @@ containers as they have values to send, and `bynk check` warns
 follows the handler's parameters, and the locals bound from them, into the first
 argument of `send`, `receiveBytes` and `sendBytes`. It does not warn when the name
 comes from a constant, from the authenticated identity, from a closed set (a
-`match` over an enum's names), from a route served `by` an actor that
-authenticates, or from an instance's own key type (below); and it does not follow a name through a function, which is where
+`match` over an enum's names), or from a route served `by` an actor that
+authenticates; and it does not follow a name through a function, which is where
 an author bounds the set, so a name laundered through one is not warned about,
 rather than warned about wrongly. A refined type limits what a name looks like, not
 how many there are: bound the count with an authenticated actor, a `RateLimit`, or
@@ -2518,11 +2518,15 @@ so the limits on a name above (1 to 256 bytes, no control character) still apply
 to it. A refined type limits what a name looks like, not how many there are: a
 route anyone can call that takes a `TenantId` still lets a caller send any
 `TenantId`, so pair a key with an authenticated actor, a `RateLimit`, or a closed
-set (a `match` over an enum that builds the key). A keyed instance is not warned
-about, because the key's construction is where the author bounds the names; that
-is the author's claim, and `bynk check` does not verify it, so a key on a route
-anyone can call, with nothing else limiting how many names are sent, bounds only
-their shape.
+set (a `match` over an enum that builds the key). A key does not make a route
+anyone can call safe, so a keyed instance is checked like any other:
+`bynk.container.unbounded_instances` warns when its name comes from request input
+on a route whose `by` has an open member (`Visitor`, or a sum that includes one),
+and does not warn on a route served by an authenticated actor. A `RateLimit` reduces
+the rate but does not bound the number of instances (it is usually keyed per client,
+so it slows each caller without limiting how many distinct names arrive across many
+callers), so `bynk check` does not take it into account and it does not clear the
+warning.
 
 A running container costs money. See Cloudflare's
 [Containers pricing](https://developers.cloudflare.com/containers/pricing/) and

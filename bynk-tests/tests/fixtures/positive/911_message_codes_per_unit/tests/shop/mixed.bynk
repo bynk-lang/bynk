@@ -1,0 +1,9 @@
+suite shop.mixed {
+  case "bynk.locale's render returns the code, not shop.cart's template" {
+    expect echo("en") == "greeting"
+  }
+
+  case "shop.cart's own function renders its bundle" {
+    expect viaCart("en", "Ada") == "Your basket, Ada."
+  }
+}

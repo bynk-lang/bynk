@@ -1,0 +1,5 @@
+suite shop.web {
+  case "each unit renders its own greeting" {
+    expect both("en", "Ada") == "Your basket, Ada. / Welcome back, Ada!"
+  }
+}
