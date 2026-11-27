@@ -16,7 +16,7 @@
     "@types/node": "26.6.6",
     "mysql2": "3.24.6",
     "postal-mime": "4.2.1",
-    "postgres": "4.0.0",
+    "postgres": "4.1.1",
     "typescript": "7.0.2",
     "yaml": "2.9.1"
   }
