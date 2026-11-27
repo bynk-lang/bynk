@@ -37,8 +37,24 @@ fn every_wrangler_a_bynk_test_starts_has_telemetry_off() {
 /// Programs a `bynk` test may start directly: none of them is, or starts, a Wrangler.
 const OTHER_PROGRAMS: [&str; 3] = ["node", "ps", "sh"];
 
-/// In a test file that includes `dev_child` (those that start `bynk dev`, `bynk test --against dev`
-/// or a Wrangler), every
+/// Files that name `"dev"` or `"--against"` and run the `bynk` binary without starting a Wrangler,
+/// each with why: they need not include `dev_child`.
+const START_NO_WRANGLER: [(&str, &str); 5] = [
+    (
+        "each.rs",
+        "`test --each --against dev` is refused before anything starts",
+    ),
+    (
+        "workspace.rs",
+        "`bynk dev` at a workspace root is refused before anything starts",
+    ),
+    ("packages_git.rs", "`dev` is a scratch directory name"),
+    ("driver_commands.rs", "`dev` is a build profile"),
+    ("registry_query.rs", "`dev` is a dependency-kind JSON key"),
+];
+
+/// A test file that runs the `bynk` binary with `dev` or `--against` includes `dev_child`; in every
+/// file that includes it, every
 /// `Command::new(` is one of [`OTHER_PROGRAMS`], and `CARGO_BIN_EXE_bynk` is never named: the binary
 /// and the tools come from `dev_child::{bynk_command, tool_command}`, which set the variable. So a
 /// bypass through a local variable (`Command::new(&bynk)`, `Command::new(tool)`) fails here too.
@@ -54,8 +70,21 @@ fn no_bynk_test_spawns_a_wrangler_without_the_builders() {
             continue;
         }
         let src = std::fs::read_to_string(&path).expect("read a test file");
-        // The files that start a Wrangler are the ones that include `dev_child`.
-        if !src.contains("support/dev_child.rs") {
+        // A file that runs the `bynk` binary with `dev` or `--against` starts a Wrangler: it
+        // includes `dev_child` for the builders.
+        let runs_bynk_dev = src.contains("CARGO_BIN_EXE_bynk")
+            && (src.contains("\"dev\"") || src.contains("\"--against\""));
+        let uses_builders = src.contains("support/dev_child.rs");
+        let exempt = START_NO_WRANGLER
+            .iter()
+            .any(|(name, _)| path.file_name().is_some_and(|n| n == *name));
+        if runs_bynk_dev && !uses_builders && !exempt {
+            bad.push(format!(
+                "{}: runs `bynk dev` / `--against` but does not include support/dev_child.rs",
+                path.display()
+            ));
+        }
+        if !uses_builders {
             continue;
         }
         checked += 1;
