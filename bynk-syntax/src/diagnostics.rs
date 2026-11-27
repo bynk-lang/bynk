@@ -6044,6 +6044,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "fn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        1 => \"uno\"    // ✗ `1` is already matched above\n        _ => \"other\"\n    }\n}\n\nfn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        2 => \"two\"    // ✓\n        _ => \"other\"\n    }\n}",
     },
     Explain {
+        code: "bynk.types.duplicate_pattern_binding",
+        blurb: "A pattern binds each name once. With `Both(a, a)`, or `Some(a as a)`, the arm's body would read a name that stands for two values, and which one it saw would be an accident of how the match is compiled. The rule holds wherever a pattern binds: variant payloads, record fields, list elements and their `..rest`, `as` names, nested patterns, `let … else`, a lambda's parameter pattern and the `is` operator. Rename one of the bindings, or write `_` where the value is not needed. An or-pattern is different: its alternatives must bind the same names (`bynk.types.or_pattern_binding_mismatch`), so `Walk(n) | Run(n)` is required, not a duplicate; a name repeated within one alternative is still refused. A field named twice in a record pattern is `bynk.types.duplicate_pattern_field`.",
+        example: "type Pair =\n    | Both(l: Int, r: Int)\n\nfn sum(p: Pair) -> Int {\n    match p {\n        Both(a, a) => a + a,    // ✗ `a` is bound twice\n    }\n}\n\nfn sum(p: Pair) -> Int {\n    match p {\n        Both(a, b) => a + b,    // ✓\n    }\n}",
+    },
+    Explain {
         code: "bynk.types.duplicate_pattern_field",
         blurb: "A record pattern lists the fields it reads, and each may be named once. Naming a field twice would bind or test the same value twice, which is almost always a slip for a different field. Keep one mention, and give it the name you want to use, as in `total: t`. The `..` at the end covers every field you leave out.",
         example: "type Order = { id: String, total: Int }\n\nfn amount(o: Order) -> Int {\n    match o {\n        Order { total, total: t, .. } => t    // ✗ `total` is named twice\n    }\n}\n\nfn amount(o: Order) -> Int {\n    match o {\n        Order { total: t, .. } => t           // ✓\n    }\n}",
@@ -11317,6 +11322,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.duplicate_literal_arm",
         "A `match` has two arms for the same literal value.",
         &["match_arm"],
+    ),
+    dg(
+        "bynk.types.duplicate_pattern_binding",
+        "A pattern binds the same name more than once.",
+        &["match_arm", "is_expr"],
     ),
     dg(
         "bynk.types.duplicate_pattern_field",

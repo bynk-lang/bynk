@@ -1194,6 +1194,10 @@
   ],
   "is_expr": [
     {
+      "code": "bynk.types.duplicate_pattern_binding",
+      "summary": "A pattern binds the same name more than once."
+    },
+    {
       "code": "bynk.types.is_base_mismatch",
       "summary": "An `is` refinement check is applied to a value of the wrong base type."
     },
@@ -1306,6 +1310,10 @@
     {
       "code": "bynk.types.duplicate_literal_arm",
       "summary": "A `match` has two arms for the same literal value."
+    },
+    {
+      "code": "bynk.types.duplicate_pattern_binding",
+      "summary": "A pattern binds the same name more than once."
     },
     {
       "code": "bynk.types.duplicate_variant_arm",

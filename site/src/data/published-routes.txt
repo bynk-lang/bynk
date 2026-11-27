@@ -2254,6 +2254,7 @@
 /reference/diagnostics/bynk.types.discriminator_not_sum/
 /reference/diagnostics/bynk.types.duplicate_example/
 /reference/diagnostics/bynk.types.duplicate_literal_arm/
+/reference/diagnostics/bynk.types.duplicate_pattern_binding/
 /reference/diagnostics/bynk.types.duplicate_pattern_field/
 /reference/diagnostics/bynk.types.duplicate_variant_arm/
 /reference/diagnostics/bynk.types.embeds_ambiguous/

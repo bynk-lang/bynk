@@ -1,0 +1,14 @@
+// #4550: a name bound in a nested payload and again outside it.
+commons app.dup
+
+type Pair =
+	| Both(l: Int, r: Int)
+
+type Wrap =
+	| Wrapped(p: Pair, n: Int)
+
+fn sum(w: Wrap) -> Int {
+	match w {
+		Wrapped(Both(a, _), a) => a,
+	}
+}
