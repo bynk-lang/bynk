@@ -115,11 +115,13 @@ impl CloudflareApi for Account<'_> {
             .map(drop)
     }
 
-    /// Every page until the exact name turns up, to `total_pages` (or while full).
+    /// Every page until the exact name turns up, to `total_pages` (or while full), never past
+    /// [`rest::queues::MAX_PAGES`] or a page that brings no queue not already seen.
     fn queue_find(&self, name: &str) -> Result<Option<String>, CloudflareError> {
         let mut found = None;
+        let mut seen: BTreeSet<String> = BTreeSet::new();
         let rule = Numbered {
-            cap: None,
+            cap: Some(rest::queues::MAX_PAGES),
             missing_total: MissingTotal::WhileFull,
             stop_on_empty: false,
         };
@@ -128,7 +130,10 @@ impl CloudflareApi for Account<'_> {
             let body = self.send(Purpose::Queues, &request)?;
             let (id, entries) = rest::queues::found(&body, name)
                 .ok_or_else(|| unreadable(&request, "`result` list"))?;
-            let done = id.is_some();
+            let before = seen.len();
+            seen.extend(rest::queues::ids(&body));
+            let fresh = seen.len() > before;
+            let done = id.is_some() || !fresh;
             if found.is_none() {
                 found = id;
             }
@@ -594,6 +599,45 @@ mod tests {
             account(base, &root).vectorize_names().unwrap(),
             ["ix-0", "ix-1"]
         );
+        assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
+    }
+
+    /// 1D.4d: the queues listing is followed while pages are full (when `total_pages` is left out)
+    /// until the exact name turns up, and stops at a page that brings no new queue, so an answer
+    /// that ignored `page=N` is asked twice, not forever.
+    #[test]
+    fn a_queue_is_found_across_full_pages_and_a_repeated_page_ends_the_lookup() {
+        let full = |from: usize| -> &'static str {
+            Box::leak(
+                format!(
+                    r#"{{"success":true,"result":[{}],"result_info":{{"per_page":2}}}}"#,
+                    (from..from + 2)
+                        .map(|i| format!(r#"{{"queue_id":"q{i}","queue_name":"other-{i}"}}"#))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+                .into_boxed_str(),
+            )
+        };
+        let root = std::env::temp_dir();
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, full(0)),
+            (200, full(2)),
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"theone","queue_name":"jobs"}],"result_info":{"per_page":2}}"#,
+            ),
+        ]));
+        let (base, seen) = answering_in_turn(answers);
+        assert_eq!(
+            account(base, &root).queue_find("jobs").unwrap().as_deref(),
+            Some("theone")
+        );
+        assert_eq!(seen.join().unwrap().len(), 3);
+        let answers: &'static [(u16, &'static str)] =
+            Box::leak(Box::new([(200, full(0)), (200, full(0))]));
+        let (base, seen) = answering_in_turn(answers);
+        assert_eq!(account(base, &root).queue_find("jobs").unwrap(), None);
         assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
     }
 

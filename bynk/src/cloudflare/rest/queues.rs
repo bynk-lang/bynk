@@ -20,6 +20,26 @@ pub(crate) const NOT_FOUND: u64 = 10104;
 /// How many queues a listing page asks for.
 const PER_PAGE: u32 = 100;
 
+/// The most listing pages a lookup reads. The listing is documented as paged to
+/// `result_info.total_pages`; this bound, and the stop on a page that brings no queue not already
+/// seen, keep an answer without `total_pages` that ignored `page=N` from being asked for forever
+/// (the 1D.4c review's finding for Vectorize). A hundred pages of 100 is far beyond any account
+/// the deploy has met.
+pub(crate) const MAX_PAGES: u64 = 100;
+
+/// The `queue_id` of each entry on one listing page.
+pub(crate) fn ids(body: &serde_json::Value) -> Vec<String> {
+    body["result"]
+        .as_array()
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|q| q["queue_id"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Whether `id` can be a queue id: plain ASCII alphanumeric, at most 32 (the reference's
 /// "maxLength 32"). Anything else is refused before it can reach a request path.
 pub(crate) fn is_queue_id(id: &str) -> bool {
