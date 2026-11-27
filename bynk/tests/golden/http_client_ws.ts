@@ -848,7 +848,8 @@ export interface WsConnectOptions<C> {
    * Reconnect after the server closes the connection for an expired credential (`1008`, `authentication
    * expired`) or the connection drops (`1006`), with backoff, asking `credentials` for a fresh one each time.
    * A close the client made (`close()`, or a frame it refused) never reconnects. Frames sent or missed across a
-   * reconnect are not replayed: the application decides what to resend.
+   * reconnect are not replayed, and a frame queued before a close is dropped, never resent on the next
+   * connection: the application decides what to resend. `credentials` is called once for every attempt.
    */
   readonly reconnect?: WsReconnect<C>;
 }
@@ -1097,6 +1098,9 @@ class __WsClient<C, In, Out> implements WsConnection<In, Out> {
   }
 
   private closed(info: { readonly code: number; readonly reason: string; readonly clean: boolean }): void {
+    // A frame queued while the connection was opening is not sent on a later one: a reconnect never resends
+    // what was written before the close, which may or may not have reached the server.
+    this.queue.length = 0;
     const reconnect = this.connect?.reconnect;
     const max = reconnect?.maxAttempts ?? 5;
     const retry =
@@ -1172,7 +1176,11 @@ export interface Frame {
 
 export interface Heard {
   readonly text: string;
-  readonly withReply: boolean;
+  readonly note: string | null;
+}
+
+export interface Login {
+  readonly name: string;
 }
 
 export type RoomId = string;
@@ -1190,7 +1198,11 @@ export interface __Wire_Frame {
 
 export interface __Wire_Heard {
   readonly text: string;
-  readonly withReply: boolean;
+  readonly note: Option<string>;
+}
+
+export interface __Wire_Login {
+  readonly name: string;
 }
 
 export type __Wire_RoomId = string;
@@ -1220,13 +1232,29 @@ export type GatewayConnection = WsConnection<Said, Heard>;
 /**
  * What `GET /health` answers, by `status`.
  */
-export type GetHealthResponse =
+export type HealthGetHealthResponse =
     { readonly status: 200; readonly kind: "Ok"; readonly body: string };
 
 /**
  * The connection `lounge.connect` opens: typed frames both ways.
  */
 export type LoungeConnection = WsConnection<Frame, Frame>;
+
+/**
+ * What `POST /login` answers, by `status`.
+ */
+export type PostLoginResponse =
+    { readonly status: 200; readonly kind: "Ok"; readonly body: string }
+  | { readonly status: 201; readonly kind: "Created"; readonly body: string }
+  | { readonly status: 400; readonly kind: "BadRequest"; readonly error: string }
+  | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError }
+  | { readonly status: 413; readonly kind: "PayloadTooLarge"; readonly error: { readonly kind: "PayloadTooLarge"; readonly details: string } };
+
+/**
+ * What `GET /health` answers, by `status`.
+ */
+export type SignGetHealthResponse =
+    { readonly status: 200; readonly kind: "Ok"; readonly body: string };
 
 export function __serialise_Frame(value: __Wire_Frame): __JsonValue {
   return {
@@ -1249,7 +1277,7 @@ export function __deserialise_Frame(json: __JsonValue, path: string = "$"): Resu
 export function __serialise_Heard(value: __Wire_Heard): __JsonValue {
   return {
     text: value.text as __JsonValue,
-    withReply: value.withReply as __JsonValue,
+    note: __serialise_Option_String(value.note),
   };
 }
 
@@ -1262,11 +1290,28 @@ export function __deserialise_Heard(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
   }
   const __text = obj["text"];
-  if (typeof obj["withReply"] !== "boolean") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.withReply`, expected: "boolean", actual: typeof obj["withReply"] });
+  const __r_note = __deserialise_Option_String(obj["note"], `${path}.note`);
+  if (__r_note.tag === "Err") return __r_note;
+  const __note = __r_note.value;
+  return Ok({ text: __text, note: __note } as __Wire_Heard);
+}
+
+export function __serialise_Login(value: __Wire_Login): __JsonValue {
+  return {
+    name: value.name as __JsonValue,
+  };
+}
+
+export function __deserialise_Login(json: __JsonValue, path: string = "$"): Result<__Wire_Login, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
-  const __withReply = obj["withReply"];
-  return Ok({ text: __text, withReply: __withReply } as __Wire_Heard);
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["name"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.name`, expected: "string", actual: typeof obj["name"] });
+  }
+  const __name = obj["name"];
+  return Ok({ name: __name } as __Wire_Login);
 }
 
 export function __serialise_RoomId(value: __Wire_RoomId): __JsonValue {
@@ -1363,6 +1408,10 @@ export function __deserialise_Option_String(json: __JsonValue, path: string = "$
   return __b;
 }
 
+export function __toPublic_Heard(v: __Wire_Heard): Heard {
+  return { ...v, note: __optToNull(v.note, (x0) => x0) } as unknown as Heard;
+}
+
 export function __toWire_Said(v: Said): __Wire_Said {
   return { ...v, reply: __nullToOpt(v.reply, (x0) => x0) } as unknown as __Wire_Said;
 }
@@ -1384,7 +1433,7 @@ const __ws_gateway: __WsSpec<Said, Heard> = {
     if (__b.tag === "Err") return __b;
     return Ok(__b.value);
   },
-  decode: (frame) => __deserialise_Heard(frame as JsonValue, "$"),
+  decode: (frame) => __then(__deserialise_Heard(frame as JsonValue, "$"), (v) => __toPublic_Heard(v)),
 };
 
 const __route_health_getHealth: __Route = {
@@ -1408,6 +1457,27 @@ const __ws_lounge: __WsSpec<Frame, Frame> = {
   decode: (frame) => __deserialise_Frame(frame as JsonValue, "$"),
 };
 
+const __route_sign_postLogin: __Route = {
+  method: "POST",
+  path: "/login",
+  contract: "455d0fe13cd75bc6",
+  replies: {
+    200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
+    201: [{ kind: "Created", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
+    400: [{ kind: "BadRequest", body: "message" }, { kind: "StructuralMismatch", body: "boundary" }],
+    413: [{ kind: "PayloadTooLarge", body: "boundary" }],
+  },
+};
+
+const __route_sign_getHealth: __Route = {
+  method: "GET",
+  path: "/health",
+  contract: "5f0b288b4a863f26",
+  replies: {
+    200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
+  },
+};
+
 /**
  * The contract of each service and route this client was generated for: a hash of
  * what a client acts on (the route's method and path, what it takes, what it can
@@ -1418,6 +1488,13 @@ export const API_CONTRACTS = {
   health: {
     service: "a523bf173821deb8",
     routes: {
+      getHealth: "5f0b288b4a863f26",
+    },
+  },
+  sign: {
+    service: "dcce70034e0de2b5",
+    routes: {
+      postLogin: "455d0fe13cd75bc6",
       getHealth: "5f0b288b4a863f26",
     },
   },
@@ -1450,9 +1527,9 @@ export function createClient(options: ClientOptions = {}) {
       }, credentials, connect) as GatewayConnection | CallFailure,
     },
     health: {
-      getHealth: (init?: globalThis.RequestInit): globalThis.Promise<GetHealthResponse | CallFailure> => __call(options, init, __route_health_getHealth, () => {
+      getHealth: (init?: globalThis.RequestInit): globalThis.Promise<HealthGetHealthResponse | CallFailure> => __call(options, init, __route_health_getHealth, () => {
         return Ok({ params: {} });
-      }) as globalThis.Promise<GetHealthResponse | CallFailure>,
+      }) as globalThis.Promise<HealthGetHealthResponse | CallFailure>,
     },
     lounge: {
       /**
@@ -1461,6 +1538,16 @@ export function createClient(options: ClientOptions = {}) {
       connect: (name: string, connect?: WsConnectOptions<undefined>): LoungeConnection | CallFailure => __webSocket(options, __ws_lounge, () => {
         return Ok({ params: { "name": globalThis.String(name) } });
       }, undefined, connect) as LoungeConnection | CallFailure,
+    },
+    sign: {
+      postLogin: (body: Login, init?: globalThis.RequestInit): globalThis.Promise<PostLoginResponse | CallFailure> => __call(options, init, __route_sign_postLogin, () => {
+        const __b = __checked(__serialise_Login(body), __deserialise_Login, "$");
+        if (__b.tag === "Err") return __b;
+        return Ok({ params: {}, body: __b.value });
+      }) as globalThis.Promise<PostLoginResponse | CallFailure>,
+      getHealth: (init?: globalThis.RequestInit): globalThis.Promise<SignGetHealthResponse | CallFailure> => __call(options, init, __route_sign_getHealth, () => {
+        return Ok({ params: {} });
+      }) as globalThis.Promise<SignGetHealthResponse | CallFailure>,
     },
   } as const;
 }

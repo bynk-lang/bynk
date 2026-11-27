@@ -541,16 +541,12 @@ The client never reads or stores one.
 **Frames are typed and checked both ways.** `send(frame)` encodes the value and runs the server's own checks on it
 first, so a refinement the server would refuse is returned as `CallFailure` `Invalid` and nothing is sent.
 Before the connection opens a frame waits for it; once it is closed, or reconnecting, `send` returns `CallFailure`
-`Transport`. A frame the server sends is decoded as the service's `out` type; one that does not decode closes the
+`Transport`. A frame the server sends is decoded as the service's `out` type by the codec the server writes it with (see
+[the wire form of a frame](/reference/websocket/#the-wire-form-of-a-frame)), so an `Option` is `T | null`; one that does not decode closes the
 connection. The client closes with `4008` where the server would use `1008`, because a page may close only with
 `1000` or a code from `3000` to `4999`. As on the server, a plain `Bytes` frame is a binary message (a
 `Uint8Array`) and any other frame type is JSON text. `frames` is an async iterator that ends when the connection
 does, and `onFrame(listener)` is the callback form; frames are kept for `frames` from the first time it is read.
-
-An `Option`, `Decimal` or `Instant` field in an `out` frame is not decoded by the client today: the server sends
-an `out` frame as the runtime's JSON, not through the codec that the HTTP side and `in` frames use, so the two
-disagree on such a field. Keep `out` frames to strings, numbers, booleans, lists and records of them until the
-server encodes `out` frames with the codec.
 
 **Closing.** `close(code?, reason?)` closes for good, with `1000` or a code from `3000` to `4999`. `onClose` reports
 `{ code, reason, clean, willReconnect }` for every close, including one a reconnect follows.
@@ -570,7 +566,8 @@ and after `1006`, an abnormal disconnection, with an exponential backoff (250 ms
 `backoff(attempt)` replaces it) for at most `maxAttempts` (5) in a row, asking `credentials` for a fresh credential
 each time. A close the client made (`close()`, or a frame it refused) never reconnects, and neither does another
 `1008`. **Frames are not replayed**: a frame sent while the connection was down, or one the server sent meanwhile,
-is the application's to resend or fetch again. The `frames` iterator and the listeners carry across a reconnect.
+is the application's to resend or fetch again, and a frame still queued when the connection closes is dropped,
+never resent on the next one. `credentials` is called once for every attempt, not once per connection. The `frames` iterator and the listeners carry across a reconnect.
 
 **Environment.** The client uses the platform `WebSocket` (browsers, Workers, Node 22 and later) and no
 dependency. A `webSocket` option on `createClient` supplies another constructor, as `fetch` does: a Node client

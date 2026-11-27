@@ -1664,13 +1664,13 @@ assert(conn.state !== undefined, "connect returns a connection");
 const frames = conn.frames[Symbol.asyncIterator]();
 await conn.opened;
 const welcome = await frames.next();
-assert(welcome.value.text === "welcome" && welcome.value.withReply === false, "the welcome frame is decoded");
+assert(welcome.value.text === "welcome" && welcome.value.note === null, "the welcome frame is decoded, None as null");
 assert(conn.send({ text: "hi", reply: "r" }) === null, "a valid frame is sent");
 const echo = await frames.next();
-assert(echo.value.text === "hi" && echo.value.withReply === true, "the echo is decoded, and the Some reached the server");
+assert(echo.value.text === "hi" && echo.value.note === "r", "the echo is decoded, Some as a value");
 assert(conn.send({ text: "again", reply: null }) === null, "a null Option is sent");
 const echo2 = await frames.next();
-assert(echo2.value.withReply === false, "a null Option reached the server as None");
+assert(echo2.value.note === null, "None comes back as null");
 
 // A frame the server would refuse is refused locally, and never reaches it.
 assert(conn.send({ text: "", reply: null }).kind === "Invalid", "an empty text is refused locally");
@@ -1751,5 +1751,146 @@ fn a_websocket_connection_is_typed_both_ways_against_a_real_worker() {
     let out = run_driver(&dir, WS_DRIVER, &[("BASE", base.as_str())]);
     wrangler::stop_all(&mut wranglers);
     assert!(out.contains("ALL OK"), "{out}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// #3906: a real browser connects to a `SignedCookie` service. Only Chromium can show that the browser
+/// itself sends the session cookie and the `Origin` on the upgrade, which the injected constructor of a Node
+/// test cannot prove: a page that signed in over HTTP opens the socket with no credential, and a page at an
+/// origin the service does not list is refused.
+const BROWSER_DRIVER: &str = r#"
+import http from "node:http";
+import fs from "node:fs";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { chromium } = require("playwright");
+const [pagePort, base] = [process.env.PAGE_PORT, process.env.BASE];
+const WAIT_MS = 60000;
+
+const server = http.createServer((req, res) => {
+  if (req.url === "/api.js") {
+    res.writeHead(200, { "content-type": "text/javascript" }).end(fs.readFileSync("dist/api.js"));
+  } else {
+    res.writeHead(200, { "content-type": "text/html" }).end("<!doctype html><meta charset=utf-8><title>ws</title>");
+  }
+});
+await new Promise((resolve) => server.listen(Number(pagePort), "127.0.0.1", resolve));
+
+const browser = await chromium.launch({ timeout: WAIT_MS });
+try {
+  const context = await browser.newContext();
+  const run = (origin, signIn) => async () => {
+    const tab = await context.newPage();
+    await tab.goto(`${origin}/`, { timeout: WAIT_MS });
+    const seen = await tab.evaluate(async ({ base, signIn, waitMs }) => {
+      const within = (what, p) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(`timed out waiting for ${what}`)), waitMs))]);
+      const { createClient } = await import("/api.js");
+      const api = createClient({ baseUrl: base, credentials: "include" });
+      const out = {};
+      if (signIn) out.login = (await within("the sign-in", api.sign.postLogin({ name: "ada" }))).kind;
+      const conn = api.lounge.connect("main");
+      if ("kind" in conn) return { ...out, failure: conn.kind };
+      let opened = true;
+      await within("the upgrade", conn.opened.catch(() => { opened = false; }));
+      out.opened = opened;
+      if (opened) {
+        const first = await within("the welcome frame", conn.frames[Symbol.asyncIterator]().next());
+        out.welcome = first.value.text;
+        conn.close();
+      }
+      return out;
+    }, { base, signIn, waitMs: WAIT_MS });
+    await tab.close();
+    return seen;
+  };
+  const listed = await run(`http://127.0.0.1:${pagePort}`, true)();
+  // The same browser, the session it now holds, from a page at an origin the service does not list.
+  const unlisted = await run(`http://localhost:${pagePort}`, false)();
+  console.log("RESULT " + JSON.stringify({ listed, unlisted }));
+} finally {
+  await browser.close();
+  server.close();
+}
+process.exit(0);
+"#;
+
+#[test]
+fn a_browser_connects_a_cookie_service_with_the_session_it_signed_in_with() {
+    if skip_without_tools() {
+        return;
+    }
+    let has_playwright = Command::new("node")
+        .args(["-e", "require('playwright').chromium"])
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !has_playwright {
+        eprintln!("\n!!! WS BROWSER VERIFICATION SKIPPED !!!\nPlaywright is not installed\n");
+        if std::env::var("BYNK_REQUIRE_BROWSER").is_ok() {
+            panic!("BYNK_REQUIRE_BROWSER is set but Playwright is not installed");
+        }
+        return;
+    }
+    if !tools::tool_exists("npx") && skip_workerd("`npx` is not on PATH") {
+        return;
+    }
+    // The page's origin, which the service lists exactly: a port chosen now.
+    let page_port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let dir = scratch("ws-browser");
+    let proj = dir.join("project");
+    copy_project(&fixture("ws"), &proj);
+    let lobby = proj.join("src/lobby.bynk");
+    let text = fs::read_to_string(&lobby).unwrap().replace(
+        "https://app.example.com",
+        &format!("http://127.0.0.1:{page_port}"),
+    );
+    fs::write(&lobby, text).unwrap();
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the `ws` client");
+    // 32 bytes, base64url: the key the session cookie is signed with.
+    fs::write(
+        dir.join("out/workers/lobby/.dev.vars"),
+        "SESSION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+    )
+    .unwrap();
+    let Some((mut wranglers, port)) = boot_workerd(&dir, "lobby", "/health", 3) else {
+        return;
+    };
+    fs::write(dir.join("dist/package.json"), "{\"type\":\"module\"}\n").unwrap();
+    fs::write(dir.join("browser.mjs"), BROWSER_DRIVER).unwrap();
+    let run = Command::new("node")
+        .arg("browser.mjs")
+        .current_dir(&dir)
+        .env("PAGE_PORT", page_port.to_string())
+        .env("BASE", format!("http://127.0.0.1:{port}"))
+        .output()
+        .expect("run node");
+    wrangler::stop_all(&mut wranglers);
+    let log = format!(
+        "{}{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(run.status.success(), "the browser driver failed:\n{log}");
+    let line = log
+        .lines()
+        .find_map(|l| l.strip_prefix("RESULT "))
+        .unwrap_or_else(|| panic!("the driver printed no result:\n{log}"));
+    let seen: serde_json::Value = serde_json::from_str(line).unwrap();
+    assert_eq!(
+        seen["listed"],
+        serde_json::json!({ "login": "Created", "opened": true, "welcome": "welcome" }),
+        "a page at the listed origin that signed in opens the socket with no credential of its own\n{log}"
+    );
+    assert_eq!(
+        seen["unlisted"],
+        serde_json::json!({ "opened": false }),
+        "a page at an origin the service does not list is refused, session or not\n{log}"
+    );
     let _ = fs::remove_dir_all(&dir);
 }

@@ -43,7 +43,8 @@ export interface WsConnectOptions<C> {
    * Reconnect after the server closes the connection for an expired credential (`1008`, `authentication
    * expired`) or the connection drops (`1006`), with backoff, asking `credentials` for a fresh one each time.
    * A close the client made (`close()`, or a frame it refused) never reconnects. Frames sent or missed across a
-   * reconnect are not replayed: the application decides what to resend.
+   * reconnect are not replayed, and a frame queued before a close is dropped, never resent on the next
+   * connection: the application decides what to resend. `credentials` is called once for every attempt.
    */
   readonly reconnect?: WsReconnect<C>;
 }
@@ -292,6 +293,9 @@ class __WsClient<C, In, Out> implements WsConnection<In, Out> {
   }
 
   private closed(info: { readonly code: number; readonly reason: string; readonly clean: boolean }): void {
+    // A frame queued while the connection was opening is not sent on a later one: a reconnect never resends
+    // what was written before the close, which may or may not have reached the server.
+    this.queue.length = 0;
     const reconnect = this.connect?.reconnect;
     const max = reconnect?.maxAttempts ?? 5;
     const retry =

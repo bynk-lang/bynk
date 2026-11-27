@@ -3,8 +3,7 @@ context chat
 type RoomId = String where Matches("^[a-z]+$")
 type UserId = opaque String
 type Said = { text: String where NonEmpty && MaxLength(20), reply: Option[String] }
-// `out` frames use types the wire codec and the server's own encoding agree on (no `Option`).
-type Heard = { text: String, withReply: Bool }
+type Heard = { text: String, note: Option[String] }
 
 actor Member { auth = Bearer(secret = "CHAT_SECRET"), identity = UserId }
 
@@ -12,17 +11,13 @@ actor Member { auth = Bearer(secret = "CHAT_SECRET"), identity = UserId }
 // credentials)` takes a `RoomId`, a bearer token, and sends `Said` and reads `Heard`.
 service gateway from websocket(in: Said, out: Heard) {
   on open(room: RoomId) -> Effect[()] by who: Member {
-    let _ <- connection.send(Heard { text: "welcome", withReply: false })
+    let _ <- connection.send(Heard { text: "welcome", note: None })
     let _ <- Room(room).join(who.identity, connection)
     ()
   }
 
   on message(room: RoomId, frame: Said) -> Effect[()] by who: Member {
-    let withReply = match frame.reply {
-      Some(_) => true
-      None => false
-    }
-    let _ <- connection.send(Heard { text: frame.text, withReply: withReply })
+    let _ <- connection.send(Heard { text: frame.text, note: frame.reply })
     ()
   }
 

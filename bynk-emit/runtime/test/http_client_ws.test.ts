@@ -251,3 +251,31 @@ test("binary frames cross as Uint8Array both ways", async () => {
   FakeSocket.made[0].message(new Uint8Array([9, 8]).buffer);
   assert.deepEqual([...seen[0]], [9, 8]);
 });
+
+test("a frame queued before a close is never resent on a reconnect, and credentials are asked for at every attempt", async () => {
+  let asked = 0;
+  const c = connect(spec(), { bearer: "old" }, {
+    reconnect: { credentials: () => ({ bearer: `fresh${++asked}` }), backoff: () => 0, maxAttempts: 3 },
+  });
+  await tick();
+  // Queued while the first attempt is still opening, then the attempt fails.
+  assert.equal(c.send({ n: 1 }), null);
+  FakeSocket.made[0].finish(1006, "", false);
+  await tick();
+  await tick();
+  assert.equal(FakeSocket.made.length, 2);
+  assert.equal(c.send({ n: 2 }).kind, "Transport");
+  FakeSocket.made[1].finish(1006, "", false);
+  await tick();
+  await tick();
+  assert.equal(FakeSocket.made.length, 3);
+  assert.deepEqual(FakeSocket.made[2].protocols, ["bynk.bearer", "fresh2"]);
+  FakeSocket.made[2].open();
+  // Nothing written before the closes reaches the connection that finally opened.
+  assert.deepEqual(FakeSocket.made[2].sent, []);
+  assert.equal(c.send({ n: 3 }), null);
+  assert.deepEqual(FakeSocket.made[2].sent, ['{"n":3}']);
+  // One credential call per attempt, not one per connection.
+  assert.equal(asked, 2);
+  assert.deepEqual(FakeSocket.made.slice(1).map((s) => s.protocols), [["bynk.bearer", "fresh1"], ["bynk.bearer", "fresh2"]]);
+});
