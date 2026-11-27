@@ -32,7 +32,7 @@ case "no metadata is None, and a query that omits it gives None" {
 	expect omitted == Ok(["-", "-"])
 }
 
-case "the text operations still read the metadata as written" {
+case "getByIdsValue of an id that is not stored is an empty list" {
 	let _ <- store.call([VectorOf { id: "a", values: at(1.0), metadata: Some(Meta { category: "faq", year: 2025 }) }])
 	let g <- fetch.call(["missing"])
 	expect g == Ok([])

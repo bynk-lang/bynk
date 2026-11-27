@@ -1473,8 +1473,8 @@ export const VectorMatch = {
  * read as `M`, on its own. `metadata` is `None` when the vector has none or the
  * query omitted it, `Some(Ok(m))` when it reads as `M`, and `Some(Err(e))` when it
  * does not (a vector written by an older shape of `M`): the match is still here
- * and the rest are unaffected. The error carries the path and what was expected,
- * never the stored value.
+ * and the rest are unaffected. The error names the path and what was expected, but
+ * its message can quote part of the stored value, so do not log it unredacted.
  */
 export interface VectorMatchOf<M> {
   readonly id: string;

@@ -154,8 +154,9 @@ match found {
 ```
 
 A match's `metadata` is `Option[Result[Meta, DecodeError]]`: `None` when the vector has none or the
-query omitted it, `Some(Ok(meta))` when it reads, `Some(Err(e))` when it does not. `e` carries the path
-and what was expected, never the stored value. `getByIdsValue(ids)` is the same for `getByIds`. The
+query omitted it, `Some(Ok(meta))` when it reads, `Some(Err(e))` when it does not. `e` names the path
+and what was expected, but its message can quote part of the stored value, so do not log it
+unredacted. `getByIdsValue(ids)` is the same for `getByIds`. The
 typed reads read what `upsertValue` writes, so use `returnMetadata: All` with them: an `Indexed`
 read returns only the filterable properties, and decodes as `Meta` only when `Meta` has just those
 fields.

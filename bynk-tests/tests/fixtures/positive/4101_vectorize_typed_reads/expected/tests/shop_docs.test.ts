@@ -445,7 +445,7 @@ async function test_no_metadata_is_None__and_a_query_that_omits_it_gives_None() 
 }
 
 // case tier: unit
-async function test_the_text_operations_still_read_the_metadata_as_written() {
+async function test_getByIdsValue_of_an_id_that_is_not_stored_is_an_empty_list() {
   try {
     const deps = __makeTestDeps();
     const { Meta, at, categories, fetch, omitted, raw, store } = __ns_shop_docs;
@@ -572,7 +572,7 @@ async function test_the_text_operations_still_read_the_metadata_as_written() {
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await store.call([{ id: "a", values: at(1.0), metadata: Some({ category: "faq", year: 2025 }), namespace: { tag: "None" as const } }], deps);
     const g = await fetch.call(["missing"], deps);
-    if (!(__bynkEq(g, Ok([])))) { throw __bynkExpectFailure("tests/shop/docs.bynk:38:9", 1841, 1852, "expect g == Ok([])\n  expected: g == Ok([])\n  actual:   " + __bynkShow((g)) + " == " + __bynkShow((Ok([])))); }
+    if (!(__bynkEq(g, Ok([])))) { throw __bynkExpectFailure("tests/shop/docs.bynk:38:9", 1845, 1856, "expect g == Ok([])\n  expected: g == Ok([])\n  actual:   " + __bynkShow((g)) + " == " + __bynkShow((Ok([])))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -584,7 +584,7 @@ async function test_the_text_operations_still_read_the_metadata_as_written() {
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["typed metadata round-trips through queryValue and getByIdsValue", "a stale vector is one Err among the Oks", "no metadata is None, and a query that omits it gives None", "the text operations still read the metadata as written"];
+export const __bynkCases: readonly string[] = ["typed metadata round-trips through queryValue and getByIdsValue", "a stale vector is one Err among the Oks", "no metadata is None, and a query that omits it gives None", "getByIdsValue of an id that is not stored is an empty list"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -607,9 +607,9 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
     results.push(r);
     if (onCase) onCase(r);
   }
-  if (want("the text operations still read the metadata as written")) {
+  if (want("getByIdsValue of an id that is not stored is an empty list")) {
     const started = __bynkCaseNow();
-    const r = { name: "the text operations still read the metadata as written", ...(await test_the_text_operations_still_read_the_metadata_as_written()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "getByIdsValue of an id that is not stored is an empty list", ...(await test_getByIdsValue_of_an_id_that_is_not_stored_is_an_empty_list()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
