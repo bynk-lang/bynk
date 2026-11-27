@@ -1,0 +1,11 @@
+context shop
+
+uses lib.cache
+consumes bynk.cloudflare { Kv }
+
+capability Sessions = Kv
+capability Archive = Kv
+
+fn move(key: String) -> Effect[()] given Sessions, Archive {
+	copy(key, given From = Sessions, To = Archive)
+}

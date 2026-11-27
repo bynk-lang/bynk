@@ -1,0 +1,3 @@
+bynk.given.unknown_capability capability `Logger` is not selected in this commons
+bynk.given.unknown_capability the kind `Kv` is not selected in this commons
+# exact

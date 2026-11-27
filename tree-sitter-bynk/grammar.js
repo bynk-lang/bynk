@@ -1467,8 +1467,24 @@ module.exports = grammar({
       ),
     given_clause: ($) =>
       // v0.15: a capability may be a bare local name or a dotted cross-context
-      // reference (`B.Cap` / `platform.time.Clock`).
-      seq("given", sep1(field("capability", $.qualified_name), ",")),
+      // reference (`B.Cap` / `platform.time.Clock`). #3959: or a commons
+      // function's capability parameter, `Store: Kv`.
+      seq(
+        "given",
+        sep1(field("capability", choice($.qualified_name, $.capability_parameter)), ","),
+      ),
+
+    // #3959: a capability parameter, `Name: Kind` — a name for the instance a
+    // caller binds, bounded by an instantiable kind.
+    capability_parameter: ($) =>
+      seq(field("name", $.identifier), ":", field("bound", $.identifier)),
+
+    // #3959: a call's capability bindings, after its ordinary arguments:
+    // `given Store = Sessions, To = Archive`. No trailing comma follows them.
+    capability_bindings: ($) => seq("given", sep1($.capability_binding, ",")),
+
+    capability_binding: ($) =>
+      seq(field("parameter", $.identifier), "=", field("value", $.qualified_name)),
 
     // v0.45: an actor declaration — a boundary contract. Normal form
     // `actor Name { auth = Scheme (, identity = Type)? }`. The refinement form
@@ -2347,8 +2363,7 @@ module.exports = grammar({
           seq(
             field("name", choice($.identifier, $._contextual_identifier)),
             "(",
-            optional(sep1(field("arg", $._expression), ",")),
-            optional(","),
+            optional($._call_arguments),
             ")",
           ),
         ),
@@ -2361,10 +2376,20 @@ module.exports = grammar({
           sep1(field("type_arg", $._type_ref), ","),
           "]",
           "(",
-          optional(sep1(field("arg", $._expression), ",")),
-          optional(","),
+          optional($._call_arguments),
           ")",
         ),
+      ),
+
+    // A call's arguments, then (#3959) its capability bindings:
+    // `f(x, y)`, `f(x, given S = A)`, `f(given S = A)`.
+    _call_arguments: ($) =>
+      choice(
+        seq(
+          sep1(field("arg", $._expression), ","),
+          optional(choice(",", seq(",", field("bindings", $.capability_bindings)))),
+        ),
+        field("bindings", $.capability_bindings),
       ),
 
     // v0.20b: a list literal — `[a, b, c]`, optional trailing comma. A

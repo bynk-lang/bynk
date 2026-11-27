@@ -1,0 +1,12 @@
+{
+  "blurb": "A capability parameter is bounded by a kind (`given Store: Kv`), and a call binds it to a capability the caller holds of exactly that kind: a derived instance of it (`capability Sessions = Kv`), the bare kind where the kind allows a bare use (only `Kv` today), or, in a commons, the caller's own parameter of that kind. A capability of another kind is refused however alike their operations are, because reading the wrong resource is well-typed and nothing else would catch it.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.binding_kind_mismatch",
+  "constructs": [
+    "call"
+  ],
+  "example": "capability Orders = D1\ncapability Sessions = Kv\n\nfn touch(id: String) -> Effect[()] given Orders {\n\tforget(id, given Store = Orders)     // ✗ `Orders` is a `D1`, and `Store` takes a `Kv`\n}\n\nfn touch(id: String) -> Effect[()] given Sessions {\n\tforget(id, given Store = Sessions)   // ✓ an instance of `Kv`\n}",
+  "severity": "error",
+  "summary": "A call binds a capability parameter to a capability that is not of the parameter's kind (a `D1` instance for a `Kv` parameter)."
+}

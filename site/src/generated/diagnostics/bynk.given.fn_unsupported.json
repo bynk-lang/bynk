@@ -1,5 +1,5 @@
 {
-  "blurb": "Only a free function in a context that returns `Effect[T]` may declare `given`. A capability operation is an effect, so a function that reaches one has to say so in its return type, and a method has no place to carry the capabilities. `Events` is refused too: `Events.emit` buffers until its handler commits, so emit in the handler, or pass the event back to the caller. Return `Effect[T]` and make it a free function, or take the operation as a function-value parameter. A `given` in a commons is `bynk.given.fn_outside_context`.",
+  "blurb": "Only a free function in a context or a commons that returns `Effect[T]` may declare `given`. A capability operation is an effect, so a function that reaches one has to say so in its return type, and a method has no place to carry the capabilities. `Events` is refused too: `Events.emit` buffers until its handler commits, so emit in the handler, or pass the event back to the caller. An adapter's helpers are pure, so one that declares `given` is refused with this code too. Return `Effect[T]` and make it a free function, or take the operation as a function-value parameter. A capability parameter outside a commons function is `bynk.given.parameter_outside_commons`.",
   "category": "Given capabilities",
   "categoryAnchor": "given-capabilities",
   "code": "bynk.given.fn_unsupported",
@@ -8,5 +8,5 @@
   ],
   "example": "fn size(sku: String) -> Int given Logger {   // ✗ it must return an `Effect`\n    3\n}\n\nfn size(sku: String) -> Effect[Int] given Logger {   // ✓\n    Effect.pure(3)\n}",
   "severity": "error",
-  "summary": "A `given` clause on a method, on a function that does not return `Effect[T]`, or naming `Events`."
+  "summary": "A `given` clause on a method, on a function that does not return `Effect[T]`, on an adapter's function, or naming `Events`."
 }

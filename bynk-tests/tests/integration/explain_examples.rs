@@ -94,6 +94,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/3329_cookie_cross_site_without_credentials` holds it with `expected_warnings.txt`, and `positive/3329_cookie_cross_site_credentials` holds the credentialed good case",
     ),
     (
+        "bynk.commons.capability_unused",
+        "a warning; `positive/3959_commons_capability_unused` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.consumes.capability_not_selected",
         "a warning; `positive/3536_per_file_consumes` holds it with `expected_warnings.txt`",
     ),

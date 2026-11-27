@@ -512,6 +512,62 @@ pub struct FileCheckResult {
     pub cross_context: resolver::CrossContextInfo,
 }
 
+/// Whether a unit of `kind` runs [`declaration_errors`]: a context or adapter
+/// for its declarations, and (#3959) a commons for its `given` functions.
+fn has_declaration_checks(kind: UnitKind) -> bool {
+    matches!(
+        kind,
+        UnitKind::Context | UnitKind::Adapter | UnitKind::Commons
+    )
+}
+
+/// The declaration-stage diagnostics of one file: a context's or adapter's
+/// capability, provider, service and agent declarations
+/// ([`check_context_declarations`]), or (#3959) a commons' functions that
+/// declare `given` ([`crate::cap_params::check_commons_given_fns`]).
+#[allow(clippy::too_many_arguments)]
+fn declaration_errors(
+    kind: UnitKind,
+    typed: &mut TypedCommons,
+    table: &UnitTable,
+    pf: &ParsedFile,
+    cross_context: &resolver::CrossContextInfo,
+    ctx: &UnitCheckCtx,
+    subscriber_visible_types: &HashMap<String, Arc<TypeDecl>>,
+    (refs, hints, locals, requirements): (
+        &mut RefSink,
+        &mut HintSink,
+        &mut LocalsSink,
+        &mut RequirementSink,
+    ),
+    tys: &Arc<Types>,
+) -> Vec<bynk_syntax::CompileError> {
+    if kind == UnitKind::Commons {
+        return crate::cap_params::check_commons_given_fns(
+            typed,
+            table,
+            pf.consumes(),
+            cross_context,
+            &ctx.uses_commons_type_names,
+            (refs, hints, locals, requirements),
+            tys,
+        );
+    }
+    check_context_declarations(
+        typed,
+        table,
+        cross_context,
+        kind == UnitKind::Context,
+        &ctx.uses_commons_type_names,
+        subscriber_visible_types,
+        refs,
+        hints,
+        locals,
+        requirements,
+        tys,
+    )
+}
+
 /// The shared resolve+check+context-checks core for one file, factored out
 /// of `check_unit_files` (see this module's own doc comment). Returns
 /// `Some(FileCheckResult)` only on the fully-clean, non-blocked path — the
@@ -698,6 +754,8 @@ pub fn check_file_core(
         ctx.uses_commons_type_names.clone(),
     )
     .with_local_fns(local_fns)
+    // #3959: a commons' free functions may declare `given`.
+    .with_is_commons(kind == UnitKind::Commons)
     // #1883, slice 1a: this unit's assets plus its `uses`d commons' ([DECISION G]).
     .with_assets(crate::assets::compose_unit_assets(name, unit_info))
     // #2387, slice 1: likewise this unit's embeds and its `uses`d commons'.
@@ -878,20 +936,18 @@ pub fn check_file_core(
     // checks are vacuous for adapters, which have none).
     let mut typed = typed;
     let unit_table_owned = unit_info.get(name).map(|i| i.table.clone());
-    if (kind == UnitKind::Context || kind == UnitKind::Adapter)
-        && let Some(table) = unit_table_owned.as_ref()
+    if let Some(table) = unit_table_owned.as_ref()
+        && has_declaration_checks(kind)
     {
-        let decl_errs = ours(check_context_declarations(
+        let decl_errs = ours(declaration_errors(
+            kind,
             &mut typed,
             table,
+            pf,
             &cross_context_for_file,
-            kind == UnitKind::Context,
-            &ctx.uses_commons_type_names,
+            ctx,
             &subscriber_visible_types,
-            refs,
-            hints,
-            locals,
-            requirements,
+            (refs, hints, locals, requirements),
             tys,
         ));
         if !decl_errs.is_empty() {

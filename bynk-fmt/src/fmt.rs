@@ -3019,10 +3019,15 @@ impl<'a> Formatter<'a> {
                 name,
                 type_args,
                 args,
+                bindings,
                 trivia,
-            } if !args.is_empty() || trivia.is_some() => {
+            } if !args.is_empty() || trivia.is_some() || bindings.is_some() => {
                 self.push(&format!("{}{}(", name.name, type_args_src(type_args)));
-                self.format_arg_list(args, trivia.as_deref(), reserve);
+                // #3959: the bindings follow the arguments, on one line.
+                let tail = bindings
+                    .as_deref()
+                    .map(bynk_syntax::print::cap_bindings_src);
+                self.format_arg_list_then(args, tail.as_deref(), trivia.as_deref(), reserve);
             }
             ExprKind::Val {
                 type_ref,
@@ -3239,8 +3244,36 @@ impl<'a> Formatter<'a> {
         trivia: Option<&ListTrivia>,
         reserve: usize,
     ) -> bool {
+        self.format_arg_list_then(args, None, trivia, reserve)
+    }
+
+    /// [`Self::format_arg_list`], with (#3959) a call's `given …` bindings as
+    /// the list's last item: after the arguments on the flat line, on a line of
+    /// its own when the list wraps.
+    fn format_arg_list_then(
+        &mut self,
+        args: &[Expr],
+        bindings: Option<&str>,
+        trivia: Option<&ListTrivia>,
+        reserve: usize,
+    ) -> bool {
+        if let Some(tail) = bindings
+            && trivia.is_none()
+            && !args.iter().any(holds_comments)
+            && self.try_layout(reserve, |f| {
+                for arg in args {
+                    f.push(&expr_with_prec(arg, 0));
+                    f.push(", ");
+                }
+                f.push(tail);
+                f.push(")");
+            })
+        {
+            return false;
+        }
         // #3110: an argument list with a comment in it goes one per line.
         if trivia.is_none()
+            && bindings.is_none()
             && let Some((last, leading)) = args.split_last()
             && (leading.is_empty() || is_block_like(last))
             && !leading.iter().any(holds_comments)
@@ -3265,11 +3298,16 @@ impl<'a> Formatter<'a> {
                 }
                 // A trailing comment rides the line after the `,`, so the
                 // argument only reserves room for the comma.
+                let last = last && bindings.is_none();
                 f.format_expr_at(arg, 0, if last { 0 } else { 1 });
                 if !last {
                     f.push(",");
                 }
                 f.emit_trailing_comment_or_newline(item.and_then(|t| t.trailing.as_deref()));
+            }
+            if let Some(tail) = bindings {
+                f.push(tail);
+                f.newline();
             }
             if let Some(t) = trivia {
                 f.emit_trailing_comments(&t.closing);
@@ -3546,9 +3584,11 @@ fn needs_parens(e: &Expr, parent_prec: u8) -> bool {
 /// Render a `given`-clause capability reference back to source: a bare name
 /// for a local capability, or `prefix.Name` for a cross-context one (v0.15).
 fn cap_ref_src(c: &CapRef) -> String {
-    match &c.context {
-        Some(prefix) => format!("{}.{}", prefix.joined(), c.name.name),
-        None => c.name.name.clone(),
+    match (&c.context, &c.bound) {
+        (Some(prefix), _) => format!("{}.{}", prefix.joined(), c.name.name),
+        // #3959: a capability parameter, `Store: Kv`.
+        (None, Some(bound)) => format!("{}: {}", c.name.name, bound.name),
+        (None, None) => c.name.name.clone(),
     }
 }
 

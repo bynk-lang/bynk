@@ -579,6 +579,15 @@ Well-formedness: §5.
 `given` and a comma-separated list of the capabilities a handler or provider may
 use. Well-formedness: §5.
 
+### §4.3.10a capability_parameter
+
+{{#grammar capability_parameter}}
+
+A commons free function's capability parameter (#3959, experimental): a name for
+the instance each caller binds, and the instantiable kind that bounds it. A `:` after
+a bare capability name in a `given` clause is unambiguous, since the clause is
+followed by `where`, a contract clause or `{`. Well-formedness: §5.
+
 ## §4.4 Services & handlers
 
 A `service` groups the handlers that respond to calls and external triggers.
@@ -1143,6 +1152,25 @@ explicit-instantiation form; a bare `name[T]` without an argument list is a
 reserved parse error), and parenthesised arguments — a function call, a
 variant construction, an agent instantiation, or (v0.20a) the **application
 of a function-typed value** in scope. Well-formedness: §5.
+
+### §4.6.10a _call_arguments
+
+{{#grammar _call_arguments}}
+
+The ordinary arguments, then (#3959, experimental) the capability bindings. `given`
+cannot start an expression, so it ends the ordinary arguments; no trailing comma
+follows the last binding.
+
+### §4.6.10b capability_bindings
+
+{{#grammar capability_bindings}}
+
+### §4.6.10c capability_binding
+
+{{#grammar capability_binding}}
+
+One binding: the callee's capability parameter, `=`, and a capability the caller
+holds. Well-formedness: §5.
 
 ### §4.6.11 record_construction
 
