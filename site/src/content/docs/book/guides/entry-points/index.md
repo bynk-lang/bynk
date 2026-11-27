@@ -15,6 +15,7 @@ schedules, queue messages, WebSocket connections, and inbound email.
 - [Branch on the caller's country](/book/guides/entry-points/branch-on-the-callers-country/)
 - [Accept a file upload](/book/guides/entry-points/accept-a-file-upload/)
 - [Stream a large upload](/book/guides/entry-points/stream-a-large-upload/)
+- [Serve files whose keys contain /](/book/guides/entry-points/serve-files-by-path/)
 - [Map a domain error to a status once](/book/guides/entry-points/map-a-domain-error-to-a-status/)
 - [Call your API from a front end](/book/guides/entry-points/call-from-a-front-end/)
 

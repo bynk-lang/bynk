@@ -4647,6 +4647,9 @@ fn check_test_service_address(
         // Type the route-pattern string as an ordinary string; check the rest.
         let _ = type_of(&args[0], None, ctx);
         let mut positional = &args[1..];
+        // #3752: a literal rest is one the router could bind, so it means the
+        // same at every tier.
+        crate::http_rest::check_rest_arguments(path, &params, positional, ctx.errors);
         // #2910: a route that declares no `headers:` parameter may still be
         // sent request headers: a trailing `RequestHeaders` argument. A route
         // that declares one fills it with the argument already, so a further

@@ -3822,7 +3822,7 @@ fn check_unreachable_routes(table: &UnitTable, errors: &mut Vec<CompileError>) {
             ),
         )
         .with_note(
-            "at the first segment where two routes differ, a literal segment beats a `:name` one; remove this route, or make it match a path the others do not",
+            "at the first segment where two routes differ, a literal segment beats a `:name` one, and a `:name` beats a `*name` rest; remove this route, or make it match a path the others do not",
         );
         for c in covering {
             err = err.with_label(
@@ -3896,6 +3896,7 @@ fn check_service_decls(
     }
 
     check_unreachable_routes(table, errors);
+    crate::http_rest::check_rest_routes(table, &typed.stability, errors);
 
     // v0.140 (ADR 0163): validate handler-position annotations (`@cache`) across
     // every handler — services and agents — so a misplaced annotation is caught
@@ -6696,8 +6697,9 @@ fn check_rejected_handlers(table: &UnitTable, errors: &mut Vec<CompileError>) {
 }
 
 /// #3753: `*`, `{` and `}` are reserved in a route segment, literal or
-/// `:name`, so a rest-segment form (#3752) can be added later without changing
-/// what an existing route means. Reports the segment's first reserved
+/// `:name`, so a route form can be added later without changing what an
+/// existing route means. #3752 spent `*` on a final `*name` rest, which the
+/// caller reads before asking here. Reports the segment's first reserved
 /// character, once, and returns whether it found one, so the caller skips the
 /// segment rather than also reporting a parameter named `key*`.
 fn reserved_route_char(
@@ -6715,7 +6717,9 @@ fn reserved_route_char(
             handler.span,
             format!("`{ch}` in the route `{path}` is reserved for a future route form"),
         )
-        .with_note(if seg.starts_with(':') {
+        .with_note(if ch == '*' {
+            "a rest segment is `*` and then a name, and only as the route's whole last segment (`/files/*key`)".to_string()
+        } else if seg.starts_with(':') {
             format!("drop `{ch}` from the parameter's name: a `:name` segment already takes any value, so check it in the handler")
         } else {
             format!("to match a literal `{ch}`, take the segment as a `:name` parameter and check it in the handler")
@@ -6796,7 +6800,20 @@ fn validate_http_handler(
     // #3753: a refused route has no reliable parameter list, so its handler
     // parameters are not also reported as unbound (`extra_param`).
     let mut refused = false;
-    for seg in path.split('/').filter(|s| !s.is_empty()) {
+    let segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    for (i, seg) in segs.iter().copied().enumerate() {
+        // #3752 (D2): a final `*name` is a rest, bound like a parameter; a final
+        // bare `*` is `bynk.http.rest_unnamed` (`crate::http_rest`).
+        if i + 1 == segs.len() {
+            if let Some(name) = crate::http_rest::rest_name(seg) {
+                path_param_names.push(name);
+                continue;
+            }
+            if crate::http_rest::is_unnamed_rest(seg) {
+                refused = true;
+                continue;
+            }
+        }
         if reserved_route_char(seg, path, handler, errors) {
             refused = true;
             continue;
@@ -6819,7 +6836,14 @@ fn validate_http_handler(
             errors.push(CompileError::new(
                 "bynk.http.unbound_path_param",
                 handler.span,
-                format!("path parameter `:{name}` has no matching handler parameter `{name}`",),
+                format!(
+                    "path parameter `{}{name}` has no matching handler parameter `{name}`",
+                    if crate::http_rest::rest_name(path) == Some(name) {
+                        "*"
+                    } else {
+                        ":"
+                    },
+                ),
             ));
         }
     }
@@ -6921,7 +6945,9 @@ fn validate_http_handler(
         }
         // #3910: a path parameter reads as a typed `query` field does, minus `Option`
         // and `List` (a segment is always present and single-valued).
-        if is_path && !is_query_leaf(&p.type_ref, types) {
+        // #3752: a rest's type is `bynk.http.rest_param_type`'s concern.
+        let is_rest = is_path && crate::http_rest::rest_name(path) == Some(p.name.name.as_str());
+        if is_path && !is_rest && !is_query_leaf(&p.type_ref, types) {
             errors.push(
                 CompileError::new(
                     "bynk.http.path_param_not_stringy",

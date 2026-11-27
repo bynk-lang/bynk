@@ -1588,6 +1588,7 @@ pub const BUILTIN_EXPERIMENTAL: &[&str] = &[
     "bynk.RequestHeaders.entries",
     "bynk.actor.ApiKey",
     "bynk.given.parameters",
+    "bynk.http.rest",
 ];
 
 /// #3939 (the API keys track, §17): first-party items admitted by another item's gate, as
@@ -2270,7 +2271,9 @@ mod tests {
                 // #3939: the `ApiKey` scheme, with its types and members behind it.
                 "bynk.actor.ApiKey",
                 // #3959: capability parameters, a language form with no unit.
-                "bynk.given.parameters"
+                "bynk.given.parameters",
+                // #3752 (D2): the rest segment, a route form.
+                "bynk.http.rest"
             ]
         );
         let extensible: Vec<(&str, &str)> = UNITS

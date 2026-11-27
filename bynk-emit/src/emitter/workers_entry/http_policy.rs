@@ -15,9 +15,12 @@ use bynk_ts::{TsExpr, TsStmt};
 
 /// Count the number of `:param` segments in a path pattern.
 pub(super) fn param_count(path: &str) -> usize {
-    path.split('/')
+    let params = path
+        .split('/')
         .filter(|s| s.starts_with(':') && s.len() > 1)
-        .count()
+        .count();
+    // #3752 (D6): a final `*name` rest is a parameter too, so its branch binds `__m`.
+    params + usize::from(bynk_check::http_rest::rest_name(path).is_some())
 }
 
 /// A CORS-enabled service and its synthesised policy (v0.131, ADR 0159). Carries
@@ -563,6 +566,9 @@ mod tests {
         assert_eq!(param_count("/a/:x/b/:y"), 2);
         // A bare `:` names nothing.
         assert_eq!(param_count("/a/:"), 0);
+        // #3752: a rest counts.
+        assert_eq!(param_count("/files/*key"), 1);
+        assert_eq!(param_count("/t/:id/*key"), 2);
     }
 
     #[test]

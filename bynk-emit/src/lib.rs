@@ -275,7 +275,11 @@ pub const STORAGE_LAYOUT: i64 = 2;
 pub use bynk_check::wire_format;
 /// I2 (#1971): the edge keys' names, for the driver (`bynk dev`, `bynk
 /// deploy`), which sees the compiler only through this crate.
-pub use bynk_check::wire_format::{EDGE_FROM_PREFIX, EDGE_TO_PREFIX, edge_key_from, edge_key_to};
+pub use bynk_check::wire_format::{
+    EDGE_FROM_PREFIX, EDGE_FROM_SLOT2_PREFIX, EDGE_TO_PREFIX, EDGE_UNTIL_PREFIX,
+    EDGE_UNTIL_SLOT2_PREFIX, edge_key_from, edge_key_from_slot2, edge_key_to, edge_until,
+    edge_until_slot2,
+};
 
 pub use emitter::wrangler::{
     COMPATIBILITY_DATE, CONTAINERS_UNAVAILABLE_VAR, DEFAULT_COMPATIBILITY_FLAGS, WRANGLER_MIN,

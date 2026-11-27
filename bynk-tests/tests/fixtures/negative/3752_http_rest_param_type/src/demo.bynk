@@ -1,0 +1,8 @@
+context demo
+
+// #3752 (D3): a rest binds the raw rest of the path, so it is a `String`.
+service api from http {
+  on GET("/files/*key") (key: Int) -> Effect[HttpResult[String]] by Visitor {
+    Ok("x")
+  }
+}

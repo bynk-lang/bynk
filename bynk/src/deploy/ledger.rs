@@ -145,6 +145,15 @@ pub(crate) struct Environment {
     /// reads and a project without rate limiting writes the same file.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) ratelimit_instances: BTreeMap<String, BTreeMap<String, RateLimitNamespace>>,
+    /// #4526: per callee Worker, the edge-key slot a rotation is retiring, by the name of the
+    /// edge's first slot (`BYNK_CALL_FROM_<S>`): which slot, and the instant after which the runtime
+    /// refuses it. It holds no key, only a slot number and a time, so it commits safely (ADR 0195
+    /// D1). Set when a rotation's callee is pushed, and cleared when the slot is cleaned up or a
+    /// later rotation or revoke replaces it. Kept on the environment, not on the Worker's record,
+    /// which every push rebuilds. Additive and `default`ed, so an older ledger still reads.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) retiring_edge_keys:
+        BTreeMap<String, BTreeMap<String, crate::deploy::edge_slots::Retiring>>,
     /// Slice 2: which Workers this project has ever pushed. Additive and
     /// `default`ed, so a slice-0 ledger still reads.
     ///
@@ -1704,6 +1713,7 @@ pub(crate) mod tests {
             environments: BTreeMap::from([(
                 "default".into(),
                 Environment {
+                    retiring_edge_keys: BTreeMap::new(),
                     deleted_classes: BTreeMap::new(),
                     renamed_classes: BTreeMap::new(),
                     agent_jurisdictions: BTreeMap::new(),

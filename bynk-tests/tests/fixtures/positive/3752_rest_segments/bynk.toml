@@ -1,0 +1,9 @@
+[project]
+name = "3752-rest-segments"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[unstable]
+allow = ["bynk.cloudflare.R2", "bynk.http.rest"]

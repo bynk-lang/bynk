@@ -1,0 +1,7 @@
+context demo
+
+service api from http {
+  on GET("/raw/*path") (path: String) -> Effect[HttpResult[String]] by Visitor {
+    Ok(path)
+  }
+}
