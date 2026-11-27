@@ -1028,7 +1028,13 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                     lv = pre.bind_temp(lv, cx);
                     rv = pre.bind_temp(rv, cx);
                 }
-                let cond = build_value_bin_op(*op, l, vec![lv.clone(), rv.clone()], cx);
+                let (lc, rc) = super::lower::expect_narrowing::narrowing_proof(
+                    (*op == BinOp::Eq || *op == BinOp::NotEq).then_some(*op == BinOp::Eq),
+                    lv.clone(),
+                    rv.clone(),
+                    cx,
+                );
+                let cond = build_value_bin_op(*op, l, vec![lc, rc], cx);
                 // #2622: an operand that holds a `Decimal` prints through the
                 // decimal-aware show, since `JSON.stringify` throws on a `bigint`.
                 let decimal = cx
@@ -1066,8 +1072,9 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 was = Some((r, head));
                 (c, ExpectDetail::Message(text))
             } else {
+                let c = pre.lower_node(&a.value, cx);
                 (
-                    pre.lower_node(&a.value, cx),
+                    super::lower::expect_narrowing::narrowing_proof_cond(c, cx),
                     ExpectDetail::Message(format!("expect {src}")),
                 )
             };

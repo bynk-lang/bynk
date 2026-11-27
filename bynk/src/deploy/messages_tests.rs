@@ -223,23 +223,6 @@ const OPERATIONS: &[(&str, Run)] = &[
     ("d1 migrations apply (--env staging)", |p, root| {
         shown(apply_d1_migrations(p, root, "DB", "staging"))
     }),
-    ("vectorize list", |p, _| shown(index_exists(p, "docs"))),
-    ("vectorize get", |p, _| shown(read_index_config(p, "docs"))),
-    ("vectorize create", |p, _| {
-        shown(create_index(p, "docs", &decl()))
-    }),
-    ("vectorize list-metadata-index", |p, _| {
-        shown(existing_metadata_indexes(p, "docs"))
-    }),
-    ("vectorize create-metadata-index", |p, _| {
-        shown(create_metadata_index(p, "docs", "category:string"))
-    }),
-    ("vectorize create-metadata-index (not name:type)", |p, _| {
-        shown(create_metadata_index(p, "docs", "category"))
-    }),
-    ("vectorize delete", |p, _| {
-        shown(delete_vectorize_index(p, "docs"))
-    }),
 ];
 
 /// The replies each operation treats specially: its success, and the failures it reads as a
@@ -293,104 +276,6 @@ const SPECIAL: &[(&str, &str, Script)] = &[
         "d1 migrations apply (default)",
         "applied",
         Script::Answers(&[("*", answer(0, "Migrations applied.\n", ""))]),
-    ),
-    (
-        "vectorize list",
-        "listed",
-        Script::Answers(&[(
-            "*",
-            answer(0, "[{\"name\":\"other\"},{\"name\":\"docs\"}]\n", ""),
-        )]),
-    ),
-    (
-        "vectorize list",
-        "not listed",
-        Script::Answers(&[("*", answer(0, "[{\"name\":\"other\"}]\n", ""))]),
-    ),
-    (
-        "vectorize list",
-        "no permission, code 10000",
-        Script::Answers(&[("*", answer(1, "", "Authentication error [code: 10000]\n"))]),
-    ),
-    (
-        "vectorize get",
-        "config at the top level",
-        Script::Answers(&[(
-            "*",
-            answer(0, "{\"dimensions\":768,\"metric\":\"COSINE\"}\n", ""),
-        )]),
-    ),
-    (
-        "vectorize get",
-        "config nested",
-        Script::Answers(&[(
-            "*",
-            answer(
-                0,
-                "{\"name\":\"docs\",\"config\":{\"dimensions\":3,\"metric\":\"dot_product\"}}\n",
-                "",
-            ),
-        )]),
-    ),
-    (
-        "vectorize create",
-        "created",
-        Script::Answers(&[("*", answer(0, "Created index docs.\n", ""))]),
-    ),
-    (
-        "vectorize list-metadata-index",
-        "listed",
-        Script::Answers(&[(
-            "*",
-            answer(
-                0,
-                "{\"metadataIndexes\":[{\"propertyName\":\"category\",\"indexType\":\"String\"}]}\n",
-                "",
-            ),
-        )]),
-    ),
-    (
-        "vectorize create-metadata-index",
-        "created",
-        Script::Answers(&[("*", answer(0, "Enqueued.\n", ""))]),
-    ),
-    (
-        "vectorize create-metadata-index",
-        "already exists",
-        Script::Answers(&[(
-            "*",
-            answer(1, "", "metadata index already exists [code: 40024]\n"),
-        )]),
-    ),
-    (
-        "vectorize delete",
-        "deleted",
-        Script::Answers(&[
-            (
-                "vectorize\\ list*",
-                answer(0, "[{\"name\":\"docs\"}]\n", ""),
-            ),
-            ("vectorize\\ delete*", answer(0, "Deleted.\n", "")),
-        ]),
-    ),
-    (
-        "vectorize delete",
-        "already gone",
-        Script::Answers(&[("vectorize\\ list*", answer(0, "[]\n", ""))]),
-    ),
-    (
-        "vectorize delete",
-        "the delete fails",
-        Script::Answers(&[
-            (
-                "vectorize\\ list*",
-                answer(0, "[{\"name\":\"docs\"}]\n", ""),
-            ),
-            (
-                "vectorize\\ delete*",
-                answer(1, "", "Authentication error [code: 10000]\n"),
-            ),
-        ]),
     ),
 ];
 
@@ -667,6 +552,24 @@ const REST_OPERATIONS: &[(&str, Run)] = &[
     ("R2 create (REST, jurisdiction eu)", |p, _| {
         shown(create_r2_bucket(p, "shop-files", Some("eu")))
     }),
+    ("Vectorize list (REST)", |p, _| {
+        shown(index_exists(p, "docs"))
+    }),
+    ("Vectorize get (REST)", |p, _| {
+        shown(read_index_config(p, "docs"))
+    }),
+    ("Vectorize create (REST)", |p, _| {
+        shown(create_index(p, "docs", &decl()))
+    }),
+    ("Vectorize list metadata indexes (REST)", |p, _| {
+        shown(existing_metadata_indexes(p, "docs"))
+    }),
+    ("Vectorize create metadata index (REST)", |p, _| {
+        shown(create_metadata_index(p, "docs", "category:string"))
+    }),
+    ("Vectorize delete (REST)", |p, _| {
+        shown(delete_vectorize_index(p, "docs"))
+    }),
 ];
 
 /// The answers each moved operation treats specially: its success, and a failure it reads as one.
@@ -783,6 +686,83 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
             ),
         ],
     ),
+    (
+        "Vectorize list (REST)",
+        "listed",
+        &[(
+            200,
+            r#"{"success":true,"result":[{"name":"other","config":{"dimensions":3,"metric":"cosine"}},{"name":"docs","config":{"dimensions":768,"metric":"cosine"}}]}"#,
+        )],
+    ),
+    (
+        "Vectorize list (REST)",
+        "not listed",
+        &[(200, r#"{"success":true,"result":[{"name":"other"}]}"#)],
+    ),
+    (
+        "Vectorize get (REST)",
+        "config, dot-product",
+        &[(
+            200,
+            r#"{"success":true,"result":{"name":"docs","config":{"dimensions":3,"metric":"dot-product"}}}"#,
+        )],
+    ),
+    (
+        "Vectorize create (REST)",
+        "created",
+        &[(
+            200,
+            r#"{"success":true,"result":{"name":"docs","config":{"dimensions":768,"metric":"cosine"}}}"#,
+        )],
+    ),
+    (
+        "Vectorize list metadata indexes (REST)",
+        "listed",
+        &[(
+            200,
+            r#"{"success":true,"result":{"metadataIndexes":[{"propertyName":"category","indexType":"String"}]}}"#,
+        )],
+    ),
+    (
+        "Vectorize create metadata index (REST)",
+        "enqueued",
+        &[(
+            200,
+            r#"{"success":true,"result":{"mutationId":"182bd5e5-6e1a-4fe4-a799-aa6d9a6ab26e"}}"#,
+        )],
+    ),
+    (
+        "Vectorize create metadata index (REST)",
+        "refused, left to the listing wait",
+        &[(
+            409,
+            r#"{"success":false,"errors":[{"code":40004,"message":"metadata index already exists"}]}"#,
+        )],
+    ),
+    (
+        "Vectorize delete (REST)",
+        "deleted",
+        &[
+            (200, r#"{"success":true,"result":[{"name":"docs"}]}"#),
+            (200, r#"{"success":true,"result":{}}"#),
+        ],
+    ),
+    (
+        "Vectorize delete (REST)",
+        "already gone",
+        &[(200, r#"{"success":true,"result":[]}"#)],
+    ),
+    (
+        "Vectorize delete (REST)",
+        "the delete is denied",
+        &[
+            (200, r#"{"success":true,"result":[{"name":"docs"}]}"#),
+            (
+                403,
+                r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#,
+            ),
+        ],
+    ),
 ];
 
 /// One moved operation's case: its requests, and what it returned. One answer logs the request
@@ -827,8 +807,18 @@ fn rest_case(
     out
 }
 
+/// Moved operations refused before any request is sent: each runs once, against no stub.
+const REST_UNSENT: &[(&str, Run)] = &[(
+    "Vectorize create metadata index (REST, not name:type)",
+    |p, _| shown(create_metadata_index(p, "docs", "category")),
+)];
+
 fn rest_kind_messages() -> String {
     let mut out = String::new();
+    for (operation, run) in REST_UNSENT {
+        out.push_str(&rest_case(operation, *run, "nothing sent", &[]));
+        out.push('\n');
+    }
     for (operation, run) in REST_OPERATIONS {
         for (shape, answer) in REST_SHAPES {
             let answers: &'static [(u16, &'static str)] = match answer {
@@ -1146,6 +1136,10 @@ fn each_rest_consumer_names_its_purpose_when_credentials_are_missing() {
         (
             "D1 databases (pre-flight)",
             crate::cloudflare::rest::Purpose::D1,
+        ),
+        (
+            "Vectorize indexes (pre-flight)",
+            crate::cloudflare::rest::Purpose::Vectorize,
         ),
     ] {
         said(
