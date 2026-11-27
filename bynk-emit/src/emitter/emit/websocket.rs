@@ -13,7 +13,7 @@ use crate::emitter::serialisation;
 use crate::emitter::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use crate::emitter::{RuntimeUse, TyRender, UnitFacts, ts_ident, ty_to_type_ref};
 use crate::ts_build::{
-    as_expr, bool_lit, call, ident, if_, member, new, not_expr, num_lit, return_,
+    as_expr, bool_lit, call, ident, if_, member, new, not_expr, num_lit, return_, str_lit,
 };
 use bynk_check::actors::ActorDecl;
 use bynk_check::checker::{TyId, TypedCommons};
@@ -275,8 +275,61 @@ fn ws_send_meta(host: &WsOpenHost<'_>) -> Vec<(String, bynk_ts::TsExpr)> {
     let mut meta = vec![("max".to_string(), num_lit(host.max_frame))];
     if host.out_bytes {
         meta.push(("bin".to_string(), bool_lit(true)));
+    } else {
+        // #4549: the service's name, under which its `out` codec is registered, so `send` writes a frame
+        // with it after any wake. A binary service has no codec.
+        meta.push(("svc".to_string(), str_lit(host.service)));
     }
     meta
+}
+
+/// #4549: the codec an `out` frame of type `out_ty` is written with, as `(frame) => <wire value>`, or `None`
+/// for a plain `Bytes` frame, which is sent as the binary message it is. The same serialiser `in` frames'
+/// decoder pairs with and the HTTP side uses; it also notes the helpers it names, so the module declares them.
+pub(super) fn ws_out_encoder(
+    out_ty: TyId,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+) -> Option<bynk_ts::TsExpr> {
+    if is_plain_bytes(commons, out_ty) {
+        return None;
+    }
+    // As `in_type` below: `check_service_protocols` already constrains a frame type to a codec-eligible one.
+    let tys = UnitFacts::of(ctx).render(commons);
+    let out_type = ty_to_type_ref(out_ty, tys.types()).unwrap_or_else(|| {
+        panic!(
+            "bynk internal error: a `from websocket` service's own `out:` frame type did not \
+             round-trip to a TypeRef, but check_service_protocols already certified it codec-eligible"
+        )
+    });
+    let body = serialisation::serialise_expr(&out_type, &ident("frame"), &ctx.runtime_use);
+    Some(bynk_ts::TsExpr::Arrow {
+        params: vec![bynk_ts::TsParam::new(
+            "frame".to_string(),
+            Some(ts_ty_to_ts_type(out_ty, tys)),
+        )],
+        is_async: false,
+        generics: Vec::new(),
+        return_type: None,
+        body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(body))),
+    })
+}
+
+/// #4549: `__registerFrameEncoder("<service>", <encoder>);`, the module-level statement that makes a hosted
+/// service's `out` codec known to the sockets it accepts. `None` for a binary service.
+pub(super) fn ws_register_encoder_stmt(
+    host: &WsOpenHost<'_>,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+) -> Option<bynk_ts::TsStmt> {
+    let encode = ws_out_encoder(host.out_ty, commons, ctx)?;
+    Some(bynk_ts::TsStmt::expr_stmt(
+        call(
+            ident("__registerFrameEncoder"),
+            vec![str_lit(host.service), encode],
+        ),
+        None,
+    ))
 }
 
 /// #3905: `if (!__webSocketAdmit(ws, message, <maxFrame>, <binary>)) return;`: the first thing an

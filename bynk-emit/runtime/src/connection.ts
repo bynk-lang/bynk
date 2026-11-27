@@ -50,6 +50,27 @@ export function closeArguments(code?: number, reason?: string): { code?: number;
 // push oversized frames at clients.
 const frameEncoder = new TextEncoder();
 
+// #4549: how a service's `out` frame becomes its wire value. The serialisation codec of the frame type, the
+// one `in` frames are decoded with (and the HTTP side uses), so an `Option`, a `Decimal`, an `Instant` or a sum
+// goes out as the codec writes it, never as the runtime's own shape. A socket holds no function, so its
+// attachment records the service's name (`svc`) and the module that hosts the sockets registers the encoder
+// under that name when it loads. A socket accepted before this has no `svc` and is sent as it always was,
+// until it reconnects. One that names a service no encoder is registered for faults.
+const frameEncoders = new Map<string, (frame: never) => unknown>();
+
+export function registerFrameEncoder<F>(service: string, encode: (frame: F) => unknown): void {
+  frameEncoders.set(service, encode as (frame: never) => unknown);
+}
+
+function encodedFrame(frame: unknown, service: string | undefined): unknown {
+  if (service === undefined) return frame;
+  const encode = frameEncoders.get(service);
+  // A socket that names its service was accepted by a module that registers the encoder, so a missing one is an
+  // emitter bug; sending the runtime shape would break the wire form without a trace, so the send faults.
+  if (encode === undefined) throw new Error(`Connection.send: no frame encoder is registered for the service ${service}`);
+  return (encode as (frame: unknown) => unknown)(frame);
+}
+
 function outboundFrame(frame: unknown, binary?: boolean): { data: string | Uint8Array; size: number } {
   if (frame instanceof Uint8Array && binary !== false) return { data: frame, size: frame.byteLength };
   const data = JSON.stringify(frame);
@@ -115,10 +136,15 @@ export class TestConnection<F> implements Connection<F> {
 
   // #3905: the service's `maxFrame`, handed over by `svc.open(tc, …)`; a frame over it faults the send.
   maxFrame: number | undefined = undefined;
+  // #4549: the frame type's codec, handed over by `svc.open(tc, …)`. `sent` keeps the frame as the handler
+  // wrote it; the codec is run so the size check sees what goes on the wire, and so a frame the codec cannot
+  // write faults in a test as it would on the platform.
+  encode: ((frame: F) => unknown) | undefined = undefined;
 
   async send(frame: F): Promise<void> {
     if (this.closed) throw new Error("send on a closed TestConnection");
-    if (this.maxFrame !== undefined) checkOutboundFrame(frame, this.maxFrame);
+    const wire = this.encode === undefined ? frame : this.encode(frame);
+    if (this.maxFrame !== undefined) checkOutboundFrame(wire, this.maxFrame);
     this.sent.push(frame);
   }
 
@@ -147,13 +173,14 @@ export class TestConnection<F> implements Connection<F> {
   private minted = false;
 
   /** Record `open`'s route values and `deps`; one socket is opened once, and not once it was handed out. */
-  remember(route: unknown[], deps: unknown, maxFrame?: number): void {
+  remember(route: unknown[], deps: unknown, maxFrame?: number, encode?: (frame: F) => unknown): void {
     if (this.routeValues !== undefined || this.minted) {
       throw new Error("TestConnection: this connection was already opened or handed to an agent — build a new TestConnection");
     }
     this.routeValues = route;
     this.depsValue = deps;
     this.maxFrame = maxFrame;
+    this.encode = encode;
   }
 
   /** The route values and `deps` from `open`; a case that skipped `open` fails. */
@@ -202,11 +229,15 @@ export class WorkersConnection<F> implements Connection<F> {
   // service's `maxFrame`, which the upgrade wrote into the socket's attachment so it is known after any
   // wake, faults the send (#3905). A socket accepted before that has no ceiling recorded.
   async send(frame: F): Promise<void> {
-    const attachment = this.ws.deserializeAttachment?.() as { max?: number; bin?: boolean } | null | undefined;
+    const attachment = this.ws.deserializeAttachment?.() as
+      | { max?: number; bin?: boolean; svc?: string }
+      | null
+      | undefined;
     const max = attachment?.max;
     // `bin` is the `out: Bytes` service the upgrade recorded: its frames go out as binary messages, and any
-    // other service's as JSON, whatever the frame's representation, as the inbound side decides by type.
-    const out = outboundFrame(frame, attachment?.bin === true);
+    // other service's as JSON, whatever the frame's representation, as the inbound side decides by type. A
+    // JSON frame is written by its type's codec (#4549), found by the service's name in the attachment.
+    const out = outboundFrame(attachment?.bin === true ? frame : encodedFrame(frame, attachment?.svc), attachment?.bin === true);
     if (max !== undefined && out.size > max) {
       throw new Error(`Connection.send: a frame of ${out.size} bytes is over the service's maxFrame of ${max}`);
     }

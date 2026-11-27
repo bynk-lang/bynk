@@ -9,7 +9,7 @@ import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } fr
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
-import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
+import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __registerFrameEncoder, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
 
 export type UserId = string & { readonly __brand: "room.UserId" };
 
@@ -137,7 +137,7 @@ export class Rooms {
     if (url.pathname === "/_bynk/ws/open/lone") {
       const __pair = __newWebSocketPair();
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; identity: string; exp?: number };
-      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, max: 1048576, exp: __payload.exp });
+      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, max: 1048576, svc: "lone", exp: __payload.exp });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       await this.__wsOpen_lone(connection, __payload.args[0] as RoomKey, { identity: __payload.identity as UserId, ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client, __webSocketBearerProtocol(request.headers.get("Sec-WebSocket-Protocol")));
@@ -172,6 +172,8 @@ export class Rooms {
   }
 }
 
+__registerFrameEncoder("lone", (frame: Frame) => __serialise_Frame(frame));
+
 const __RoomsWire: __AgentWire = {
   keep: { args: [__AGENT_WIRE_PASS], result: { enc: (__v: void) => null, dec: (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError> } },
 };
@@ -182,6 +184,24 @@ export function __makeRooms(key: RoomKey, env?: { ROOMS?: __DurableObjectNamespa
 
 export function __resetAgents(): void {
   __RoomsRegistry.reset();
+}
+
+export function __serialise_Frame(value: Frame): __JsonValue {
+  return {
+    text: value.text as __JsonValue,
+  };
+}
+
+export function __deserialise_Frame(json: __JsonValue, path: string = "$"): Result<Frame, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  return Ok({ text: __text } as Frame);
 }
 
 export function __serialise_RoomKey(value: RoomKey): __JsonValue {
