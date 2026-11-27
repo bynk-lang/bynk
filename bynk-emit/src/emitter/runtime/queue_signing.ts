@@ -159,6 +159,21 @@ interface EmittedEvent {
   readonly envelope: { readonly eventId: string; readonly publisherId: string; readonly emittedAt: number };
 }
 
+/**
+ * The replacer that sizes a Bynk value as the wire carries it, not as `JSON.stringify` would
+ * render the in-memory value: a `Bytes` (`Uint8Array`) as its base64 string, a `Map` as its
+ * array of entries and a `Set` as its array of members (`codec.ts`), and a `bigint` (a
+ * `Decimal`'s coefficient, which `JSON.stringify` refuses) as its digits. Other shapes differ
+ * from the wire by a few bytes at most (an `Option`'s tag), which a warning can absorb.
+ */
+function wireShaped(_key: string, value: unknown): unknown {
+  if (value instanceof Uint8Array) return "A".repeat(4 * Math.ceil(value.length / 3));
+  if (value instanceof Map) return Array.from(value.entries());
+  if (value instanceof Set) return Array.from(value);
+  if (typeof value === "bigint") return value.toString();
+  return value;
+}
+
 /** The UTF-8 length of the signed queue message `event` will be sent as. */
 export function eventMessageBytes(event: EmittedEvent): number {
   const message: SignedQueueEnvelope = {
@@ -171,21 +186,43 @@ export function eventMessageBytes(event: EmittedEvent): number {
     },
     body: event,
   };
-  return encoder.encode(JSON.stringify(message)).length;
+  return encoder.encode(JSON.stringify(message, wireShaped)).length;
 }
 
 const warnedEventTypes = new Set<string>();
 
 /**
+ * Per event type, how many emissions have measured under half the threshold in a row. Once a
+ * type has done so `SAMPLE_AFTER` times, only one emission in `SAMPLE_EVERY` is measured, so a
+ * high-rate small event does not pay a second serialisation on every emission.
+ */
+const smallRuns = new Map<string, number>();
+const SAMPLE_AFTER = 100;
+const SAMPLE_EVERY = 100;
+
+/**
  * `Events.emit`'s measurement: logs `EventNearLimit` the first time in this isolate an emission
  * of the event's type comes within a quarter of the budget, or over it, and returns the event.
+ * It only warns, so it never faults the emitting handler: a value it cannot measure is skipped.
  */
 export function measureEvent<E extends EmittedEvent>(event: E): E {
   if (warnedEventTypes.has(event.type)) return event;
-  const size = eventMessageBytes(event);
+  const run = smallRuns.get(event.type) ?? 0;
+  if (run >= SAMPLE_AFTER && run % SAMPLE_EVERY !== 0) {
+    smallRuns.set(event.type, run + 1);
+    return event;
+  }
+  let size: number;
+  try {
+    size = eventMessageBytes(event);
+  } catch {
+    return event;
+  }
   if (size >= EVENT_NEAR_LIMIT_BYTES) {
     warnedEventTypes.add(event.type);
     console.warn("EventNearLimit", { event: event.type, size, budget: EVENT_MESSAGE_BUDGET_BYTES });
+  } else {
+    smallRuns.set(event.type, size < EVENT_NEAR_LIMIT_BYTES / 2 ? run + 1 : 0);
   }
   return event;
 }

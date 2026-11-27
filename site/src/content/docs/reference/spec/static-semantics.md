@@ -2948,8 +2948,8 @@ the payload, as UTF-8) has a budget of 127,000 bytes. `Events.emit` measures eac
 emission on every target and logs `EventNearLimit` (the event type, the size and
 the budget) once per event type per isolate when the message is 96,000 bytes or
 more; it does not fault yet. An `event` whose payload reaches a `Bytes`, or a
-`List`, `Map` or `Set` of a non-scalar type, with no refinement bounding it,
-draws the warning `bynk.event.unbounded_payload`
+`List`, `Map` or `Set` of a non-scalar type that no refinement (such as
+`MaxLength(n)`) bounds, draws the warning `bynk.event.unbounded_payload`
 ([Keeping an event small](/book/concepts/events/understand-events/#keeping-an-event-small)).
 
 ## §5.8 Boundaries & cross-context

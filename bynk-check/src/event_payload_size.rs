@@ -4,8 +4,8 @@
 //! An event will travel as one Cloudflare Queue message, which holds at most 128 KB (about
 //! 127,000 bytes of it the event's own), so a large event will fault its handler. The size is
 //! only known at run time, so this is a hint, not a check: it fires where large events come
-//! from, a `Bytes` or a `List`, `Map` or `Set` of a non-scalar type, with no refinement that
-//! bounds it. A payload of scalars and `String`s does not warn, since nearly every event would.
+//! from, a `Bytes`, or a `List`, `Map` or `Set` of a non-scalar type that no refinement (such as
+//! `MaxLength(n)`) bounds. A `Bytes` takes no length refinement, so it always warns. A payload of scalars and `String`s does not warn, since nearly every event would.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -46,7 +46,8 @@ pub(crate) fn check_event_payload_sizes<'a>(
             )
             .with_note(format!(
                 "on Workers an event must fit one queue message, about {EVENT_BUDGET_BYTES} bytes; \
-                 store a large value (R2, D1) and send a reference to it, or bound it with a refinement"
+                 store a large value (R2, D1) and send a reference to it; a collection can instead be bounded \
+                 with a refinement such as `MaxLength(n)`"
             )),
         );
     }
@@ -64,6 +65,8 @@ fn unbounded(
         TypeRef::Base(BaseType::Bytes, _) if refinement.is_none() => Some("`Bytes`".into()),
         TypeRef::Base(..) => None,
         TypeRef::Option(inner, _) => unbounded(inner, refinement, types, seen),
+        // A refinement on the collection (`MaxLength(n)`) bounds it.
+        TypeRef::List(..) | TypeRef::Set(..) | TypeRef::Map(..) if refinement.is_some() => None,
         TypeRef::List(elem, _) | TypeRef::Set(elem, _) if !is_scalar(elem, types) => Some(format!(
             "`{}`, a collection of a non-scalar type",
             ts_type_ref_display(t)
@@ -108,16 +111,103 @@ fn unbounded(
     }
 }
 
-/// A base type other than `Bytes`, or a refined or opaque type over one.
+/// A value as small as a scalar: a base type other than `Bytes`, a refined or opaque type over
+/// one, a sum whose variants carry no payload (an enum), or an `Option` of any of these.
 fn is_scalar(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     match t {
         TypeRef::Base(b, _) => *b != BaseType::Bytes,
-        TypeRef::Named(id) => types.get(&id.name).is_some_and(|d| {
-            matches!(
-                &d.body,
-                TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } if *base != BaseType::Bytes
-            )
+        TypeRef::Option(inner, _) => is_scalar(inner, types),
+        TypeRef::Named(id) => types.get(&id.name).is_some_and(|d| match &d.body {
+            TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => {
+                *base != BaseType::Bytes
+            }
+            TypeBody::Sum(body) => body.variants.iter().all(|v| v.payload.is_empty()),
+            TypeBody::Record(_) => false,
         }),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::testkit::analyse;
+
+    /// How many `bynk.event.unbounded_payload` warnings a context holding `body` draws.
+    fn warnings(body: &str) -> usize {
+        let source = format!(
+            "context t.e\n\ntype Line = {{ sku: String }}\n\ntype Status = enum {{ Open, Closed }}\n\n{body}\n"
+        );
+        analyse(&[("t/e.bynk", &source)])
+            .categories()
+            .into_iter()
+            .filter(|c| *c == "bynk.event.unbounded_payload")
+            .count()
+    }
+
+    #[test]
+    fn scalars_strings_enums_and_options_of_scalars_do_not_warn() {
+        // §8.1: such a payload would warn on nearly every event.
+        assert_eq!(
+            warnings("event E = { a: String, b: Int, c: Status, d: Option[Int] }"),
+            0
+        );
+        assert_eq!(
+            warnings(
+                "event E = { a: List[String], b: Map[String, Int], c: Set[Int], d: List[Status], e: List[Option[Int]] }"
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn a_refinement_on_a_collection_bounds_it() {
+        assert_eq!(
+            warnings("event E = { lines: List[Line] where MaxLength(10) }"),
+            0
+        );
+        assert_eq!(warnings("event E = { lines: List[Line] }"), 1);
+    }
+
+    #[test]
+    fn bytes_and_collections_of_records_warn_however_they_are_reached() {
+        assert_eq!(warnings("event E = { data: Bytes }"), 1);
+        assert_eq!(warnings("event E = { data: Option[Bytes] }"), 1);
+        assert_eq!(warnings("type Blob = Bytes\n\nevent E = { blob: Blob }"), 1);
+        assert_eq!(
+            warnings("type A = { name: String, body: Bytes }\n\nevent E = { a: A }"),
+            1
+        );
+        assert_eq!(
+            warnings(
+                "type C =\n  | Text(body: String)\n  | Binary(data: Bytes)\n\nevent E = { c: C }"
+            ),
+            1
+        );
+        assert_eq!(warnings("event E = { m: Map[String, Line] }"), 1);
+    }
+
+    #[test]
+    fn a_recursive_type_is_followed_once_and_warns_once() {
+        assert_eq!(
+            warnings(
+                "type Node = { label: String, children: List[Node] }\n\nevent E = { root: Node }"
+            ),
+            1
+        );
+        // A recursion through scalars only stays silent.
+        assert_eq!(
+            warnings(
+                "type Chain = { label: String, next: Option[Chain] }\n\nevent E = { root: Chain }"
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn each_event_warns_at_most_once() {
+        assert_eq!(
+            warnings("event E = { a: Bytes, b: Bytes, c: List[Line] }"),
+            1
+        );
     }
 }

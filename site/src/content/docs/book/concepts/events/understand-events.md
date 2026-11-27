@@ -522,9 +522,10 @@ nothing faults yet. Instead, two warnings find the events that would:
   (or process), so run the project as usual, or under `bynk test`, and search the
   logs for it.
 - **At compile time, `bynk.event.unbounded_payload`.** An `event` whose payload
-  reaches a `Bytes`, or a `List`, `Map` or `Set` of records, sums or other
-  collections, with no refinement bounding it, is warned of: that is where large
-  events come from. A payload of scalars and `String`s is not.
+  reaches a `Bytes`, or a `List`, `Map` or `Set` of records, sums with payloads
+  or other collections, is warned of: that is where large events come from. A
+  collection bounded with a refinement such as `MaxLength(n)` is not, and nor is
+  a payload of scalars, `String`s and enums.
 
 When the queues take over delivery, an emission over the budget will fault its
 handler before it commits, so nothing is persisted and nothing is lost. To keep

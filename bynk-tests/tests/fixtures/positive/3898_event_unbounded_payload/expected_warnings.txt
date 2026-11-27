@@ -1,2 +1,7 @@
-bynk.event.unbounded_payload
-bynk.event.unbounded_payload
+bynk.event.unbounded_payload event `Uploaded`'s field `data` reaches `Bytes`
+bynk.event.unbounded_payload event `Ordered`'s field `lines` reaches `List[Line]`
+bynk.event.unbounded_payload event `Blobbed`'s field `blob` reaches `Blob` (`Bytes`)
+bynk.event.unbounded_payload event `MaybeBytes`'s field `data` reaches `Bytes`
+bynk.event.unbounded_payload event `Attached`'s field `attachment` reaches `Bytes`
+bynk.event.unbounded_payload event `Posted`'s field `content` reaches `Bytes`
+bynk.event.unbounded_payload event `Treed`'s field `root` reaches `List[Node]`
