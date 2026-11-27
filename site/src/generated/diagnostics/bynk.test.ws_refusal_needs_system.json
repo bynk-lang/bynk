@@ -1,0 +1,12 @@
+{
+  "blurb": "`tc.refusedWith()` is the status a `system` case's upgrade was refused with (`401`, `403`, `400`): only a real upgrade through the deployed Worker can be refused. Below `system` the connection is never refused, so the read would be `None` whatever the case did, and an assertion on it would fail misleadingly or pass vacuously. Read it in a `suite … as system`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.ws_refusal_needs_system",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/room.test.bynk\nsuite chat {                                   // ✗ `refusedWith` below `system`\n    case \"a stranger is refused\" {\n        let tc = TestConnection[Frame]()\n        let _ <- Gateway.open(tc, Val[RoomId]) by Nobody\n        expect tc.refusedWith() == Some(401)\n    }\n}\n\nsuite chat as system {                        // ✓ the Worker refuses the upgrade\n    case \"a stranger is refused\" {\n        let tc = TestConnection[Frame]()\n        let _ <- Gateway.open(tc, Val[RoomId]) by Nobody\n        expect tc.refusedWith() == Some(401)\n    }\n}",
+  "severity": "error",
+  "summary": "A case below `system` reads `tc.refusedWith()` of a `TestConnection`; only a `system` case performs a real upgrade through the Worker, which can be refused, so there is nothing to read below it."
+}

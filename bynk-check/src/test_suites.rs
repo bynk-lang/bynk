@@ -1241,7 +1241,7 @@ pub fn phase_integration_bodies(
                     &case_callees,
                     &mut body_errs,
                 );
-                check_ws_address_tier(
+                check_ws_refusal_tier(
                     case,
                     case_effective_tier(case, d),
                     &case_callees,
@@ -2418,6 +2418,7 @@ fn check_test_bodies(
             let tier = case_effective_tier(case, test_decl);
             check_extra_headers_tier(case, tier, &case_callees, &mut errors);
             check_extra_headers_let(case, &case_callees, &mut errors);
+            check_ws_refusal_tier(case, tier, &case_callees, &mut errors);
             check_faults_tier(case, tier, &mut errors);
             check_snapshot_placement(
                 case,
@@ -3371,43 +3372,42 @@ fn check_event_address_tier(
     }
 }
 
-/// #3051: a `system`-tier case cannot drive a WebSocket lifecycle address: a
-/// deployed WebSocket is a real upgrade through the Worker and a Durable Object,
-/// which the system harness does not drive. The address is an in-process one.
-fn check_ws_address_tier(
+/// #3901: `tc.refusedWith()` reads the status a `system` case's upgrade was refused with, which only a real
+/// upgrade through the Worker has. Below `system` there is no upgrade to refuse, so the read would be `None`
+/// whatever the case did: `expect tc.refusedWith() == Some(401)` would fail misleadingly, and
+/// `expect tc.refusedWith() == None` would pass vacuously. It is refused there rather than answered.
+fn check_ws_refusal_tier(
     case: &Case,
     tier: bynk_syntax::ast::TestTier,
     callees: &HashMap<ExprId, checker::Callee>,
     errors: &mut Vec<CompileError>,
 ) {
-    if tier != bynk_syntax::ast::TestTier::System {
+    if tier == bynk_syntax::ast::TestTier::System {
         return;
     }
-    let mut services: Vec<&str> = callees
-        .values()
-        .filter_map(|c| match c {
-            checker::Callee::TestService {
-                service,
-                address: checker::HandlerAddress::Ws(_),
+    let reads = callees.values().any(|c| {
+        matches!(
+            c,
+            checker::Callee::Kernel {
+                op: crate::kernel_op::KernelOp::TestConnection(
+                    crate::kernel_op::TestConnectionOp::RefusedWith
+                ),
                 ..
-            } => Some(service.as_str()),
-            _ => None,
-        })
-        .collect();
-    services.sort_unstable();
-    services.dedup();
-    for service in services {
+            }
+        )
+    });
+    if reads {
         errors.push(
             CompileError::new(
-                "bynk.test.ws_needs_in_process",
+                "bynk.test.ws_refusal_needs_system",
                 case.name_span,
                 format!(
-                    "case `\"{}\"` drives the WebSocket service `{service}` by address, but is a `system`-tier case",
+                    "case `\"{}\"` reads `refusedWith()` of a `TestConnection`, but is not a `system`-tier case",
                     case.name
                 ),
             )
             .with_note(
-                "a deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive; drive the service at `unit` or `integration`",
+                "only a `system` case performs a real upgrade through the Worker, which can be refused; below `system` the connection is never refused, so there is nothing to read. Assert the refusal in a `suite … as system`",
             ),
         );
     }

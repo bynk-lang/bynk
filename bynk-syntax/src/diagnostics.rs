@@ -5993,9 +5993,9 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "// tests/room.test.bynk\nlet tc = TestConnection[Frame]()\nlet _ <- Gateway.open(tc, RoomId.unsafe(\"r\")) by Member(UserId.unsafe(\"ann\"))\nlet _ <- Gateway.message(tc, Frame { text: \"hi\" }) by Member(UserId.unsafe(\"ann\"))    // ✗ given at `open`\nlet _ <- Gateway.message(tc, Frame { text: \"hi\" })                                    // ✓",
     },
     Explain {
-        code: "bynk.test.ws_needs_in_process",
-        blurb: "`svc.open(tc, …)`, `svc.message` and `svc.close` drive a `from websocket` service in process, against a `TestConnection`. A deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive, so the address has nothing to run. Drive the service in a case at `unit` or `integration` instead.",
-        example: "// tests/room.test.bynk\ncase \"a join\" as system {         // ✗ a `system` case cannot drive a WebSocket\ncase \"a join\" as integration {    // ✓\n    let tc = TestConnection[Frame]()\n    let _ <- Gateway.open(tc, Val[RoomId]) by Member(Val[UserId])\n}",
+        code: "bynk.test.ws_refusal_needs_system",
+        blurb: "`tc.refusedWith()` is the status a `system` case's upgrade was refused with (`401`, `403`, `400`): only a real upgrade through the deployed Worker can be refused. Below `system` the connection is never refused, so the read would be `None` whatever the case did, and an assertion on it would fail misleadingly or pass vacuously. Read it in a `suite … as system`.",
+        example: "// tests/room.test.bynk\nsuite chat {                                   // ✗ `refusedWith` below `system`\n    case \"a stranger is refused\" {\n        let tc = TestConnection[Frame]()\n        let _ <- Gateway.open(tc, Val[RoomId]) by Nobody\n        expect tc.refusedWith() == Some(401)\n    }\n}\n\nsuite chat as system {                        // ✓ the Worker refuses the upgrade\n    case \"a stranger is refused\" {\n        let tc = TestConnection[Frame]()\n        let _ <- Gateway.open(tc, Val[RoomId]) by Nobody\n        expect tc.refusedWith() == Some(401)\n    }\n}",
     },
     Explain {
         code: "bynk.tier.cross_context_needs_system",
@@ -7508,6 +7508,14 @@ pub const RETIRED: &[Retired] = &[
         why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
         replacement: Some(
             "the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`",
+        ),
+    },
+    Retired {
+        code: "bynk.test.ws_needs_in_process",
+        last_release: "0.661.1",
+        why: "A `system` case now drives a `from websocket` service by address (#3901): `open` performs a real upgrade through the deployed Worker, so a case keeps its meaning at every tier.",
+        replacement: Some(
+            "`svc.open(tc, …)`, `svc.message(tc, frame)` and `svc.close(tc)` in a `suite … as system`",
         ),
     },
     Retired {
@@ -11499,8 +11507,8 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
-        "bynk.test.ws_needs_in_process",
-        "A `system`-tier case drives a `from websocket` service by address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`); a deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive, so the case runs at `unit` or `integration`.",
+        "bynk.test.ws_refusal_needs_system",
+        "A case below `system` reads `tc.refusedWith()` of a `TestConnection`; only a `system` case performs a real upgrade through the Worker, which can be refused, so there is nothing to read below it.",
         &["case"],
     ),
     dg(
