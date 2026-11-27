@@ -111,9 +111,11 @@ service orders from http {
 }
 ```
 
-A row field is an `Int`, `Float`, `String`, `Bool`, `Bytes` or `Decimal`; an
-`Instant` field is refused (`bynk.types.sql_row_shape`), because a MySQL date has no
-zone to make an instant from.
+A row field is an `Int`, `Float`, `String`, `Bool`, `Bytes`, `Decimal`, `Instant`,
+`Duration` or a payload-less enum, the same [column
+types](/reference/bynk-capabilities/#sql-column-types) as `Postgres` and `D1`. An
+`Instant` field reads a `DATETIME` or `TIMESTAMP` as UTC, so keep the column in UTC
+(`MySqlTimestamp` binds the same way); a `Duration` is a `BIGINT` of milliseconds.
 
 ## Give Bynk the connection string
 

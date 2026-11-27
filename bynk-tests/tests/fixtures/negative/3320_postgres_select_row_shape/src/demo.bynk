@@ -7,7 +7,7 @@ capability Main = Postgres
 
 type Money = { cents: Int }
 type Order = { id: String, total: Money }
-type Timed = { id: Int, took: Duration }
+type Timed = { id: Int, took: List[Int] }
 type Placed = { id: Int, at: Instant, maybe: Option[Instant] }
 type Plain = { id: String }
 

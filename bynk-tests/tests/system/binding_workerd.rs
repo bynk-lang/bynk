@@ -2493,7 +2493,7 @@ service api from http {
 	}
 
 	on GET("/insert/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Main {
-		let ran <- Main.run("insert into items (name, qty, meta, stamp, raw) values ($1, $2::bigint, $3::jsonb, $4, $5)", [PgText(name), PgNumeric("1152921504606846976"), PgJson("{\"k\":[1,2]}"), PgTimestamp(Instant.fromIso("2026-01-02T03:04:05Z").getOrElse(Instant.fromEpochMillis(0))), PgBytea(Bytes.fromHex("00ff07").getOrElse(Bytes.empty()))])
+		let ran <- Main.run("insert into items (name, qty, meta, stamp, raw) values ($1, $2::bigint, $3::jsonb, $4, $5)", [PgText(name), PgNumeric(1152921504606846976d), PgJson("{\"k\":[1,2]}"), PgTimestamp(Instant.fromIso("2026-01-02T03:04:05Z").getOrElse(Instant.fromEpochMillis(0))), PgBytea(Bytes.fromHex("00ff07").getOrElse(Bytes.empty()))])
 		match ran {
 			Ok(r) => Ok("inserted \(r.rowCount)")
 			Err(e) => Ok(why(e))
