@@ -1,0 +1,17 @@
+---
+#3959, track Q8 and §14.1 `bynk.given.parameterised_fn_value`: a function with capability
+parameters is not a value, because a value would leave its bindings unchosen; a lambda that
+binds takes its place (positive `3959_capability_parameter_forwarding`).
+---
+commons lib.cache
+
+consumes bynk.cloudflare { Kv }
+
+fn evict(key: String) -> Effect[()] given Inner: Kv {
+	Inner.delete(key)
+}
+
+fn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {
+	let _ <- Store.delete("index")
+	keys.forEach(evict)
+}

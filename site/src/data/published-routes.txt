@@ -1725,6 +1725,7 @@
 /reference/diagnostics/bynk.given.missing_for_call/
 /reference/diagnostics/bynk.given.parameter_name_conflict/
 /reference/diagnostics/bynk.given.parameter_outside_commons/
+/reference/diagnostics/bynk.given.parameterised_fn_value/
 /reference/diagnostics/bynk.given.shared_as_parameter/
 /reference/diagnostics/bynk.given.undeclared_capability/
 /reference/diagnostics/bynk.given.unknown_capability/

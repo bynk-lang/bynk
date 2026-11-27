@@ -255,3 +255,33 @@ fn exec_unavailable_through_detach_names_detach_at_the_end_of_the_chain() {
         e.notes
     );
 }
+
+/// #3959, §14.1 `bynk.given.parameterised_fn_value`: the note's lambda takes the
+/// callee's own parameters, none or several, and binds every capability parameter.
+/// The fixture `3959_parameterised_fn_value_binary` pins the messages; the notes are
+/// pinned here.
+#[test]
+fn parameterised_fn_value_note_lambda_follows_the_callee_arity() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/negative/3959_parameterised_fn_value_binary");
+    let target = bynk_driver::project::BuildTarget::Bundle;
+    let Err(failure) = super::e2e::compile_fixture(&dir, target) else {
+        panic!("expected a compile failure");
+    };
+    let notes: Vec<&String> = failure
+        .errors
+        .iter()
+        .map(|a| &a.error)
+        .filter(|e| e.category == "bynk.given.parameterised_fn_value")
+        .flat_map(|e| &e.notes)
+        .collect();
+    for want in [
+        "`() => flush(given Inner = …)`",
+        "`(key, value) => put(key, value, given Inner = …, Outer = …)`",
+    ] {
+        assert!(
+            notes.iter().any(|n| n.contains(want)),
+            "a note should suggest {want}: {notes:?}"
+        );
+    }
+}

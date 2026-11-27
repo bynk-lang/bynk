@@ -1689,7 +1689,11 @@ the caller's own `given` (`bynk.given.missing_for_call`) whose kind is exactly `
 (`bynk.given.binding_kind_mismatch`): a derived instance of `K`, the bare `K` where
 `K` allows a bare use, or the caller's own parameter bounded by `K`. It counts as used
 by the caller. A binding is never inferred or defaulted. The callee's shared
-capabilities follow the inclusion rule above. The machine-applicable fix of
+capabilities follow the inclusion rule above. In a commons body the right-hand side
+is necessarily one of the function's own parameters (forwarding). A function with
+capability parameters MUST NOT be named as a value
+(`bynk.given.parameterised_fn_value`); a lambda that binds takes its place. The
+machine-applicable fix of
 `bynk.given.binding_missing` is offered only when the caller holds exactly one
 candidate.
 
