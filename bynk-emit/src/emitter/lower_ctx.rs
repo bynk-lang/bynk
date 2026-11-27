@@ -64,7 +64,7 @@ pub(crate) struct LowerCtx<'a> {
     pub(crate) expect_is_bindings: bool,
     /// #3775: the reads an earlier `expect <read> == <literal>` left narrowed to that literal in
     /// TypeScript, so a later comparison widens them (`lower_stmt::narrowing_proof`).
-    pub(crate) expect_narrowed: HashSet<String>,
+    pub(crate) narrowed_reads: HashSet<String>,
     /// #2024: identifiers the generated scaffold around this body already
     /// binds in the body's own JS scope — a test runner's `deps`, `__obs`, and
     /// the target's destructured services, agents, functions and assets. A
@@ -192,7 +192,7 @@ impl<'a> LowerCtx<'a> {
             shadow_scopes: vec![HashMap::new()],
             scrutinee_frames: Vec::new(),
             expect_is_bindings: false,
-            expect_narrowed: HashSet::new(),
+            narrowed_reads: HashSet::new(),
             harness_bound: HashSet::new(),
             is_receiver_temps: HashMap::new(),
             is_temp_hoist: None,
