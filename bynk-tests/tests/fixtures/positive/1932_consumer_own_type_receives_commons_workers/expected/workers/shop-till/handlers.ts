@@ -16,7 +16,7 @@ export const Amount = {
 export const total = {
   async call(deps: { env: { SHOP_QUOTES: __ServiceBinding } }): globalThis.Promise<number> {
     const a = await __callService(deps.env.SHOP_QUOTES, "price", {}, __deserialise_shop_quotes__Amount, "shop.till", "13d2ae969f935116", deps.env, "shop.quotes");
-    const paid = await __callService(deps.env.SHOP_QUOTES, "pay", __serialise_shop_quotes__Amount(({ cents: a.cents + 1 } as unknown as shop_quotes.Amount)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "shop.till", "0a863ca09197a185", deps.env, "shop.quotes");
+    const paid = await __callService(deps.env.SHOP_QUOTES, "pay", __serialise_shop_quotes__Amount(({ cents: a.cents + 1 } as unknown as shop_quotes.Amount)), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "shop.till", "0a863ca09197a185", deps.env, "shop.quotes");
     return paid;
   },
 };
@@ -36,7 +36,7 @@ export function __deserialise_shop_quotes__Amount(json: __JsonValue, path: strin
     return Err({ kind: "StructuralMismatch", path: `${path}.cents`, expected: "number", actual: typeof obj["cents"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["cents"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.cents`, expected: "safe integer", actual: String(obj["cents"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.cents`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["cents"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __cents = obj["cents"];
   return Ok({ cents: __cents } as shop_quotes.Amount);

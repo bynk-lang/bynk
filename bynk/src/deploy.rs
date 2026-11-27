@@ -67,6 +67,7 @@ mod hyperdrive;
 mod kind;
 mod ledger;
 mod linked;
+mod move_sets;
 mod on_account;
 mod pins;
 mod plan;

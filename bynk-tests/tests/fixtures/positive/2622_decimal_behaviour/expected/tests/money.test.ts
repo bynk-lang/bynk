@@ -7,7 +7,7 @@ import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __bynkMapInsert } from "../__bynk_runtime/keys.js";
 import { __bynkCmpDecimal } from "../__bynk_runtime/compare.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 import * as __ns_money from "./../money.js";
 import * as __ns_bynk_decode from "./../bynk/decode.js";
 
@@ -493,7 +493,7 @@ async function test_a_malformed_decimal_on_the_wire_is_rejected_at_the_field_pat
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Line(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_money.Line);
@@ -506,7 +506,7 @@ async function test_a_malformed_decimal_on_the_wire_is_rejected_at_the_field_pat
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Line(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_money.Line);
@@ -519,7 +519,7 @@ async function test_a_malformed_decimal_on_the_wire_is_rejected_at_the_field_pat
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Line(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_money.Line);
@@ -532,7 +532,7 @@ async function test_a_malformed_decimal_on_the_wire_is_rejected_at_the_field_pat
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Line(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_money.Line);
@@ -629,7 +629,7 @@ export function __deserialise_Line(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["qty"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["qty"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __qty = obj["qty"];
   return Ok({ sku: __sku, unit: __unit, qty: __qty } as __ns_money.Line);

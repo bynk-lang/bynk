@@ -1,0 +1,30 @@
+context shop.orders
+
+consumes bynk { CloseInfo, Cookie }
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+service api from http {
+  on GET("/ping") () -> Effect[HttpResult[String]] by u: User {
+    Ok("pong")
+  }
+}
+
+service one {
+  on call() -> Effect[CloseInfo] by Caller {
+    Effect.pure(CloseInfo { code: 1000, reason: "done", clean: true })
+  }
+}
+
+service many {
+  on call() -> Effect[List[CloseInfo]] by Caller {
+    Effect.pure([CloseInfo { code: 1000, reason: "done", clean: true }, CloseInfo { code: 1006, reason: "gone", clean: false }])
+  }
+}
+
+service session {
+  on call() -> Effect[Cookie] by Caller {
+    Effect.pure(Cookie { name: "sid", value: "a" })
+  }
+}

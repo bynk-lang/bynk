@@ -108,7 +108,7 @@ export function __deserialise_Mode(json: __JsonValue, path: string = "$"): Resul
       case "Slow":
         return Ok({ tag: "Slow" } as Mode);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -122,7 +122,7 @@ export function __deserialise_Mode(json: __JsonValue, path: string = "$"): Resul
     case "Slow":
       return Ok({ tag: "Slow" } as Mode);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -145,7 +145,7 @@ export function __deserialise_UploadHeaders(json: __JsonValue, path: string = "$
     return Err({ kind: "StructuralMismatch", path: `${path}.content-length`, expected: "number", actual: typeof obj["content-length"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["content-length"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.content-length`, expected: "safe integer", actual: String(obj["content-length"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.content-length`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["content-length"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __length = obj["content-length"];
   if (!(__length >= 0)) {
@@ -166,7 +166,7 @@ export function __deserialise_UploadHeaders(json: __JsonValue, path: string = "$
     return Err({ kind: "StructuralMismatch", path: `${path}.priority`, expected: "number", actual: typeof __d_priority });
   }
   if (!globalThis.Number.isSafeInteger(__d_priority)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.priority`, expected: "safe integer", actual: String(__d_priority) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.priority`, expected: "safe integer", actual: globalThis.Number.isInteger(__d_priority) ? "integer outside the safe range" : "non-integer number" });
   }
   const __priority = __d_priority;
   return Ok({ length: __length, key: __key, tags: __tags, mode: __mode, priority: __priority } as UploadHeaders);

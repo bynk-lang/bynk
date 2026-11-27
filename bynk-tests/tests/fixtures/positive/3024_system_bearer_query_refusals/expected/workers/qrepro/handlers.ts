@@ -46,7 +46,7 @@ export function __deserialise_Window(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.days`, expected: "number", actual: typeof obj["days"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["days"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.days`, expected: "safe integer", actual: String(obj["days"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.days`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["days"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __days = obj["days"];
   return Ok({ days: __days } as Window);

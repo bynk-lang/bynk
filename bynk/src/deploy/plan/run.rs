@@ -150,6 +150,9 @@ pub struct DeployOptions {
     /// #3562 (G5): `--accept-fresh-agent <context>` (repeatable): a context with agents that
     /// moves to another Worker script starts fresh, its old state staying in the old script.
     pub accept_fresh_agent: Vec<String>,
+    /// #3565: `--move-agent <context>` (repeatable): a context with agents that moves to another
+    /// Worker script keeps its state, moved in phases (`design/tracks/agent-context-moves.md`).
+    pub move_agent: Vec<String>,
     pub wrangler_args: Vec<String>,
 }
 
@@ -423,7 +426,9 @@ fn deploy(
 
     // #3562 (G5): a context with agent state that would change scripts is refused before
     // anything is pushed, `--dry-run` included.
-    let agents = checked_agent_moves(&lock, opts, &resources, &order, &groups);
+    // #3565: the Workers that declare routes or custom domains, whose move sets are refused in v1.
+    let attached = attached_workers(project_root);
+    let agents = checked_agent_moves(&lock, opts, &resources, &order, &groups, &attached);
     agents.eprint();
     if !agents.may_go_on() {
         // #3797: the refusals, with what the run knew, for a client that asked for JSON.
@@ -435,7 +440,10 @@ fn deploy(
         });
     }
     let AgentGate {
-        moves, warnings, ..
+        moves,
+        warnings,
+        planned: planned_moves,
+        ..
     } = agents;
 
     check_foreign_pins(project_root, &workers_dir, &order, opts)
@@ -507,7 +515,8 @@ fn deploy(
     )
     .checked_against_account()
     .noting_unchecked_kv(!opts.dry_run)
-    .with_report(Vec::new(), warnings.clone());
+    .with_report(Vec::new(), warnings.clone())
+    .with_moves(planned_moves);
     let own_scripts: BTreeSet<String> =
         script_names(&workers_dir, &available).into_keys().collect();
     let shared = shared_with_default(project_root, opts, &model, &own_scripts)
@@ -616,6 +625,25 @@ fn deploy(
     apply_plan(&apply, &mut writer)?;
     prune_plan(&apply, &mut writer)?;
     Ok(())
+}
+
+/// #3565 (D12): each `[deploy.workers.<key>]` Worker that declares `routes` or `custom_domains`,
+/// with the first key it declares. A manifest that does not read has no groups here (the build
+/// has already reported it).
+fn attached_workers(project_root: &Path) -> std::collections::BTreeMap<String, &'static str> {
+    bynk_project::worker_groups::try_read_worker_groups(project_root)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(key, group)| {
+            if !group.routes.is_empty() {
+                Some((key, "routes"))
+            } else if !group.custom_domains.is_empty() {
+                Some((key, "custom_domains"))
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 /// #2055: a first deploy's secrets file that a SIGKILLed run left behind goes

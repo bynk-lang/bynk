@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 
 /**
  * #3975: wire names. A field, a variant and a payload field are known by their `@name` on the wire,
@@ -55,7 +55,7 @@ export function captured(s: string): number {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Charge(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Charge);
@@ -80,7 +80,7 @@ export function contentType(s: string): string {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Charge(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Charge);
@@ -105,7 +105,7 @@ export function requestId(s: string): Option<string> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Charge(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Charge);
@@ -130,7 +130,7 @@ export function errorPath(s: string): string {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Charge(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Charge);
@@ -155,7 +155,7 @@ export function describe(s: string): string {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Hook(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Hook);
@@ -195,7 +195,7 @@ export function action(s: string): string {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Action(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Action);
@@ -265,7 +265,7 @@ export function __deserialise_Action(json: __JsonValue, path: string = "$"): Res
       case "closed":
         return Ok({ tag: "Closed" } as Action);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -279,7 +279,7 @@ export function __deserialise_Action(json: __JsonValue, path: string = "$"): Res
     case "closed":
       return Ok({ tag: "Closed" } as Action);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -298,7 +298,7 @@ export function __deserialise_Box(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path: `${path}.box-id`, expected: "number", actual: typeof obj["box-id"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["box-id"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.box-id`, expected: "safe integer", actual: String(obj["box-id"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.box-id`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["box-id"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __id = obj["box-id"];
   return Ok({ id: __id } as Box);
@@ -326,7 +326,7 @@ export function __deserialise_Charge(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.amount_captured`, expected: "number", actual: typeof obj["amount_captured"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["amount_captured"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.amount_captured`, expected: "safe integer", actual: String(obj["amount_captured"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.amount_captured`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["amount_captured"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __captured = obj["amount_captured"];
   if (typeof obj["content-type"] !== "string") {
@@ -374,7 +374,7 @@ export function __deserialise_Hook(json: __JsonValue, path: string = "$"): Resul
     case "Ping":
       return Ok({ tag: "Ping" } as Hook);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

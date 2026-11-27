@@ -1,0 +1,7 @@
+commons demo {
+  type Shape = | Circle(r: Int) | Dot
+
+  fn wrong(s: Shape) -> String {
+    s.wireName()
+  }
+}

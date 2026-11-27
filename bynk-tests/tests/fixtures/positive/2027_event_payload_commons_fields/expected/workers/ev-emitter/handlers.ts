@@ -5,6 +5,7 @@ import type { Result } from "../../__bynk_runtime/result.js";
 import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 
 import { Line as __CommonsLine, Qty as __CommonsQty, Tag as __CommonsTag, someTag } from "../../ev/values.js";
 
@@ -35,7 +36,7 @@ export const api = {
     const __result = await (async () => {
       const line = { qty: (3 as Qty), tag: someTag() };
       const __r0 = await (async () => {
-        __events.push({ type: "Pinged", payload: { n: (7 as Qty), tag: someTag(), line: line, lines: [line] }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.emitter", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Pinged", payload: { n: (7 as Qty), tag: someTag(), line: line, lines: [line] }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.emitter", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return HttpResult.Created("sent");
     })();

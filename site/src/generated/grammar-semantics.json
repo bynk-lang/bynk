@@ -411,7 +411,7 @@
     },
     {
       "code": "bynk.test.revoked_needs_sessions_route",
-      "summary": "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it."
+      "summary": "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true` or a single `ApiKey` actor; it sends a revoked session's correctly signed cookie, or a revoked key, so only a seam that keeps sessions or keys can refuse it."
     },
     {
       "code": "bynk.test.service_bad_address",
@@ -1519,7 +1519,7 @@
     },
     {
       "code": "bynk.types.sql_row_shape",
-      "summary": "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). A `Postgres` row may also hold a `Decimal` or an `Instant` (Hyperdrive H3)."
+      "summary": "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`, `Decimal`, `Instant`, `Duration` or a payload-less enum (or a refined or opaque type over a scalar one, or an `Option` of either), or a `List` of such records, one set for `D1`, `Postgres` and `MySql` (standard-library P4c, #4046)."
     },
     {
       "code": "bynk.within.in_agent_handler",

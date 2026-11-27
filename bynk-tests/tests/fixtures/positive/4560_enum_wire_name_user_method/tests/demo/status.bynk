@@ -1,0 +1,14 @@
+---
+#4560: the type's own `wireName` and `fromWireName` win over the built-ins.
+---
+suite demo.status
+
+case "the declared method answers, not the built-in" {
+  expect Open.wireName() == "mine-open"
+  expect Shipped.wireName() == "mine-shipped"
+}
+
+case "the declared static answers, not the built-in" {
+  expect Status.fromWireName("mine-open") == Some(Open)
+  expect Status.fromWireName("Open") == None
+}

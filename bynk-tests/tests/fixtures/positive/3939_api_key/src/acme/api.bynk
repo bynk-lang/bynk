@@ -1,6 +1,6 @@
 context acme.api
 
-consumes bynk { Clock, ApiKeyLabel, ApiKeySecret }
+consumes bynk { Clock, ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret }
 consumes bynk.cloudflare { RateLimit }
 
 type AccountId = String where NonEmpty && MaxLength(64)
@@ -13,6 +13,8 @@ actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"), ide
 
 capability PerIp = RateLimit @limit(1000) @period(60.seconds)
 
+capability PerClient = RateLimit @limit(2) @period(60.seconds)
+
 service api from http {
 	cors { origins: ["https://console.example.com"] }
 
@@ -20,6 +22,14 @@ service api from http {
 	@rateLimit(PerIp, key: clientIp)
 	on GET("/me") () -> Effect[HttpResult[String]] by c: Client {
 		Ok(c.identity)
+	}
+
+	// #3939 (slice 2, track §12): `key: identity` counts a verified key holder, after the seam; a key
+	// that fails verification never reaches this limiter, so this route still warns
+	// `bynk.actor.api_key_unlimited`: nothing bounds the unverified requests a guessing attacker sends.
+	@rateLimit(PerClient, key: identity)
+	on GET("/usage") () -> Effect[HttpResult[String]] by c: Client {
+		Ok("usage for \(c.identity)")
 	}
 
 	// The handler's `headers` view hides the key's header (ADR 0899).
@@ -42,5 +52,37 @@ service api from http {
 			Ok(key) => Created(key),
 			Err(_) => Conflict("too many keys"),
 		}
+	}
+
+	// #3939 (slice 2): `list` answers the identity's keys, never a secret or a digest.
+	@rateLimit(PerIp, key: clientIp)
+	on GET("/accounts/:id/keys") (id: AccountId) -> Effect[HttpResult[List[ApiKeyInfo]]] by Visitor given Clock {
+		let keys <- Client.list(id)
+		Ok(keys)
+	}
+
+	// `revoke` answers `false` for a key that is not the identity's, or is already gone.
+	@rateLimit(PerIp, key: clientIp)
+	on DELETE("/accounts/:id/keys/:key") (id: AccountId, key: ApiKeyId) -> Effect[HttpResult[()]] by Visitor {
+		let gone <- Client.revoke(id, key)
+		if gone { NoContent } else { NotFound }
+	}
+
+	// `revokeAll` is legal in an agent's handler too, as an account-closure workflow needs.
+	@rateLimit(PerIp, key: clientIp)
+	on POST("/accounts/:id/close") (id: AccountId) -> Effect[HttpResult[Int]] by Visitor {
+		let n <- Accounts(id).close()
+		Ok(n)
+	}
+}
+
+agent Accounts {
+	key id: AccountId
+
+	store closed: Cell[Bool] = false
+
+	on call close() -> Effect[Int] {
+		closed := true
+		Client.revokeAll(self.id)
 	}
 }

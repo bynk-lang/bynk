@@ -2391,41 +2391,19 @@ pub(crate) fn check_static_call(
         return check_method_args(method_decl, args, ctx, type_name, method);
     }
 
+    // #4560: `E.fromWireName(s)` on an enum, after any static the type declares itself.
+    if method.name == super::enum_wire::FROM_WIRE_NAME
+        && let Some(r) =
+            super::enum_wire::check_from_wire_name(decl, type_name, args, span, expr_id, ctx)
+    {
+        return r;
+    }
+
     // 2) Built-in `of` constructor on refined or opaque types.
     if method.name == OF
         && let Some(base) = type_decl_base(decl)
     {
-        ctx.callees
-            .insert(expr_id, Callee::Refine(Arc::clone(decl)));
-        if args.len() != 1 {
-            ctx.errors.push(CompileError::new(
-                "bynk.types.constructor_arity",
-                span,
-                format!(
-                    "constructor `{}.of` expects 1 argument, but {} were given",
-                    type_name.name,
-                    args.len()
-                ),
-            ));
-            return None;
-        }
-        let arg = &args[0];
-        let expected = tys.intern(Ty::Base(base));
-        let arg_ty = type_of(arg, Some(expected), ctx)?;
-        if !compatible(arg_ty, expected, tys) {
-            ctx.errors.push(CompileError::new(
-                "bynk.types.constructor_base_mismatch",
-                arg.span,
-                format!(
-                    "constructor `{}.of` expects a `{}` argument, but got `{}`",
-                    type_name.name,
-                    base.name(),
-                    arg_ty.display(tys)
-                ),
-            ));
-            return None;
-        }
-        return Some(of_result_ty(decl, base, tys));
+        return check_of_constructor(decl, base, type_name, args, span, expr_id, ctx);
     }
 
     // 2b) Built-in `unsafe` constructor on opaque types — only available
@@ -2508,6 +2486,51 @@ pub(crate) fn check_static_call(
         .with_note("type declared here"),
     );
     None
+}
+
+/// `T.of(value)` on a refined or opaque type (the checker half of [`Callee::Refine`]): one argument
+/// of the base type, answering the type or a `Result` of it.
+fn check_of_constructor(
+    decl: &Arc<TypeDecl>,
+    base: BaseType,
+    type_name: &Ident,
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    ctx.callees
+        .insert(expr_id, Callee::Refine(Arc::clone(decl)));
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.constructor_arity",
+            span,
+            format!(
+                "constructor `{}.of` expects 1 argument, but {} were given",
+                type_name.name,
+                args.len()
+            ),
+        ));
+        return None;
+    }
+    let arg = &args[0];
+    let expected = tys.intern(Ty::Base(base));
+    let arg_ty = type_of(arg, Some(expected), ctx)?;
+    if !compatible(arg_ty, expected, tys) {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.constructor_base_mismatch",
+            arg.span,
+            format!(
+                "constructor `{}.of` expects a `{}` argument, but got `{}`",
+                type_name.name,
+                base.name(),
+                arg_ty.display(tys)
+            ),
+        ));
+        return None;
+    }
+    Some(of_result_ty(decl, base, tys))
 }
 
 fn check_method_args(
@@ -3663,18 +3686,11 @@ fn check_method_call_inner(
         reject_method_type_args(method, args, span, ctx);
         return None;
     }
-    // #3955: the universal `compare` on every `Ord` receiver.
-    if method.name == "compare"
-        && let Some(r) = super::ordering::check_compare_method(recv_ty, method, args, span, ctx)
+    // #3955, #4560: the methods every `Ord` receiver (`compare`) and every enum (`wireName`) has.
+    if let Some((op, r)) =
+        super::enum_wire::check_universal_method(recv_ty, method, args, span, ctx)
     {
-        return record_kernel(
-            ctx,
-            expr_id,
-            recv_ty,
-            Some(KernelOp::Ord(crate::kernel_op::OrdOp::Compare)),
-            method,
-            r,
-        );
+        return record_kernel(ctx, expr_id, recv_ty, Some(op), method, r);
     }
     // v0.20b: built-in kernel methods on the collection types. These are
     // compiler-known special forms typed directly here — generic in their
@@ -5177,7 +5193,8 @@ pub(super) const OPEN_SUM_NOTE: &str = "this actor sum admits an open member (`V
 
 /// #3939: `by Malformed` and `by Unknown` are an `ApiKey` seam's own refusals, refused on any
 /// other route; and an `ApiKey` key does not expire until `ttl` (slice 3), so `by Expired` is
-/// refused on an `ApiKey` route. Whether `bad` is one of these (each reported here).
+/// refused on an `ApiKey` route. `by Revoked` is admitted on one (slice 2): the driver mints a key,
+/// revokes it and presents it. Whether `bad` is one of these (each reported here).
 fn check_api_key_principal(
     bad: BadCredential,
     by: Option<&bynk_syntax::ast::ByClause>,
@@ -5199,6 +5216,7 @@ fn check_api_key_principal(
             ctx.errors.push(crate::api_key::expired_needs_ttl(span));
             true
         }
+        BadCredential::Revoked => api_key,
         _ => false,
     }
 }
@@ -6154,9 +6172,9 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
                 CompileError::new(
                     "bynk.test.revoked_needs_sessions_route",
                     p.span,
-                    "`by Revoked` sends a cookie for a revoked session, but this address reaches no http route guarded by a `SignedCookie` actor with `sessions = true`",
+                    "`by Revoked` sends a revoked session's cookie or a revoked API key, but this address reaches no http route guarded by a `SignedCookie` actor with `sessions = true` or by an `ApiKey` actor",
                 )
-                .with_note("use `by Revoked` on an http route guarded by a `SignedCookie` actor declared with `sessions = true`")
+                .with_note("use `by Revoked` on an http route guarded by a `SignedCookie` actor declared with `sessions = true`, or by an `ApiKey` actor")
             } else if bad == BadCredential::Expired {
                 CompileError::new(
                     "bynk.test.expired_needs_bearer_route",

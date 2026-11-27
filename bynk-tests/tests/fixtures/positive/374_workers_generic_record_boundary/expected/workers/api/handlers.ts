@@ -42,7 +42,7 @@ export function __deserialise_User(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "number", actual: typeof obj["id"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["id"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: String(obj["id"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["id"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __id = obj["id"];
   if (typeof obj["name"] !== "string") {
@@ -153,5 +153,5 @@ export function __deserialise_Result_Paginated_User_Unit(json: __JsonValue, path
     const __e = undefined;
     return Ok(Err(__e) as Result<Paginated<User>, void>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

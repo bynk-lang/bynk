@@ -103,9 +103,9 @@ export default {
             case "touch": {
               __route = "call touch";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "25f222ff154143b0") {
-                globalThis.console.error("ContractMismatch registry.store call touch", { service: "touch", expected: "25f222ff154143b0", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "touch", expected: "25f222ff154143b0", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "2a54ac36e33053fb") {
+                globalThis.console.error("ContractMismatch registry.store call touch", { service: "touch", expected: "2a54ac36e33053fb", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "touch", expected: "2a54ac36e33053fb", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {

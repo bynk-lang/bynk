@@ -1,0 +1,14 @@
+---
+#4560: `wireName` and `fromWireName` on an enum this commons imports with `uses`.
+---
+commons demo.report
+
+uses demo.status
+
+fn label(s: Status) -> String {
+  s.wireName()
+}
+
+fn parse(text: String) -> Option[Status] {
+  Status.fromWireName(text)
+}

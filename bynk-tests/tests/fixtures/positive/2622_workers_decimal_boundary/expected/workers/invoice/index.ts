@@ -53,7 +53,7 @@ export default {
               const __r_unit = handlers.__deserialise_Price(argsObj["unit"], "$.unit");
               if (__r_unit.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_unit.error)), { status: 400, headers: { "content-type": "application/json" } });
               const unit = __r_unit.value;
-              const __r_qty = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["qty"]);
+              const __r_qty = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(argsObj["qty"]);
               if (__r_qty.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_qty.error)), { status: 400, headers: { "content-type": "application/json" } });
               const qty = __r_qty.value;
               const result = await surface.lines(sku, unit, qty);
@@ -78,7 +78,7 @@ export default {
               const __r_unit = handlers.__deserialise_Price(argsObj["unit"], "$.unit");
               if (__r_unit.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_unit.error)), { status: 400, headers: { "content-type": "application/json" } });
               const unit = __r_unit.value;
-              const __r_qty = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["qty"]);
+              const __r_qty = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.qty", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(argsObj["qty"]);
               if (__r_qty.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_qty.error)), { status: 400, headers: { "content-type": "application/json" } });
               const qty = __r_qty.value;
               const result = await surface.totals(unit, qty);

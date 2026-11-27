@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError, __ServiceBinding } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 import { __responseToHttpResult, __responseToHttpOutcome, __requestHeaderPairs } from "../__bynk_runtime/http.js";
 import * as __ns_api from "../workers/api/handlers.js";
 import worker___ns_api from "../workers/api/index.js";
@@ -32,7 +32,7 @@ async function __sysdrive_api_http_GET_ping(__extraHeaders: { get(name: string):
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/ping`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.API.fetch(__req);
-  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j));
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j));
 }
 async function __sysdrive_wrongmethod_api(method: string, path: string) {
   const __h = __makeHarness();
@@ -56,7 +56,7 @@ async function test_a_commons_record_round_trips__tagged() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Pull(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Pull);
@@ -68,7 +68,7 @@ async function test_a_commons_record_round_trips__tagged() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Pull(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Pull);
@@ -122,7 +122,7 @@ async function test_a_commons_record_round_trips__plain() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Pull(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Pull);
@@ -143,7 +143,7 @@ async function test_a_commons_record_round_trips__plain() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Pull(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Pull);
@@ -188,7 +188,7 @@ async function test_a_participant_type__a_sum_and_a_generic_instance_round_trip(
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Wrap(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Wrap);
@@ -200,7 +200,7 @@ async function test_a_participant_type__a_sum_and_a_generic_instance_round_trip(
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Wrap(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Wrap);
@@ -213,7 +213,7 @@ async function test_a_participant_type__a_sum_and_a_generic_instance_round_trip(
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Wrap(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Wrap);
@@ -234,7 +234,7 @@ async function test_a_participant_type__a_sum_and_a_generic_instance_round_trip(
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Wrap(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Wrap);
@@ -257,7 +257,7 @@ async function test_a_participant_type__a_sum_and_a_generic_instance_round_trip(
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Result_Pull_String(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Result<Pull, string>);
@@ -269,7 +269,7 @@ async function test_a_participant_type__a_sum_and_a_generic_instance_round_trip(
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Result_Pull_String(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Result<Pull, string>);
@@ -282,7 +282,7 @@ async function test_a_participant_type__a_sum_and_a_generic_instance_round_trip(
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Shape(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Shape);
@@ -303,7 +303,7 @@ async function test_a_participant_type__a_sum_and_a_generic_instance_round_trip(
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Shape(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Shape);
@@ -398,7 +398,7 @@ export function __deserialise_Pull(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "number", actual: typeof obj["id"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["id"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: String(obj["id"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["id"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __id = obj["id"];
   const __r_draft = __deserialise_Option_Bool(obj["draft"], `${path}.draft`);
@@ -442,7 +442,7 @@ export function __deserialise_Shape(json: __JsonValue, path: string = "$"): Resu
     case "Dot":
       return Ok({ tag: "Dot" } as __ns_shape_model.Shape);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -478,7 +478,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);
@@ -534,7 +534,7 @@ export function __deserialise_Result_Pull_String(json: __JsonValue, path: string
     const __e = obj["error"];
     return Ok(Err(__e) as Result<__ns_shape_model.Pull, string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Option_String(value: Option<string>): __JsonValue {

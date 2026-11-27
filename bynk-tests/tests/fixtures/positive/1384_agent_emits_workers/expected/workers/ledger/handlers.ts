@@ -6,6 +6,7 @@ import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 
 export interface Bumped {
@@ -26,7 +27,7 @@ const __entryFieldsOfLedger = [] as const;
 
 function __rehydrateLedgerState(s: LedgerState, stored: LedgerState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "total")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.total as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "total", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.total as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).total = __r.value as unknown as (typeof s)["total"];
   }
@@ -67,7 +68,7 @@ export class Ledger {
       const next = __state.total + amount;
       __state.total = next;
       const __r0 = await (async () => {
-        __events.push({ type: "Bumped", payload: { amount: amount }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ledger", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Bumped", payload: { amount: amount }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ledger", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return next;
     })();
@@ -91,7 +92,7 @@ export class Ledger {
 }
 
 const __LedgerWire: __AgentWire = {
-  bump: { args: [{ enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) } },
+  bump: { args: [{ enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
 };
 
 export function __makeLedger(key: string, env?: { LEDGER?: __DurableObjectNamespace }): Ledger {

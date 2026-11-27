@@ -81,7 +81,7 @@ export function __deserialise_OrderError(json: __JsonValue, path: string = "$"):
       case "PaymentInfrastructureError":
         return Ok({ tag: "PaymentInfrastructureError" } as OrderError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -97,7 +97,7 @@ export function __deserialise_OrderError(json: __JsonValue, path: string = "$"):
     case "PaymentInfrastructureError":
       return Ok({ tag: "PaymentInfrastructureError" } as OrderError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -123,7 +123,7 @@ export function __deserialise_Result_Unit_OrderError(json: __JsonValue, path: st
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<void, OrderError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_AuthId(value: commerce_payment.AuthId): __JsonValue {
@@ -158,7 +158,7 @@ export function __deserialise_PaymentError(json: __JsonValue, path: string = "$"
       case "GatewayDown":
         return Ok({ tag: "GatewayDown" } as commerce_payment.PaymentError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -174,7 +174,7 @@ export function __deserialise_PaymentError(json: __JsonValue, path: string = "$"
     case "GatewayDown":
       return Ok({ tag: "GatewayDown" } as commerce_payment.PaymentError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -200,5 +200,5 @@ export function __deserialise_Result_AuthId_PaymentError(json: __JsonValue, path
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<commerce_payment.AuthId, commerce_payment.PaymentError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

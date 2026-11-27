@@ -76,7 +76,7 @@ export function __deserialise_SearchHit(json: __JsonValue, path: string = "$"): 
     return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "number", actual: typeof obj["score"] });
   }
   if (!globalThis.Number.isFinite(obj["score"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: String(obj["score"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: "non-finite number" });
   }
   const __score = obj["score"];
   if (typeof obj["text"] !== "string") {
@@ -126,7 +126,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);

@@ -4,6 +4,7 @@
 import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import type { __JsonValue } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 
 import * as bynk from "../../bynk.js";
 
@@ -20,7 +21,7 @@ export const api = {
     const __result = await (async () => {
       const __r0 = await deps.Idempotency.remember(`shop.paid.api.http_POST_paid::${"k"}`, true as __JsonValue, 3600000);
       const __r1 = await (async () => {
-        __events.push({ type: "Paid", payload: { orderId: "o1" }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.paid", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Paid", payload: { orderId: "o1" }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.paid", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return HttpResult.Created("sent");
     })();

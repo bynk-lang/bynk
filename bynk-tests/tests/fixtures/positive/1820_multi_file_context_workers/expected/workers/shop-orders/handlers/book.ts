@@ -31,7 +31,7 @@ function __rehydrateBookState(s: BookState, stored: BookState): void {
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).last = __r.value as unknown as (typeof s)["last"];
   }
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.count as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Book", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"];
   }
@@ -96,7 +96,7 @@ export class Book {
 }
 
 const __BookWire: __AgentWire = {
-  add: { args: [{ enc: __serialise_Line, dec: __deserialise_Line }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) } },
+  add: { args: [{ enc: __serialise_Line, dec: __deserialise_Line }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
 };
 
 export function __makeBook(key: string, env?: { BOOK?: __DurableObjectNamespace }): Book {
@@ -127,7 +127,7 @@ export function __deserialise_Line(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["qty"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["qty"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __qty = obj["qty"];
   return Ok({ sku: __sku, qty: __qty } as Line);

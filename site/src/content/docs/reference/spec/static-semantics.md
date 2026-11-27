@@ -1763,18 +1763,20 @@ and `expect` apply to it unchanged. The rules:
   string literal or constant that continues from `FROM`
   (`bynk.types.select_tail_has_select`, `bynk.types.sql_not_literal`), `T` MUST
   be a row record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`,
-  `Decimal` or `Instant` (or a refined or opaque type over one, or an `Option`
-  of either) (`bynk.types.sql_row_shape`), and the call has type
+  `Decimal`, `Instant`, `Duration` or a payload-less enum (or a refined or opaque
+  type over a scalar one, or an `Option` of either), the same set for `D1`,
+  `Postgres` and `MySql` (`bynk.types.sql_row_shape`), and the call has type
   `Effect[Result[List[T], PgReadError]]` (`firstAs`: `Option[T]`). The compiler
   writes the column list from `T`'s field names as Postgres quoted identifiers.
   A derived `MySql` instance (Hyperdrive H5, #3322) is the same with `?`
   placeholders, `MySqlValue`, `MySqlStatement` and `MySqlReadError`, MySQL's
-  backtick-quoted identifiers, and no `Instant` row field (a MySQL date or time
-  arrives as text without a zone). Its optional `@tls` MUST be `"required"`,
+  backtick-quoted identifiers, and an `Instant` row field read from a `DATETIME` or
+  `TIMESTAMP`'s text as UTC. Its optional `@tls` MUST be `"required"`,
   `"verify-ca"` or `"verify-identity"` (`bynk.capability.invalid_option`).
   The rows decode through the boundary codec, with an `Int` field read from the
-  text of an `int8` and an `Instant` field from the ISO-8601 text of a
-  `timestamptz` (normalised to UTC) before it runs; `Json.decode` reads neither.
+  text of an `int8` (a `Duration` field likewise) and an `Instant` field from the
+  ISO-8601 text of a `timestamptz` (normalised to UTC) before it runs; `Json.decode`
+  reads neither.
 - A kind used only through instances MUST NOT be named bare in a `given`
   clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit`,
   `Queue`, `Analytics`, `EdgeCache`, `Email`, `Postgres` and `MySql` are such kinds.
@@ -2936,6 +2938,21 @@ will get an event queue named `bynk-ev-<slug>-<hash>` and a dead-letter queue na
 `from queue("…")` consumer or a `delivery { deadLetter: "…" }`
 (`bynk.queue.reserved_name`). Only these two prefixes are reserved, not `bynk-` as
 a whole ([Reserved names](/reference/queue/#reserved-names)).
+
+**Event queue names.** Two `from Events` services MUST NOT get the same
+event queue name in any environment (`bynk.event.queue_name_collision`). The
+name keeps an 8-digit hash of `<context>/<service>` and a slug cut to fit 63
+characters, so two services can share one, rarely; the error names both, and
+renaming one resolves it.
+
+**Payload size.** An event's queue message (the signed wrapper, the envelope and
+the payload, as UTF-8) has a budget of 127,000 bytes. `Events.emit` measures each
+emission on every target and logs `EventNearLimit` (the event type, the size and
+the budget) once per event type per isolate when the message is 96,000 bytes or
+more; it does not fault yet. An `event` whose payload reaches a `Bytes`, or a
+`List`, `Map` or `Set` of a non-scalar type that no refinement (such as
+`MaxLength(n)`) bounds, draws the warning `bynk.event.unbounded_payload`
+([Keeping an event small](/book/concepts/events/understand-events/#keeping-an-event-small)).
 
 ## §5.8 Boundaries & cross-context
 

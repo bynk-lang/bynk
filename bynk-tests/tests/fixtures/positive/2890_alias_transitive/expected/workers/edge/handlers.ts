@@ -34,7 +34,7 @@ export function __deserialise_app__lib__Code(json: __JsonValue, path: string = "
       case "Beta":
         return Ok({ tag: "Beta" } as lib.Code);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -48,7 +48,7 @@ export function __deserialise_app__lib__Code(json: __JsonValue, path: string = "
     case "Beta":
       return Ok({ tag: "Beta" } as lib.Code);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

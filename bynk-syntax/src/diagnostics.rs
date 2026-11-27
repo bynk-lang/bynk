@@ -124,6 +124,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "let same <- ApiKey.equal(a, b)   // ✗ internal to the generated key store\n\nlet same <- Crypto.equal(a, b)   // ✓",
     },
     Explain {
+        code: "bynk.actor.api_key_member_in_provider",
+        blurb: "An `ApiKey` actor's `list`, `revoke` and `revokeAll` read and change the key store the compiler generates for it, two agents. A service handler or an agent's handler can call an agent; a provider or a function cannot. So call the member in the handler, and pass the result on.",
+        example: "provides Keys = ClientKeys {\n    fn forget(id: AccountId, key: ApiKeyId) -> Effect[Bool] {\n        Client.revoke(id, key)   // ✗ in a provider\n    }\n}\n\non DELETE(\"/accounts/:id/keys/:key\") (id: AccountId, key: ApiKeyId) -> Effect[HttpResult[()]] by Visitor {\n    let gone <- Client.revoke(id, key)   // ✓ in a service handler\n    if gone { NoContent } else { NotFound }\n}",
+    },
+    Explain {
         code: "bynk.actor.api_key_mint_outside_handler",
         blurb: "`Actor.mint(identity, label)` hashes the new key under the pepper, and the pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's. So `mint` is legal only in a service handler. Mint the key there and return it; a provider or agent gets what it needs from the handler.",
         example: "agent Accounts {\n    key id: AccountId\n}\n\non call open(label: ApiKeyLabel) -> Effect[()] given Clock {\n    let _ <- Client.mint(self.id, label)   // ✗ in an agent\n}\n\non POST(\"/accounts/:id/keys\") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {\n    let r <- Client.mint(id, body.label)   // ✓ in a service handler\n}",
@@ -1654,6 +1659,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "on schedule(\"*/45 * * * *\") () -> Effect[Result[(), String]] { … }   // ⚠ fires at :00 and :45, then :00 again\n\non schedule(\"0,45 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ says so explicitly",
     },
     Explain {
+        code: "bynk.d1.column_affinity",
+        blurb: "A typed read of a `D1` row reads each field by one storage convention: an `Instant` or `Duration` is `INTEGER` milliseconds, and a payload-less enum is `TEXT`, the variant's name. A SQLite column declared with the other affinity stores the value in a form the field does not read (a timestamp kept as ISO text, an enum kept as a number), so the decode fails, naming the field. Declare the column to match, or read it into a field of the column's own type (`String` or `Int`) and convert. Only a column read straight from a table has a declared type, so this is a warning on the common case, not a proof. `Decimal` has its own check, `bynk.d1.decimal_numeric_affinity`.",
+        example: "CREATE TABLE orders (id TEXT PRIMARY KEY, placed TEXT NOT NULL);       // ⚠ read as an `Instant`, it is text\n\nCREATE TABLE orders (id TEXT PRIMARY KEY, placed INTEGER NOT NULL);    // ✓ epoch milliseconds",
+    },
+    Explain {
         code: "bynk.d1.decimal_numeric_affinity",
         blurb: "A `Decimal` is exact only as text. A `Json.decodeSql` or `select` row may hold a `Decimal`, read from a SQLite `TEXT` column, which keeps its digits. A column declared `DECIMAL`, `NUMERIC`, `REAL` or an integer type has numeric affinity, so SQLite hands the value back as a number, and a number does not decode as a `Decimal`. Declare the column `TEXT` (the compiler stores a `Decimal` as its canonical text), or read the column into a `Float`. Only a column read straight from a table has a declared type, so this is a warning on the common case, not a proof.",
         example: "CREATE TABLE prices (id TEXT PRIMARY KEY, amount NUMERIC NOT NULL);   // ⚠ read as a `Decimal`, it arrives as a number\n\nCREATE TABLE prices (id TEXT PRIMARY KEY, amount TEXT NOT NULL);      // ✓ the digits stay exact",
@@ -2063,9 +2073,19 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Region =\n    | Domestic\n    | International\n    | Refunded(reason: String)\nevent Paid = { id: String, region: Region }\n\nservice onPaid from Events(Paid { region: Region.Refunded, .. }) {   // ✗ `Refunded` carries a `reason`\n\nservice onPaid from Events(Paid { region: Region.Domestic, .. }) {   // ✓ no payload",
     },
     Explain {
+        code: "bynk.event.queue_name_collision",
+        blurb: "On Workers each `from Events` service will receive its events through a queue the compiler creates, named `bynk-ev-` followed by its context and service and a short hash of them, with a matching `bynk-dl-` dead-letter queue. The name has to fit Cloudflare's 63 characters, so the context and service may be cut short and the hash is only 8 hex digits: two different services can, rarely, get the same name, in every environment or only in one with a long name. They would then share a queue, which has one consumer, so one of them would never see its events. The compiler knows every subscriber in the project, so it refuses such a pair and names both. Rename one of the two services.",
+        example: "service notify23278 from Events(Paid) {\n    on event(e: Paid) -> Effect[()] { … }\n}\n\nservice notify24925 from Events(Paid) {   // ✗ its event queue's name would be `notify23278`'s\nservice notifyRefund from Events(Paid) {   // ✓\n    on event(e: Paid) -> Effect[()] { … }\n}",
+    },
+    Explain {
         code: "bynk.event.return_not_effect_unit",
         blurb: "Emission is fire-and-forget: nothing receives a subscriber's result, so an `on event` handler returns `Effect[()]` and anything else is refused. Return `Effect.pure(())` once its work is done, and move a value it computes into an effect the handler performs, such as a write. A handler that does not return an `Effect` at all is `bynk.service.return_not_effect`.",
         example: "service onPaid from Events(Paid) {\n    on event(e: Paid) -> Effect[Int] { … }   // ✗ the result has nowhere to go\n    on event(e: Paid) -> Effect[()] { … }    // ✓\n}",
+    },
+    Explain {
+        code: "bynk.event.unbounded_payload",
+        blurb: "On Workers an event will travel as one Cloudflare Queue message, which holds at most 128 KB, so an emission larger than about 127,000 bytes will fault its handler. Its size is known only at run time, so the compiler cannot check it, but it can point at where large events come from: a `Bytes` field, or a `List`, `Map` or `Set` of records, sums with payloads or other collections, with no refinement such as `MaxLength(n)` that bounds it. A payload of scalars, `String`s and enums does not warn. Store the large value elsewhere (R2 or D1) and send a reference to it; a collection can instead be bounded with `MaxLength(n)`. It is only a warning: a field that is small in practice may stay as it is.",
+        example: "event Uploaded = { name: String, data: Bytes }   // ⚠ `data` has no size bound\n\nevent Uploaded = { name: String, key: String }   // ✓ the bytes are stored in R2 under `key`",
     },
     Explain {
         code: "bynk.event.unknown_annotation",
@@ -3013,7 +3033,7 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.rate_limit_key_unavailable",
-        blurb: "`key: identity` counts requests by the verified caller: the router verifies the credential first, asks the limiter about the caller's identity (`sub`), and only then reads the body. That needs a route whose `by` is a single actor that carries an identity: a `Bearer`, `Oidc` or `SignedCookie` actor. A `Visitor` has no caller to count, a `Signature` sender is a service, not a person, and an actor sum has no one identity, so `identity` is refused on them. Use `key: clientIp` for the address, or call the limiter's `allow(key)` in the handler for a limit keyed on something only the handler knows.",
+        blurb: "`key: identity` counts requests by the verified caller: the router verifies the credential first, asks the limiter about the caller's identity (`sub`), and only then reads the body. That needs a route whose `by` is a single actor that carries an identity: a `Bearer`, `Oidc`, `SignedCookie` or `ApiKey` actor. A `Visitor` has no caller to count, a `Signature` sender is a service, not a person, and an actor sum has no one identity, so `identity` is refused on them. Use `key: clientIp` for the address, or call the limiter's `allow(key)` in the handler for a limit keyed on something only the handler knows.",
         example: "@rateLimit(SignupLimit, key: identity)   // ✗ a Visitor has no identity\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓ count by address\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
@@ -5845,10 +5865,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "`by Revoked` sends a cookie for a session that was issued and then \
                 revoked in the session agent, so it needs a route whose seam \
                 checks one: a `SignedCookie` actor declared with `sessions = true`. \
-                A stateless cookie keeps no session to revoke, a route guarded by \
-                another scheme has no cookie, and a public route has no seam. \
-                Declare `sessions = true` on the actor, or test the cookie's \
-                signature and expiry with `by Forged` and `by Expired`.",
+                On a route an `ApiKey` actor guards, it sends a key that was minted \
+                and then revoked. A stateless cookie keeps no session to revoke, a \
+                route guarded by another scheme has nothing to revoke, and a public \
+                route has no seam. Declare `sessions = true` on the actor, or test \
+                the cookie's signature and expiry with `by Forged` and `by Expired`.",
         example: "// demo/api.bynk\n\
                   actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours), identity = UserId }\n\
                   actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours, sessions = true), identity = UserId }\n\n\
@@ -7032,7 +7053,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.sql_row_shape",
-        blurb: "`select[T]`, `firstAs[T]` and `Json.decodeSql` read each SQL row into a record, and a column holds only a plain value. So `T` must be a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes`, or a refined or opaque type over one, or an `Option` of either (Postgres and MySQL also read `Decimal`); a nested record, a list or an enum has no column to read. `T` is the row itself, so `select[List[Row]]` is refused too. Flatten the record.",
+        blurb: "`select[T]`, `firstAs[T]` and `Json.decodeSql` read each SQL row into a record, and a column holds only a plain value. So `T` must be a record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`, `Decimal`, `Instant`, `Duration` or a payload-less enum, or a refined or opaque type over a scalar one, or an `Option` of either, the same for `D1`, `Postgres` and `MySql`; a nested record, a list or an enum with payloads has no column to read. `T` is the row itself, so `select[List[Row]]` is refused too. Flatten the record.",
         example: "type Money = { cents: Int }\ntype Order = { id: String, total: Money }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✗ `total` is a record\n\ntype Order = { id: String, total: Int }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✓",
     },
     Explain {
@@ -7663,6 +7684,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.api_key_internal",
         "A program names `ApiKey.equal`, the generated key store's internal comparison (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_member_in_provider",
+        "An `ApiKey` actor's `list`, `revoke` or `revokeAll` is called outside a service or agent handler (#3939).",
     ),
     d(
         "bynk.actor.api_key_mint_outside_handler",
@@ -8469,6 +8494,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["cron_handler"],
     )),
     warn(d(
+        "bynk.d1.column_affinity",
+        "An `Instant`, `Duration` or enum row field is read from a SQLite column declared with the other affinity (`INTEGER` milliseconds, or `TEXT` for an enum), so the typed read fails to decode; declare the column to match (warning).",
+    )),
+    warn(d(
         "bynk.d1.decimal_numeric_affinity",
         "A `Decimal` row field is read from a SQLite column declared with numeric affinity (`DECIMAL`, `NUMERIC`, `REAL`), which hands the value back as a number that does not decode; declare the column `TEXT` (warning).",
     )),
@@ -8530,8 +8559,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.deploy.agent_move_refused",
-        "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
+        "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Move it with its state with `--move-agent <context>` (planned with `--dry-run` in this release), or start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use. A `reason` says why a named move is refused: `chained`, `partial_selection`, `order`, `routes`, `tombstones`, `renamed_in_place`, `both`, or `apply_not_yet` outside `--dry-run`.",
     ),
+    warn(d(
+        "bynk.deploy.agent_move_window",
+        "A `--move-agent` move keeps its agents' state, but from the commit (the source's push) until the receiver goes live again, calls to the moving contexts fail: a window of about one push. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`, beside the plan's `moves`.",
+    )),
     warn(d(
         "bynk.deploy.agent_starts_fresh",
         "A context that hosts agents moves to a different Worker script and `--accept-fresh-agent <context>` named it, so its agents start with fresh state there and the old state stays in the old script, which is no longer a Worker of the project: do not delete it if the data matters. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`.",
@@ -8607,6 +8640,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.deploy.ledger_unreadable",
         "`bynk deploy` could not read `bynk.deploy.lock`, the ledger of what is deployed, so it stopped before planning: a plan made without it would call everything new. Fix or restore the file (it is plain TOML). With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
+        "bynk.deploy.move_agent_unused",
+        "A `--move-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
     ),
     d(
         "bynk.deploy.multiple_websocket_members",
@@ -8931,6 +8968,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.event.pattern_variant_payload",
         "A `from Events(E { ... })` subscription pattern's variant value names a variant that carries a payload — only nullary variants are admitted, since testing the tag alone would silently ignore the payload.",
     ),
+    d(
+        "bynk.event.queue_name_collision",
+        "Two `from Events` services would get the same compiler-owned event queue name in some environment.",
+    ),
     dg(
         "bynk.event.return_not_effect_unit",
         "An `on event` handler returns an `Effect` of something other than `()`; emission is fire-and-forget, so it returns `Effect[()]`.",
@@ -8940,6 +8981,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.event.schema_version_mismatch",
         "An event's `@schema(N)` annotation disagrees with the version the schema registry computes from the event's build history.",
     ),
+    warn(d(
+        "bynk.event.unbounded_payload",
+        "An `event`'s payload reaches a `Bytes`, or a `List`, `Map` or `Set` of a non-scalar type that no refinement bounds (warning).",
+    )),
     d(
         "bynk.event.unknown_annotation",
         "An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set.",
@@ -11493,7 +11538,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.revoked_needs_sessions_route",
-        "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it.",
+        "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true` or a single `ApiKey` actor; it sends a revoked session's correctly signed cookie, or a revoked key, so only a seam that keeps sessions or keys can refuse it.",
         &["case"],
     ),
     dg(
@@ -12225,7 +12270,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.sql_row_shape",
-        "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). A `Postgres` row may also hold a `Decimal` or an `Instant` (Hyperdrive H3).",
+        "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`, `Decimal`, `Instant`, `Duration` or a payload-less enum (or a refined or opaque type over a scalar one, or an `Option` of either), or a `List` of such records, one set for `D1`, `Postgres` and `MySql` (standard-library P4c, #4046).",
         &["method_call"],
     ),
     d(

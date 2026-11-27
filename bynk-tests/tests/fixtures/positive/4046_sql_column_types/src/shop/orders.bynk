@@ -1,0 +1,34 @@
+context shop.orders
+
+// #4046: `Decimal`, `Instant`, `Duration` and a payload-less enum are row types and typed
+// parameters of a `D1` capability, read and bound by one set of storage conventions.
+
+consumes bynk
+consumes bynk.cloudflare { D1, SqlRun, SqlError, SqlReadError, SqlValue }
+
+capability Orders = D1
+
+type Status = enum { Open, Shipped }
+
+type Order = { id: String, total: Decimal, placed: Instant, wait: Duration, status: Status }
+
+type Logged = { id: String, logged: Instant }
+
+service save {
+	on call(id: String, total: Decimal, placed: Instant, wait: Duration, status: Status) -> Effect[Result[SqlRun, SqlError]] by Caller given Orders {
+		Orders.run("INSERT INTO orders (id, total, placed, wait, status, logged) VALUES (?1, ?2, ?3, ?4, ?5, ?6)", [Text(id), Numeric(total), Timestamp(placed), Integer(wait.toMillis()), Text(match status { Open => "Open", Shipped => "Shipped" }), Text("yesterday")])
+	}
+}
+
+service since {
+	on call(at: Instant) -> Effect[Result[List[Order], SqlReadError]] by Caller given Orders {
+		Orders.select[Order]("FROM orders WHERE placed > ?1 ORDER BY id", [Timestamp(at)])
+	}
+}
+
+// The column is declared `TEXT`: the build warns, and the read fails naming the field.
+service logs {
+	on call() -> Effect[Result[List[Logged], SqlReadError]] by Caller given Orders {
+		Orders.select[Logged]("FROM orders ORDER BY id", [])
+	}
+}

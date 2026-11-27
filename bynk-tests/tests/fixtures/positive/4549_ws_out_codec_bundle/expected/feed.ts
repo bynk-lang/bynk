@@ -232,7 +232,7 @@ export function __deserialise_Tick(json: __JsonValue, path: string = "$"): Resul
     case "Gone":
       return Ok({ tag: "Gone" } as Tick);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -266,7 +266,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);

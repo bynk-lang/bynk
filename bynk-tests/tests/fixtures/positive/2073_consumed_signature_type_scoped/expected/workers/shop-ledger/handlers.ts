@@ -74,7 +74,7 @@ export function __deserialise_Region(json: __JsonValue, path: string = "$"): Res
       case "There":
         return Ok({ tag: "There" } as Region);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -88,7 +88,7 @@ export function __deserialise_Region(json: __JsonValue, path: string = "$"): Res
     case "There":
       return Ok({ tag: "There" } as Region);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -231,7 +231,7 @@ export function __deserialise_shop_order__Region(json: __JsonValue, path: string
       case "International":
         return Ok({ tag: "International" } as shop_order.Region);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -245,7 +245,7 @@ export function __deserialise_shop_order__Region(json: __JsonValue, path: string
     case "International":
       return Ok({ tag: "International" } as shop_order.Region);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -289,7 +289,7 @@ export function __deserialise_shop_post__Region(json: __JsonValue, path: string 
       case "South":
         return Ok({ tag: "South" } as shop_post.Region);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -303,7 +303,7 @@ export function __deserialise_shop_post__Region(json: __JsonValue, path: string 
     case "South":
       return Ok({ tag: "South" } as shop_post.Region);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

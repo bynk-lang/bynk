@@ -7,6 +7,7 @@
 #     ./fuzz/seed-corpus.sh
 #     cargo +nightly fuzz run parse   -- -max_total_time=60
 #     cargo +nightly fuzz run compile -- -max_total_time=60
+#     cargo +nightly fuzz run template -- -max_total_time=60
 [package]
 name = "bynk-fuzz"
 version = "0.0.0"
@@ -20,10 +21,21 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 bynk-syntax = { path = "../bynk-syntax" }
 bynk-emit = { path = "../bynk-emit" }
+# #3927: the template target, and its oracle (a browser-grade parser, as in bynk-check's tests).
+bynk-check = { path = "../bynk-check" }
+html5ever = "0.40"
+markup5ever_rcdom = "0.40"
 
 [[bin]]
 name = "parse"
 path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "template"
+path = "fuzz_targets/template.rs"
 test = false
 doc = false
 bench = false

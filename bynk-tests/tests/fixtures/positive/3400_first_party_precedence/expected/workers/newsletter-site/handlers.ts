@@ -39,7 +39,7 @@ export function __deserialise_Cookie(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.ttl`, expected: "number", actual: typeof obj["ttl"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["ttl"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.ttl`, expected: "safe integer", actual: String(obj["ttl"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.ttl`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["ttl"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __ttl = obj["ttl"];
   return Ok({ name: __name, ttl: __ttl } as Cookie);

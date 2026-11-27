@@ -1,10 +1,10 @@
 {
   "version": 1,
   "provides": {
-    "add": "f42a44f2eba2a28a"
+    "add": "9998bca536345928"
   },
   "expects": {},
   "provides_shapes": {
-    "add": "Svc(\"add\",Ret(R(N(\"PgRun\"),N(\"PgError\"))))"
+    "add": "Svc(\"add\",Ret(R(Rec(\"PgRun\",F(\"rowCount\",B(\"Int\"))),Sum(\"PgError\",V(\"PgConnection\",F(\"message\",B(\"String\"))),V(\"PgConstraint\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgFailed\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgSerialization\",F(\"message\",B(\"String\")))))))"
   }
 }

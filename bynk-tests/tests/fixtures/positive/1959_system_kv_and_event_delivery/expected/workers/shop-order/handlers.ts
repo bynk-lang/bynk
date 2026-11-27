@@ -6,6 +6,7 @@ import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { __bynkMeasureEvent } from "../../__bynk_runtime/queue_signing.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 
 export interface Placed {
@@ -33,7 +34,7 @@ const __entryFieldsOfTally = [] as const;
 
 function __rehydrateTallyState(s: TallyState, stored: TallyState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.count as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Tally", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"];
   }
@@ -74,7 +75,7 @@ export class Tally {
       const next = __state.count + 1;
       __state.count = next;
       const __r0 = await (async () => {
-        __events.push({ type: "Tallied", payload: { id: id }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Tallied", payload: { id: id }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return next;
     })();
@@ -98,7 +99,7 @@ export class Tally {
 }
 
 const __TallyWire: __AgentWire = {
-  bump: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) } },
+  bump: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
 };
 
 export function __makeTally(key: string, env?: { TALLY?: __DurableObjectNamespace }): Tally {
@@ -110,7 +111,7 @@ export const place = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Placed", payload: { id: id }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "Placed", payload: { id: id }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return __makeTally(id, deps.env).bump(id, deps);
     })();

@@ -43,5 +43,5 @@ export function __deserialise_Result_String_PgError(json: __JsonValue, path: str
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<string, PgError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

@@ -24,7 +24,7 @@ const __entryFieldsOfBooks = [] as const;
 
 function __rehydrateBooksState(s: BooksState, stored: BooksState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "count")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.count as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "count", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.count as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Books", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).count = __r.value as unknown as (typeof s)["count"];
   }

@@ -83,7 +83,7 @@ const __entryFieldsOfBag = [{ name: "items", kind: "map" }] as const;
 function __rehydrateBagState(s: BagState, stored: BagState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) {
     for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) {
-      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
       if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error);
       ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value;
     }
@@ -110,7 +110,7 @@ function __encodeBagState(s: BagState): globalThis.Record<string, unknown> {
   return { ...s, items: __wireMap(s.items, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)) };
 }
 
-const __lazyFieldsOfBag = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); } }] as const;
+const __lazyFieldsOfBag = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); } }] as const;
 
 export class Bag {
   state: __DurableObjectState;
@@ -436,7 +436,7 @@ const __entryFieldsOfMemo = [{ name: "c", kind: "cache" }] as const;
 function __rehydrateMemoState(s: MemoState, stored: MemoState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "c")) {
     for (const __e of globalThis.Object.values((s as unknown as globalThis.Record<string, unknown>).c as globalThis.Record<string, { v: unknown }>)) {
-      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__e.v as unknown as __JsonValue));
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((__e.v as unknown as __JsonValue));
       if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error);
       __e.v = __r.value;
     }
@@ -457,7 +457,7 @@ function __encodeMemoState(s: MemoState): globalThis.Record<string, unknown> {
   return { ...s, c: __wireMap(s.c, (__e) => ({ ...__e, v: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__e.v) })) };
 }
 
-const __lazyFieldsOfMemo = [{ name: "c", kind: "cache", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); } }] as const;
+const __lazyFieldsOfMemo = [{ name: "c", kind: "cache", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "c", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Memo", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); } }] as const;
 
 export class Memo {
   state: __DurableObjectState;
@@ -893,7 +893,7 @@ export function __deserialise_Line(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["qty"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["qty"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __qty = obj["qty"];
   return Ok({ orderId: __orderId, qty: __qty } as Line);
@@ -938,14 +938,14 @@ export function __deserialise_Pt(json: __JsonValue, path: string = "$"): Result<
     return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "number", actual: typeof obj["x"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["x"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "safe integer", actual: String(obj["x"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["x"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __x = obj["x"];
   if (typeof obj["y"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.y`, expected: "number", actual: typeof obj["y"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["y"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.y`, expected: "safe integer", actual: String(obj["y"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.y`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["y"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __y = obj["y"];
   return Ok({ x: __x, y: __y } as Pt);

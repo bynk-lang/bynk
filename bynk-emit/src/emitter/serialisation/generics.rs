@@ -22,7 +22,8 @@ use super::record_sum::{emit_record_codec, emit_sum_codec};
 use super::support::{
     Depth, array_shape_guard, depth_expected, depth_for, deserialise_params,
     err_structural_mismatch, err_structural_mismatch_top, index_signature_record_ty, obj_prop,
-    object_shape_guard, path_elem, path_entry, path_field, serialise_params, value_prop,
+    object_shape_guard, path_elem, path_entry, path_field, serialise_params, tag_failure_class,
+    value_prop,
 };
 use super::{GenericInst, app_ts_name, inner_ts_name, record_inst_fields, sum_inst_variants};
 use super::{Qual, qual_type, qualified_ts_type, wire_ref_of};
@@ -673,7 +674,7 @@ pub fn emit_generic_helpers_qualified(
                 ));
                 body.push(ret(err_structural_mismatch_top(
                     "Ok | Err",
-                    call(ident("String"), vec![index(ident("obj"), str_lit("kind"))]),
+                    tag_failure_class(&index(ident("obj"), str_lit("kind"))),
                 )));
 
                 let deserialise = TsDecl::Export(Box::new(TsDecl::Function {
