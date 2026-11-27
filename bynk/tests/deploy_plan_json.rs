@@ -540,23 +540,6 @@ fn the_text_plan_lists_each_move_set_with_its_phases() {
     assert!(stderr.contains("about one push"), "{stderr}");
 }
 
-/// Without `--dry-run`, a supported move is still refused: this release only plans it.
-#[test]
-fn a_named_move_outside_a_dry_run_is_refused_as_not_applied_yet() {
-    let dir = moved_agent_project("move_not_applied");
-    let out = Command::new(env!("CARGO_BIN_EXE_bynk"))
-        .args(["deploy", "--format", "json", "--move-agent", "shop.orders"])
-        .arg(&dir)
-        .env("BYNK_NO_INSTALL", "1")
-        .output()
-        .expect("runs bynk");
-    let r = only_refusal(&out);
-    assert_eq!(r["code"], "bynk.deploy.agent_move_refused");
-    assert_eq!(r["reason"], "apply_not_yet");
-    assert_eq!(r["contexts"], serde_json::json!(["shop.orders"]));
-    assert!(r["message"].as_str().unwrap().contains("--dry-run"), "{r}");
-}
-
 #[test]
 fn a_move_agent_name_that_matches_no_move_is_a_refusal_entry() {
     let dir = moved_agent_project("move_unused");
@@ -896,23 +879,6 @@ fn a_move_under_way_resumes_without_the_flag_and_the_plan_says_so() {
     assert_eq!(moves[0]["resumes"]["move"], "m1", "{doc}");
 }
 
-/// Outside `--dry-run`, a resumed move is still refused in this release (slice 4b applies it).
-#[test]
-fn a_move_under_way_outside_a_dry_run_is_refused_as_not_applied_yet() {
-    let dir = joining_core(
-        "move_resume_not_applied",
-        "\n[deploy.workers.core]\ncontexts = [\"shop.orders\"]\n",
-    );
-    let out = Command::new(env!("CARGO_BIN_EXE_bynk"))
-        .args(["deploy", "--format", "json"])
-        .arg(&dir)
-        .env("BYNK_NO_INSTALL", "1")
-        .output()
-        .expect("runs bynk");
-    let r = only_refusal(&out);
-    assert_eq!(r["reason"], "apply_not_yet", "{r}");
-}
-
 /// D8: a manifest that no longer puts a moving context on its receiver cannot finish the move.
 #[test]
 fn a_manifest_that_no_longer_asks_for_the_move_under_way_is_refused() {
@@ -939,4 +905,36 @@ fn a_new_move_sharing_a_script_with_the_move_under_way_is_refused() {
     assert_eq!(r["code"], "bynk.deploy.move_open", "{r}");
     assert_eq!(r["context"], "shop.pay");
     assert_eq!(r["move"], "m1");
+}
+
+/// D8: `--cancel-move` names a move under way; with `--dry-run` it says which and pushes nothing.
+#[test]
+fn a_cancel_of_the_move_under_way_is_named_by_a_dry_run() {
+    let dir = joining_core(
+        "move_cancel_dry",
+        "\n[deploy.workers.core]\ncontexts = [\"shop.orders\"]\n",
+    );
+    let out = deploy(&dir, &["--cancel-move", "shop.orders"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("would cancel the agent move `m1` (at step `committing`)"),
+        "{stderr}"
+    );
+}
+
+/// D8: a `--cancel-move` name that matches no move under way stops the run.
+#[test]
+fn a_cancel_naming_no_move_under_way_is_refused() {
+    let dir = plain_project("move_cancel_unused");
+    let r = only_refusal(&deploy(
+        &dir,
+        &["--format", "json", "--cancel-move", "shop.orders"],
+    ));
+    assert_eq!(r["code"], "bynk.deploy.cancel_move_unused", "{r}");
+    assert_eq!(r["name"], "shop.orders");
 }

@@ -27,6 +27,8 @@ const MOVE_AGENT_UNUSED: &str = "bynk.deploy.move_agent_unused";
 const AGENT_MOVE_WINDOW: &str = "bynk.deploy.agent_move_window";
 /// #3565 (D8): a move is under way, and this run's manifest does not finish it.
 pub(crate) const MOVE_OPEN: &str = "bynk.deploy.move_open";
+/// #3565 (D8): a `--cancel-move` name that matches no move under way.
+pub(crate) const CANCEL_MOVE_UNUSED: &str = "bynk.deploy.cancel_move_unused";
 
 /// One context with agent state that the plan would put on another script.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,7 +93,7 @@ pub(crate) fn agent_moves(
 }
 
 /// Whether `--accept-fresh-agent` names this move's context (a `-` stands for a `.`).
-fn is_named(context: &str, accepted: &[String]) -> bool {
+pub(crate) fn is_named(context: &str, accepted: &[String]) -> bool {
     accepted
         .iter()
         .any(|a| a == context || a.replace('-', ".") == context)
@@ -257,6 +259,8 @@ pub(crate) struct AgentGate {
     pub(crate) refusals: Vec<Entry>,
     pub(crate) warnings: Vec<Entry>,
     pub(crate) planned: Vec<PlannedSet>,
+    /// #3565 (slice 4b): the planned sets as the apply walks them, when there are any.
+    pub(crate) placed: Option<Placed>,
 }
 
 impl AgentGate {
@@ -289,7 +293,6 @@ pub(crate) struct MoveCx<'a> {
     pub(crate) attached: &'a BTreeMap<String, &'static str>,
     /// A `--worker` or `--context` run, which deploys only part of the project.
     pub(crate) partial: bool,
-    pub(crate) dry_run: bool,
     /// Each Worker's script, for the plan's names.
     pub(crate) script: &'a dyn Fn(&str) -> String,
     /// The moves under way in this environment (D8): each resumes, unless the manifest no longer
@@ -313,7 +316,6 @@ pub(crate) fn checked_agent_moves(
         order,
         attached,
         partial: opts.context.is_some(),
-        dry_run: opts.dry_run,
         script: &script,
         open: lock.open_moves(&opts.environment),
     };
@@ -374,7 +376,7 @@ pub(crate) fn gate(
         .cloned()
         .collect();
     refusals.extend(overlapping_open(&moved, cx.open));
-    let (set_refused, planned) = plan_sets(&moved, resumed, cx);
+    let (set_refused, planned, placed) = plan_sets(&moved, resumed, cx);
     refusals.extend(set_refused);
     // Warnings say what a run goes ahead with, so a refused run has none: its refusals are the
     // whole story, as on stderr. (A move that is refused is said by its refusal, not as though it
@@ -385,6 +387,7 @@ pub(crate) fn gate(
             refusals,
             warnings: Vec::new(),
             planned: Vec::new(),
+            placed: None,
         };
     }
     let mut warnings: Vec<Entry> = moves
@@ -398,20 +401,20 @@ pub(crate) fn gate(
         refusals,
         warnings,
         planned,
+        placed,
     }
 }
 
 /// The move sets of `moved` (the moves `--move-agent` names), checked: each set's refusals; or,
-/// when it has none, the sets as the plan lists them, placed in the order (§3.2). Outside
-/// `--dry-run` a supported set is still refused (`apply_not_yet`): this release plans moves, it
-/// does not apply them.
+/// when it has none, the sets as the plan lists them and as the apply walks them, placed in the
+/// order (§3.2).
 fn plan_sets(
     moved: &[AgentMove],
     resumed: Vec<(MoveSet, Resumes)>,
     cx: &MoveCx<'_>,
-) -> (Vec<Entry>, Vec<PlannedSet>) {
+) -> (Vec<Entry>, Vec<PlannedSet>, Option<Placed>) {
     if moved.is_empty() && resumed.is_empty() {
-        return (Vec::new(), Vec::new());
+        return (Vec::new(), Vec::new(), None);
     }
     let mut sets = move_sets(moved);
     let fresh = sets.len();
@@ -425,7 +428,7 @@ fn plan_sets(
         refused.extend(set_refusals(set, cx));
     }
     if !refused.is_empty() {
-        return (refused, Vec::new());
+        return (refused, Vec::new(), None);
     }
     let placement = match place(&sets, cx.order, cx.resources) {
         Ok(placement) => placement,
@@ -439,38 +442,33 @@ fn plan_sets(
             )
             .with("reason", "order")
             .with("cycle", cycle);
-            return (vec![entry], Vec::new());
+            return (vec![entry], Vec::new(), None);
         }
     };
     let planned: Vec<PlannedSet> = sets
         .iter()
         .zip(&placement.callers)
-        .zip(resumes)
+        .zip(resumes.iter().cloned())
         .map(|((set, callers), resumes)| PlannedSet {
             resumes,
             ..PlannedSet::of(set, callers, cx.script)
         })
         .collect();
-    if !cx.dry_run {
-        let refused = planned
-            .iter()
-            .map(|p| {
-                let contexts: Vec<String> = p.moves.iter().map(|m| m.context.clone()).collect();
-                Entry::new(
-                    AGENT_MOVE_REFUSED,
-                    format!(
-                        "{} would move with {} state; this release plans such a move but does not apply it yet. See the plan with `--dry-run`; applying it comes with a later release.",
-                        contexts_phrase(&contexts),
-                        if contexts.len() == 1 { "its" } else { "their" }
-                    ),
-                )
-                .with("reason", "apply_not_yet")
-                .with("contexts", contexts)
-            })
-            .collect();
-        return (refused, Vec::new());
-    }
-    (Vec::new(), planned)
+    let placed = Placed {
+        sets,
+        resumes,
+        steps: placement.steps,
+    };
+    (Vec::new(), planned, Some(placed))
+}
+
+/// #3565 (slice 4b): the run's move sets as the apply walks them: each set, the move under way it
+/// resumes (if any), and the run's order with each set as its two nodes.
+#[derive(Debug, Clone)]
+pub(crate) struct Placed {
+    pub(crate) sets: Vec<MoveSet>,
+    pub(crate) resumes: Vec<Option<Resumes>>,
+    pub(crate) steps: Vec<super::move_sets::Step>,
 }
 
 /// D8: each move under way in this environment, as a set to resume; or, when this run's manifest

@@ -8672,7 +8672,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.deploy.agent_move_refused",
-        "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Move it with its state with `--move-agent <context>` (planned with `--dry-run` in this release), or start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use. A `reason` says why a named move is refused: `chained`, `partial_selection`, `order`, `routes`, `tombstones`, `renamed_in_place`, `both`, or `apply_not_yet` outside `--dry-run`.",
+        "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Move it with its state with `--move-agent <context>`, or start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use. A `reason` says why a named move is refused: `chained`, `partial_selection`, `order`, `routes`, `tombstones`, `renamed_in_place` or `both` from the plan, and `receiver_has_class`, `no_namespace` or `repeated_class` once the account is read.",
     ),
     warn(d(
         "bynk.deploy.agent_move_window",
@@ -8689,6 +8689,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.deploy.binding_collision",
         "Two members of one `[deploy.workers.<key>]` group declare different bindings under the same name; members share one `wrangler.toml`, so identical declarations share a binding and differing ones are refused.",
+    ),
+    d(
+        "bynk.deploy.cancel_move_unused",
+        "A `--cancel-move <context>` name matched no context of an agent move under way in this environment (a typo, a move already finished or cancelled, or a ledger that does not record the move), so `bynk deploy` stopped without pushing anything. With `--format json` the plan's `refusals` carries it with the `name`.",
     ),
     d(
         "bynk.deploy.context_in_two_groups",

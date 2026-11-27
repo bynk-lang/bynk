@@ -615,11 +615,14 @@ impl WorkersEmit<'_> {
         if let Some(incoming) = layout.moves().receive.get(&dir) {
             let without: Vec<&str> = incoming.iter().map(|i| i.context.as_str()).collect();
             let mut config = self.worker_config(members, &without, staged_assets);
+            let mut cancel = config.clone();
             workers_moves::receive_config(&mut config, incoming);
             compiled.push(staged(
                 workers_moves::RECEIVE_CONFIG,
                 Document::Toml(config),
             ));
+            workers_moves::cancel_config(&mut cancel, incoming);
+            compiled.push(staged(workers_moves::CANCEL_CONFIG, Document::Toml(cancel)));
             let entry = if layout.is_member(first) {
                 let bindings = self.bindings.of_worker(&dir);
                 self.group_entry(first, members, bindings, incoming)

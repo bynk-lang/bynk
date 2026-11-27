@@ -60,6 +60,7 @@ bynk.deploy.workers_unreadable: needs the network, git, a registry, lockfile sta
 bynk.deploy.accept_fresh_agent_unused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.agent_move_refused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.move_agent_unused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.cancel_move_unused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.move_commit_unconfirmed: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.move_interleaved: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.move_open: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example

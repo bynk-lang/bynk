@@ -1583,6 +1583,7 @@
 /reference/diagnostics/bynk.deploy.agent_starts_fresh/
 /reference/diagnostics/bynk.deploy.asset_path_conflict/
 /reference/diagnostics/bynk.deploy.binding_collision/
+/reference/diagnostics/bynk.deploy.cancel_move_unused/
 /reference/diagnostics/bynk.deploy.context_in_two_groups/
 /reference/diagnostics/bynk.deploy.context_not_found/
 /reference/diagnostics/bynk.deploy.contract_skew/

@@ -20,10 +20,6 @@
 //! D1). The pushes themselves are the caller's ([`MovePusher`]), and so is what the ledger records
 //! of each pushed Worker beside `done`.
 
-// 4a: the engine and its tests. Slice 4b wires it into the run with the wrangler-backed pusher,
-// when the `apply_not_yet` refusal is lifted; until then only the tests reach it.
-#![cfg_attr(not(test), allow(dead_code))]
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::mpsc;
 
@@ -91,6 +87,9 @@ pub(crate) enum Phase {
     Commit,
     /// Each receiver, serving the classes.
     GoLive,
+    /// `--cancel-move` (D8): each receiver without its `expecting-transfer` entries, still
+    /// forwarding the moving contexts to their sources.
+    Cancel,
 }
 
 impl Phase {
@@ -100,6 +99,7 @@ impl Phase {
             Phase::Receive => 1,
             Phase::Commit => 2,
             Phase::GoLive => 3,
+            Phase::Cancel => 4,
         }
     }
 }
@@ -134,6 +134,14 @@ pub(crate) struct MoveStop {
 }
 
 impl MoveStop {
+    pub(crate) fn from_refusal(entry: Entry) -> Self {
+        Self::refused(entry)
+    }
+
+    pub(crate) fn from_failure(failure: DeployFailure) -> Self {
+        Self::failed(failure)
+    }
+
     fn refused(entry: Entry) -> Self {
         MoveStop {
             refusals: vec![entry],
@@ -321,7 +329,7 @@ impl MoveRun<'_> {
             let script = self.deployed(&script);
             let newest = self.newest(&script)?;
             if let Some((_, Some(transfer))) = &newest.1
-                && transfer.phase != Phase::GoLive.number()
+                && matches!(transfer.phase, 1 | 2)
             {
                 stop.refusals.push(
                     already_under_way(&format!(
@@ -346,6 +354,7 @@ impl MoveRun<'_> {
             moves,
             deployments,
             namespaces,
+            committed: Vec::new(),
         };
         let environment = self.environment;
         writer
@@ -389,10 +398,14 @@ impl MoveRun<'_> {
                         "the agent move `{move_id}` cannot commit before its phase 1 has landed"
                     ))));
                 }
-                MoveStep::Received => self.write(writer, move_id, |r| {
-                    r.step = MoveStep::Committing;
-                    r.done.clear();
-                })?,
+                MoveStep::Received => {
+                    // A source whose every class is already committed is not pushed again.
+                    let done = fully_committed_sources(&record);
+                    self.write(writer, move_id, |r| {
+                        r.step = MoveStep::Committing;
+                        r.done = done;
+                    })?
+                }
                 MoveStep::Committing => {
                     let sources = sources(&record);
                     if !sources.iter().all(|s| record.done.contains(s)) {
@@ -438,6 +451,51 @@ impl MoveRun<'_> {
                 }
             }
         }
+    }
+
+    /// `--cancel-move` (D8): cancel the whole move `move_id` while nothing of it can have
+    /// committed, by pushing each receiver without its pending transfers (Cloudflare's documented
+    /// cancel), then closing the record. From the commit on, it is refused: the only way is
+    /// forward.
+    pub(crate) fn cancel(
+        &self,
+        writer: &mut LedgerWriter<'_>,
+        move_id: &str,
+    ) -> Result<(), MoveStop> {
+        let record = Self::record(writer, self.environment, move_id);
+        let contexts: Vec<String> = record.moves.iter().map(|m| m.context.clone()).collect();
+        if commit_may_have_landed(&record) {
+            return Err(MoveStop::refused(
+                Entry::new(
+                    super::agent_move::MOVE_OPEN,
+                    format!(
+                        "the agent move `{move_id}` ({}) cannot be cancelled: it is at step `{}`, so a commit may have landed and its data may already be the receiver's. The only way is forward: run `bynk deploy` to finish it.",
+                        contexts.join(", "),
+                        step_name(record.step)
+                    ),
+                )
+                .with("move", move_id)
+                .with("step", step_name(record.step))
+                .with("contexts", contexts),
+            ));
+        }
+        // Ruling 2 (#3565): before any commit, a cancel goes ahead over a deployment the move did
+        // not make, so it is the way out of a `move_interleaved` stop; it checks nothing here.
+        // The record goes back to `receiving` first, so a cancel cut short is resumed by
+        // receiving again, never by a commit the cancelled receiver no longer expects.
+        self.write(writer, move_id, |r| {
+            r.step = MoveStep::Receiving;
+            r.done.clear();
+        })?;
+        let fresh = Self::record(writer, self.environment, move_id);
+        let outcome = self.push_all(writer, &fresh, Phase::Cancel, &receivers(&fresh));
+        if !outcome.stop.is_empty() {
+            return Err(outcome.stop);
+        }
+        let environment = self.environment;
+        writer
+            .change(|lock| lock.close_move(environment, move_id))
+            .map_err(|e| ledger_failure(writer, &e))
     }
 
     /// The moved classes whose commit the listing does not show: each must have the namespace
@@ -535,10 +593,33 @@ impl MoveRun<'_> {
         outcome: Pushes,
     ) -> MoveStop {
         let mut stop = outcome.stop;
+        // Per class: a class the listing shows committed stays committed, and only the others go
+        // back to phase 1. A class already on its receiver is never received again: Cloudflare
+        // refuses that (`phase_one_transfer_target_class_provisioned`).
+        let unconfirmed: BTreeSet<String> = match self.unconfirmed(record) {
+            Ok(u) => u.into_iter().map(|u| u.class).collect(),
+            // Unread, nothing is known class by class: the record stays as it was (its
+            // `committed` and `done` included), and the next run repeats the commit, which is
+            // refused again until the listing can say which classes went back.
+            Err(e) => {
+                stop.failures.extend(e.failures);
+                return stop;
+            }
+        };
+        let committed: Vec<String> = record
+            .moves
+            .iter()
+            .flat_map(|m| m.classes.iter())
+            .filter(|c| !unconfirmed.contains(*c))
+            .chain(record.committed.iter())
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
         let lost_receivers: BTreeSet<String> = record
             .moves
             .iter()
-            .filter(|m| outcome.lost.contains(&m.from_worker))
+            .filter(|m| m.classes.iter().any(|c| unconfirmed.contains(c)))
             .map(|m| m.to_worker.clone())
             .collect();
         for m in record
@@ -551,7 +632,7 @@ impl MoveRun<'_> {
                 Entry::new(
                     MOVE_TRANSFER_LOST,
                     format!(
-                        "the commit of context `{}` from `{from}` was refused: `{to}` no longer expects {} (`transferred_pending_not_found`). Nothing has committed, so the data is safe on `{from}`. The next `bynk deploy` pushes `{to}`'s phase 1 again, then the commit. If `{to}` now has a namespace of its own for the class, Cloudflare refuses that phase 1 (`phase_one_transfer_target_class_provisioned`): that namespace was made outside the move and holds none of `{from}`'s data, so remove the class from `{to}` (`removed agent`, once it is empty) or cancel the move and start it again.",
+                        "the commit of context `{}` from `{from}` was refused: `{to}` no longer expects {} (`transferred_pending_not_found`). Nothing of it has committed, so its data is safe on `{from}`. The next `bynk deploy` pushes `{to}`'s phase 1 again for the classes not yet committed, then their commit. If `{to}` now has a namespace of its own for the class, Cloudflare refuses that phase 1 (`phase_one_transfer_target_class_provisioned`): that namespace was made outside the move and holds none of `{from}`'s data, so remove the class from `{to}` (`removed agent`, once it is empty) or cancel the move and start it again.",
                         m.context,
                         agents_phrase(&m.classes)
                     ),
@@ -570,6 +651,7 @@ impl MoveRun<'_> {
         if let Err(e) = self.write(writer, &record.move_id, |r| {
             r.step = MoveStep::Receiving;
             r.done = done;
+            r.committed = committed;
         }) {
             stop.failures.extend(e.failures);
         }
@@ -633,8 +715,18 @@ impl MoveRun<'_> {
                 Entry::new(
                     MOVE_INTERLEAVED,
                     format!(
-                        "`{script}` was deployed by something other than the agent move `{}` since the move recorded it: its live deployment is `{id}`, and the move recorded `{recorded}`. The move stops rather than push over that deployment, and it resumes once `{recorded}` is live on `{script}` again (for instance after a `wrangler rollback` to it); `bynk.deploy.lock` holds the move at step `{}`.",
+                        "`{script}` was deployed by something other than the agent move `{}` since the move recorded it: its live deployment is `{id}`, and the move recorded `{recorded}`. The move stops rather than push over that deployment, and never takes an unknown deployment as its own. {} `bynk.deploy.lock` holds the move at step `{}`.",
                         record.move_id,
+                        if commit_may_have_landed(record) {
+                            format!(
+                                "A commit may have landed, so the move can only go forward: make `{recorded}` live on `{script}` again (for instance with `wrangler rollback` to it) and run `bynk deploy` to resume, or stop and get help before deploying anything else."
+                            )
+                        } else {
+                            format!(
+                                "Nothing has committed: make `{recorded}` live on `{script}` again (for instance with `wrangler rollback` to it) and run `bynk deploy` to resume, or cancel the move with `bynk deploy --cancel-move {}`.",
+                                record.moves[0].context
+                            )
+                        },
                         step_name(record.step)
                     ),
                 )
@@ -720,7 +812,11 @@ impl MoveRun<'_> {
         let move_id = record.move_id.as_str();
         let written = writer.change(|lock| {
             if let Some(r) = lock.open_move_mut(environment, move_id) {
-                if !r.done.iter().any(|d| d == worker) {
+                if phase == Phase::Cancel {
+                    // A cancelled receiver no longer expects the transfer: a resume receives it
+                    // again rather than skip it.
+                    r.done.retain(|d| d != worker);
+                } else if !r.done.iter().any(|d| d == worker) {
                     r.done.push(worker.to_string());
                     r.done.sort();
                 }
@@ -749,7 +845,7 @@ impl MoveRun<'_> {
         for m in &record.moves {
             match phase {
                 Phase::Receive if m.to_worker == worker => {
-                    for class in &m.classes {
+                    for class in m.classes.iter().filter(|c| !record.committed.contains(c)) {
                         transfer
                             .expecting
                             .insert(class.clone(), self.deployed(&m.from_script));
@@ -781,12 +877,43 @@ struct Pushes {
 /// the commit on, at its phase 2.
 fn own_phases(record: &AgentMoveRecord, worker: &str) -> Vec<u8> {
     let receiver = record.moves.iter().any(|m| m.to_worker == worker);
+    // A source that has committed a class is at its phase 2 even while a lost class goes back.
+    let committed = record
+        .moves
+        .iter()
+        .any(|m| m.from_worker == worker && m.classes.iter().any(|c| record.committed.contains(c)));
     match (receiver, record.step) {
         (true, MoveStep::GoingLive) => vec![1, 3],
+        // A cancel cut short leaves a receiver at its cancel push.
+        (true, MoveStep::Receiving | MoveStep::Received) => vec![1, 4],
         (true, _) => vec![1],
-        (false, MoveStep::Receiving | MoveStep::Received) => Vec::new(),
+        (false, MoveStep::Receiving | MoveStep::Received) if !committed => Vec::new(),
         (false, _) => vec![2],
     }
+}
+
+/// Whether a commit of the move may have landed: the record has reached the commit, or a class
+/// is committed. From then on the only way is forward (§3.4).
+pub(crate) fn commit_may_have_landed(record: &AgentMoveRecord) -> bool {
+    !record.committed.is_empty()
+        || matches!(
+            record.step,
+            MoveStep::Committing | MoveStep::Committed | MoveStep::GoingLive
+        )
+}
+
+/// The sources whose every class is committed (§3.4: not pushed again).
+fn fully_committed_sources(record: &AgentMoveRecord) -> Vec<String> {
+    sources(record)
+        .into_iter()
+        .filter(|s| {
+            record
+                .moves
+                .iter()
+                .filter(|m| &m.from_worker == s)
+                .all(|m| m.classes.iter().all(|c| record.committed.contains(c)))
+        })
+        .collect()
 }
 
 /// Every Worker of the moves, with its script: the sources, then the receivers.
