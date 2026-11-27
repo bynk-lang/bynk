@@ -91,6 +91,14 @@ pub(super) fn build_path_method_table(
     cors_services: &[CorsService],
     security_services: &[SecurityService],
 ) -> Vec<PathMethods> {
+    // #3752 (D9): an `ANY` route answers every method on the paths it owns, so it
+    // adds no `Allow`, `405` or `OPTIONS` of its own.
+    let ordinary: Vec<HttpRoute> = http_routes
+        .iter()
+        .filter(|r| !super::pass_through::is_any(r))
+        .cloned()
+        .collect();
+    let http_routes = ordinary.as_slice();
     let mut paths: Vec<String> = Vec::new();
     for r in http_routes {
         if !paths.contains(&r.path) {
@@ -381,7 +389,16 @@ pub(super) fn build_security_services(
 /// preflight (has it) is answered here with the `Access-Control-*` grant; a bare
 /// `OPTIONS` (lacks it) falls through to the generic `204 + Allow`, so the two
 /// `OPTIONS` answers compose instead of colliding.
-pub(super) fn cors_preflight(cs: &CorsService, security_services: &[SecurityService]) -> TsStmt {
+/// #3752 (D10): the preflight never answers for a path a pass-through route owns.
+pub(super) fn cors_preflight(
+    cs: &CorsService,
+    security_services: &[SecurityService],
+    routes: &[HttpRoute],
+) -> TsStmt {
+    super::pass_through::guard_preflight(cors_preflight_branch(cs, security_services), routes)
+}
+
+fn cors_preflight_branch(cs: &CorsService, security_services: &[SecurityService]) -> TsStmt {
     let mut cond_terms = cs.paths.iter().map(|(path, _)| {
         strict_neq(
             call(
