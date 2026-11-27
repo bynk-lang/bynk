@@ -898,7 +898,7 @@ const viaWorker = async (url, init) => {
   return call(url, init);
 };
 const show = (label, v) => console.log(label, JSON.stringify(v));
-const c = createClient({ baseUrl: "http://api.test", fetch: viaWorker });
+const c = createClient({ baseUrl: "http://localhost", fetch: viaWorker });
 
 show("note", await c.api.postNotes({ title: "Hi there", body: null, tags: ["a", "b"], pinned: true, rank: 3 }));
 show("note-some", await c.api.postNotes({ title: "T", body: "x y&z", tags: [], pinned: false, rank: null }));
@@ -916,7 +916,7 @@ show("prefs-inject", await c.api.getPrefs({ theme: "dark; __Host-sid=attacker" }
 // A `Cookie` the caller configured is joined, not replaced; a JSON `content-type`
 // configured for the whole client does not spoil a form or a multipart body.
 const configured = createClient({
-  baseUrl: "http://api.test",
+  baseUrl: "http://localhost",
   headers: { cookie: "sid=abc", "content-type": "application/json" },
   fetch: async (url, init) => {
     sent.push(`CONFIGURED ${new Headers(init.headers).get("cookie") ?? "-"} ${new Headers(init.headers).get("content-type") ?? "-"}`);
@@ -932,7 +932,7 @@ show("prefs-browser", await c.api.getPrefs({ theme: "dark" }));
 show("origin-in-browser", await c.api.getOrigin());
 delete globalThis.document;
 show("origin-none", await c.api.getOrigin());
-const withOrigin = createClient({ baseUrl: "http://api.test", fetch: viaWorker, origin: "https://app.test" });
+const withOrigin = createClient({ baseUrl: "http://localhost", fetch: viaWorker, origin: "https://app.test" });
 show("origin", await withOrigin.api.getOrigin());
 console.log("requests", JSON.stringify(sent));
 "#;
@@ -1043,9 +1043,9 @@ fn forms_multipart_and_cookies_round_trip_against_a_real_worker() {
     );
     let requests = line(&out, "requests");
     for expected in [
-        r#"POST http://api.test/notes application/x-www-form-urlencoded title=Hi+there&tags=a&tags=b&pinned=true&rank=3 cookie=-"#,
-        "POST http://api.test/upload - FormData",
-        "GET http://api.test/prefs - - cookie=theme=dark; lang-pref=fr",
+        r#"POST http://localhost/notes application/x-www-form-urlencoded title=Hi+there&tags=a&tags=b&pinned=true&rank=3 cookie=-"#,
+        "POST http://localhost/upload - FormData",
+        "GET http://localhost/prefs - - cookie=theme=dark; lang-pref=fr",
     ] {
         assert!(requests.contains(expected), "{expected} not in {requests}");
     }

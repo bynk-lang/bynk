@@ -1471,10 +1471,12 @@ export async function __call(
   let streamed: unknown;
   try {
     const headers = await __headers(options, init, request, route);
-    // #4610: the credential is an `Authorization` header, from the options, the init or a typed record.
+    // #4610, #4631: the credential is an `Authorization` header or an explicitly set `Cookie` one, from the
+    // options, the init, a typed record or typed cookies. A browser's own cookie jar sets no header here, so a
+    // page's cookie-credentialed call (`credentials: "include"`) is not affected.
     const url = __url(options, route, request);
     if (
-      (headers.get("authorization") ?? "") !== "" &&
+      ((headers.get("authorization") ?? "") !== "" || (headers.get("cookie") ?? "") !== "") &&
       !(options.fetch !== undefined && __bindingFetches.has(options.fetch)) &&
       __cleartextRemote(url)
     ) {
