@@ -182,10 +182,7 @@ fn emit_refined_type(
         base_ty.clone()
     };
 
-    let brand_ty = bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
-        "__brand",
-        bynk_ts::TsType::named(format!("\"{brand_prefix}{name}\"")),
-    )]);
+    let brand_ty = brand_type(brand_prefix, &name);
     let type_alias = bynk_ts::TsStmt::decl(
         bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::TypeAlias {
             name: name.clone(),
@@ -268,6 +265,15 @@ fn emit_refined_type(
     stmts
 }
 
+/// `{ readonly __brand: "<prefix><name>" }`, the brand a refined or opaque type's
+/// carrier is intersected with.
+fn brand_type(brand_prefix: &str, name: &str) -> bynk_ts::TsType {
+    bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
+        "__brand",
+        bynk_ts::TsType::named(format!("\"{brand_prefix}{name}\"")),
+    )])
+}
+
 /// #3752 (D8, D11): `bynk`'s `InboundRequest` and `Forwarded` are runtime views (the
 /// router's request, an upstream's answer), not strings, and only the router and
 /// `Upstream.forward` make one, so each is the branded view type, with an empty
@@ -284,10 +290,7 @@ fn pass_through_carrier_type(
         PassThroughType::PassThrough | PassThroughType::UpstreamError => return None,
     };
     let name = t.name.name.clone();
-    let brand_ty = bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
-        "__brand",
-        bynk_ts::TsType::named(format!("\"{brand_prefix}{name}\"")),
-    )]);
+    let brand_ty = brand_type(brand_prefix, &name);
     let alias = bynk_ts::TsStmt::decl(
         bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::TypeAlias {
             name: name.clone(),

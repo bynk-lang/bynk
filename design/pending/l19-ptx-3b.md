@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
+probes: emit_diagnostics, diagnostic_coverage, explained_codes, ts_writes
 changelog: An `on ANY(…)` pass-through route now builds and forwards: `Upstream.forward` sends the method, the path it is given, the raw query and the streamed body to the declared origin, refusing a dot segment or a path that could leave it (`Err(InvalidPath)`), and a `Forward` passes the upstream's status, headers and body through with no `ETag`, `304`, `HEAD` body, `405`, `Allow` or CORS synthesised, stripping hop-by-hop headers, `Set-Cookie` and the upstream's HSTS; a method outside the seven, or an `Upgrade`, is `501`; no inbound header is forwarded yet; a suite case can't yet address a pass-through route (`bynk.test.pass_through_address`); experimental
 ---
 
