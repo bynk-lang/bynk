@@ -26,64 +26,13 @@ jobs:
           node-version: "24"
       - name: Pre-warm the npx cache for wrangler
         run: npx -y wrangler@4 --version
-      - name: Network timings to the Request.cf endpoint
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Boot like bynk-tests (file output, registry, inspector), alone and concurrently
         run: |
-          for fam in "" -4 -6; do
-            echo "curl $fam:"
-            curl $fam -sS -o /dev/null --max-time 150 \
-              -w "  dns %{time_namelookup}s connect %{time_connect}s tls %{time_appconnect}s total %{time_total}s http %{http_code}\n" \
-              https://workers.cloudflare.com/cf.json || echo "  failed"
-          done
-          node -e '
-            const t = Date.now();
-            fetch("https://workers.cloudflare.com/cf.json")
-              .then(r => console.log("node fetch", r.status, (Date.now() - t) + "ms"))
-              .catch(e => console.log("node fetch error", e.cause?.code ?? e.message, (Date.now() - t) + "ms"));'
-          node -e 'require("dns").lookup("localhost", {all: true}, (e, a) => console.log("localhost resolves to", JSON.stringify(a)))'
-      - name: Boot variants
-        run: |
-          set -u
-          mkdir -p work && cd work
-          cat > wrangler.toml <<'EOF'
-          name = "diag"
-          main = "index.js"
-          compatibility_date = "2025-01-01"
-          EOF
-          printf 'export default { fetch() { return new Response("ok"); } };\n' > index.js
-          now() { node -e 'process.stdout.write(String(Date.now()/1000))'; }
-          stop_all() {
-            if [ "$RUNNER_OS" = Windows ]; then
-              taskkill //F //IM workerd.exe >/dev/null 2>&1 || true
-              taskkill //F //IM node.exe >/dev/null 2>&1 || true
-            else
-              pkill -f workerd || true; pkill -f wrangler || true
-            fi
-            sleep 3
-          }
-          boot() {
-            label=$1; shift
-            start=$(now)
-            ( npx -y wrangler@4 dev --port 8787 "$@" < /dev/null 2>&1 \
-                | while IFS= read -r l; do echo "$(now) $l"; done > "../$label.log" ) &
-            ready=no
-            for i in $(seq 1 400); do
-              if grep -q "Ready on" "../$label.log" 2>/dev/null; then ready=yes; break; fi
-              sleep 0.5
-            done
-            end=$(now)
-            echo "=================== $label: ready=$ready after $(awk -v a="$start" -v b="$end" 'BEGIN{printf "%.1f", b-a}') s"
-            awk -v s="$start" '{t=$1; $1=""; printf "+%6.1fs%s\n", t-s, $0}' "../$label.log" | cut -c1-220 | head -120
-            stop_all
-          }
-          boot v1-baseline-debug --log-level debug
-          echo "--- cache dirs after v1:"; find . -name "cf.json" -o -name ".mf" 2>/dev/null | head
-          boot v2-second-boot-same-dir --log-level debug
-          rm -rf .wrangler node_modules
-          boot v3-ip-127 --ip 127.0.0.1 --log-level debug
-          rm -rf .wrangler node_modules
-          if [ "$RUNNER_OS" = Windows ]; then
-            echo "127.0.0.1 workers.cloudflare.com" >> /c/Windows/System32/drivers/etc/hosts
-          else
-            echo "127.0.0.1 workers.cloudflare.com" | sudo tee -a /etc/hosts
-          fi
-          boot v4-cf-host-blocked --log-level debug
+          node .github/diag-4579/boot.mjs single-registry 1
+          node .github/diag-4579/boot.mjs single-no-registry 1 --no-registry
+          node .github/diag-4579/boot.mjs single-registry-debug 1 --log-level debug
+          node .github/diag-4579/boot.mjs concurrent-4 4
+          node .github/diag-4579/boot.mjs concurrent-8 8
