@@ -387,8 +387,48 @@ fn attempt_create(cx: &StepCx<'_, '_, Queue>, queue: &str) -> Result<bool, Deplo
     if queue_exists(cx.tools.api, &physical) {
         return Ok(false);
     }
-    create_queue(cx.tools.api, &physical)
-        .map_err(|e| DeployFailure::driver(format!("could not create the queue `{physical}`: {e}")))
+    let created = create_queue(cx.tools.api, &physical).map_err(|e| {
+        DeployFailure::driver(format!("could not create the queue `{physical}`: {e}"))
+    })?;
+    if created {
+        // #4098: wrangler's own provisioning looks the queue up and creates it again when the
+        // listing lags behind this create, and that second create is refused.
+        wait_for_queue(
+            cx.tools.api,
+            &physical,
+            crate::deploy::visible::VISIBILITY_PACING,
+            &mut std::thread::sleep,
+        )
+        .map_err(|e| {
+            DeployFailure::driver(e.replace("{rerun}", &deploy_command(cx.environment)))
+        })?;
+    }
+    Ok(created)
+}
+
+/// #4098: wait until the account lists `physical`, which this run just created. The failure is
+/// a lookup's, or the lag message with `{rerun}` for the command to run again.
+pub(crate) fn wait_for_queue(
+    api: &dyn CloudflareApi,
+    physical: &str,
+    pacing: crate::deploy::vectorize::Pacing,
+    sleep: &mut dyn FnMut(std::time::Duration),
+) -> Result<(), String> {
+    let seen = crate::deploy::visible::wait_until(
+        || api.queue_find(physical).map(|id| id.is_some()),
+        pacing,
+        sleep,
+    )
+    .map_err(|e| format!("created the queue `{physical}`, but could not look it up: {e}"))?;
+    if seen {
+        Ok(())
+    } else {
+        Err(crate::deploy::visible::lagging(
+            &format!("the queue `{physical}`"),
+            pacing,
+            "{rerun}",
+        ))
+    }
 }
 
 /// Record `queue`, as Bynk's when this run `created` it and as reused otherwise: written when that
@@ -610,11 +650,18 @@ mod tests {
     fn the_queues_made_before_a_failed_create_are_recorded_as_created() {
         use crate::cloudflare::{CloudflareError, Op, fake::Recording};
         let declared = Resources::default().consumes(&["a-jobs", "b-jobs", "c-jobs"]);
-        let api = Recording::new(|op: &Op<'_>| match op {
+        // The account lists what it was made to create (#4098 waits for that).
+        let made = std::cell::RefCell::new(BTreeSet::<String>::new());
+        let api = Recording::new(move |op: &Op<'_>| match op {
+            Op::QueueInfo { name } if made.borrow().contains(*name) => Ok(String::new()),
             Op::QueueInfo { .. } => Ok("absent".to_string()),
             Op::QueueCreate { name: "b-jobs" } => Err(CloudflareError::from(
                 crate::cloudflare::rest::RestError::answered("POST", "/queues", 500, "[]"),
             )),
+            Op::QueueCreate { name } => {
+                made.borrow_mut().insert(name.to_string());
+                Ok(String::new())
+            }
             _ => Ok(String::new()),
         });
         let project = BTreeMap::new();
@@ -651,6 +698,7 @@ mod tests {
             [
                 "queues info a-jobs",
                 "queues create a-jobs",
+                "queues info a-jobs",
                 "queues info b-jobs",
                 "queues create b-jobs"
             ],
@@ -664,5 +712,44 @@ mod tests {
         let on_disk = std::fs::read_to_string(&path).unwrap();
         assert!(on_disk.contains("a-jobs"), "{on_disk}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #4098: a queue this run created is waited for until the listing shows it, a lookup that
+    /// fails fails at once, and one never listed says the platform is lagging.
+    #[test]
+    fn a_created_queue_is_waited_for_until_the_listing_shows_it() {
+        use crate::cloudflare::{CloudflareError, Op, fake::Recording};
+        let refused = |status: u16| -> CloudflareError {
+            crate::cloudflare::rest::RestError::answered("GET", "/queues", status, "[]").into()
+        };
+        let pacing = crate::deploy::visible::VISIBILITY_PACING;
+        let answers = std::cell::RefCell::new(vec!["absent", "absent"]);
+        let lagging = Recording::new(move |_: &Op<'_>| {
+            Ok::<_, CloudflareError>(answers.borrow_mut().pop().unwrap_or("").to_string())
+        });
+        let mut slept = Vec::new();
+        assert_eq!(
+            wait_for_queue(&lagging, "jobs", pacing, &mut |d| slept.push(d.as_secs())),
+            Ok(())
+        );
+        assert_eq!(slept, [1, 2]);
+        assert_eq!(lagging.calls().len(), 3);
+
+        let never = Recording::new(|_: &Op<'_>| Ok::<_, CloudflareError>("absent".to_string()));
+        let said = wait_for_queue(&never, "jobs", pacing, &mut |_| {}).unwrap_err();
+        assert!(
+            said.starts_with("Cloudflare has not shown the queue `jobs` 30 s after it was created"),
+            "{said}"
+        );
+        assert!(said.contains("Run `{rerun}` again"), "{said}");
+
+        let denied = Recording::new(move |_: &Op<'_>| Err(refused(403)));
+        let mut polls = 0;
+        let said = wait_for_queue(&denied, "jobs", pacing, &mut |_| polls += 1).unwrap_err();
+        assert!(
+            said.starts_with("created the queue `jobs`, but could not look it up"),
+            "{said}"
+        );
+        assert_eq!(polls, 0);
     }
 }

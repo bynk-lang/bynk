@@ -211,7 +211,16 @@ pub(crate) fn push(
         (pushed, _) => pushed,
     };
     // A forgiven failure left wrangler's triggers step unrun (see `Watch::forgave`).
-    if pushed == Pushed::Ok && watch.as_ref().is_some_and(first_deploy::Watch::forgave) {
+    if let Some(watch) = watch
+        .as_ref()
+        .filter(|w| pushed == Pushed::Ok && w.forgave())
+    {
+        // #4098: not against the lag that made wrangler skip them.
+        watch
+            .wait_until_visible(super::visible::VISIBILITY_PACING, &mut std::thread::sleep)
+            .map_err(|e| {
+                DeployFailure::driver(e.replace("{rerun}", &deploy_command(environment)))
+            })?;
         deploy_forgiven_triggers(api, worker_dir, worker, environment)?;
     }
     Ok(pushed)

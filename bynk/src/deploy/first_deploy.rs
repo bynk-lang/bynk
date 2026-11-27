@@ -41,6 +41,9 @@ pub(crate) enum ScriptState {
 /// The account's record of a script's versions.
 pub(crate) trait ScriptVersions {
     fn state(&self, script: &str) -> ScriptState;
+    /// #4098: whether the Worker lookup that lagged behind the upload now finds `script`
+    /// (`GET /workers/workers/{script}`): `false` while it answers that it does not exist.
+    fn visible(&self, script: &str) -> Result<bool, crate::cloudflare::CloudflareError>;
 }
 
 /// [`ScriptVersions`] over Cloudflare's REST API.
@@ -58,6 +61,14 @@ impl ScriptVersions for RestVersions {
             // an id or a message could happen to contain.
             Err(said) if is_absent(&said) => ScriptState::Absent,
             Err(said) => ScriptState::Unknown(said.into()),
+        }
+    }
+
+    fn visible(&self, script: &str) -> Result<bool, crate::cloudflare::CloudflareError> {
+        match self.0.get(&format!("/workers/workers/{script}")) {
+            Ok(_) => Ok(true),
+            Err(said) if is_absent(&said) => Ok(false),
+            Err(said) => Err(said.into()),
         }
     }
 }
@@ -150,6 +161,32 @@ impl Watch {
     pub(crate) fn forgave(&self) -> bool {
         self.forgave.get()
     }
+
+    /// #4098: wait until wrangler's Worker lookup, which lagged behind the upload it forgave,
+    /// finds the script, so `triggers deploy` is not run against the same lag. The failure is a
+    /// lookup's, or the lag message with `{rerun}` for the command to run again.
+    pub(crate) fn wait_until_visible(
+        &self,
+        pacing: super::vectorize::Pacing,
+        sleep: &mut dyn FnMut(std::time::Duration),
+    ) -> Result<(), String> {
+        let seen = super::visible::wait_until(|| self.scripts.visible(&self.script), pacing, sleep)
+            .map_err(|e| {
+                format!(
+                    "`{}` was uploaded, but looking it up to apply its triggers failed: {e}",
+                    self.script
+                )
+            })?;
+        if seen {
+            Ok(())
+        } else {
+            Err(super::visible::lagging(
+                &format!("the new Worker `{}`", self.script),
+                pacing,
+                "{rerun}",
+            ))
+        }
+    }
 }
 
 /// Run `wrangler triggers deploy` for a Worker whose `deploy` was forgiven: the
@@ -219,6 +256,11 @@ mod tests {
     impl ScriptVersions for Scripted {
         fn state(&self, _: &str) -> ScriptState {
             self.0.borrow_mut().remove(0)
+        }
+
+        /// Visible once the states are used up: the lookup that lagged has caught up.
+        fn visible(&self, _: &str) -> Result<bool, crate::cloudflare::CloudflareError> {
+            Ok(self.0.borrow_mut().pop().is_none())
         }
     }
 
@@ -335,5 +377,68 @@ mod tests {
         );
         let missing = Recording::new(|op| Err(crate::cloudflare::WranglerError::missing(op)));
         assert_eq!(deploy_triggers(&missing, &dir, "default"), Err(None));
+    }
+
+    /// #4098: the lookup that lagged is polled until it finds the new Worker, then the triggers
+    /// run; one that never does says the platform is lagging, and a failed poll fails at once.
+    #[test]
+    fn a_forgiven_upload_waits_for_its_worker_before_the_triggers() {
+        let dir = dir("visible");
+        // Two lookups that lag (the two states left), then it finds the Worker.
+        let watch = Watch::with(
+            &dir,
+            "staging",
+            Box::new(Scripted(std::cell::RefCell::new(vec![
+                ScriptState::Absent,
+                ScriptState::Present(1),
+                ScriptState::Present(1),
+            ]))),
+        )
+        .unwrap();
+        let mut slept = Vec::new();
+        let pacing = super::super::visible::VISIBILITY_PACING;
+        assert_eq!(
+            watch.wait_until_visible(pacing, &mut |d| slept.push(d.as_secs())),
+            Ok(())
+        );
+        assert_eq!(slept, [1, 2]);
+
+        struct Never(Option<u16>);
+        impl ScriptVersions for Never {
+            fn state(&self, _: &str) -> ScriptState {
+                ScriptState::Absent
+            }
+            fn visible(&self, _: &str) -> Result<bool, crate::cloudflare::CloudflareError> {
+                match self.0 {
+                    None => Ok(false),
+                    Some(status) => Err(crate::cloudflare::RestError::answered(
+                        "GET",
+                        "/workers/workers/x",
+                        status,
+                        "[]",
+                    )
+                    .into()),
+                }
+            }
+        }
+        let lagging = Watch::with(&dir, "staging", Box::new(Never(None))).unwrap();
+        let said = lagging.wait_until_visible(pacing, &mut |_| {}).unwrap_err();
+        assert!(
+            said.starts_with("Cloudflare has not shown the new Worker `revertprobe-core-staging` 30 s after it was created"),
+            "{said}"
+        );
+        for status in [403, 500] {
+            let failing = Watch::with(&dir, "staging", Box::new(Never(Some(status)))).unwrap();
+            let mut polls = 0;
+            let said = failing
+                .wait_until_visible(pacing, &mut |_| polls += 1)
+                .unwrap_err();
+            assert!(
+                said.contains("looking it up to apply its triggers failed"),
+                "{said}"
+            );
+            assert_eq!(polls, 0, "a failed poll is not waited past");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

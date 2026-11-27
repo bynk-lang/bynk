@@ -20,17 +20,18 @@
  19 queues info intake
  20 queues info outbound
  21 queues create outbound
- 22 d1 migrations apply D1_ORDERS --remote
- 23 secret put API_TOKEN
- 24 deploy
- 25 kv namespace delete --namespace-id kv-gone-default --skip-confirmation
- 26 kv namespace delete --namespace-id kv-gone-cache-default --skip-confirmation
- 27 kv namespace delete --namespace-id kv-shop-old-default --skip-confirmation
- 28 vectorize list --json
+ 22 queues info outbound
+ 23 d1 migrations apply D1_ORDERS --remote
+ 24 secret put API_TOKEN
+ 25 deploy
+ 26 kv namespace delete --namespace-id kv-gone-default --skip-confirmation
+ 27 kv namespace delete --namespace-id kv-gone-cache-default --skip-confirmation
+ 28 kv namespace delete --namespace-id kv-shop-old-default --skip-confirmation
  29 vectorize list --json
- 30 hyperdrive delete hd-gone
- 31 hyperdrive delete hd-shop-main-was
- 32 queues delete old-jobs
+ 30 vectorize list --json
+ 31 hyperdrive delete hd-gone
+ 32 hyperdrive delete hd-shop-main-was
+ 33 queues delete old-jobs
 == staging ==
   1 kv namespace create shop-cart-sessions-staging
   2 queues info shared-feed-staging
@@ -55,7 +56,8 @@
  21 queues info intake-staging
  22 queues info outbound-staging
  23 queues create outbound-staging
- 24 d1 migrations apply D1_ORDERS --remote --env staging
- 25 secret put API_TOKEN --env staging
- 26 deploy --env staging
- 27 queues delete old-jobs-staging
+ 24 queues info outbound-staging
+ 25 d1 migrations apply D1_ORDERS --remote --env staging
+ 26 secret put API_TOKEN --env staging
+ 27 deploy --env staging
+ 28 queues delete old-jobs-staging

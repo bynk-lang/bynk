@@ -57,12 +57,12 @@
 +132 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
 +133 namespace_id = "301720278"
 +134 
--- write 14 (after call 21: queues create outbound)
+-- write 14 (after call 22: queues info outbound)
 +  7     "outbound",
--- write 15 (after call 21: queues create outbound)
+-- write 15 (after call 22: queues info outbound)
 + 71 Renderer = "registry.example/renderer@sha256:bbbb"
 - 71 Renderer = "registry.example/renderer@sha256:aaaa"
--- write 16 (after call 24: deploy)
+-- write 16 (after call 25: deploy)
 -130 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
 -131 namespace_id = "1002"
 -132 
@@ -78,37 +78,37 @@
 -165     "orders@example.com",
 -166     "returns@example.com",
 -167 ]
--- write 17 (after call 25: kv namespace delete --namespace-id kv-gone-default --skip-confirmation)
+-- write 17 (after call 26: kv namespace delete --namespace-id kv-gone-default --skip-confirmation)
 - 12 [environments.default.kv.gone]
 - 13 id = "kv-gone-default"
 - 14 
--- write 18 (after call 26: kv namespace delete --namespace-id kv-gone-cache-default --skip-confirmation)
+-- write 18 (after call 27: kv namespace delete --namespace-id kv-gone-cache-default --skip-confirmation)
 - 15 [environments.default.kv_instances.gone.KV_CACHE]
 - 16 id = "kv-gone-cache-default"
 - 17 
--- write 19 (after call 27: kv namespace delete --namespace-id kv-shop-old-default --skip-confirmation)
+-- write 19 (after call 28: kv namespace delete --namespace-id kv-shop-old-default --skip-confirmation)
 - 18 [environments.default.kv_instances.shop.KV_OLD]
 - 19 id = "kv-shop-old-default"
 - 20 
--- write 20 (after call 28: vectorize list --json)
+-- write 20 (after call 29: vectorize list --json)
 - 45 [environments.default.vectorize_instances.gone.VECTORIZE_GONE]
 - 46 name = "gone-index"
 - 47 
--- write 21 (after call 29: vectorize list --json)
+-- write 21 (after call 30: vectorize list --json)
 - 48 [[environments.default.vectorize_instances.shop.VECTORIZE_DOCS.superseded]]
 - 49 name = "shop-docs-v0"
 - 50 
--- write 22 (after call 30: hyperdrive delete hd-gone)
+-- write 22 (after call 31: hyperdrive delete hd-gone)
 - 74 [environments.default.hyperdrive_instances.gone.HYPERDRIVE_GONE]
 - 75 name = "gone-main"
 - 76 id = "hd-gone"
 - 77 
--- write 23 (after call 31: hyperdrive delete hd-shop-main-was)
+-- write 23 (after call 32: hyperdrive delete hd-shop-main-was)
 - 83 [[environments.default.hyperdrive_instances.shop.HYPERDRIVE_MAIN.superseded]]
 - 84 name = "shop-main-was"
 - 85 id = "hd-shop-main-was"
 - 86 
--- write 24 (after call 32: queues delete old-jobs)
+-- write 24 (after call 33: queues delete old-jobs)
 -  6     "old-jobs",
 == staging ==
 -- write 1 (after call 1: kv namespace create shop-cart-sessions-staging)
@@ -202,20 +202,20 @@
 +198 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
 +199 namespace_id = "856287038"
 +200 
--- write 20 (after call 23: queues create outbound-staging)
+-- write 20 (after call 24: queues info outbound-staging)
 +128     "intake",
 +132 reused_queues = [
 +133     "intake",
 +134     "shared-feed",
 +135 ]
 -131 reused_queues = ["shared-feed"]
--- write 21 (after call 23: queues create outbound-staging)
+-- write 21 (after call 24: queues info outbound-staging)
 +130     "outbound",
--- write 22 (after call 23: queues create outbound-staging)
+-- write 22 (after call 24: queues info outbound-staging)
 +167 [environments.staging.container_images.shop]
 +168 Renderer = "registry.example/renderer@sha256:bbbb"
 +169 
--- write 23 (after call 26: deploy --env staging)
+-- write 23 (after call 27: deploy --env staging)
 +215 [environments.staging.workers.shop.contracts]
 +216 
 +217 [environments.staging.workers.shop.expects]
@@ -232,5 +232,5 @@
 +234 
 +235 [environments.staging.email_addresses]
 +236 shop = ["orders@example.com"]
--- write 24 (after call 27: queues delete old-jobs-staging)
+-- write 24 (after call 28: queues delete old-jobs-staging)
 -129     "old-jobs",

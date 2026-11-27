@@ -75,6 +75,7 @@ mod revert;
 mod secrets;
 mod senders;
 mod vectorize;
+mod visible;
 
 use agent_move::*;
 use apply::*;

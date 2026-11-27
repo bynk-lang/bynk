@@ -168,6 +168,16 @@ the deploy will do. In a named environment the
 producer's queue is qualified as a consumer's is (`n-staging`), so staging
 never sends into the default environment's queue.
 
+Right after a create, Cloudflare can take a few seconds to show it. A queue
+`bynk deploy` has just created may be missing from the account's queue list,
+and on a first deploy a new Worker's lookup can answer that it doesn't exist
+yet. So the deploy waits, for up to 30 seconds, until the new queue or Worker
+shows up, and then carries on: the push finds the queue, and a new Worker's
+triggers (workers.dev, routes, crons) are applied in the same run. If it still
+hasn't appeared, the deploy stops and says the platform is lagging; run
+`bynk deploy` again to finish. What was created is already recorded, so nothing
+is created twice.
+
 ### Durable Objects
 
 Each agent compiles to a Durable Object class, and so does the events fan-out

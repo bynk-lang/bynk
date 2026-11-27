@@ -263,8 +263,8 @@ stopped: exit 1: could not create the queue `outbound`: Cloudflare answered 500 
 +153 
 +154 [environments.default.workers.shop-cart.expects]
 +155 
--- call 22 fails: d1 migrations apply D1_ORDERS --remote
-stopped: exit 1: could not apply the migrations of the D1 database `shop-orders` for `shop`'s `D1_ORDERS`, so nothing was pushed: ✘ [ERROR] the stand-in failed call 22
+-- call 23 fails: d1 migrations apply D1_ORDERS --remote
+stopped: exit 1: could not apply the migrations of the D1 database `shop-orders` for `shop`'s `D1_ORDERS`, so nothing was pushed: ✘ [ERROR] the stand-in failed call 23
 +  7     "outbound",
 + 21 [environments.default.kv_instances.shop.KV_CART]
 + 22 id = "kv-shop-cart"
@@ -312,8 +312,8 @@ stopped: exit 1: could not apply the migrations of the D1 database `shop-orders`
 +154 
 +155 [environments.default.workers.shop-cart.expects]
 +156 
--- call 23 fails: secret put API_TOKEN
-stopped: exit 1: could not set the secret `API_TOKEN` on `shop`: ✘ [ERROR] the stand-in failed call 23
+-- call 24 fails: secret put API_TOKEN
+stopped: exit 1: could not set the secret `API_TOKEN` on `shop`: ✘ [ERROR] the stand-in failed call 24
 +  7     "outbound",
 + 21 [environments.default.kv_instances.shop.KV_CART]
 + 22 id = "kv-shop-cart"
@@ -361,7 +361,7 @@ stopped: exit 1: could not set the secret `API_TOKEN` on `shop`: ✘ [ERROR] the
 +154 
 +155 [environments.default.workers.shop-cart.expects]
 +156 
--- call 24 fails: deploy
+-- call 25 fails: deploy
 stopped: exit 1: wrangler deploy failed for `shop` (exit 1)
 +  7     "outbound",
 + 21 [environments.default.kv_instances.shop.KV_CART]
@@ -410,8 +410,8 @@ stopped: exit 1: wrangler deploy failed for `shop` (exit 1)
 +154 
 +155 [environments.default.workers.shop-cart.expects]
 +156 
--- call 25 fails: kv namespace delete --namespace-id kv-gone-default --skip-confirmation
-stopped: exit 1: could not delete the orphaned KV namespace for `gone`: Cloudflare answered 500 to call 25
+-- call 26 fails: kv namespace delete --namespace-id kv-gone-default --skip-confirmation
+stopped: exit 1: could not delete the orphaned KV namespace for `gone`: Cloudflare answered 500 to call 26
 +  7     "outbound",
 + 21 [environments.default.kv_instances.shop.KV_CART]
 + 22 id = "kv-shop-cart"
@@ -472,8 +472,8 @@ stopped: exit 1: could not delete the orphaned KV namespace for `gone`: Cloudfla
 -122     "orders@example.com",
 -123     "returns@example.com",
 -124 ]
--- call 26 fails: kv namespace delete --namespace-id kv-gone-cache-default --skip-confirmation
-stopped: exit 1: could not delete the orphaned KV namespace `KV_CACHE` for `gone`: Cloudflare answered 500 to call 26
+-- call 27 fails: kv namespace delete --namespace-id kv-gone-cache-default --skip-confirmation
+stopped: exit 1: could not delete the orphaned KV namespace `KV_CACHE` for `gone`: Cloudflare answered 500 to call 27
 +  7     "outbound",
 - 11 [environments.default.kv.gone]
 - 12 id = "kv-gone-default"
@@ -537,8 +537,8 @@ stopped: exit 1: could not delete the orphaned KV namespace `KV_CACHE` for `gone
 -122     "orders@example.com",
 -123     "returns@example.com",
 -124 ]
--- call 27 fails: kv namespace delete --namespace-id kv-shop-old-default --skip-confirmation
-stopped: exit 1: could not delete the orphaned KV namespace `KV_OLD` for `shop`: Cloudflare answered 500 to call 27
+-- call 28 fails: kv namespace delete --namespace-id kv-shop-old-default --skip-confirmation
+stopped: exit 1: could not delete the orphaned KV namespace `KV_OLD` for `shop`: Cloudflare answered 500 to call 28
 +  7     "outbound",
 - 11 [environments.default.kv.gone]
 - 12 id = "kv-gone-default"
@@ -603,8 +603,8 @@ stopped: exit 1: could not delete the orphaned KV namespace `KV_OLD` for `shop`:
 -122     "orders@example.com",
 -123     "returns@example.com",
 -124 ]
--- call 30 fails: hyperdrive delete hd-gone
-stopped: exit 1: could not delete the orphaned Hyperdrive config `gone-main` of `gone`'s `HYPERDRIVE_GONE`: Cloudflare answered 500 to call 30
+-- call 31 fails: hyperdrive delete hd-gone
+stopped: exit 1: could not delete the orphaned Hyperdrive config `gone-main` of `gone`'s `HYPERDRIVE_GONE`: Cloudflare answered 500 to call 31
 +  7     "outbound",
 - 11 [environments.default.kv.gone]
 - 12 id = "kv-gone-default"
@@ -676,8 +676,8 @@ stopped: exit 1: could not delete the orphaned Hyperdrive config `gone-main` of 
 -122     "orders@example.com",
 -123     "returns@example.com",
 -124 ]
--- call 31 fails: hyperdrive delete hd-shop-main-was
-stopped: exit 1: could not delete the orphaned Hyperdrive config `shop-main-was` of `shop`'s `HYPERDRIVE_MAIN`: Cloudflare answered 500 to call 31
+-- call 32 fails: hyperdrive delete hd-shop-main-was
+stopped: exit 1: could not delete the orphaned Hyperdrive config `shop-main-was` of `shop`'s `HYPERDRIVE_MAIN`: Cloudflare answered 500 to call 32
 +  7     "outbound",
 - 11 [environments.default.kv.gone]
 - 12 id = "kv-gone-default"
@@ -751,8 +751,8 @@ stopped: exit 1: could not delete the orphaned Hyperdrive config `shop-main-was`
 -122     "orders@example.com",
 -123     "returns@example.com",
 -124 ]
--- call 32 fails: queues delete old-jobs
-stopped: exit 1: could not delete the orphaned queue `old-jobs`: Cloudflare answered 500 to call 32
+-- call 33 fails: queues delete old-jobs
+stopped: exit 1: could not delete the orphaned queue `old-jobs`: Cloudflare answered 500 to call 33
 +  7     "outbound",
 - 11 [environments.default.kv.gone]
 - 12 id = "kv-gone-default"
@@ -2285,8 +2285,8 @@ stopped: exit 1: could not create the queue `outbound-staging`: Cloudflare answe
 +210 [environments.staging.workers.shop-cart.contracts]
 +211 
 +212 [environments.staging.workers.shop-cart.expects]
--- call 24 fails: d1 migrations apply D1_ORDERS --remote --env staging
-stopped: exit 1: could not apply the migrations of the D1 database `shop-orders-staging` for `shop`'s `D1_ORDERS`, so nothing was pushed: ✘ [ERROR] the stand-in failed call 24
+-- call 25 fails: d1 migrations apply D1_ORDERS --remote --env staging
+stopped: exit 1: could not apply the migrations of the D1 database `shop-orders-staging` for `shop`'s `D1_ORDERS`, so nothing was pushed: ✘ [ERROR] the stand-in failed call 25
 +127 queues = [
 +128     "intake",
 +129     "old-jobs",
@@ -2366,8 +2366,8 @@ stopped: exit 1: could not apply the migrations of the D1 database `shop-orders-
 +218 [environments.staging.workers.shop-cart.contracts]
 +219 
 +220 [environments.staging.workers.shop-cart.expects]
--- call 25 fails: secret put API_TOKEN --env staging
-stopped: exit 1: could not set the secret `API_TOKEN` on `shop-staging`: ✘ [ERROR] the stand-in failed call 25
+-- call 26 fails: secret put API_TOKEN --env staging
+stopped: exit 1: could not set the secret `API_TOKEN` on `shop-staging`: ✘ [ERROR] the stand-in failed call 26
 +127 queues = [
 +128     "intake",
 +129     "old-jobs",
@@ -2447,7 +2447,7 @@ stopped: exit 1: could not set the secret `API_TOKEN` on `shop-staging`: ✘ [ER
 +218 [environments.staging.workers.shop-cart.contracts]
 +219 
 +220 [environments.staging.workers.shop-cart.expects]
--- call 26 fails: deploy --env staging
+-- call 27 fails: deploy --env staging
 stopped: exit 1: wrangler deploy failed for `shop-staging` (exit 1)
 +127 queues = [
 +128     "intake",
@@ -2528,8 +2528,8 @@ stopped: exit 1: wrangler deploy failed for `shop-staging` (exit 1)
 +218 [environments.staging.workers.shop-cart.contracts]
 +219 
 +220 [environments.staging.workers.shop-cart.expects]
--- call 27 fails: queues delete old-jobs-staging
-stopped: exit 1: could not delete the orphaned queue `old-jobs-staging`: Cloudflare answered 500 to call 27
+-- call 28 fails: queues delete old-jobs-staging
+stopped: exit 1: could not delete the orphaned queue `old-jobs-staging`: Cloudflare answered 500 to call 28
 +127 queues = [
 +128     "intake",
 +129     "old-jobs",
