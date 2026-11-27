@@ -6,6 +6,7 @@ import { __BynkSecret, __bynkSecret } from "./__bynk_runtime/secret.js";
 import { __bynkIsCron } from "./__bynk_runtime/time.js";
 import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
+import { HttpResult } from "./__bynk_runtime/httpresult.js";
 
 import { LocaleTag } from "./bynk/locale/types.js";
 
@@ -486,6 +487,81 @@ export const StreamResponse = {
 };
 
 /**
+ * The request an `on ANY(…)` pass-through route received (#3752), as only
+ * `Upstream.forward` sends it on: `method()` (upper case), `headers()` (the
+ * same view a `headers: RequestHeaders` parameter gets, the route's consumed
+ * credential hidden) and `query()` (the raw query string, without `?`). Its
+ * body isn't readable here: `forward` consumes it, once. Like
+ * `RequestHeaders` it is read while the request is handled and never kept: it
+ * can't be a field, cross a boundary or be stored
+ * (`bynk.types.inbound_request_at_boundary`), and only a pass-through route
+ * takes one (`bynk.http.inbound_request_not_pass_through`).
+ */
+export type InboundRequest = string & { readonly __brand: "InboundRequest" };
+
+export const InboundRequest = {
+  of(value: string): Result<InboundRequest, ValidationError> {
+    return Ok(value as InboundRequest);
+  },
+  unsafe(value: string): InboundRequest {
+    return value as InboundRequest;
+  },
+};
+
+/**
+ * An upstream's answer, as `Upstream.forward` returns it (#3752): its status,
+ * headers and streamed body, passed through by `Forward(…)`. There is no
+ * constructor, so a handler can't fabricate one, and it can't carry a status or
+ * header that didn't come from the declared origin. `status()` and
+ * `header(name)` read it for a handler that decides on them.
+ */
+export type Forwarded = string & { readonly __brand: "Forwarded" };
+
+export const Forwarded = {
+  of(value: string): Result<Forwarded, ValidationError> {
+    return Ok(value as Forwarded);
+  },
+  unsafe(value: string): Forwarded {
+    return value as Forwarded;
+  },
+};
+
+/**
+ * What an `on ANY(…)` pass-through route answers (#3752): `Forward(response)`
+ * sends an upstream's answer through, with the router's own `ETag`, `HEAD`,
+ * `OPTIONS`, `405` and CORS behaviour suspended; `Respond(result)` answers
+ * locally with any `HttpResult[()]`, shaped by the router as on an ordinary
+ * route.
+ */
+export type PassThrough =
+    { readonly tag: "Forward"; readonly response: Forwarded }
+  | { readonly tag: "Respond"; readonly result: HttpResult<void> };
+
+export const PassThrough = {
+  Forward: (response: Forwarded): PassThrough => ({ tag: "Forward", response }),
+  Respond: (result: HttpResult<void>): PassThrough => ({ tag: "Respond", result }),
+};
+
+/**
+ * Why `Upstream.forward` sent nothing, or got no answer (#3752). `Timeout` is
+ * no response head within the instance's `@timeout`; `Unreachable` is a
+ * connection that failed; `InvalidPath` is a `path` refused before anything was
+ * sent (not starting with `/`, holding `?`, `#` or a control character, or a
+ * `.` or `..` segment, encoded or not). It may gain variants, so a `match` on it
+ * needs a wildcard.
+ */
+export type UpstreamError =
+    { readonly tag: "Timeout" }
+  | { readonly tag: "Unreachable" }
+  | { readonly tag: "InvalidPath" };
+
+export const UpstreamError = {
+  Timeout: { tag: "Timeout" } as UpstreamError,
+  Unreachable: { tag: "Unreachable" } as UpstreamError,
+  InvalidPath: { tag: "InvalidPath" } as UpstreamError,
+};
+
+/**
  * Runtime metadata carried alongside an event payload (Events track, slice
  * 2; ADR 0293, spine #936), available as an `on event`
  * handler's optional second parameter. `eventId` is minted once per
@@ -603,6 +679,20 @@ export interface Fetch {
 }
 
 export const __FetchToken: symbol = globalThis.Symbol("Fetch");
+
+/**
+ * A declared upstream origin a pass-through route forwards to (#3752):
+ * `capability Pages = Upstream @origin("https://pages.example") @timeout(30.seconds)`.
+ * The origin is a literal or a `String` constant, never a value computed at run
+ * time, so no request can steer the proxy to another host. `forward` builds the
+ * URL textually, the origin then `path` then the raw query, and checks the
+ * result's origin before sending; `path` must start with `/`.
+ */
+export interface Upstream {
+  forward(request: InboundRequest, path: string): globalThis.Promise<Result<Forwarded, UpstreamError>>;
+}
+
+export const __UpstreamToken: symbol = globalThis.Symbol("Upstream");
 
 /**
  * Reads named secrets from the platform's secret store.

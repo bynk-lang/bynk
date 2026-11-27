@@ -1,6 +1,16 @@
 adapter bynk {
 	uses bynk.locale.types
-	exports capability { Clock, Random, Logger, Fetch, Secrets, Locale, Idempotency, Events, Upstream }
+	exports capability {
+		Clock,
+		Random,
+		Logger,
+		Fetch,
+		Secrets,
+		Locale,
+		Idempotency,
+		Events,
+		Upstream,
+	}
 	exports opaque { Secret, Authorization, InboundRequest, Forwarded }
 	exports transparent {
 		Uuid,
@@ -508,7 +518,10 @@ adapter bynk {
 	result's origin before sending; `path` must start with `/`.
 	---
 	capability Upstream {
-		fn forward(request: InboundRequest, path: String) -> Effect[Result[Forwarded, UpstreamError]]
+		fn forward(
+			request: InboundRequest,
+			path: String
+		) -> Effect[Result[Forwarded, UpstreamError]]
 	}
 
 	---

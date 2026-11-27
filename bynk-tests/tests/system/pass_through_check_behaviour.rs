@@ -144,6 +144,97 @@ service proxy from http {
     assert!(ok, "qualified variants must check:\n{out}");
 }
 
+/// D8: where an expected type names one sum, a bare `Forward` or `Respond` is
+/// that sum's, though the program declares its own: a return type picks
+/// `PassThrough.Forward` in `pass` and `Move.Forward` in `step`, and an
+/// annotated `let` picks `PassThrough.Respond` over the program's own `Respond`.
+#[test]
+fn a_bare_variant_resolves_by_its_expected_type() {
+    let (ok, out) = check(
+        "expected-type",
+        r#"context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough }
+
+type Move = | Forward(steps: Int) | Hold
+type Reply = | Respond(text: String) | Silent
+
+fn step() -> Move {
+	Forward(1)
+}
+
+fn reply() -> Reply {
+	Respond("hi")
+}
+
+fn pass(response: Forwarded) -> PassThrough {
+	Forward(response)
+}
+
+capability Pages = Upstream @origin("https://upstream.example")
+
+service proxy from http {
+	on ANY("/blog/*path") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor given Pages {
+		let got <- Pages.forward(request, path)
+		match got {
+			Ok(response) => pass(response)
+			Err(_) => {
+				let answer: PassThrough = Respond(BadGateway("no"))
+				answer
+			}
+		}
+	}
+}
+"#,
+    );
+    assert!(ok, "a bare variant must resolve by its expected type:\n{out}");
+}
+
+/// §12: `bynk.cloudflare`'s `EmailVerdict` also has a `Forward`, so an email
+/// handler that consumes the whole of `bynk` sees two. The handler's
+/// `Effect[EmailVerdict]` picks the verdict's, in a tail, a `match` arm and an
+/// `if` branch, as it did before `PassThrough` existed.
+#[test]
+fn an_email_handlers_bare_forward_is_still_the_verdicts() {
+    let (ok, out) = check(
+        "email-forward",
+        r#"context demo
+
+consumes bynk
+consumes bynk.cloudflare { InboundEmail, EmailVerdict }
+
+service intake from email("support@q.example") {
+	on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+		match mail.subject {
+			"f" => Forward("team@q.example")
+			_ => Accept
+		}
+	}
+}
+
+service branch from email("branch@q.example") {
+	on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+		if mail.subject == "f" {
+			Forward("team@q.example")
+		} else {
+			Accept
+		}
+	}
+}
+
+service tail from email("tail@q.example") {
+	on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+		Forward("team@q.example")
+	}
+}
+"#,
+    );
+    assert!(
+        ok,
+        "an email handler's bare `Forward` must stay `EmailVerdict.Forward`:\n{out}"
+    );
+}
+
 /// D11: the boundary rule is the `bynk` type's, found by its declaration, so a
 /// program's own `InboundRequest` is an ordinary record.
 #[test]

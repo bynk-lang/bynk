@@ -315,37 +315,6 @@ pub fn upstream_origin_problem(origin: &str) -> Option<String> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::upstream_origin_problem as problem;
-
-    // §8 "SSRF to internal addresses": `http` only for a loopback host.
-    #[test]
-    fn an_upstream_origin_is_https_or_loopback_http() {
-        assert_eq!(problem("https://bynk-blog.pages.dev"), None);
-        assert_eq!(problem("https://upstream.example:8443"), None);
-        assert_eq!(problem("http://127.0.0.1:8787"), None);
-        assert_eq!(problem("http://localhost:3000"), None);
-        assert_eq!(problem("http://[::1]:9000"), None);
-        assert!(problem("http://upstream.example").is_some());
-        assert!(problem("http://10.0.0.1").is_some());
-        assert!(problem("http://localhost.evil.example").is_some());
-        assert!(problem("https://upstream.example/blog").is_some(), "a path");
-        assert!(
-            problem("https://upstream.example/").is_some(),
-            "a trailing slash"
-        );
-        assert!(
-            problem("https://user@upstream.example").is_some(),
-            "user information"
-        );
-        assert!(problem("HTTPS://Upstream.example").is_some(), "upper case");
-        assert!(problem("*").is_some());
-        assert!(problem("null").is_some());
-        assert!(problem("upstream.example").is_some(), "no scheme");
-    }
-}
-
 /// The held type (`InboundRequest` or `Forwarded`) that the named type `name`
 /// is, or holds at any depth in a record field or variant payload, as a
 /// `Stream` is found in a type that carries one. `bynk`'s own `PassThrough`
@@ -418,4 +387,35 @@ pub(crate) fn held_at_boundary(
         format!("{subject} cannot appear in {what} — {article} `{held}` is {is}, never persisted or sent"),
     )
     .with_note(instead)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::upstream_origin_problem as problem;
+
+    // §8 "SSRF to internal addresses": `http` only for a loopback host.
+    #[test]
+    fn an_upstream_origin_is_https_or_loopback_http() {
+        assert_eq!(problem("https://bynk-blog.pages.dev"), None);
+        assert_eq!(problem("https://upstream.example:8443"), None);
+        assert_eq!(problem("http://127.0.0.1:8787"), None);
+        assert_eq!(problem("http://localhost:3000"), None);
+        assert_eq!(problem("http://[::1]:9000"), None);
+        assert!(problem("http://upstream.example").is_some());
+        assert!(problem("http://10.0.0.1").is_some());
+        assert!(problem("http://localhost.evil.example").is_some());
+        assert!(problem("https://upstream.example/blog").is_some(), "a path");
+        assert!(
+            problem("https://upstream.example/").is_some(),
+            "a trailing slash"
+        );
+        assert!(
+            problem("https://user@upstream.example").is_some(),
+            "user information"
+        );
+        assert!(problem("HTTPS://Upstream.example").is_some(), "upper case");
+        assert!(problem("*").is_some());
+        assert!(problem("null").is_some());
+        assert!(problem("upstream.example").is_some(), "no scheme");
+    }
 }
