@@ -1,0 +1,10 @@
+{
+  "blurb": "An `ApiKey` actor's `list`, `revoke` and `revokeAll` read and change the key store the compiler generates for it, two agents. A service handler or an agent's handler can call an agent; a provider or a function cannot. So call the member in the handler, and pass the result on.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.api_key_member_in_provider",
+  "constructs": [],
+  "example": "provides Keys = ClientKeys {\n    fn forget(id: AccountId, key: ApiKeyId) -> Effect[Bool] {\n        Client.revoke(id, key)   // ✗ in a provider\n    }\n}\n\non DELETE(\"/accounts/:id/keys/:key\") (id: AccountId, key: ApiKeyId) -> Effect[HttpResult[()]] by Visitor {\n    let gone <- Client.revoke(id, key)   // ✓ in a service handler\n    if gone { NoContent } else { NotFound }\n}",
+  "severity": "error",
+  "summary": "An `ApiKey` actor's `list`, `revoke` or `revokeAll` is called outside a service or agent handler (#3939)."
+}

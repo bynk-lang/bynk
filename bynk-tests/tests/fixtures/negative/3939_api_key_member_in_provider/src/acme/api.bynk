@@ -1,0 +1,19 @@
+context acme.api
+
+consumes bynk { ApiKeyId }
+
+type AccountId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"), identity = AccountId }
+
+capability Keys {
+	fn forget(id: AccountId, key: ApiKeyId) -> Effect[Bool]
+}
+
+// #3939 (slice 2, §9): `revoke` calls the actor's generated key store, which a provider cannot
+// reach, so only a service handler or an agent's handler may call it.
+provides Keys = ClientKeys {
+	fn forget(id: AccountId, key: ApiKeyId) -> Effect[Bool] {
+		Client.revoke(id, key)
+	}
+}

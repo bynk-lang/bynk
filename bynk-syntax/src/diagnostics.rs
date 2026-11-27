@@ -124,6 +124,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "let same <- ApiKey.equal(a, b)   // ✗ internal to the generated key store\n\nlet same <- Crypto.equal(a, b)   // ✓",
     },
     Explain {
+        code: "bynk.actor.api_key_member_in_provider",
+        blurb: "An `ApiKey` actor's `list`, `revoke` and `revokeAll` read and change the key store the compiler generates for it, two agents. A service handler or an agent's handler can call an agent; a provider or a function cannot. So call the member in the handler, and pass the result on.",
+        example: "provides Keys = ClientKeys {\n    fn forget(id: AccountId, key: ApiKeyId) -> Effect[Bool] {\n        Client.revoke(id, key)   // ✗ in a provider\n    }\n}\n\non DELETE(\"/accounts/:id/keys/:key\") (id: AccountId, key: ApiKeyId) -> Effect[HttpResult[()]] by Visitor {\n    let gone <- Client.revoke(id, key)   // ✓ in a service handler\n    if gone { NoContent } else { NotFound }\n}",
+    },
+    Explain {
         code: "bynk.actor.api_key_mint_outside_handler",
         blurb: "`Actor.mint(identity, label)` hashes the new key under the pepper, and the pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's. So `mint` is legal only in a service handler. Mint the key there and return it; a provider or agent gets what it needs from the handler.",
         example: "agent Accounts {\n    key id: AccountId\n}\n\non call open(label: ApiKeyLabel) -> Effect[()] given Clock {\n    let _ <- Client.mint(self.id, label)   // ✗ in an agent\n}\n\non POST(\"/accounts/:id/keys\") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {\n    let r <- Client.mint(id, body.label)   // ✓ in a service handler\n}",
@@ -7576,6 +7581,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.api_key_internal",
         "A program names `ApiKey.equal`, the generated key store's internal comparison (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_member_in_provider",
+        "An `ApiKey` actor's `list`, `revoke` or `revokeAll` is called outside a service or agent handler (#3939).",
     ),
     d(
         "bynk.actor.api_key_mint_outside_handler",
