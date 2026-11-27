@@ -364,6 +364,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         imported_from: HashMap::new(),
         imported_from_kind: HashMap::new(),
         imported_decl_paths: HashMap::new(),
+        split_consumed_contexts: HashSet::new(),
         consumed_type_aliases: HashMap::new(),
         unit_kind: UnitKind::Commons,
         owning_context: None,
