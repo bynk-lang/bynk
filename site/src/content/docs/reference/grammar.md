@@ -1062,6 +1062,14 @@ Declares the capabilities a handler or provider may use.
 **Static semantics.**
 {{#grammar-semantics given_clause}}
 
+### capability_parameter {#rule-capability_parameter}
+
+{{#grammar capability_parameter}}
+
+A commons free function's capability parameter, `given Store: Kv`: a name for the
+instance each caller binds, bounded by an instantiable kind the commons selects
+(experimental). See [Capability parameters in a commons](/reference/capabilities/#capability-parameters).
+
 ## Actors (v0.45)
 
 An `actor` is a nominal *boundary contract* — a closed, compiler-known
@@ -1811,10 +1819,33 @@ Reads a field of a record or agent state: `value.field`.
 
 {{#grammar call}}
 
-Calls a function or constructs a variant: `name(args)`.
+Calls a function or constructs a variant: `name(args)`. A call to a commons
+function with capability parameters ends its arguments with their bindings,
+`name(args, given Store = Sessions)` (experimental).
 
 **Static semantics.**
 {{#grammar-semantics call}}
+
+### _call_arguments {#rule-_call_arguments}
+
+{{#grammar _call_arguments}}
+
+A call's arguments, then its capability bindings: `f(x, y)`, `f(x, given S = A)`,
+`f(given S = A)`.
+
+### capability_bindings {#rule-capability_bindings}
+
+{{#grammar capability_bindings}}
+
+The bindings after a call's ordinary arguments, behind `given`. No trailing comma
+follows the last.
+
+### capability_binding {#rule-capability_binding}
+
+{{#grammar capability_binding}}
+
+One binding, `Parameter = Capability`: the callee's capability parameter, and a
+capability in the caller's own `given` of the parameter's kind.
 
 ### record_construction {#rule-record_construction}
 
@@ -2057,10 +2088,13 @@ parse error.
 
 {{#grammar literal_pattern}}
 
-Matches a primitive scrutinee (`Int`/`String`/`Bool`, or a refinement over one)
-by value equality — an integer (optionally negated), a string, or a boolean.
-A literal-pattern `match` needs a wildcard `_` arm to be exhaustive, except over
-`Bool`, which is complete once both `true` and `false` appear.
+Matches a primitive scrutinee (`Int`/`String`/`Bool`/`Decimal`, or a refinement
+over one) by value equality — an integer (optionally negated), a string, a
+boolean, or a `Decimal` literal (`20.0d`, `-1.5d`), which matches by value at any
+scale. A literal-pattern `match` needs a wildcard `_` arm to be exhaustive, except
+over `Bool`, which is complete once both `true` and `false` appear. A `Float`
+literal parses so that the checker can say why it is refused
+([`bynk.types.float_literal_pattern`](/reference/diagnostics/bynk.types.float_literal_pattern/)).
 
 ### or_pattern {#rule-or_pattern}
 

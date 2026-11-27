@@ -8,6 +8,10 @@
 use super::*;
 use crate::error::Applicability;
 
+/// #3959: a call's arguments, its capability bindings, and the comments
+/// between the arguments.
+type CallArgs = (Vec<Expr>, Vec<CapBinding>, Option<Box<ListTrivia>>);
+
 /// #3110: a record literal's `...base` (if any), its fields, and its comments.
 type RecordItems = (Option<Expr>, Vec<FieldInit>, Option<Box<ListTrivia>>);
 
@@ -1115,7 +1119,7 @@ impl<'a> Parser<'a> {
                         .with_note("a bare `name[T]` value form is reserved"));
                     }
                     self.bump();
-                    let (args, trivia) = self.parse_arg_list_body()?;
+                    let (args, bindings, trivia) = self.parse_call_arg_list_body()?;
                     let close_paren =
                         self.expect(TokenKind::RParen, "to close the argument list")?;
                     return Ok(Expr {
@@ -1124,6 +1128,7 @@ impl<'a> Parser<'a> {
                             name: ident.clone(),
                             type_args,
                             args,
+                            bindings: Self::boxed_bindings(bindings),
                             trivia,
                         },
                         span: ident.span.merge(close_paren.span),
@@ -1140,7 +1145,7 @@ impl<'a> Parser<'a> {
                     && !self.next_token_on_new_line(ident.span)
                 {
                     self.bump();
-                    let (args, trivia) = self.parse_arg_list_body()?;
+                    let (args, bindings, trivia) = self.parse_call_arg_list_body()?;
                     let close = self.expect(TokenKind::RParen, "to close the argument list")?;
                     Ok(Expr {
                         id: self.alloc_expr_id(),
@@ -1148,6 +1153,7 @@ impl<'a> Parser<'a> {
                             name: ident.clone(),
                             type_args: Vec::new(),
                             args,
+                            bindings: Self::boxed_bindings(bindings),
                             trivia,
                         },
                         span: ident.span.merge(close.span),
@@ -1335,10 +1341,41 @@ impl<'a> Parser<'a> {
     fn parse_arg_list_body(
         &mut self,
     ) -> Result<(Vec<Expr>, Option<Box<ListTrivia>>), CompileError> {
+        let (args, bindings, trivia) = self.parse_call_arg_list_body()?;
+        if let Some(b) = bindings.first() {
+            return Err(Self::binding_not_on_a_function(b.span));
+        }
+        Ok((args, trivia))
+    }
+
+    /// #3959: bindings follow only a call to a function by name; a method, a
+    /// constructor or `Val[T](…)` has no capability parameters.
+    fn binding_not_on_a_function(span: Span) -> CompileError {
+        CompileError::new(
+            "bynk.given.binding_unknown",
+            span,
+            "only a call to a function can bind capability parameters",
+        )
+        .with_note("a method or a constructor declares no capability parameters, so there is nothing to bind: remove `given …` from the arguments")
+    }
+
+    /// The arguments of a call by name, then (#3959) its capability bindings:
+    /// see [`CallArgs`].
+    ///
+    /// `"(" ( args | (args ",")? "given" binding ("," binding)* )? ")"`, with
+    /// `binding = Name "=" CapRef`. `given` cannot start an expression, so it
+    /// ends the ordinary arguments; no trailing comma follows the last binding,
+    /// as none follows an argument.
+    pub(crate) fn parse_call_arg_list_body(&mut self) -> Result<CallArgs, CompileError> {
         let mut args = Vec::new();
         let mut items = Vec::new();
+        let mut bindings = Vec::new();
         if self.peek_kind() != Some(TokenKind::RParen) {
             loop {
+                if self.peek_kind() == Some(TokenKind::Given) {
+                    bindings = self.parse_cap_bindings()?;
+                    break;
+                }
                 let leading = self.take_leading_trivia();
                 args.push(self.parse_expr()?);
                 let comma = self.eat(TokenKind::Comma);
@@ -1352,7 +1389,32 @@ impl<'a> Parser<'a> {
             }
         }
         let closing = self.take_leading_trivia();
-        Ok((args, Self::list_trivia(items, closing)))
+        Ok((args, bindings, Self::list_trivia(items, closing)))
+    }
+
+    /// #3959: a call's bindings as the AST holds them, boxed, `None` for none.
+    fn boxed_bindings(bindings: Vec<CapBinding>) -> Option<Box<[CapBinding]>> {
+        (!bindings.is_empty()).then(|| bindings.into_boxed_slice())
+    }
+
+    /// #3959: `given Name = CapRef ("," Name = CapRef)*`, at the `given`.
+    fn parse_cap_bindings(&mut self) -> Result<Vec<CapBinding>, CompileError> {
+        self.bump();
+        let mut bindings = Vec::new();
+        loop {
+            let param = self.expect_ident("as the capability parameter a binding names")?;
+            self.expect(
+                TokenKind::Eq,
+                "after the capability parameter, as in `given Store = Sessions`",
+            )?;
+            let value = self.parse_cap_ref()?;
+            let span = param.span.merge(value.span);
+            bindings.push(CapBinding { param, value, span });
+            if self.eat(TokenKind::Comma).is_none() {
+                break;
+            }
+        }
+        Ok(bindings)
     }
 
     /// `None` when no item and no closing slot holds a comment.
@@ -1727,11 +1789,19 @@ impl<'a> Parser<'a> {
                 return Ok(Pattern::Range(self.parse_int_range()?));
             }
             match t.kind {
-                TokenKind::IntLit | TokenKind::StrLit | TokenKind::True | TokenKind::False => {
+                TokenKind::IntLit
+                | TokenKind::StrLit
+                | TokenKind::True
+                | TokenKind::False
+                | TokenKind::DecimalLit
+                | TokenKind::FloatLit => {
                     return self.parse_literal_pattern();
                 }
                 TokenKind::Minus
-                    if self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::IntLit) =>
+                    if matches!(
+                        self.tokens.get(self.pos + 1).map(|t| t.kind),
+                        Some(TokenKind::IntLit | TokenKind::DecimalLit | TokenKind::FloatLit)
+                    ) =>
                 {
                     return self.parse_literal_pattern();
                 }
@@ -2231,6 +2301,24 @@ impl<'a> Parser<'a> {
             }
             TokenKind::True => (LiteralValue::Bool(true), t.span),
             TokenKind::False => (LiteralValue::Bool(false), t.span),
+            // #3973: a `Decimal` literal matches by value; a `Float` literal is admitted so the
+            // checker can say why it cannot be matched.
+            TokenKind::DecimalLit => {
+                let slice = self.slice(t.span);
+                let body = crate::lexer::strip_digit_separators(&slice[..slice.len() - 1]);
+                let scale = body.split_once('.').map_or(0, |(_, f)| f.len() as u32);
+                text = Some(format!("{}{slice}", if neg.is_some() { "-" } else { "" }));
+                (
+                    LiteralValue::decimal(neg.is_some(), &body.replace('.', ""), scale),
+                    t.span,
+                )
+            }
+            TokenKind::FloatLit => {
+                let slice = self.slice(t.span);
+                let written = format!("{}{slice}", if neg.is_some() { "-" } else { "" });
+                text = Some(written.clone());
+                (LiteralValue::Float(written), t.span)
+            }
             _ => unreachable!("parse_literal_value called on a non-literal token"),
         };
         let span = neg.map(|m| m.span).unwrap_or(t.span).merge(end_span);

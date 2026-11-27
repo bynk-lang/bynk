@@ -582,6 +582,11 @@ fn lower_event_pattern_ir(pattern: &EventPattern) -> EventPatternIr {
                             LiteralValue::Int(n) => ConstVal::Int(*n),
                             LiteralValue::Str(s) => ConstVal::Str(s.clone()),
                             LiteralValue::Bool(b) => ConstVal::Bool(*b),
+                            // A subscription pattern's value is an `Int`, `String` or `Bool`
+                            // literal; `Decimal` and `Float` are match-pattern forms (#3973).
+                            LiteralValue::Decimal { .. } | LiteralValue::Float(_) => {
+                                unreachable!("an events pattern value is an Int, String or Bool")
+                            }
                         })
                     }
                     EventPatternValue::Variant { variant, .. } => EventPatternValueIr::Variant {
@@ -1011,6 +1016,7 @@ fn lower_http_method_ir(m: HttpMethod) -> IrHttpMethod {
         HttpMethod::Put => IrHttpMethod::Put,
         HttpMethod::Patch => IrHttpMethod::Patch,
         HttpMethod::Delete => IrHttpMethod::Delete,
+        HttpMethod::Any => IrHttpMethod::Any,
     }
 }
 
@@ -1086,6 +1092,9 @@ pub fn lower_actor_seam_ir(handler: &Handler, actors: &HashMap<String, ActorDecl
     }
     if let Some(seam) = bynk_check::actors::signed_cookie_seam_for(handler, actors) {
         return ActorSeamIr::SignedCookie(seam);
+    }
+    if let Some(seam) = bynk_check::api_key::api_key_seam_for(handler, actors) {
+        return ActorSeamIr::ApiKey(seam);
     }
     if let Some(binder) = bynk_check::actors::caller_binder_for(handler, actors) {
         return ActorSeamIr::Caller(binder);
@@ -1808,6 +1817,7 @@ capability Store {
                 name: "Clock".to_string(),
                 span: Span::default(),
             },
+            bound: None,
             span: Span::default(),
         };
         let ir = lower_cap_ref_ir(&cap_ref);
@@ -1835,6 +1845,7 @@ capability Store {
                 name: "Ledger".to_string(),
                 span: Span::default(),
             },
+            bound: None,
             span: Span::default(),
         };
         let ir = lower_cap_ref_ir(&cap_ref);
@@ -2659,6 +2670,7 @@ provides Store = MemStore given Random, Clock {
                     name: "Clock".to_string(),
                     span: Span::default(),
                 },
+                bound: None,
                 span: Span::default(),
             }],
             ops: Vec::new(),

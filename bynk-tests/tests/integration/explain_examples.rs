@@ -74,12 +74,24 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
 const WARNING_ONLY: &[(&str, &str)] = &[
     (
+        "bynk.container.unbounded_instances",
+        "a warning; `positive/4112_container_unbounded_instances` holds it with `expected_warnings.txt`, and `positive/4112_container_bounded_instances` holds the good cases",
+    ),
+    (
         "bynk.http.body_cap_defaulted",
         "a hint, which the positive-fixture gate leaves out; `tests/system/body_cap_hint.rs` holds it",
     ),
     (
         "bynk.store.unique_implies_indexed",
         "a warning; `positive/4038_store_unique_behaviour` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.actor.api_key_unlimited",
+        "a warning; `positive/3939_api_key_unlimited` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.actor.signed_cookie_issue_on_safe_method",
+        "a warning; `positive/3825_issue_on_safe_method` holds it with `expected_warnings.txt`",
     ),
     (
         "bynk.actor.signed_cookie_ttl_long",
@@ -92,6 +104,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
     (
         "bynk.http.cookie_cross_site_without_credentials",
         "a warning; `positive/3329_cookie_cross_site_without_credentials` holds it with `expected_warnings.txt`, and `positive/3329_cookie_cross_site_credentials` holds the credentialed good case",
+    ),
+    (
+        "bynk.commons.capability_unused",
+        "a warning; `positive/3959_commons_capability_unused` holds it with `expected_warnings.txt`",
     ),
     (
         "bynk.consumes.capability_not_selected",
@@ -633,7 +649,11 @@ fn compile_failures(code: &str, bad: &Side, good: &Side) -> Vec<String> {
             code, bad.name
         ));
     }
-    if !good.errors.is_empty() {
+    // #3752 (slice 3a): a build refuses every `on ANY` route until its router
+    // lands (slice 3b retires this), and only once the program checks clean; so
+    // a good side refused for that alone is one the checker accepted.
+    let built_later = |e: &Reported| e.code == "bynk.http.pass_through_not_emitted";
+    if !good.errors.is_empty() && !good.errors.iter().all(built_later) {
         let got: Vec<(&str, usize)> = good.errors.iter().map(|e| (&*e.code, e.line)).collect();
         out.push(format!(
             "{}: {} must compile, but its errors are {got:?}",

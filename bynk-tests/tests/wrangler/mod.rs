@@ -68,15 +68,41 @@ pub fn npx_command() -> std::process::Command {
 #[allow(dead_code)]
 pub const BOOT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(180);
 
-/// The line `wrangler dev` logs once its Worker is serving on `port`.
+/// The line `wrangler dev` logs once its Worker is serving on `port`, as Linux and macOS print it.
 #[allow(dead_code)]
 pub fn ready_line(port: u16) -> String {
     format!("Ready on http://localhost:{port}")
 }
 
+/// Whether `log` holds the line `wrangler dev` logs once its Worker is serving on `port`.
+///
+/// The line names the address wrangler bound, and that differs by OS: `localhost` on Linux and
+/// macOS, `127.0.0.1` on Windows (#4579). Matching only the `localhost` form meant a Windows
+/// boot never passed the gate. Every workerd test there waited out the whole
+/// [`BOOT_DEADLINE`] and then skipped, which more than doubled the Windows job. So any of
+/// wrangler's local host forms is accepted, and the port must be the whole number that follows,
+/// so `:1870` does not match a line for `:18700`.
+#[allow(dead_code)]
+pub fn logged_ready(log: &str, port: u16) -> bool {
+    const HOSTS: [&str; 3] = ["localhost:", "127.0.0.1:", "[::1]:"];
+    log.lines().any(|line| {
+        let Some(at) = line.find("Ready on http://") else {
+            return false;
+        };
+        let rest = &line[at + "Ready on http://".len()..];
+        HOSTS.iter().any(|host| {
+            rest.strip_prefix(host).is_some_and(|after| {
+                let digits: String = after.chars().take_while(char::is_ascii_digit).collect();
+                digits.parse::<u16>().is_ok_and(|p| p == port)
+            })
+        })
+    })
+}
+
 /// Wait until `wrangler dev`, logging to `log_path`, is serving its Worker on `port`:
-/// it has logged [`ready_line`] for that port **and** `probe` (a request the Worker answers,
-/// with whatever status its boot route gives) succeeds, within [`BOOT_DEADLINE`]. The log line
+/// it has logged its `Ready on` line for that port (any of wrangler's host forms,
+/// [`logged_ready`]) **and** `probe` (a request the Worker answers, with whatever status its
+/// boot route gives) succeeds, within [`BOOT_DEADLINE`]. The log line
 /// is the gate, and it names the port, because the port answering is not the Worker answering:
 /// under load a probe that accepts any HTTP reply took another server's `403 Forbidden` for the
 /// Worker (#4479). The error says which of the two waits expired.
@@ -104,7 +130,8 @@ pub fn wait_until_ready_or_exit(
     let mut logged_ready = false;
     loop {
         if !logged_ready {
-            logged_ready = std::fs::read_to_string(log_path).is_ok_and(|log| log.contains(&ready));
+            logged_ready =
+                std::fs::read_to_string(log_path).is_ok_and(|log| self::logged_ready(&log, port));
         }
         if logged_ready && probe() {
             return Ok(());
@@ -120,8 +147,8 @@ pub fn wait_until_ready_or_exit(
                 )
             } else {
                 format!(
-                    "wrangler had not logged `{ready}` within the {BOOT_DEADLINE:?} boot \
-                     deadline"
+                    "wrangler had not logged `{ready}` (or its `127.0.0.1` or `[::1]` form) \
+                     within the {BOOT_DEADLINE:?} boot deadline"
                 )
             });
         }
@@ -520,6 +547,37 @@ pub fn processes_under(dir: &std::path::Path) -> Vec<u32> {
             std::fs::read_link(format!("/proc/{pid}/cwd")).is_ok_and(|cwd| cwd.starts_with(dir))
         })
         .collect()
+}
+
+/// #4579: the boot gate reads wrangler's `Ready on` line on every OS.
+#[cfg(test)]
+mod ready_line_tests {
+    use super::logged_ready;
+
+    /// Linux and macOS name `localhost`; Windows names `127.0.0.1`. Both are the Worker serving.
+    #[test]
+    fn the_ready_line_is_read_in_each_host_form() {
+        let linux = "[wrangler:info] Ready on http://localhost:18700\n";
+        let windows = "[wrangler:info] Ready on http://127.0.0.1:18700\n";
+        let ipv6 = "[wrangler:info] Ready on http://[::1]:18700\n";
+        for log in [linux, windows, ipv6] {
+            assert!(logged_ready(log, 18700), "{log}");
+        }
+        assert!(logged_ready(
+            "[wrangler-ProxyWorker:info] Ready on http://127.0.0.1:18700\n",
+            18700
+        ));
+    }
+
+    /// The gate is still the line for this port: another port's line, a port that only starts
+    /// with this one, and a log with no such line do not pass it.
+    #[test]
+    fn only_the_line_for_this_port_passes() {
+        assert!(!logged_ready("Ready on http://localhost:18701\n", 18700));
+        assert!(!logged_ready("Ready on http://127.0.0.1:18700\n", 1870));
+        assert!(!logged_ready("⎔ Starting local server...\n", 18700));
+        assert!(!logged_ready("Ready on http://example.com:18700\n", 18700));
+    }
 }
 
 #[cfg(all(test, target_os = "linux"))]

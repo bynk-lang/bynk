@@ -1,0 +1,13 @@
+context demo
+
+// #3752 (D6): `/a-b` and `/a_b` would both be emitted as `http_GET_a_b`, so one
+// handler would answer both paths; the second is refused.
+service api from http {
+  on GET("/a-b") () -> Effect[HttpResult[String]] by Visitor {
+    Ok("dash")
+  }
+
+  on GET("/a_b") () -> Effect[HttpResult[String]] by Visitor {
+    Ok("underscore")
+  }
+}

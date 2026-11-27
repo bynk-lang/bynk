@@ -179,6 +179,12 @@ adapters, never a context. Another project depends on it under
 [`[package]`](/reference/tooling/manifest/#package) and
 [Share code between projects](/book/guides/projects-build-and-deployment/share-code-between-projects/).
 
+### pass-through route {#term-pass-through-route}
+
+An `on ANY(…)` route returning `Effect[PassThrough]`, which forwards its request to an
+[upstream](#term-upstream) and passes the answer through. Experimental. See
+[Pass-through routes](/reference/http/#pass-through-routes).
+
 ### prelude type {#term-prelude-type}
 
 A compiler-known type a unit can name with no import, as `Option` can. A prelude
@@ -246,6 +252,13 @@ a directory. See [Registry protocol](/reference/tooling/registry-protocol/) and
 A function precondition: `requires <name>: <pred>`, a pure `Bool` over the
 parameters. Guards the call and filters the runner's generated arguments (like a
 `for all … where`). `result` is not in scope in a `requires`.
+
+### rest segment {#term-rest-segment}
+
+A route's last segment written `*name`, which matches the rest of the path (zero
+or more segments) and binds it, still percent-encoded, as a `String`. The
+weakest segment when routes are ordered. Experimental. See
+[Rest segments](/reference/http/#rest-segments).
 
 ### `result` {#term-result}
 
@@ -320,6 +333,12 @@ no wire**. **`system`** stands contexts up as the Workers they deploy as and wir
 them across the real serialise → JSON → deserialise edge; a `system` case must span
 ≥ 2 contexts (`bynk.tier.system_needs_wire`). Participants for `integration` /
 `system` are **inferred** from the `consumes` graph — there is no `wires` clause.
+
+### upstream {#term-upstream}
+
+The origin a [pass-through route](#term-pass-through-route) forwards to: an `Upstream`
+instance whose `@origin` is declared, never computed. See
+[`Upstream`](/reference/bynk-capabilities/#upstream).
 
 ### `Val[T]` {#term-val}
 

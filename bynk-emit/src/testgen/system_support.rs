@@ -232,6 +232,7 @@ pub(super) fn emit_system_http_support(
             let path_params: Vec<&str> = path
                 .split('/')
                 .filter_map(|seg| seg.strip_prefix(':'))
+                .chain(bynk_check::http_rest::rest_name(&path))
                 .collect();
             // #2341 (L4), #3911: a `headers` param (the raw view or a typed record) is
             // neither: the drivers send it as the request's headers.
@@ -483,17 +484,9 @@ pub(super) fn emit_system_http_support(
                 &mut session_secrets,
                 (&typed_cookie, &raw_cookie),
             );
-            // #3936: a sum's cookie arm sends the same default `Sec-Fetch-Site`; a case's own
-            // header (a cross-site request, say) wins, as it does on a lone cookie route.
-            let csrf_default = if sum.as_ref().is_some_and(|s| {
-                s.members
-                    .iter()
-                    .any(|(_, c)| matches!(c, SumCredential::Cookie(_)))
-            }) {
-                vec![header("sec-fetch-site", str_lit("same-origin"))]
-            } else {
-                csrf_default
-            };
+            // #3936, #3825: a sum's cookie arm, and a route that issues a session, send the same default
+            // `Sec-Fetch-Site`; a case's own header (a cross-site request, say) wins, as on a lone cookie route.
+            let csrf_default = system_request::default_csrf(csrf_default, &sum, (h, &table.actors));
             // #2864: the secret a `by Forged` / `by Expired` Bearer token is
             // signed against — the lone Bearer actor's, or a sum's first
             // Bearer member's.
@@ -1667,6 +1660,15 @@ fn session_route(
     (typed_cookie, raw_cookie): (&CookieHeader, &CookieHeader),
 ) -> (Option<SessionDriver>, Entries, Entries, Entries) {
     let Some(seam) = bynk_check::actors::signed_cookie_seam_for(h, actors) else {
+        // #3825: a route that issues a session signs with the actor's key, though it does not read one.
+        for name in bynk_check::actors::issued_cookie_actors(h, actors) {
+            if let Some(seam) = actors
+                .get(&name)
+                .and_then(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
+            {
+                session_secrets.insert(seam.secret);
+            }
+        }
         return (
             None,
             typed_cookie.render(None),

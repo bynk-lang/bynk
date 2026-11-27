@@ -1,0 +1,6 @@
+context acme.api
+
+
+type AccountId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefx = "acme"), identity = AccountId }

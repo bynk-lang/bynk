@@ -54,16 +54,7 @@ impl Exit {
 /// takes its variants with it, so the `wrangler_resource_ops` probe reads what is left here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OpKind {
-    QueueCreate,
-    QueueInfo,
-    QueueDelete,
     D1MigrationsApply,
-    VectorizeList,
-    VectorizeGet,
-    VectorizeCreate,
-    VectorizeListMetadataIndex,
-    VectorizeCreateMetadataIndex,
-    VectorizeDelete,
     Push,
     TriggersDeploy,
     Whoami,
@@ -197,10 +188,13 @@ impl WranglerError {
 
     /// Whether a Worker lookup failed because the Worker is not there: Cloudflare's code 10007,
     /// or 10090 for a legacy environment, as wrangler reads them (`isWorkerNotFoundError`). An
-    /// auth or network failure is never mistaken for one.
+    /// auth or network failure is never mistaken for one, and nor is any call but the
+    /// deployments listing.
     pub(crate) fn worker_not_found(&self) -> bool {
-        self.exit_said()
-            .is_some_and(|said| said.contains("[code: 10007]") || said.contains("[code: 10090]"))
+        self.op == Some(OpKind::WorkerDeployments)
+            && self.exit_said().is_some_and(|said| {
+                said.contains("[code: 10007]") || said.contains("[code: 10090]")
+            })
     }
 
     /// Everything a failed call said, both streams, never empty: a non-zero exit with nothing to
@@ -240,43 +234,6 @@ impl WranglerError {
     /// which no predicate reads as benign.
     fn exit_said(&self) -> Option<String> {
         self.ran_and_failed().then(|| self.said())
-    }
-
-    /// Whether this create failed only because what it creates is already there.
-    ///
-    /// - A queue: "already exists" on either stream, wrangler being inconsistent about which. The
-    ///   race-loser's path (ADR 0194 D2): a queue that was simply there was found by `queues
-    ///   info` first.
-    /// - A metadata index: "metadata index already exists", as written: listed between the
-    ///   listing and the create, since Cloudflare builds them asynchronously.
-    pub(crate) fn already_exists(&self) -> bool {
-        let Some(said) = self.exit_said() else {
-            return false;
-        };
-        let lower = said.to_ascii_lowercase();
-        match self.op {
-            Some(OpKind::QueueCreate) => lower.contains("already exists"),
-            Some(OpKind::VectorizeCreateMetadataIndex) => {
-                said.contains("metadata index already exists")
-            }
-            _ => false,
-        }
-    }
-
-    /// Whether this delete failed only because what it deletes is already gone, so a re-run
-    /// `--prune` is safe (#839).
-    ///
-    /// - A queue: "does not exist" (`Queue "<name>" does not exist. To create it, …`).
-    ///
-    /// (A KV namespace's delete runs over REST since 1D.4a, read by its code, 10013.)
-    pub(crate) fn already_gone(&self) -> bool {
-        let Some(said) = self.exit_said() else {
-            return false;
-        };
-        match self.op {
-            Some(OpKind::QueueDelete) => said.to_ascii_lowercase().contains("does not exist"),
-            _ => false,
-        }
     }
 }
 
@@ -337,22 +294,6 @@ mod tests {
     }
 
     #[test]
-    fn already_exists_is_read_per_operation() {
-        let queue = Op::QueueCreate { name: "q" };
-        assert!(exit(&queue, 1, "Queue Already Exists", "").already_exists());
-        let meta = Op::Vectorize(VectorizeOp::CreateMetadataIndex {
-            name: "i",
-            property: "p",
-            ty: "string",
-        });
-        assert!(exit(&meta, 1, "", "metadata index already exists [code: 40004]").already_exists());
-        assert!(!exit(&meta, 1, "", "Metadata Index Already Exists").already_exists());
-        // Only a failed exit is ever benign, and only for a create.
-        assert!(!WranglerError::missing(&queue).already_exists());
-        assert!(!exit(&Op::Whoami, 1, "already exists", "").already_exists());
-    }
-
-    #[test]
     fn a_refusal_is_a_4xx_that_is_neither_denied_nor_rate_limited() {
         use super::super::rest::RestError;
         let answered = |status, errors: &str| -> CloudflareError {
@@ -370,18 +311,6 @@ mod tests {
         assert!(!CloudflareError::Other("x".into()).is_refusal());
         assert!(!CloudflareError::from(WranglerError::missing(&Op::Whoami)).is_refusal());
     }
-
-    #[test]
-    fn already_gone_is_read_per_operation() {
-        let queue = Op::QueueDelete { name: "q" };
-        assert!(exit(&queue, 1, "", "Queue \"q\" does not exist.").already_gone());
-        assert!(!exit(&queue, 1, "", "Authentication error [code: 10000]").already_gone());
-        assert!(!WranglerError::missing(&queue).already_gone());
-        // Only a delete is ever already gone.
-        assert!(!exit(&Op::Whoami, 1, "", "does not exist").already_gone());
-    }
-
-    use super::super::api::VectorizeOp;
 }
 
 /// Whether a failed push's teed output says the Worker it just uploaded does not exist: wrangler's

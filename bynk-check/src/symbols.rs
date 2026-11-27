@@ -964,6 +964,8 @@ pub enum OptionValue {
     /// A list of string literals (`@allowedSenders(["orders@shop.example"])`,
     /// #3302), in source order.
     List(Vec<String>),
+    /// The name of a type (`@instances(by: TenantId)`, #4112).
+    Type(String),
 }
 
 impl DerivedInstance {
@@ -974,6 +976,17 @@ impl DerivedInstance {
             .find(|(o, _)| o == name)
             .and_then(|(_, v)| match v {
                 OptionValue::Str(s) => Some(s.as_str()),
+                _ => None,
+            })
+    }
+
+    /// The type named by a `Container`'s `@instances(by: …)` (#4112), if it carries one.
+    pub fn instance_key(&self) -> Option<&str> {
+        self.options
+            .iter()
+            .find(|(o, _)| o == crate::firstparty::CONTAINER_INSTANCES_OPTION)
+            .and_then(|(_, v)| match v {
+                OptionValue::Type(name) => Some(name.as_str()),
                 _ => None,
             })
     }
@@ -999,7 +1012,7 @@ impl DerivedInstance {
             .find(|(o, _)| o == name)
             .and_then(|(_, v)| match v {
                 OptionValue::Int(n) | OptionValue::Seconds(n) => Some(*n),
-                OptionValue::Str(_) | OptionValue::List(_) => None,
+                OptionValue::Str(_) | OptionValue::List(_) | OptionValue::Type(_) => None,
             })
     }
 
@@ -2661,6 +2674,11 @@ pub fn resolve_given_cap_ref(
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
 ) -> Option<CapabilityInfo> {
+    // #3959: a capability parameter belongs to a commons function's `given`.
+    if cap_ref.is_parameter() {
+        errors.push(crate::cap_params::parameter_outside_commons(cap_ref));
+        return None;
+    }
     let Some(prefix) = cap_ref.prefix() else {
         // Local capability.
         match capability_info_map.get(cap_ref.key()) {

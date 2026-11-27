@@ -60,6 +60,10 @@ pub enum Scheme {
     /// verifies (HMAC-SHA-256 over a compact JWS). A browser credential, so
     /// HTTP only; single-actor only in the first slice (like `Oidc`).
     SignedCookie,
+    /// #3939 (the API keys track): an opaque key the service mints, stores only as a peppered HMAC
+    /// in generated agents, and verifies at the seam (D1–D3). HTTP only, a single actor until
+    /// slice 4.
+    ApiKey,
 }
 
 impl Scheme {
@@ -74,6 +78,7 @@ impl Scheme {
             "Oidc" => Scheme::Oidc,
             "Foreign" => Scheme::Foreign,
             "SignedCookie" => Scheme::SignedCookie,
+            "ApiKey" => Scheme::ApiKey,
             _ => return None,
         })
     }
@@ -92,6 +97,7 @@ impl Scheme {
                 | Scheme::Oidc
                 | Scheme::Foreign
                 | Scheme::SignedCookie
+                | Scheme::ApiKey
         )
     }
 
@@ -104,6 +110,7 @@ impl Scheme {
             Scheme::Oidc => "Oidc",
             Scheme::Foreign => "Foreign",
             Scheme::SignedCookie => "SignedCookie",
+            Scheme::ApiKey => "ApiKey",
         }
     }
 }
@@ -391,6 +398,64 @@ pub fn bearer_claims_of_route(
     };
     (Scheme::from_name(base.auth.as_ref()?.name.as_str()) == Some(Scheme::Bearer))
         .then(|| BearerClaims::of(base))
+}
+
+/// #3825: the `SignedCookie` actors a handler's body issues a session for (`Actor.issue(identity)`), in
+/// first-use order. The route that issues a session is necessarily one the actor does not guard (the
+/// caller has no session yet), so it is the one place a cross-site request can plant its own: login CSRF.
+/// An actor can only be named in a service handler (a function cannot name one), so the body is the whole
+/// of what a handler issues. A local binding that shadows an actor's name would read as a call too; the
+/// route is then checked as an issuing one, which only makes it stricter.
+pub fn issued_cookie_actors(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Vec<String> {
+    use bynk_syntax::ast::{ExprKind, expr_children, statement_exprs};
+    fn walk(
+        e: &bynk_syntax::ast::Expr,
+        actors: &HashMap<String, ActorDecl>,
+        out: &mut Vec<String>,
+    ) {
+        if let ExprKind::MethodCall {
+            receiver, method, ..
+        } = &e.kind
+            && method.name == "issue"
+            && let ExprKind::Ident(actor) = &receiver.kind
+            && actors.get(&actor.name).is_some_and(|a| {
+                a.auth
+                    .as_ref()
+                    .and_then(|s| Scheme::from_name(s.name.as_str()))
+                    == Some(Scheme::SignedCookie)
+            })
+            && !out.contains(&actor.name)
+        {
+            out.push(actor.name.clone());
+        }
+        for child in expr_children(e) {
+            walk(child, actors, out);
+        }
+    }
+    let mut out = Vec::new();
+    let mut exprs = Vec::new();
+    for statement in &handler.body.statements {
+        statement_exprs(statement, &mut exprs);
+    }
+    exprs.push(&handler.body.tail);
+    for e in exprs {
+        walk(e, actors, &mut out);
+    }
+    out
+}
+
+/// #3825: whether an HTTP route runs the login-CSRF check ahead of its body: it issues a session
+/// (`Actor.issue`), is not a safe `GET` (which is outside fetch-metadata protection, and draws
+/// `bynk.actor.signed_cookie_issue_on_safe_method`), and is not guarded by a lone `SignedCookie` actor,
+/// whose own seam already runs the check. The wrapper and the entry that calls it both read this.
+pub fn route_checks_issue_csrf(
+    handler: &Handler,
+    is_get: bool,
+    actors: &HashMap<String, ActorDecl>,
+) -> bool {
+    !is_get
+        && signed_cookie_seam_for(handler, actors).is_none()
+        && !issued_cookie_actors(handler, actors).is_empty()
 }
 
 /// The cookie name a `SignedCookie` actor issues and reads when `cookie` is not given.
@@ -1001,6 +1066,7 @@ pub fn route_is_secured(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> b
         return by_clause_is_bearer(by, actors)
             || by_clause_is_oidc(by, actors)
             || by_clause_is_signed_cookie(by, actors)
+            || crate::api_key::by_clause_is_api_key(by, actors)
             || signature_seam_for_by(by, actors).is_some();
     }
     if sum_has_open_member(by, actors) {
@@ -1041,7 +1107,11 @@ pub fn route_is_credentialed(by: &ByClause, actors: &HashMap<String, ActorDecl>)
             .is_some_and(|s| {
                 matches!(
                     s,
-                    Scheme::Bearer | Scheme::Oidc | Scheme::SignedCookie | Scheme::Signature
+                    Scheme::Bearer
+                        | Scheme::Oidc
+                        | Scheme::SignedCookie
+                        | Scheme::Signature
+                        | Scheme::ApiKey
                 )
             })
     })
@@ -1171,8 +1241,9 @@ pub fn sum_members_for(
                 Scheme::SignedCookie => {
                     SumMemberSeam::SignedCookie(signed_cookie_seam_of(decl, None)?)
                 }
-                // I3: a `Foreign` sum is a `call` sum (`call_admission_for`).
-                Scheme::Internal | Scheme::Foreign => return None,
+                // I3: a `Foreign` sum is a `call` sum (`call_admission_for`). #3939: an `ApiKey`
+                // member is slice 4's; the checker refuses it (`scheme_not_admissible`).
+                Scheme::Internal | Scheme::Foreign | Scheme::ApiKey => return None,
             }
         } else {
             // A prelude actor: only `Visitor` (scheme `None`) is an HTTP peer.
@@ -1228,6 +1299,10 @@ pub fn consumed_credential_headers(
     if let Some(s) = signature_seam_for(handler, actors) {
         hide(&s.header, &primary);
     }
+    // #3939 (D3 E): an `ApiKey` actor's header, the named one or `authorization` (ADR 0899).
+    if let Some(s) = crate::api_key::api_key_seam_for(handler, actors) {
+        hide(&s.consumed_header(), &primary);
+    }
     out
 }
 
@@ -1245,6 +1320,7 @@ pub fn scheme_admissible(protocol: &ServiceProtocol, scheme: Scheme) -> bool {
                     | Scheme::Signature
                     | Scheme::Oidc
                     | Scheme::SignedCookie
+                    | Scheme::ApiKey
             )
         }
         // v0.103 (D-B): a WebSocket upgrade authenticates via `None` (anonymous)

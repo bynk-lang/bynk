@@ -452,6 +452,17 @@ kernel_ops! {
         Bearer = "bearer", "bearer() -> Authorization";
         Basic = "basic", "basic(user: String) -> Authorization";
     }
+/// `InboundRequest` (#3752, D11): a pass-through route's request, as `Upstream.forward` sends it.
+    InboundRequestOp {
+        Method = "method", "method() -> String";
+        Headers = "headers", "headers() -> RequestHeaders";
+        Query = "query", "query() -> String";
+    }
+/// `Forwarded` (#3752, D8): an upstream's answer, read by a handler that decides on it.
+    ForwardedOp {
+        Status = "status", "status() -> Int";
+        Header = "header", "header(name: String) -> Option[String]";
+    }
 /// `TestConnection[F]` (#3051): a case's recording handle for a `from
 /// websocket` connection; a test body only.
     TestConnectionOp {
@@ -527,6 +538,10 @@ pub enum KernelOp {
     TokenClaims(TokenClaimsOp),
     /// #4111: `reveal` and `matches` on a `Secret`.
     Secret(SecretOp),
+    /// #3752: `method`, `headers` and `query` on an `InboundRequest`.
+    InboundRequest(InboundRequestOp),
+    /// #3752: `status` and `header` on a `Forwarded`.
+    Forwarded(ForwardedOp),
     Bytes(BytesOp),
     /// #3955: `compare` on any `Ord` value.
     Ord(OrdOp),
@@ -561,6 +576,8 @@ impl KernelOp {
             KernelOp::RequestCookies(o) => o.name(),
             KernelOp::TokenClaims(o) => o.name(),
             KernelOp::Secret(o) => o.name(),
+            KernelOp::InboundRequest(o) => o.name(),
+            KernelOp::Forwarded(o) => o.name(),
             KernelOp::Bytes(o) => o.name(),
             KernelOp::Ord(o) => o.name(),
             KernelOp::Decimal(o) => o.name(),

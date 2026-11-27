@@ -12,74 +12,18 @@
 //! enqueues it), so the deploy waits for every one it just created to be listed
 //! before it pushes the Worker; one that does not appear in time fails the deploy.
 //!
-//! Everything goes through wrangler, as D1 and R2 do, so the token the deploy
-//! needs does not grow. Wrangler's `--json` output is not documented field by
-//! field, so what is read from it is read defensively: an output that cannot
-//! be understood fails the deploy and says so, and never reads as "matches".
+//! Since 1D.4c (#4056) every call goes through Cloudflare's REST API, as KV, R2
+//! and D1 do, so a Vectorize project needs `CLOUDFLARE_API_TOKEN` and
+//! `CLOUDFLARE_ACCOUNT_ID` on every deploy (the index is checked each time). An
+//! answer that cannot be understood fails the deploy and says so, and never
+//! reads as "matches".
 
 use super::*;
 use bynk_driver::emsg;
 
-use serde_json::Value;
 use std::time::{Duration, Instant};
 
-/// An index's fixed configuration, as the account reports it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct IndexConfig {
-    pub(crate) dimensions: i64,
-    pub(crate) metric: String,
-}
-
-/// A metric as the declaration spells it (`dot-product`), whatever case or
-/// separator the account's output uses.
-fn normalise_metric(metric: &str) -> String {
-    metric.trim().to_ascii_lowercase().replace('_', "-")
-}
-
-/// An index's configuration from `wrangler vectorize get --json`: at the top
-/// level or under `config`. `None` when it is neither, so the caller can say it
-/// could not read it rather than guess.
-pub(crate) fn parse_index_config(json: &str) -> Option<IndexConfig> {
-    let value: Value = serde_json::from_str(json).ok()?;
-    let config = value.get("config").unwrap_or(&value);
-    Some(IndexConfig {
-        dimensions: config.get("dimensions")?.as_i64()?,
-        metric: normalise_metric(config.get("metric")?.as_str()?),
-    })
-}
-
-/// The names in `wrangler vectorize list --json`: an array of objects with a
-/// `name`. `None` when it is not that.
-pub(crate) fn parse_index_names(json: &str) -> Option<Vec<String>> {
-    let value: Value = serde_json::from_str(json).ok()?;
-    value
-        .as_array()?
-        .iter()
-        .map(|i| i.get("name")?.as_str().map(str::to_string))
-        .collect()
-}
-
-/// The metadata indexes in `wrangler vectorize list-metadata-index --json`, as
-/// `name:type`: an array of objects naming the property and its type. `None`
-/// when it is not that.
-pub(crate) fn parse_metadata_indexes(json: &str) -> Option<Vec<String>> {
-    let value: Value = serde_json::from_str(json).ok()?;
-    // Wrangler has wrapped lists in an object (`{ "metadataIndexes": [...] }`).
-    let list = value
-        .as_array()
-        .or_else(|| value.as_object()?.values().find_map(Value::as_array))?;
-    list.iter()
-        .map(|i| {
-            let name = ["propertyName", "property_name", "name"]
-                .iter()
-                .find_map(|k| i.get(*k)?.as_str())?;
-            let ty = ["indexType", "index_type", "type"]
-                .iter()
-                .find_map(|k| i.get(*k)?.as_str())?;
-            Some(format!("{name}:{}", ty.to_ascii_lowercase()))
-        })
-        .collect()
-}
+pub(crate) use crate::cloudflare::rest::vectorize::{IndexConfig, normalise_metric};
 
 /// A mismatch between an existing index and the declaration, as the failure
 /// the deploy reports. Pure, so the wording is tested without an account.
@@ -96,41 +40,40 @@ pub(crate) fn drift_message(
     )
 }
 
-/// One Vectorize call: its stdout on success, and what wrangler said on failure, with the
-/// permission hint when it says the token lacks it. The adapter runs it from the project root,
-/// where wrangler cannot load and reject a generated config that is still incomplete.
-fn vectorize_command(api: &dyn CloudflareApi, op: VectorizeOp<'_>) -> Result<String, String> {
-    api.vectorize(op)
-        .map_err(|e| with_permission_hint(e.to_string()))
+/// A failed Vectorize call as the deploy says it, with the permission hint when the token lacks
+/// it.
+fn said(e: CloudflareError) -> String {
+    with_permission_hint(&e, e.to_string())
 }
 
-/// #3495: Cloudflare answers a token without the Vectorize permission with a
-/// bare `Authentication error [code: 10000]`. Name the permission that call
-/// needs (it covered create, list, get, delete and both metadata-index calls
-/// when checked against a real account); any other message is returned as is.
-fn with_permission_hint(said: String) -> String {
-    if said.contains("code: 10000") {
-        format!("{said}\n  hint: the API token needs the Account > Vectorize > Edit permission")
+/// #3495: a token without the Vectorize permission is answered with a bare authentication
+/// error. Name the permission the call needs (it covered create, list, get, delete and both
+/// metadata-index calls when checked against a real account); any other failure is said as is.
+/// `text` (what is said of `e`), with the hint last.
+fn with_permission_hint(e: &CloudflareError, text: String) -> String {
+    if e.is_denied() {
+        format!("{text}\n  hint: the API token needs the Account > Vectorize > Edit permission")
     } else {
-        said
+        text
     }
 }
 
 /// Whether the account has an index called `name`.
 pub(crate) fn index_exists(api: &dyn CloudflareApi, name: &str) -> Result<bool, String> {
-    let out = vectorize_command(api, VectorizeOp::List)?;
-    let names = parse_index_names(&out)
-        .ok_or("could not read the list of Vectorize indexes from wrangler's output")?;
-    Ok(names.iter().any(|n| n == name))
+    Ok(api
+        .vectorize_names()
+        .map_err(said)?
+        .iter()
+        .any(|n| n == name))
 }
 
 pub(crate) fn read_index_config(
     api: &dyn CloudflareApi,
     name: &str,
 ) -> Result<IndexConfig, String> {
-    let out = vectorize_command(api, VectorizeOp::Get { name })?;
-    parse_index_config(&out).ok_or_else(|| {
-        format!("could not read the dimensions and metric of `{name}` from wrangler's output, so it was not checked against the source")
+    api.vectorize_config(name).map_err(|e| {
+        let text = format!("{e}; so `{name}` was not checked against the source");
+        with_permission_hint(&e, text)
     })
 }
 
@@ -139,40 +82,35 @@ pub(crate) fn create_index(
     name: &str,
     declared: &VectorizeDecl,
 ) -> Result<(), String> {
-    vectorize_command(
-        api,
-        VectorizeOp::Create {
-            name,
-            dimensions: declared.dimensions,
-            metric: &declared.metric,
-        },
-    )
-    .map(|_| ())
+    api.vectorize_create(name, declared.dimensions, &declared.metric)
+        .map_err(said)
 }
 
 pub(crate) fn existing_metadata_indexes(
     api: &dyn CloudflareApi,
     name: &str,
 ) -> Result<Vec<String>, String> {
-    let out = vectorize_command(api, VectorizeOp::ListMetadataIndex { name })?;
-    parse_metadata_indexes(&out)
-        .ok_or_else(|| "could not read the metadata indexes from wrangler's output".to_string())
+    api.vectorize_metadata_indexes(name).map_err(said)
 }
 
+/// Enqueue the metadata index `entry` (`property:type`) on `name`. A create that Cloudflare
+/// refuses may have found one already there: the reference documents no code for that, and one
+/// listed between the listing and this create is exactly what Cloudflare's asynchronous builds
+/// produce. So a refusal is `Ok(Some(what Cloudflare said))`, and the listing wait that follows
+/// decides: the index listed is what was wanted, and one never listed fails the deploy with
+/// that refusal in its message. Any other failure is the error.
 pub(crate) fn create_metadata_index(
     api: &dyn CloudflareApi,
     name: &str,
     entry: &str,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     let (property, ty) = entry
         .split_once(':')
         .ok_or_else(|| format!("`{entry}` is not `name:type`"))?;
-    match api.vectorize(VectorizeOp::CreateMetadataIndex { name, property, ty }) {
-        Ok(_) => Ok(()),
-        // Listed between the listing and this request (Cloudflare builds them
-        // asynchronously): the property is there, which is what was wanted.
-        Err(e) if e.already_exists() => Ok(()),
-        Err(e) => Err(with_permission_hint(e.to_string())),
+    match api.vectorize_create_metadata_index(name, property, ty) {
+        Ok(()) => Ok(None),
+        Err(e) if e.is_refusal() => Ok(Some(e.to_string())),
+        Err(e) => Err(said(e)),
     }
 }
 
@@ -200,6 +138,7 @@ fn wait_for_metadata_indexes(
     api: &dyn CloudflareApi,
     name: &str,
     wanted: &[String],
+    refused: &[String],
     pacing: Pacing,
 ) -> Result<(), String> {
     let start = Instant::now();
@@ -207,6 +146,11 @@ fn wait_for_metadata_indexes(
     let mut announced = false;
     loop {
         let listed = existing_metadata_indexes(api, name)?;
+        // Listed means the property *and* its type: one of another type is not what was wanted,
+        // and waiting will not change it.
+        if let Some(message) = retyped_message(name, wanted, &listed) {
+            return Err(message);
+        }
         let pending: Vec<&String> = wanted.iter().filter(|w| !listed.contains(*w)).collect();
         if pending.is_empty() {
             if announced {
@@ -218,8 +162,17 @@ fn wait_for_metadata_indexes(
             return Ok(());
         }
         if start.elapsed() >= pacing.timeout {
+            let refusals = if refused.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    " (Cloudflare refused creating {}: {})",
+                    if refused.len() == 1 { "one" } else { "some" },
+                    refused.join("; ")
+                )
+            };
             return Err(format!(
-                "the metadata index{} {} {} created but {} not listed after {} seconds; Cloudflare builds them asynchronously. The Worker was not pushed: run the deploy again once they are listed",
+                "the metadata index{} {} {} created but {} not listed after {} seconds{refusals}; Cloudflare builds them asynchronously. The Worker was not pushed: run the deploy again once they are listed",
                 if pending.len() == 1 { "" } else { "es" },
                 pending
                     .iter()
@@ -248,6 +201,24 @@ fn wait_for_metadata_indexes(
     }
 }
 
+/// The failure for a wanted metadata index (`property:type`) that the listing shows under the
+/// same property with another type: Cloudflare cannot retype one, so the deploy fails at once,
+/// naming both types and the manual delete that clears it. `None` when no listed property has
+/// another type than wanted. Pure.
+fn retyped_message(name: &str, wanted: &[String], listed: &[String]) -> Option<String> {
+    let (want, have) = wanted.iter().find_map(|want| {
+        let (property, _) = want.split_once(':')?;
+        let have = listed.iter().find(|have| {
+            have.split_once(':').is_some_and(|(p, _)| p == property) && *have != want
+        })?;
+        Some((want, have))
+    })?;
+    let property = want.split_once(':').map_or(want.as_str(), |(p, _)| p);
+    Some(format!(
+        "the metadata index for `{property}` on `{name}` is listed as `{have}`, but the source declares `{want}`; Cloudflare cannot change a metadata index's type, so the Worker was not pushed. Delete it by hand (`wrangler vectorize delete-metadata-index {name} --propertyName {property}`) and deploy again, or declare `{have}`"
+    ))
+}
+
 /// Delete the index `name` (`--prune`, after its confirmation). One already
 /// gone is success, as for a queue: the ledger entry goes either way.
 pub(crate) fn delete_vectorize_index(api: &dyn CloudflareApi, name: &str) -> Result<(), String> {
@@ -256,7 +227,7 @@ pub(crate) fn delete_vectorize_index(api: &dyn CloudflareApi, name: &str) -> Res
         Ok(true) => {}
         Err(e) => return Err(e),
     }
-    vectorize_command(api, VectorizeOp::Delete { name }).map(|_| ())
+    api.vectorize_delete(name).map_err(said)
 }
 
 /// The metadata indexes the declaration wants that the index lacks, and those
@@ -312,13 +283,14 @@ pub(crate) fn apply_vectorize_adoptions(
     project_root: &Path,
     resources: &mut BTreeMap<String, Resources>,
     environment: &str,
-) -> Result<(), ()> {
+) -> Result<Vec<plan::Entry>, plan::Entry> {
     if resources.values().all(|r| r.vectorize_indexes.is_empty()) {
-        return Ok(());
+        return Ok(Vec::new());
     }
     let settings =
         bynk_project::vectorize::try_read_vectorize_deploy(project_root).map_err(|e| {
             emsg!("bynk: error: {e}");
+            plan::refusals::adoption_unreadable("vectorize", &e)
         })?;
     // An entry that names no declared capability would be silently ignored,
     // and the deploy would create a fresh, empty index beside the one the team
@@ -342,18 +314,31 @@ pub(crate) fn apply_vectorize_adoptions(
         let hint = bynk_project::paths::did_you_mean(&wanted, bindings.iter().copied())
             .map(|b| format!("; did you mean the capability whose binding is `{b}`?"))
             .unwrap_or_default();
-        emsg!(
+        let message = format!(
             "bynk: error: `[deploy.vectorize.{capability}]` in bynk.toml names no `Vectorize` capability in this project{hint}; an entry that matches nothing would have the deploy create a new, empty index instead of adopting yours"
         );
-        return Err(());
+        emsg!("{message}");
+        return Err(plan::refusals::adoption_unmatched(
+            "vectorize",
+            capability,
+            &message,
+        ));
     }
+    let mut notes = Vec::new();
     for (capability, entry) in &settings {
         if !entry.index.contains_key(environment) {
             let named: Vec<&str> = entry.index.keys().map(String::as_str).collect();
-            emsg!(
+            let note = format!(
                 "bynk: note: `[deploy.vectorize.{capability}]` adopts an index only for {}; under `{environment}` the deploy creates one",
                 named.join(", ")
             );
+            emsg!("{note}");
+            notes.push(plan::refusals::adoption_partial(
+                "vectorize",
+                capability,
+                environment,
+                &note,
+            ));
         }
     }
     for declared in resources.values_mut() {
@@ -365,7 +350,7 @@ pub(crate) fn apply_vectorize_adoptions(
                 .cloned();
         }
     }
-    Ok(())
+    Ok(notes)
 }
 
 /// An adopted index: it has to exist (the deploy never creates it) and match
@@ -585,14 +570,17 @@ fn provision_metadata_indexes(
     if let Some(message) = type_change_message(physical, &missing, &removed) {
         return Err(DeployFailure::driver(message));
     }
+    let mut refused = Vec::new();
     for entry in &missing {
-        create_metadata_index(api, physical, entry)
-            .map_err(|e| fail(&format!("create the metadata index `{entry}` on"), e))?;
+        refused.extend(
+            create_metadata_index(api, physical, entry)
+                .map_err(|e| fail(&format!("create the metadata index `{entry}` on"), e))?,
+        );
     }
     if !missing.is_empty() {
         // Only now is the index safe to write to: a vector upserted before a
         // metadata index is listed is silently left out of it.
-        wait_for_metadata_indexes(api, physical, &missing, pacing).map_err(|e| {
+        wait_for_metadata_indexes(api, physical, &missing, &refused, pacing).map_err(|e| {
             DeployFailure::driver(format!(
                 "the Vectorize index `{physical}` for `{worker}`'s `{}`: {e}",
                 decl.binding

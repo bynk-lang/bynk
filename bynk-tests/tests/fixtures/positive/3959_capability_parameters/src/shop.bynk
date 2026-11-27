@@ -1,0 +1,41 @@
+---
+#3959: every call binds the parameter explicitly, inside its argument list, to a capability
+the caller holds (track §11): a derived instance, the bare `Kv`, and from a Bynk-bodied
+provider, whose `deps` is `this.deps`. The emitted call passes `{ Store: deps.Sessions,
+Logger: deps.Logger }`.
+---
+context shop
+
+uses lib.cache
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+capability Sessions = Kv
+
+capability Notes {
+	fn note(key: String, value: String) -> Effect[String]
+}
+
+provides Notes = KvNotes given Sessions, Logger {
+	fn note(key: String, value: String) -> Effect[String] {
+		remember(key, value, given Store = Sessions)
+	}
+}
+
+service api {
+	on call(key: String) -> Effect[String] by Caller given Sessions, Logger {
+		remember(key, "fresh", given Store = Sessions)
+	}
+}
+
+service bare {
+	on call(key: String) -> Effect[String] by Caller given Kv, Logger {
+		remember(key, "plain", given Store = Kv)
+	}
+}
+
+service notes {
+	on call(key: String, value: String) -> Effect[String] by Caller given Notes {
+		Notes.note(key, value)
+	}
+}

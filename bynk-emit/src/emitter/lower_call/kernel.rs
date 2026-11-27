@@ -310,7 +310,11 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             // object with these very methods, each answering an `Option`.
             // #4111: a `Secret` is a runtime `BynkSecret` whose `reveal` and
             // constant-time `matches` are its only readers.
+            // #3752: an `InboundRequest` and a `Forwarded` are runtime objects
+            // with these very methods.
             KernelOp::Secret(_)
+            | KernelOp::InboundRequest(_)
+            | KernelOp::Forwarded(_)
             | KernelOp::RequestHeaders(_)
             | KernelOp::RequestQuery(_)
             | KernelOp::RequestCookies(_)

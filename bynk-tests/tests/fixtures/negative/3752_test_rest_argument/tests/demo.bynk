@@ -1,0 +1,8 @@
+// #3752 (review of #4559): a case's rest is one the router could bind, so it means
+// the same at every tier; `a/b` would be sent as `/rawa/b` at the system tier.
+suite demo {
+  case "a rest without its leading slash" {
+    let r <- api.GET("/raw/*path", "a/b") by Visitor
+    expect r == Ok("a/b")
+  }
+}

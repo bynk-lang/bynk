@@ -1554,6 +1554,16 @@
           }
         ]
       },
+      "bindings": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "capability_bindings",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,
@@ -1983,6 +1993,47 @@
     }
   },
   {
+    "type": "capability_binding",
+    "named": true,
+    "fields": {
+      "parameter": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "value": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "qualified_name",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "capability_bindings",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "capability_binding",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "capability_decl",
     "named": true,
     "fields": {
@@ -2110,6 +2161,32 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "capability_parameter",
+    "named": true,
+    "fields": {
+      "bound": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -5889,6 +5966,10 @@
         "required": true,
         "types": [
           {
+            "type": "capability_parameter",
+            "named": true
+          },
+          {
             "type": "qualified_name",
             "named": true
           }
@@ -7816,6 +7897,14 @@
       "types": [
         {
           "type": "boolean_literal",
+          "named": true
+        },
+        {
+          "type": "decimal_literal",
+          "named": true
+        },
+        {
+          "type": "float_literal",
           "named": true
         },
         {
@@ -14625,6 +14714,14 @@
   },
   {
     "type": "@",
+    "named": false
+  },
+  {
+    "type": "ANY",
+    "named": false
+  },
+  {
+    "type": "ApiKey",
     "named": false
   },
   {

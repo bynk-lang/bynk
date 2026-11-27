@@ -1,7 +1,17 @@
 adapter bynk {
 	uses bynk.locale.types
-	exports capability { Clock, Random, Logger, Fetch, Secrets, Locale, Idempotency, Events }
-	exports opaque { Secret, Authorization }
+	exports capability {
+		Clock,
+		Random,
+		Logger,
+		Fetch,
+		Secrets,
+		Locale,
+		Idempotency,
+		Events,
+		Upstream,
+	}
+	exports opaque { Secret, Authorization, ApiKeyValue, InboundRequest, Forwarded }
 	exports transparent {
 		Uuid,
 		CronSchedule,
@@ -27,6 +37,12 @@ adapter bynk {
 		LogLevel,
 		Claim,
 		EventEnvelope,
+		ApiKeyId,
+		ApiKeyLabel,
+		ApiKeySecret,
+		TooManyKeys,
+		PassThrough,
+		UpstreamError,
 	}
 
 	---
@@ -49,6 +65,50 @@ adapter bynk {
 	`authorization: Some(token.bearer())`.
 	---
 	type Authorization = opaque String
+
+	---
+	An API key, as an `ApiKey` actor's `mint` answers it: the one time the key is
+	shown. Like a `Secret` it cannot leak by accident: it has no string form, is
+	not `Eq`, a `Key` or `Codable`, and cannot be stored or sent
+	(`bynk.types.secret_at_boundary`). Its one way out is a handler returning the
+	`ApiKeySecret` that `mint` answered, which encodes it on the wire as the key
+	string. Anywhere else it renders as `<secret>`.
+	---
+	type ApiKeyValue = opaque String
+
+	---
+	An API key's public id, `<prefix>_<33 base62 characters>`: it names the key
+	without being it, so it is safe to log, to show in a console and to pass to
+	`revoke`.
+	---
+	type ApiKeyId = String where Matches("[a-z][a-z0-9]{1,15}_[0-9A-Za-z]{33}")
+
+	---
+	A key's label, shown beside its id: 1 to 64 characters, none of them a
+	control character.
+	---
+	type ApiKeyLabel = String where Matches("[^\\x00-\\x1F\\x7F]{1,64}")
+
+	---
+	A key an `ApiKey` actor's `mint` has just made. `key` is the key itself,
+	shown this once: the service stores only a peppered hash of it. `id` names it
+	from now on. `expires` is `None`: keys do not expire yet.
+	---
+	type ApiKeySecret = {
+		id: ApiKeyId,
+		key: ApiKeyValue,
+		label: ApiKeyLabel,
+		created: Instant,
+		expires: Option[Instant],
+	}
+
+	---
+	The refusal of `mint` when the identity already holds the most live keys it
+	may (`limit`, 100).
+	---
+	type TooManyKeys = {
+		limit: Int,
+	}
 
 	---
 	A UUID in canonical 8-4-4-4-12 lowercase-hex form.
@@ -346,6 +406,49 @@ adapter bynk {
 	}
 
 	---
+	The request an `on ANY(…)` pass-through route received (#3752), as only
+	`Upstream.forward` sends it on: `method()` (upper case), `headers()` (the
+	same view a `headers: RequestHeaders` parameter gets, the route's consumed
+	credential hidden) and `query()` (the raw query string, without `?`). Its
+	body isn't readable here: `forward` consumes it, once. Like
+	`RequestHeaders` it is read while the request is handled and never kept: it
+	can't be a field, cross a boundary or be stored
+	(`bynk.types.inbound_request_at_boundary`), and only a pass-through route
+	takes one (`bynk.http.inbound_request_not_pass_through`).
+	---
+	type InboundRequest = opaque String
+
+	---
+	An upstream's answer, as `Upstream.forward` returns it (#3752): its status,
+	headers and streamed body, passed through by `Forward(…)`. There is no
+	constructor, so a handler can't fabricate one, and it can't carry a status or
+	header that didn't come from the declared origin. `status()` and
+	`header(name)` read it for a handler that decides on them.
+	---
+	type Forwarded = opaque String
+
+	---
+	What an `on ANY(…)` pass-through route answers (#3752): `Forward(response)`
+	sends an upstream's answer through, with the router's own `ETag`, `HEAD`,
+	`OPTIONS`, `405` and CORS behaviour suspended; `Respond(result)` answers
+	locally with any `HttpResult[()]`, shaped by the router as on an ordinary
+	route.
+	---
+	type PassThrough =
+		| Forward(response: Forwarded)
+		| Respond(result: HttpResult[()])
+
+	---
+	Why `Upstream.forward` sent nothing, or got no answer (#3752). `Timeout` is
+	no response head within the instance's `@timeout`; `Unreachable` is a
+	connection that failed; `InvalidPath` is a `path` refused before anything was
+	sent (not starting with `/`, holding `?`, `#` or a control character, or a
+	`.` or `..` segment, encoded or not). It may gain variants, so a `match` on it
+	needs a wildcard.
+	---
+	type UpstreamError = enum { Timeout, Unreachable, InvalidPath }
+
+	---
 	Runtime metadata carried alongside an event payload (Events track, slice
 	2; ADR 0293, spine #936), available as an `on event`
 	handler's optional second parameter. `eventId` is minted once per
@@ -455,6 +558,21 @@ adapter bynk {
 	}
 
 	---
+	A declared upstream origin a pass-through route forwards to (#3752):
+	`capability Pages = Upstream @origin("https://pages.example") @timeout(30.seconds)`.
+	The origin is a literal or a `String` constant, never a value computed at run
+	time, so no request can steer the proxy to another host. `forward` builds the
+	URL textually, the origin then `path` then the raw query, and checks the
+	result's origin before sending; `path` must start with `/`.
+	---
+	capability Upstream {
+		fn forward(
+			request: InboundRequest,
+			path: String
+		) -> Effect[Result[Forwarded, UpstreamError]]
+	}
+
+	---
 	Reads named secrets from the platform's secret store.
 	---
 	capability Secrets {
@@ -558,4 +676,6 @@ adapter bynk {
 	provides Idempotency = IdempotencyProvider given Clock
 
 	provides Events = EventsProvider
+
+	provides Upstream = UpstreamProvider
 }

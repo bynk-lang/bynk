@@ -1,8 +1,9 @@
 context demo
 
-// #3753: `*` is reserved in a route, for a future rest-segment form.
+// #3753: `*` is reserved in a route. #3752 spent it on a final `*name` rest, so
+// one anywhere else stays reserved.
 service api from http {
-  on GET("/files/*key") () -> Effect[HttpResult[Int]] by Visitor {
+  on GET("/files/*key/x") () -> Effect[HttpResult[Int]] by Visitor {
     Ok(1)
   }
 }

@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+`@origin("https://upstream.example/blog")`

@@ -1,0 +1,13 @@
+// #4550: two fields of a record pattern bind the same name.
+commons app.dup
+
+type Order = {
+	id: Int,
+	total: Int,
+}
+
+fn amount(o: Order) -> Int {
+	match o {
+		Order { id: x, total: x, .. } => x,
+	}
+}

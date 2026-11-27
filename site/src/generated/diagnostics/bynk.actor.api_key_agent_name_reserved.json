@@ -1,0 +1,10 @@
+{
+  "blurb": "An `ApiKey` actor's keys live in two agents the compiler generates and names after it: `<Actor>Keys`, which holds one identity's keys and is the only agent a request asks, and `<Actor>KeyOwner`, which maps an identity to its key store. Their names are reserved in the declaring context, so an author's agent, type, function, service, actor or capability with one of them is refused. Rename it.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.api_key_agent_name_reserved",
+  "constructs": [],
+  "example": "agent ClientKeys {   // ✗ the name of `Client`'s generated key store\n    key id: String\n}\n\nagent ClientLedger {   // ✓\n    key id: String\n}",
+  "severity": "error",
+  "summary": "An author's declaration takes the name of an agent the compiler generates for an `ApiKey` actor (`<Actor>Keys`, `<Actor>KeyOwner`) (#3939)."
+}

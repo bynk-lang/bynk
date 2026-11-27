@@ -15,9 +15,12 @@ use bynk_ts::{TsExpr, TsStmt};
 
 /// Count the number of `:param` segments in a path pattern.
 pub(super) fn param_count(path: &str) -> usize {
-    path.split('/')
+    let params = path
+        .split('/')
         .filter(|s| s.starts_with(':') && s.len() > 1)
-        .count()
+        .count();
+    // #3752 (D6): a final `*name` rest is a parameter too, so its branch binds `__m`.
+    params + usize::from(bynk_check::http_rest::rest_name(path).is_some())
 }
 
 /// A CORS-enabled service and its synthesised policy (v0.131, ADR 0159). Carries
@@ -218,6 +221,14 @@ pub(super) fn build_cors_services(
             let mut hs = vec!["content-type".to_string()];
             if routes.iter().any(|r| r.bearer || r.oidc) {
                 hs.push("authorization".to_string());
+            }
+            // #3939: an `ApiKey` route's header, `authorization` for the default form.
+            for r in &routes {
+                let Some(seam) = &r.api_key else { continue };
+                let header = seam.consumed_header();
+                if !hs.contains(&header) {
+                    hs.push(header);
+                }
             }
             hs
         });
@@ -555,6 +566,9 @@ mod tests {
         assert_eq!(param_count("/a/:x/b/:y"), 2);
         // A bare `:` names nothing.
         assert_eq!(param_count("/a/:"), 0);
+        // #3752: a rest counts.
+        assert_eq!(param_count("/files/*key"), 1);
+        assert_eq!(param_count("/t/:id/*key"), 2);
     }
 
     #[test]

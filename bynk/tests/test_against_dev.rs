@@ -14,11 +14,14 @@
 
 #![cfg(unix)]
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
+#[path = "support/dev_child.rs"]
+mod dev_child;
+
 fn have(tool: &str) -> bool {
-    Command::new(tool)
+    dev_child::tool_command(tool)
         .arg("--version")
         .output()
         .map(|o| o.status.success())
@@ -52,7 +55,6 @@ fn copy_dir(from: &Path, to: &Path) {
 
 #[test]
 fn system_suites_run_against_a_local_bynk_dev_one_per_env() {
-    let bynk = PathBuf::from(env!("CARGO_BIN_EXE_bynk"));
     if (!have("node") || !(have("wrangler") || have("npx")))
         && skip("`node`, and `wrangler` or `npx`, are not available")
     {
@@ -66,7 +68,7 @@ fn system_suites_run_against_a_local_bynk_dev_one_per_env() {
     copy_dir(&fixture, &proj);
     let out = dir.join("run").join("out");
 
-    let o = Command::new(&bynk)
+    let o = dev_child::bynk_command()
         .args(["test"])
         .arg(&proj)
         .arg("--output")

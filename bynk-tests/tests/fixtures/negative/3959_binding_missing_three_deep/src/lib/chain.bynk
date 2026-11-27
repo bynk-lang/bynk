@@ -1,0 +1,21 @@
+---
+#3959, track §10 and §14.1 `bynk.given.binding_missing`: the rule is checked at each call,
+so a binding missing three deep is reported at the function that leaves it out (`middle`),
+not at the context that starts the chain.
+---
+commons lib.chain
+
+consumes bynk.cloudflare { Kv }
+
+fn bottom(key: String) -> Effect[()] given Inner: Kv {
+	Inner.delete(key)
+}
+
+fn middle(key: String) -> Effect[()] given Mid: Kv {
+	let _ <- Mid.delete("index")
+	bottom(key)
+}
+
+fn top(key: String) -> Effect[()] given Store: Kv {
+	middle(key, given Mid = Store)
+}

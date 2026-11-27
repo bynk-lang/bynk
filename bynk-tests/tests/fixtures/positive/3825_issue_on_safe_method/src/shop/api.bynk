@@ -1,0 +1,35 @@
+context shop.api
+
+consumes bynk { Cookie, Clock }
+
+type UserId = String where NonEmpty && MaxLength(64)
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service api from http {
+	cors { origins: ["https://app.example.com"], credentials: true }
+
+	// A sign-in done as a link click is a `GET`, which the login-CSRF check does not cover.
+	on GET("/login/:token") (token: String) -> Effect[HttpResult[String]] by v: Visitor given Clock {
+		let Ok(id) = UserId.of(token) else {
+			BadRequest("bad token")
+		}
+		let c <- User.issue(id)
+		Ok("welcome").withCookie(c)
+	}
+
+	on POST("/signin/:token") (token: String) -> Effect[HttpResult[String]] by v: Visitor given Clock {
+		let Ok(id) = UserId.of(token) else {
+			BadRequest("bad token")
+		}
+		let c <- User.issue(id)
+		Ok("welcome").withCookie(c)
+	}
+
+	// A `GET` guarded by the same actor, re-issuing its caller's own identity (a sliding session), plants
+	// nothing and draws no warning.
+	on GET("/refresh") () -> Effect[HttpResult[String]] by u: User given Clock {
+		let c <- User.issue(u.identity)
+		Ok("refreshed").withCookie(c)
+	}
+}

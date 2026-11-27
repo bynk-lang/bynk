@@ -1,0 +1,10 @@
+{
+  "blurb": "`Container.send` starts, or reuses, one container for each distinct instance name, and a running container costs money. A name built from a request's own input on a route whose caller is not authenticated (`by Visitor`) lets anyone start as many containers as they have values to send, with nothing limiting how many. The check follows the handler's parameters, and the locals bound from them, into the instance argument; a name that comes from a constant, from the authenticated identity or from a closed set (an enum's names) does not warn, and neither does one passed through a function, which is where a set is bounded and is not followed. Serve the route `by` an authenticated actor, or choose the name from a fixed set. A refined type limits the shape of a name, not how many there are, so pair a keyed instance with an authenticated actor or a `RateLimit`. An instance can also declare `@instances(by: K)`: `send` then takes a `K`, whose construction is where the names are bounded, and a name from it does not warn.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.container.unbounded_instances",
+  "constructs": [],
+  "example": "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\nservice api from http {\n    on GET(\"/render/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {\n        let res <- Renderer.send(\"tenant-\\(tenant)\", req)   // ⚠ any caller picks the instance\n        …\n    }\n}\n\nservice api from http {\n    on GET(\"/render\") () -> Effect[HttpResult[String]] by m: Member given Renderer {\n        let res <- Renderer.send(m.identity, req)       // ✓ the authenticated identity chooses\n        …\n    }\n}",
+  "severity": "warning",
+  "summary": "A `Container` instance name is built from a request's own input on a route whose caller is not authenticated, so any caller can start as many containers as they have values to send (warning)."
+}

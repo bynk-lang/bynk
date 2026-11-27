@@ -104,6 +104,56 @@ impl Explain {
 /// project trees `bad/` and `good/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.actor.api_key_agent_name_reserved",
+        blurb: "An `ApiKey` actor's keys live in two agents the compiler generates and names after it: `<Actor>Keys`, which holds one identity's keys and is the only agent a request asks, and `<Actor>KeyOwner`, which maps an identity to its key store. Their names are reserved in the declaring context, so an author's agent, type, function, service, actor or capability with one of them is refused. Rename it.",
+        example: "agent ClientKeys {   // ✗ the name of `Client`'s generated key store\n    key id: String\n}\n\nagent ClientLedger {   // ✓\n    key id: String\n}",
+    },
+    Explain {
+        code: "bynk.actor.api_key_bad_arg",
+        blurb: "Each `ApiKey` key takes one kind of value. `secret` names the environment variable holding the pepper, as a string. `prefix` is 2 to 16 lower-case letters and digits starting with a letter, and every key starts with it. `header` is an HTTP header name to read the key from; omit it to read `Authorization: Bearer <key>`, and it cannot be `Authorization`, `Cookie`, `Host`, `Content-Length` or `Content-Type`. A key given twice is refused too, since the first would win quietly.",
+        example: "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"Acme\"), identity = AccountId }   // ✗ upper case\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"acme\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_identity_not_string_constructible",
+        blurb: "An `ApiKey` actor's key store answers the identity a key was minted for as a string, and the seam mints it through the identity type's `of` before the handler runs. So the identity must be a context-owned type built from a `String`: a refined or opaque `String`.",
+        example: "type Account = { id: Int }\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = Account }     // ✗ a record\n\ntype AccountId = String where NonEmpty\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_internal",
+        blurb: "`ApiKey` names an actor scheme, not a value, so a program has no `ApiKey` members to call. The key store the compiler generates for an `ApiKey` actor compares digests with an internal constant-time comparison, the same one `bynk.crypto`'s `Crypto.equal` uses, which only that generated code can reach. To compare a secret in your own code, use `Secret.matches` or `Crypto.equal`.",
+        example: "let same <- ApiKey.equal(a, b)   // ✗ internal to the generated key store\n\nlet same <- Crypto.equal(a, b)   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_mint_outside_handler",
+        blurb: "`Actor.mint(identity, label)` hashes the new key under the pepper, and the pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's. So `mint` is legal only in a service handler. Mint the key there and return it; a provider or agent gets what it needs from the handler.",
+        example: "agent Accounts {\n    key id: AccountId\n}\n\non call open(label: ApiKeyLabel) -> Effect[()] given Clock {\n    let _ <- Client.mint(self.id, label)   // ✗ in an agent\n}\n\non POST(\"/accounts/:id/keys\") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {\n    let r <- Client.mint(id, body.label)   // ✓ in a service handler\n}",
+    },
+    Explain {
+        code: "bynk.actor.api_key_missing_secret",
+        blurb: "An `ApiKey` actor stores each key as an HMAC keyed with a pepper, an environment secret the store never sees, so the compiler needs to know which variable holds it. Name it: `ApiKey(secret = \"CLIENT_KEY_PEPPER\")`. The string is the variable's name, never the pepper; `bynk deploy` mints a pepper when the variable is unset.",
+        example: "actor Client { auth = ApiKey, identity = AccountId }                                // ✗ no pepper named\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_prefix_shared",
+        blurb: "Every key an `ApiKey` actor mints starts with its `prefix`, which makes a leaked key recognisable and, in an actor sum, tells the seam which actor a key is for without a lookup. Two `ApiKey` actors in one context with the same prefix (the default is `bk`) make their keys indistinguishable, so give each its own.",
+        example: "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }\nactor Robot { auth = ApiKey(secret = \"ROBOT_KEY_PEPPER\"), identity = RobotId }   // ✗ both `bk`\n\nactor Robot { auth = ApiKey(secret = \"ROBOT_KEY_PEPPER\", prefix = \"rbt\"), identity = RobotId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_secret_shared",
+        blurb: "An `ApiKey` actor's pepper hashes its own keys only. A variable that is also another actor's `secret` or `previous` would be one key doing two jobs, so a credential of one scheme could be checked against the other. Give each actor its own variable.",
+        example: "actor User { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }\nactor Client { auth = ApiKey(secret = \"AUTH_SECRET\"), identity = AccountId }          // ✗ shared\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_unknown_key",
+        blurb: "An `ApiKey` actor's config keys are a closed set: `secret`, `prefix` and `header`. Any other key is refused rather than ignored, because an ignored key is a rule you believed you had written. `ttl` (key expiry) and `previous` (pepper rotation) are reserved for a later release and refused until then: a key does not expire yet, and changing the pepper ends every key.",
+        example: "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefx = \"acme\"), identity = AccountId }   // ✗ misspelt\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"acme\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_unlimited",
+        blurb: "A well-formed key is cheap to fabricate (its checksum is public), and each one the seam parses costs a key-store request. A route guarded by an `ApiKey` actor should therefore limit requests by client address before it authenticates, with `@rateLimit(Limiter, key: clientIp)`. This is a warning, not an error, so a service rate-limited at its edge still builds. A `key: identity` limit does not help here, because a fabricated key never verifies and so never reaches it.",
+        example: "on GET(\"/orders\") () -> Effect[HttpResult[List[Order]]] by c: Client { … }   // ⚠ no limit before authentication\n\n@rateLimit(PerIp, key: clientIp)\non GET(\"/orders\") () -> Effect[HttpResult[List[Order]]] by c: Client { … }   // ✓",
+    },
+    Explain {
         code: "bynk.actor.bearer_bad_arg",
         blurb: "A `Bearer` actor's `issuer`, `audience` and `trustFrom` are non-empty strings: the `iss` and `aud` its tokens must carry, and the name of the environment variable whose JSON `{ \"issuer\", \"audience\" }` replaces them at run time. An empty string or another kind of value is refused. Write the claim as a string, as `issuer = \"web\"`.",
         example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"\"), identity = UserId }      // ✗ an empty issuer\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\"), identity = UserId }   // ✓",
@@ -395,6 +445,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.actor.signed_cookie_issue_needs_clock",
         blurb: "`User.issue(identity)` signs a cookie that expires, so it reads the current time from the `Clock` capability, and a handler's dependencies are always visible in its `given` clause (and a test can stub the clock to know exactly the cookie it gets). Add `consumes bynk { Clock }` to the context and `given Clock` to the handler.",
         example: "let c <- User.issue(body)   // ✗ the handler lists no `given Clock`\n\nlet c <- User.issue(body)   // ✓ with `given Clock` on the handler",
+    },
+    Explain {
+        code: "bynk.actor.signed_cookie_issue_on_safe_method",
+        blurb: "A route that issues a session cannot be guarded by the actor it issues for: the caller has no session yet. So that route is where login CSRF happens, a hostile page making a signed-out visitor's browser post the attacker's own credential, after which the victim works signed in as the attacker, and `SameSite` does not help because the attacker wants the cookie set. A route that issues a session and is not a `GET` is therefore checked as a guarded route is, before its body: fetch metadata, then `Origin` against the service's `cors` origins. A `GET` is outside that check (a link click, a prefetch and an image all send one), so a sign-in done as a `GET` is unprotected, and this warns. A `GET` guarded by the same actor, which re-issues its caller's own session, is not warned: there is no session to plant. Issue the session from a `POST`.",
+        example: "on GET(\"/login\") (token: String) -> Effect[HttpResult[String]] by v: Visitor given Clock { … }   // ⚠ issues a session from a `GET`\n\non POST(\"/login\") (body: Login) -> Effect[HttpResult[String]] by v: Visitor given Clock { … }   // ✓ checked for login CSRF",
     },
     Explain {
         code: "bynk.actor.signed_cookie_issue_outside_handler",
@@ -1214,9 +1269,14 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }   // ✗ one member's response, shared with all\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }",
     },
     Explain {
+        code: "bynk.commons.capability_unused",
+        blurb: "A commons may select a first-party capability in its braced `consumes`, so that its functions can name it in `given`: as a shared capability (`given Logger`) or as the bound of a capability parameter (`given Store: Kv`). The selection brings in the capability's contract and nothing else, so one that no function in the file names only misleads a reader about what the library reaches. Remove it from the list, or use it. Capabilities in a commons are experimental: `[unstable] allow = [\"bynk.given.parameters\"]`.",
+        example: "commons shop.cache\n\nconsumes bynk.cloudflare { Kv }   // ✗ nothing here names `Kv`\n\nfn key(id: String) -> String { \"session:\\(id)\" }\n\nconsumes bynk.cloudflare { Kv }   // ✓ a function's `given` names it\n\nfn forget(id: String) -> Effect[()] given Store: Kv {\n\tStore.delete(key(id))\n}",
+    },
+    Explain {
         code: "bynk.commons.consumes_not_types",
-        blurb: "A commons is shared, pure code, so it may `consumes` types of an adapter and nothing else: write the braced list, `consumes bynk { TimedOut }` or `consumes bynk.cloudflare { SqlError }`. A whole-unit or aliased `consumes` brings services and capabilities, a name that is a capability is not a type, a name the unit does not export has nothing to import, and a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable. A context uses a capability with `consumes` and `given`. Renaming a listed type with `as` is allowed.",
-        example: "commons app.errors\n\nconsumes bynk { Clock }      // ✗ `Clock` is a capability, not a type\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
+        blurb: "A commons is shared code, so it may `consumes` only a braced list: types of an adapter, `consumes bynk { TimedOut }` or `consumes bynk.cloudflare { SqlError }`, and capabilities of a first-party unit, `consumes bynk.cloudflare { Kv }`, whose contracts its functions name in `given` (experimental). A whole-unit or aliased `consumes` brings services, a capability of a project's own adapter is reached only from a context, a name the unit does not export has nothing to import, and a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable. Renaming a listed type with `as` is allowed.",
+        example: "commons app.errors\n\nconsumes bynk                // ✗ a whole-unit `consumes`\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
     },
     Explain {
         code: "bynk.consumes.alias_conflict",
@@ -1355,6 +1415,25 @@ pub const EXPLANATIONS: &[Explain] = &[
                   [build]\n\
                   out = \"../dist\"    # ✗ outside the project\n\
                   out = \"dist\"       # ✓ inside it",
+    },
+    Explain {
+        code: "bynk.container.unbounded_instances",
+        blurb: "`Container.send` starts, or reuses, one container for each distinct instance name, \
+                and a running container costs money. A name built from a request's own input on a \
+                route whose caller is not authenticated (`by Visitor`) lets anyone start as many \
+                containers as they have values to send, with nothing limiting how many. The check \
+                follows the handler's parameters, and the locals bound from them, into the instance \
+                argument; a name that comes from a constant, from the authenticated identity or from \
+                a closed set (an enum's names) does not warn, and neither does one passed through a \
+                function, which is where a set is bounded and is not followed. Serve the route `by` \
+                an authenticated actor, or choose the name from a fixed set. A refined type limits \
+                the shape of a name, not how many there are, so pair a keyed instance with an \
+                authenticated actor or a `RateLimit`. An instance can also declare \
+                `@instances(by: K)`: `send` then takes a `K`, whose construction is where the \
+                names are bounded, and a name from it does not warn.",
+        example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\n\
+                  service api from http {\n    on GET(\"/render/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {\n        let res <- Renderer.send(\"tenant-\\(tenant)\", req)   // ⚠ any caller picks the instance\n        …\n    }\n}\n\n\
+                  service api from http {\n    on GET(\"/render\") () -> Effect[HttpResult[String]] by m: Member given Renderer {\n        let res <- Renderer.send(m.identity, req)       // ✓ the authenticated identity chooses\n        …\n    }\n}",
     },
     Explain {
         code: "bynk.context.consumes_cycle",
@@ -2338,20 +2417,45 @@ agent Cart {
         example: "fn same[T](a: T) -> T where U: Eq { a }   // ✗ `U` is not a parameter here\n\nfn same[T](a: T) -> T where T: Eq { a }   // ✓ bound a parameter that is declared",
     },
     Explain {
+        code: "bynk.given.binding_duplicate",
+        blurb: "A call binds each of its callee's capability parameters exactly once, inside the argument list after `given`. Binding one twice leaves the call with two meanings for the parameter. Remove the repeat. Binding one instance to two different parameters is allowed, because the aliasing is written where a reader sees it.",
+        example: "copy(key, given From = Sessions, To = Archive, From = Archive)   // ✗ `From` is bound twice\n\ncopy(key, given From = Sessions, To = Archive)                   // ✓ each parameter once",
+    },
+    Explain {
+        code: "bynk.given.binding_kind_mismatch",
+        blurb: "A capability parameter is bounded by a kind (`given Store: Kv`), and a call binds it to a capability the caller holds of exactly that kind: a derived instance of it (`capability Sessions = Kv`), the bare kind where the kind allows a bare use (only `Kv` today), or, in a commons, the caller's own parameter of that kind. A capability of another kind is refused however alike their operations are, because reading the wrong resource is well-typed and nothing else would catch it.",
+        example: "capability Orders = D1\ncapability Sessions = Kv\n\nfn touch(id: String) -> Effect[()] given Orders {\n\tforget(id, given Store = Orders)     // ✗ `Orders` is a `D1`, and `Store` takes a `Kv`\n}\n\nfn touch(id: String) -> Effect[()] given Sessions {\n\tforget(id, given Store = Sessions)   // ✓ an instance of `Kv`\n}",
+    },
+    Explain {
+        code: "bynk.given.binding_missing",
+        blurb: "A commons function's capability parameter (`given Store: Kv`) stands for whichever instance its caller chooses, and every call says which one, inside the argument list after the ordinary arguments: `forget(id, given Store = Sessions)`. Nothing is inferred or defaulted, even when the caller holds only one capability of the kind, because binding the wrong instance reads or writes the wrong data and is well-typed. The fix offers one binding per capability of the kind the caller holds; it is applied by `bynk check --fix` only when there is exactly one, so the tools never choose between instances.",
+        example: "fn touch(id: String) -> Effect[()] given Sessions {\n\tforget(id)                           // ✗ `Store` is unbound\n}\n\nfn touch(id: String) -> Effect[()] given Sessions {\n\tforget(id, given Store = Sessions)   // ✓ the instance is written at the call\n}",
+    },
+    Explain {
+        code: "bynk.given.binding_shared",
+        blurb: "A commons function names a capability with no instances bare, as a shared capability: `given Logger` means the caller's one `Logger`, which the caller's own `given` supplies, exactly as between context functions. There is nothing to choose, so a shared capability is never bound at a call. Remove the binding; only capability parameters (`given Store: Kv`) are bound.",
+        example: "fn remember(key: String) -> Effect[()] given Store: Kv, Logger { … }\n\nremember(key, given Store = Sessions, Logger = Logger)   // ✗ `Logger` is shared\n\nremember(key, given Store = Sessions)                    // ✓ the caller's `given Logger` supplies it",
+    },
+    Explain {
+        code: "bynk.given.binding_unknown",
+        blurb: "The bindings after `given` in a call's arguments name the callee's capability parameters (`given Store: Kv`). A name the callee does not declare, or a binding on a call to a function, method or constructor with no capability parameters at all, has nothing to bind. Check the parameter's name in the callee's signature, or remove the bindings.",
+        example: "fn forget(id: String) -> Effect[()] given Store: Kv { … }\n\nforget(id, given Store = Sessions, Cache = Sessions)   // ✗ `forget` has no parameter `Cache`\n\nforget(id, given Store = Sessions)                    // ✓",
+    },
+    Explain {
         code: "bynk.given.cross_context_unknown_capability",
         blurb: "A context may only depend on a capability that the context providing it exports. `exports capability { … }` is the provider's decision about what it offers other contexts, and a capability it leaves out stays its own. So `consumes clock { Clock }`, or a qualified `given clock.Clock`, is refused when `clock` does not list `Clock`. Add the name to the provider's `exports capability` clause (it must declare and provide the capability), or correct the spelling here. A context that is not consumed at all is `bynk.resolve.unconsumed_context`.",
         example: "// shop.bynk\ncontext shop\n\nconsumes clock { Clock }   // ✗ `clock` exports no `Clock`\n\n\
                   // clock.bynk\ncontext clock\n\nexports capability { Clock }   // ✓ the provider offers it",
     },
     Explain {
-        code: "bynk.given.fn_outside_context",
-        blurb: "`given` lets a function use capabilities, and only a context declares which capabilities it consumes. A commons is shared by every context that uses it, and those may consume different capabilities, so a function in a commons or a suite cannot declare `given`. Take the operation as a parameter instead, and pass `(m) => Logger.error(m)` from the handler, or move the function into the context that consumes the capability. A method cannot declare `given` anywhere: that is `bynk.given.fn_unsupported`.",
-        example: "fn warn(what: String) -> Effect[()] given Logger { … }   // ✗ a commons function has no `given`\n\nfn warn(log: (String) -> Effect[()], what: String) -> Effect[()] { … }   // ✓ the caller passes the operation in",
+        code: "bynk.given.fn_unsupported",
+        blurb: "Only a free function in a context or a commons that returns `Effect[T]` may declare `given`. A capability operation is an effect, so a function that reaches one has to say so in its return type, and a method has no place to carry the capabilities. `Events` is refused too: `Events.emit` buffers until its handler commits, so emit in the handler, or pass the event back to the caller. An adapter's helpers are pure, so one that declares `given` is refused with this code too. Return `Effect[T]` and make it a free function, or take the operation as a function-value parameter. A capability parameter outside a commons function is `bynk.given.parameter_outside_commons`.",
+        example: "fn size(sku: String) -> Int given Logger {   // ✗ it must return an `Effect`\n    3\n}\n\nfn size(sku: String) -> Effect[Int] given Logger {   // ✓\n    Effect.pure(3)\n}",
     },
     Explain {
-        code: "bynk.given.fn_unsupported",
-        blurb: "Only a free function in a context that returns `Effect[T]` may declare `given`. A capability operation is an effect, so a function that reaches one has to say so in its return type, and a method has no place to carry the capabilities. `Events` is refused too: `Events.emit` buffers until its handler commits, so emit in the handler, or pass the event back to the caller. Return `Effect[T]` and make it a free function, or take the operation as a function-value parameter. A `given` in a commons is `bynk.given.fn_outside_context`.",
-        example: "fn size(sku: String) -> Int given Logger {   // ✗ it must return an `Effect`\n    3\n}\n\nfn size(sku: String) -> Effect[Int] given Logger {   // ✓\n    Effect.pure(3)\n}",
+        code: "bynk.given.kind_needs_parameter",
+        blurb: "A commons is shared by contexts that may hold several instances of a kind, so it never names an instantiable kind (`Kv`, `D1`, `R2`, `Queue`, `Service`, …) bare: that would quietly mean \"the caller's default instance\". Declare a capability parameter bounded by the kind instead, `given Store: Kv`, and each caller binds it to one of its own instances with `given Store = Sessions` (or to its bare `Kv`, which it then writes explicitly). This holds in a test-only commons too. A kind with no instances, such as `Logger`, is named bare as a shared capability.",
+        example: "consumes bynk.cloudflare { Kv }\n\nfn forget(id: String) -> Effect[()] given Kv {          // ✗ which `Kv`?\n\tKv.delete(id)\n}\n\nfn forget(id: String) -> Effect[()] given Store: Kv {   // ✓ the caller binds it\n\tStore.delete(id)\n}",
     },
     Explain {
         code: "bynk.given.missing_for_call",
@@ -2369,6 +2473,26 @@ agent Cart {
                     warn(sku)                           // ✗ `warn` needs `given Logger`\n}\n\n\
                   on call(sku: String) -> Effect[()] by Caller given Logger {   // ✓ declared on the caller\n    \
                     warn(sku)\n}",
+    },
+    Explain {
+        code: "bynk.given.parameter_name_conflict",
+        blurb: "Inside a commons function's body a capability parameter is called like a capability (`Store.get(key)`), so its name must mean one thing there. A parameter may not take the name of a capability or kind the commons can see (`given Kv: Kv`, or `given Clock: Kv` beside a selected `Clock`), of one of the function's type parameters, or of another of its capability parameters. Rename it.",
+        example: "fn copy(key: String) -> Effect[()] given Kv: Kv, To: Kv { … }     // ✗ `Kv` is the kind's own name\n\nfn copy(key: String) -> Effect[()] given From: Kv, To: Kv { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.given.parameter_outside_commons",
+        blurb: "A capability parameter (`given Store: Kv`) belongs to a free function in a commons, the one place capability-polymorphic code lives. A context function, a method, a handler, a provider and a suite helper name the capabilities they use directly, with concrete instances only, so a reader of a context sees exactly which resource each body touches. Write `given Sessions` there; a helper over two instances moves to a commons, which the context `uses`.",
+        example: "context shop\n\nfn forget(id: String) -> Effect[()] given Store: Kv { … }   // ✗ a context function\n\nfn forget(id: String) -> Effect[()] given Sessions {         // ✓ the instance, by name\n\tSessions.delete(id)\n}",
+    },
+    Explain {
+        code: "bynk.given.parameterised_fn_value",
+        blurb: "A function with capability parameters (`given Store: Kv`) has its parameters bound at every call, inside the argument list. Named as a value, as in `keys.forEach(evict)`, it would leave them unchosen, and a binding is never inferred. Write a lambda that binds them instead, `(k) => evict(k, given Inner = Store)`: it says which instance each call uses, where review sees it. A function with only shared capabilities, or none, may still be named as a value.",
+        example: "fn evict(key: String) -> Effect[()] given Inner: Kv { … }\n\nfn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {\n\tkeys.forEach(evict)                              // ✗ `Inner` is unbound\n}\n\nfn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {\n\tkeys.forEach((k) => evict(k, given Inner = Store))   // ✓ a lambda that binds\n}",
+    },
+    Explain {
+        code: "bynk.given.shared_as_parameter",
+        blurb: "A capability parameter exists to choose between instances, so its bound must be a kind with instances (`Kv`, `D1`, `R2`, …). A capability with none (`Clock`, `Random`, `Logger`, `Fetch`, `Secrets`, `Locale`, `Idempotency`, the Cloudflare singletons, `Crypto`) has exactly one per caller, so a binding would add a name and no choice. Name it bare, as a shared capability: `given Logger`.",
+        example: "fn note(text: String) -> Effect[()] given L: Logger {   // ✗ there is only one `Logger`\n\tL.info(text)\n}\n\nfn note(text: String) -> Effect[()] given Logger {      // ✓ a shared capability\n\tLogger.info(text)\n}",
     },
     Explain {
         code: "bynk.given.undeclared_capability",
@@ -2514,6 +2638,11 @@ agent Cart {
         example: "@cache(maxAge: 5.minutes)   // ✗ a `POST` changes something\non POST(\"/refresh\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ a read\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.cache_on_pass_through",
+        blurb: "`@cache` sets a response's freshness, `Cache-Control`, for a route whose answer the service makes. A pass-through route's forwarded answer is the upstream's, and the upstream's own `Cache-Control` is its freshness, so `@cache` is refused on an `on ANY` route. Set the header at the upstream. A `Respond(…)` answer is shaped by the router as on any route.",
+        example: "@cache(maxAge: 5.minutes)   // ✗\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }\n\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✓ the upstream sets `Cache-Control`",
+    },
+    Explain {
         code: "bynk.http.cache_public_authenticated",
         blurb: "A route guarded by an actor that carries a credential (`Bearer`, `Oidc`, `SignedCookie` or `Signature`, or a sum with one) answers for whoever authenticated, and `scope: public` lets a shared cache, such as a CDN or a corporate proxy, store that response and serve it to anyone who asks for the URL. So it is refused, as `bynk.http.cache_public_reads_cookies` refuses it for a handler that reads `cookies`. Such a route sends `Cache-Control: private` by default; use `scope: private`, or move a response that is really the same for everyone to a `Visitor` route.",
         example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)    // ✗ one member's answer, stored for everyone\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
@@ -2639,6 +2768,11 @@ agent Cart {
         example: "cors { origins: [\"https://app.example.com\"], credentials: true, expose: [\"*\"] }                 // ✗ credentials need named headers\n\ncors { origins: [\"https://app.example.com\"], credentials: true, expose: [\"x-request-id\"] }   // ✓",
     },
     Explain {
+        code: "bynk.http.cors_with_pass_through",
+        blurb: "A forwarded response carries the upstream's own `Access-Control-*` headers, and the router passes a preflight to the upstream, so a service's own `cors { }` policy would put two policies on one answer, and both can't be right. A service that declares an `on ANY` pass-through route therefore may not declare `cors { }`. Put the proxy in its own `from http` service, and keep `cors` on the service whose routes the service answers itself.",
+        example: "service proxy from http {\n    cors { origins: [\"https://app.example.com\"] }   // ✗\n    on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }\n}\n\nservice proxy from http {\n    on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✓\n}",
+    },
+    Explain {
         code: "bynk.http.duplicate_rejected",
         blurb: "`on rejected` renders every refusal the router makes for a service's routes, so a service has one and it must handle every case: a second would leave the router choosing between them. Merge the two into one that matches on `why`. Its required shape is `bynk.http.rejected_signature`.",
         example: "on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] { … }\non rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] { … }   // ✗ already declared above\n\non rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {\n    match why {\n        MethodNotAllowed => RawError(MethodNotAllowed, Bytes.empty(), \"text/plain\")   // ✓ one hook, all cases\n        _ => RawError(BadRequest, Bytes.empty(), \"text/plain\")\n    }\n}",
@@ -2715,6 +2849,11 @@ agent Cart {
         example: "type Signup = { email: String }\n\n@form(contentType: \"application/x-www-form-urlencoded\")    // ✗ `@form` takes no argument\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }\n\n@form    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.handler_name_collision",
+        blurb: "Each HTTP handler becomes a method on its service, named from its method and route: `http_GET`, then one part per segment, `Param_id` for `:id` and `Rest_key` for `*key`, with every character outside `A-Z`, `a-z` and `0-9` written `_`. That spelling is not one-to-one, so two routes can share a name (`/a-b`, `/a_b` and `/a/b` all give `http_GET_a_b`), and one handler would then answer both paths. Every service of a context is composed into one object, so the names are the context's, and the second such route in a context is refused, whichever services the two are in. Spell one route differently.",
+        example: "on GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a_b\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ both are `http_GET_a_b`\n\non GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/ab\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
         code: "bynk.http.headers_field_consumed",
         blurb: "A route guarded by an actor consumes the credential it carries before the handler runs: `authorization` for a `Bearer` or `Oidc` actor, the signature header for a `Signature` one, and the session cookie out of `cookie` for a `SignedCookie` one. The typed `headers` record is built from what is left, so a field that reads one of them is always absent, and a required field makes every request a `400`. The route compiles but can never succeed, so it is refused. Read the credential through the actor's principal instead, or drop the field. An `Option` or `List` field is allowed, because it is merely always empty, but it draws `bynk.http.headers_field_consumed_optional`.",
         example: "type Auth = { authorization: String }          // ✗ the Bearer actor consumes `authorization`\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }\n\ntype Auth = { accept: String }                 // ✓ a header the actor does not consume\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }",
@@ -2733,6 +2872,11 @@ agent Cart {
         code: "bynk.http.headers_wrong_type",
         blurb: "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` is either a record the router decodes and validates (`headers: UploadHeaders`, one field per header, named by the field or by `@name(\"if-match\")`, answering `400` when the request does not fit), or `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`. The record's fields are held to `bynk.http.headers_field_not_stringy`.",
         example: "on GET(\"/whoami\") (headers: String) -> Effect[HttpResult[String]] by v: Visitor { … }           // ✗\n\non GET(\"/whoami\") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.inbound_request_not_pass_through",
+        blurb: "An `InboundRequest` is the request a pass-through route forwards with `Upstream.forward`, and only an `on ANY` route receives one, as its `request` parameter. An ordinary route reads its request through `headers`, `query`, `cookies` and `body`, so an `InboundRequest` parameter there is refused, and so is one on an `ANY` route under another name. Use the ordinary parameters, or make the route a pass-through route.",
+        example: "on GET(\"/x\") (request: InboundRequest) -> Effect[HttpResult[String]] by Visitor { … }   // ✗\n\non ANY(\"/x/*rest\") (rest: String, request: InboundRequest) -> Effect[PassThrough] by Visitor { … }   // ✓",
     },
     Explain {
         code: "bynk.http.invalid_path",
@@ -2823,6 +2967,16 @@ agent Cart {
         code: "bynk.http.limits_unknown_field",
         blurb: "A `limits { }` section sets the request-body ceilings of a service. Its fields are `maxBody` and, for `@multipart` routes, `maxFile` and `maxParts`; on a `from websocket` service the one field is `maxFrame`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the routes with a ceiling you did not set. Rename it or remove it. A field with a bad value is `bynk.http.limits_invalid_field`; the per-route form is `bynk.http.limit_unknown_arg`.",
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: 1_000_000, maxSize: 10 }    // ✗ not a field of `limits`\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }                 // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.http.pass_through_not_emitted",
+        blurb: "An `on ANY` pass-through route type-checks, but its router (the suspended `ETag`, `HEAD`, `OPTIONS` and CORS behaviour) and the `Upstream` exchange arrive in the next increment. Until then a build that would emit one is refused, rather than built without its routes, which would answer `404` where the program says it forwards. `bynk check` accepts the route meanwhile.",
+        example: "on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗ for `bynk build` and `bynk test`, until the router lands\n\non GET(\"/blog/*path\") (path: String) -> Effect[HttpResult[String]] by Visitor { … }   // ✓ until then, an ordinary route builds",
+    },
+    Explain {
+        code: "bynk.http.pass_through_signature",
+        blurb: "`on ANY(…)` declares a pass-through route: it receives every method the platform delivers, `HEAD` and `OPTIONS` included, and answers `Effect[PassThrough]`, either `Forward(response)` with an upstream's answer or `Respond(result)` with an `HttpResult[()]`. It takes its path parameters, a rest, `request: InboundRequest` and `cf`; the body belongs to the upstream, so `body`, `@raw`, `@form` and `@multipart` are refused, and the headers, query and cookies are read through `request`. Only an `ANY` route returns `Effect[PassThrough]`. `PassThrough` and `InboundRequest` are `bynk`'s (`consumes bynk { PassThrough, InboundRequest }`).",
+        example: "on ANY(\"/blog/*path\") (path: String) -> Effect[HttpResult[String]] by Visitor { … }   // ✗\n\non ANY(\"/blog/*path\") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor { … }   // ✓",
     },
     Explain {
         code: "bynk.http.path_param_not_stringy",
@@ -2929,8 +3083,18 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.reserved_route_syntax",
-        blurb: "`*`, `{` and `}` are reserved in a route, both in a literal segment and in a `:name` parameter, for a future form that matches the rest of a path. Matched literally, such a segment would quietly change meaning when that form arrives, so it is refused now. To match a literal `*` or brace, take the segment as a `:name` parameter and check its value in the handler. A route that does not start with `/` is `bynk.http.invalid_path`.",
-        example: "on GET(\"/files/*key\") () -> Effect[HttpResult[String]] by v: Visitor { … }             // ✗ `*` is reserved\n\non GET(\"/files/:key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        blurb: "`{` and `}` are reserved in a route, in a literal segment and in a `:name` parameter, for a future in-segment form, and so is `*` everywhere but one place: the start of a route's last segment, where `*name` is a rest segment that matches the rest of the path. Matched literally, a reserved character would quietly change meaning when its form arrives, so it is refused now. To match a literal `*` or brace, take the segment as a `:name` parameter and check its value in the handler. A bare final `*` is `bynk.http.rest_unnamed`; a route that does not start with `/` is `bynk.http.invalid_path`.",
+        example: "on GET(\"/files/*key/raw\") () -> Effect[HttpResult[String]] by v: Visitor { … }        // ✗ a rest is last\n\non GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.rest_param_type",
+        blurb: "A `*name` rest segment binds the rest of the path as it was received: one text value, still percent-encoded, that starts with `/` unless it is empty and keeps empty segments and a trailing slash. Only `String` can hold that faithfully, so the parameter it binds must be typed `String`. Decode it in the handler with `percentDecode()` (which is `None` for a malformed escape), or parse it there. A `:name` parameter may take other types; see `bynk.http.path_param_not_stringy`.",
+        example: "on GET(\"/files/*key\") (key: Int) -> Effect[HttpResult[String]] by v: Visitor { … }      // ✗\n\non GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.rest_unnamed",
+        blurb: "A rest segment, a route's last segment written `*name`, matches the rest of a path and binds it to the handler parameter of that name, as a `:name` segment binds one segment. A bare `*` binds nothing, so it is refused. Name it and take the parameter. A `*` anywhere other than the start of the last segment is `bynk.http.reserved_route_syntax`.",
+        example: "on GET(\"/files/*\") () -> Effect[HttpResult[String]] by v: Visitor { … }                // ✗\n\non GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
         code: "bynk.http.return_not_effect_http_result",
@@ -2984,7 +3148,7 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.unreachable_route",
-        blurb: "A router tries the routes of a method in a fixed order: they are compared segment by segment, left to right, and at the first segment where two differ a literal segment beats a `:name` one. So `GET /users/me` answers `/users/me` and `GET /users/:id` answers every other `/users/<x>`, whichever is written first. Overlap is fine, even intended. But a route is refused when every path it matches is answered first by other routes (of the same method, in this context or, in a worker group, in any member): no request could ever reach it. Parameter names are not part of the shape, so `GET /a/:x` beside `GET /a/:y` leaves the second unreachable. Remove the route, or make it match a path the others do not.",
+        blurb: "A router tries the routes of a method in a fixed order: they are compared segment by segment, left to right, and at the first segment where two differ a literal segment beats a `:name` one, and a `:name` beats a `*name` rest. So `GET /users/me` answers `/users/me` and `GET /users/:id` answers every other `/users/<x>`, whichever is written first. Overlap is fine, even intended. But a route is refused when every path it matches is answered first by other routes (of the same method, in this context or, in a worker group, in any member): no request could ever reach it. Parameter names are not part of the shape, so `GET /a/:x` beside `GET /a/:y` leaves the second unreachable. Remove the route, or make it match a path the others do not.",
         example: "on GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:y\") (y: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `/a/:x` already answers every path it matches\n\non GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓ a literal and a parameter overlap, and each is reachable",
     },
     Explain {
@@ -5602,6 +5766,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   let r <- api.GET(\"/items\") by User(\"ada\")   // ✓",
     },
     Explain {
+        code: "bynk.test.rest_argument",
+        blurb: "A test case addresses a rest route by its pattern and then the rest, which the case gives as the router would bind it: `\"\"`, or text that starts with `/`, as a request carries it. At the `system` tier the rest is sent as written after the prefix, so a rest without its leading `/` would request another path (`/raw/*path` with `\"a/b\"` asks for `/rawa/b`), and the case would mean one thing at one tier and another at the next. So a literal rest is refused when it is neither `\"\"` nor starts with `/`, when it is `\"\"` under a root rest (which always holds at least `/`), or when it holds `?`, `#` or a `.` or `..` segment, which a path never brings to a rest. Write the rest as the request would.",
+        example: "let r <- api.GET(\"/raw/*path\", \"a/b\") by Visitor   // ✗\n\nlet r <- api.GET(\"/raw/*path\", \"/a/b\") by Visitor   // ✓",
+    },
+    Explain {
         code: "bynk.test.revoked_needs_sessions_route",
         blurb: "`by Revoked` sends a cookie for a session that was issued and then \
                 revoked in the session agent, so it needs a route whose seam \
@@ -6044,6 +6213,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "fn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        1 => \"uno\"    // ✗ `1` is already matched above\n        _ => \"other\"\n    }\n}\n\nfn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        2 => \"two\"    // ✓\n        _ => \"other\"\n    }\n}",
     },
     Explain {
+        code: "bynk.types.duplicate_pattern_binding",
+        blurb: "A pattern binds each name once. With `Both(a, a)`, or `Some(a as a)`, the arm's body would read a name that stands for two values, and which one it saw would be an accident of how the match is compiled. The rule holds wherever a pattern binds: variant payloads, record fields, list elements and their `..rest`, `as` names, nested patterns, `let … else`, a lambda's parameter pattern and the `is` operator. Rename one of the bindings, or write `_` where the value is not needed. An or-pattern is different: its alternatives must bind the same names (`bynk.types.or_pattern_binding_mismatch`), so `Walk(n) | Run(n)` is required, not a duplicate; a name repeated within one alternative is still refused. A field named twice in a record pattern is `bynk.types.duplicate_pattern_field`.",
+        example: "type Pair =\n    | Both(l: Int, r: Int)\n\nfn sum(p: Pair) -> Int {\n    match p {\n        Both(a, a) => a + a,    // ✗ `a` is bound twice\n    }\n}\n\nfn sum(p: Pair) -> Int {\n    match p {\n        Both(a, b) => a + b,    // ✓\n    }\n}",
+    },
+    Explain {
         code: "bynk.types.duplicate_pattern_field",
         blurb: "A record pattern lists the fields it reads, and each may be named once. Naming a field twice would bind or test the same value twice, which is almost always a slip for a different field. Keep one mention, and give it the name you want to use, as in `total: t`. The `..` at the end covers every field you leave out.",
         example: "type Order = { id: String, total: Int }\n\nfn amount(o: Order) -> Int {\n    match o {\n        Order { total, total: t, .. } => t    // ✗ `total` is named twice\n    }\n}\n\nfn amount(o: Order) -> Int {\n    match o {\n        Order { total: t, .. } => t           // ✓\n    }\n}",
@@ -6208,6 +6382,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "consumes bynk { File }\n\nagent Gallery {\n    key id: String\n    store photo: Cell[Option[File]]     // ✗ an upload is not kept as a `File`\n}\n\nagent Gallery {\n    key id: String\n    store photo: Cell[Option[Bytes]]    // ✓ keep its bytes\n}",
     },
     Explain {
+        code: "bynk.types.float_literal_pattern",
+        blurb: "A `Float` cannot be matched against a literal. Floating-point equality is exact and `NaN` never equals itself, so an arm such as `0.1 =>` rarely means what it seems: the value a calculation produces is seldom exactly `0.1`. The same holds for a `Float` field of a record pattern or a payload. A `Float` is not a `match` scrutinee at all, so compare it with `<`, `>=` or a tolerance in an `if`: `if x < 0.5 { … }`. A `Decimal` has none of this trouble: its literal patterns match by value (`20d`, `20.0d` and `20.00d` are one pattern), so a price tier or a VAT rate is written as a `Decimal` literal arm.",
+        example: "fn band(x: Float) -> String {\n    match x {\n        0.1 => \"tenth\"    // ✗ a `Float` can't be matched against a literal\n        _ => \"other\"\n    }\n}\n\nfn band(x: Float) -> String {\n    if x < 0.5 { \"low\" } else { \"other\" }    // ✓ compare instead\n}",
+    },
+    Explain {
         code: "bynk.types.form_uncodable",
         blurb: "`Form.decode[T]` and `Form.encode` read and write the flat `key=value` text a `@form` route handles, so `T` must be a record of fields a form can carry: a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`. Form keys have no nesting, so a nested record, or a type that is not a record, is refused. Put the nested record's fields in `T` itself. A `@form` route's own body has the same rule: `bynk.http.form_field_not_stringy`.",
         example: "type Address = { city: String }\ntype Signup = { email: String, address: Address }\n\nForm.decode[Signup](text)    // ✗ `address` is a nested record\n\ntype Signup = { email: String, city: String }\n\nForm.decode[Signup](text)    // ✓",
@@ -6264,6 +6443,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.if_without_else_requires_unit",
         blurb: "An `if` with no `else` has nothing to produce when its condition is false, so Bynk gives that path the value `()`. The `then` branch must therefore be `()` too, or `Effect[()]` for a branch that only performs effects; a branch that yields a `String` would leave the other path without one. Add an `else` that produces a value of the same type, or make the branch a unit effect.",
         example: "fn sign(n: Int) -> String {\n    if n > 0 { \"positive\" }    // ✗ no `else`, so the value would be `()`\n}\n\nfn sign(n: Int) -> String {\n    if n > 0 { \"positive\" } else { \"not positive\" }    // ✓\n}",
+    },
+    Explain {
+        code: "bynk.types.inbound_request_at_boundary",
+        blurb: "An `InboundRequest` is the request a pass-through route is answering, and a `Forwarded` an upstream's answer streaming through it. Each lives for that request: a record or sum may hold one, but no value holding one is stored, sent, encoded or returned across a boundary, and it has no codec. Read what you need from it (`request.method()`, `request.headers().get(…)`, `response.status()`) and store or send that. `Upstream.forward`, which takes one and returns the other, is where they belong.",
+        example: "type Held = { request: InboundRequest }\nservice keep { on call(h: Held) -> Effect[Int] by Caller { … } }   // ✗\n\ntype Seen = { method: String }\nservice keep { on call(s: Seen) -> Effect[Int] by Caller { … } }   // ✓",
     },
     Explain {
         code: "bynk.types.interpolation_non_scalar",
@@ -7311,6 +7495,14 @@ pub const RETIRED: &[Retired] = &[
         ),
     },
     Retired {
+        code: "bynk.given.fn_outside_context",
+        last_release: "0.661.1",
+        why: "A commons free function may now declare `given` (#3959): capability parameters, which every call binds, and shared capabilities; an adapter's helper that declares `given` is `bynk.given.fn_unsupported`.",
+        replacement: Some(
+            "`given Store: Kv, Logger` on a commons function, bound at each call with `given Store = Sessions`",
+        ),
+    },
+    Retired {
         code: "bynk.http.multipart_body_unbounded",
         last_release: "0.661.1",
         why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
@@ -7386,6 +7578,46 @@ pub fn lookup(code: &str) -> Option<&'static DiagnosticInfo> {
 
 /// Every diagnostic code the compiler emits, sorted by code.
 pub const REGISTRY: &[DiagnosticInfo] = &[
+    d(
+        "bynk.actor.api_key_agent_name_reserved",
+        "An author's declaration takes the name of an agent the compiler generates for an `ApiKey` actor (`<Actor>Keys`, `<Actor>KeyOwner`) (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_bad_arg",
+        "An `ApiKey` config value has the wrong kind, or a key is repeated (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_identity_not_string_constructible",
+        "An `ApiKey` actor's identity is not a string-constructible type (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_internal",
+        "A program names `ApiKey.equal`, the generated key store's internal comparison (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_mint_outside_handler",
+        "`Actor.mint` on an `ApiKey` actor is called outside a service handler, where the pepper is not (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_missing_secret",
+        "An `ApiKey` actor does not name its pepper (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_prefix_shared",
+        "Two `ApiKey` actors in one context share a key prefix (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_secret_shared",
+        "An `ApiKey` actor's pepper is also another actor's secret (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_unknown_key",
+        "An `ApiKey` config has a key outside the closed set, or one not supported yet (#3939).",
+    ),
+    warn(d(
+        "bynk.actor.api_key_unlimited",
+        "A route guarded by an `ApiKey` actor applies no rate limit before authentication (warning, #3939).",
+    )),
     d(
         "bynk.actor.bearer_bad_arg",
         "A `Bearer` actor's `issuer`, `audience` or `trustFrom` is not a non-empty string (#3821).",
@@ -7570,6 +7802,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.actor.signed_cookie_issue_needs_clock",
         "`Actor.issue(identity)` on a `SignedCookie` actor is called where the handler does not list `Clock` in `given`.",
     ),
+    warn(d(
+        "bynk.actor.signed_cookie_issue_on_safe_method",
+        "A `GET` route issues a `SignedCookie` session, so it is outside the login-CSRF check a state-changing route gets (warning, #3825).",
+    )),
     d(
         "bynk.actor.signed_cookie_issue_outside_handler",
         "`Actor.issue(identity)` on a `SignedCookie` actor is called outside a service handler (in a provider or an agent).",
@@ -7942,6 +8178,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`.",
     ),
     d(
+        "bynk.cloudflare.credentials_missing",
+        "A command that reads the Cloudflare account needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and one or both are not set, so it stopped before reading anything. With `--format json`, `bynk revert` writes `{\"error\": {\"code\", \"missing\", \"message\"}}` to stdout, `missing` naming each variable that is unset; the message says what the token needs.",
+    ),
+    d(
         "bynk.cloudflare.edge_cache_duplicate",
         "A context declares a second `EdgeCache` instance; the edge cache is one setting for the whole Worker.",
     ),
@@ -7969,9 +8209,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.codegen.tsc_failed",
         "`tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068).",
     ),
+    warn(dg(
+        "bynk.commons.capability_unused",
+        "A commons selects a first-party capability in its `consumes` that no function's `given` names (warning).",
+        &["consumes_decl"],
+    )),
     dg(
         "bynk.commons.consumes_not_types",
-        "A commons `consumes` something other than a braced list of types an adapter exports: a whole-unit or aliased form, a capability, an unknown name, or a context.",
+        "A commons `consumes` something other than a braced list of types an adapter exports and capabilities a first-party unit exports: a whole-unit or aliased form, a project adapter's capability, an unknown name, or a context.",
         &["consumes_decl"],
     ),
     dg(
@@ -8066,6 +8311,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.container.output_outside_project",
         "A build with a `Container` is written to an output directory outside the project, so `wrangler` cannot reach the container's Dockerfile from the Worker's output directory by a relative path inside the project.",
     ),
+    warn(d(
+        "bynk.container.unbounded_instances",
+        "A `Container` instance name is built from a request's own input on a route whose caller is not authenticated, so any caller can start as many containers as they have values to send (warning).",
+    )),
     d(
         "bynk.context.consumes_cycle",
         "Contexts form a `consumes` dependency cycle.",
@@ -8189,6 +8438,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.account_name_conflict",
         "Two instances in the build would take the same name on the Cloudflare account, so `bynk deploy` stopped before planning. The message names the instances and the name they share; rename one.",
     ),
+    warn(d(
+        "bynk.deploy.account_note",
+        "Checking the plan against the Cloudflare account found something worth saying, such as a resource it could not check. The message says what; the plan is still made (warning).",
+    )),
+    warn(d(
+        "bynk.deploy.adoption_partial",
+        "`[deploy.vectorize.<Capability>]` or `[deploy.containers.<Capability>]` in `bynk.toml` adopts an index or image only for some environments, and this environment is not one of them, so the deploy creates (or builds) one (warning).",
+    )),
+    d(
+        "bynk.deploy.adoption_unmatched",
+        "An entry under `[deploy.vectorize]` or `[deploy.containers]` in `bynk.toml` names no capability of this project, so `bynk deploy` stopped before planning: an entry that matches nothing would have the deploy create a new, empty index or build an image instead of adopting yours. The message names the entry and the nearest capability.",
+    ),
+    d(
+        "bynk.deploy.adoption_unreadable",
+        "`[deploy.vectorize]` or `[deploy.containers]` in `bynk.toml` did not read, so `bynk deploy` stopped before planning. The message names the problem.",
+    ),
     d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
@@ -8237,6 +8502,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.email_claim_refused",
         "`bynk deploy` could not decide which inbound email addresses the Worker claims in a named environment from `[deploy.email]` in `bynk.toml`, so it stopped before planning. With `--format json` the plan's `refusals` carries it with the `environment`.",
     ),
+    warn(d(
+        "bynk.deploy.email_forward_destination",
+        "A handler's `Forward` goes to an address Cloudflare may refuse, or one that cannot be checked at deploy: it is computed at run time, is not a verified destination address, or the lookup did not answer. The plan is still made, and the sender's mail would bounce if Cloudflare refuses the forward (warning).",
+    )),
     d(
         "bynk.deploy.empty_group",
         "A `[deploy.workers.<key>]` group lists no context.",
@@ -8856,23 +9125,68 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["where_clause"],
     ),
     dg(
+        "bynk.given.binding_duplicate",
+        "A call binds one of its callee's capability parameters more than once.",
+        &["call"],
+    ),
+    dg(
+        "bynk.given.binding_kind_mismatch",
+        "A call binds a capability parameter to a capability that is not of the parameter's kind (a `D1` instance for a `Kv` parameter).",
+        &["call"],
+    ),
+    dg(
+        "bynk.given.binding_missing",
+        "A call leaves one of its callee's capability parameters unbound; the fix is machine-applicable only when the caller holds exactly one candidate.",
+        &["call"],
+    ),
+    dg(
+        "bynk.given.binding_shared",
+        "A call binds a shared capability of its callee (`given Logger = Logger`); only capability parameters are bound.",
+        &["call"],
+    ),
+    dg(
+        "bynk.given.binding_unknown",
+        "A call binds a name that is not one of its callee's capability parameters, or binds on a callee that has none.",
+        &["call"],
+    ),
+    dg(
         "bynk.given.cross_context_unknown_capability",
         "`given B.Cap` or `consumes B { Cap }` names a capability the consumed context does not export.",
         &["given_clause"],
     ),
     dg(
-        "bynk.given.fn_outside_context",
-        "A function in a commons (or a suite) declares `given`; only a context function can.",
+        "bynk.given.fn_unsupported",
+        "A `given` clause on a method, on a function that does not return `Effect[T]`, on an adapter's function, or naming `Events`.",
         &["given_clause"],
     ),
     dg(
-        "bynk.given.fn_unsupported",
-        "A `given` clause on a method, on a function that does not return `Effect[T]`, or naming `Events`.",
+        "bynk.given.kind_needs_parameter",
+        "A commons function names an instantiable kind bare (`given Kv`); it must be a capability parameter (`given Store: Kv`).",
         &["given_clause"],
     ),
     dg(
         "bynk.given.missing_for_call",
         "A call to a function that declares `given` from a body that does not declare those capabilities.",
+        &["given_clause"],
+    ),
+    dg(
+        "bynk.given.parameter_name_conflict",
+        "A capability parameter shadows a visible capability or kind, a type parameter, or another capability parameter.",
+        &["given_clause"],
+    ),
+    dg(
+        "bynk.given.parameter_outside_commons",
+        "`given Name: Kind` on a context function, a method, a handler, a provider or a suite helper; only a commons function takes capability parameters.",
+        &["given_clause"],
+    ),
+    dg(
+        "bynk.given.parameterised_fn_value",
+        "A function with capability parameters is named as a value; a lambda that binds them takes its place.",
+        &["call"],
+    ),
+    dg(
+        "bynk.given.shared_as_parameter",
+        "A capability with no instances bounds a capability parameter (`given L: Logger`); it is named bare, as a shared capability.",
         &["given_clause"],
     ),
     dg(
@@ -8978,6 +9292,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.cache_on_non_get",
         "A `@cache` annotation is placed on a handler that is not `on http GET` (`@cache(noStore: true)` is also legal on any other HTTP route).",
+    ),
+    dg(
+        "bynk.http.cache_on_pass_through",
+        "An `on ANY` pass-through route carries `@cache`; the upstream's `Cache-Control` is its answer's freshness.",
+        &["http_handler"],
     ),
     d(
         "bynk.http.cache_public_authenticated",
@@ -9101,6 +9420,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `cors` policy combines `credentials: true` with `expose: [\"*\"]`.",
     ),
     dg(
+        "bynk.http.cors_with_pass_through",
+        "A service that declares an `on ANY` pass-through route also declares `cors { }`.",
+        &["http_handler"],
+    ),
+    dg(
         "bynk.http.duplicate_rejected",
         "A `from http` service declares `on rejected` more than once.",
         &["rejected_handler"],
@@ -9166,6 +9490,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.form_unknown_arg",
         "A `@form` annotation is given an argument; it takes none.",
     ),
+    dg(
+        "bynk.http.handler_name_collision",
+        "Two HTTP handlers of a context would be emitted under one method name (`/a-b` and `/a_b` are both `http_GET_a_b`).",
+        &["http_handler"],
+    ),
     warn(d(
         "bynk.http.header_question_not_found",
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
@@ -9188,6 +9517,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.http.headers_wrong_type",
         "An HTTP handler's `headers` parameter is neither a record type nor `RequestHeaders`.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.inbound_request_not_pass_through",
+        "An `InboundRequest` parameter on a route that is not `on ANY`, or not named `request`.",
         &["http_handler"],
     ),
     dg(
@@ -9267,6 +9601,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.multipart_large_cap",
         "A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning).",
     )),
+    dg(
+        "bynk.http.pass_through_not_emitted",
+        "A build reaches an `on ANY` pass-through route, which this release checks but does not yet build.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.pass_through_signature",
+        "An `on ANY` route does not return `Effect[PassThrough]` or takes a parameter it may not, or another route returns `Effect[PassThrough]`.",
+        &["http_handler"],
+    ),
     dg(
         "bynk.http.path_param_not_stringy",
         "A path parameter's type is not one a single path segment can carry.",
@@ -9351,7 +9695,17 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.http.reserved_route_syntax",
-        "A route segment contains `*`, `{` or `}`, which are reserved for a future route form.",
+        "A route segment contains `{` or `}`, or a `*` other than a final `*name` rest, which are reserved for a future route form.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.rest_param_type",
+        "The parameter a route's `*name` rest segment binds is not typed `String`.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.rest_unnamed",
+        "A route's last segment is a bare `*`, a rest segment with no name to bind.",
         &["http_handler"],
     ),
     dg(
@@ -11035,6 +11389,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `system` case runs a cron handler with `svc.schedule(…)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a cron handler.",
         &["case"],
     ),
+    d(
+        "bynk.test.rest_argument",
+        "A test case gives a route's `*name` rest a literal the router could never bind: not `\"\"` or `/…`, `\"\"` under a root rest, or holding `?`, `#` or a dot segment.",
+    ),
     dg(
         "bynk.test.revoked_needs_sessions_route",
         "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it.",
@@ -11299,6 +11657,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["match_arm"],
     ),
     dg(
+        "bynk.types.duplicate_pattern_binding",
+        "A pattern binds the same name more than once.",
+        &["match_arm", "is_expr"],
+    ),
+    dg(
         "bynk.types.duplicate_pattern_field",
         "A record pattern lists the same field twice.",
         &["record_pattern"],
@@ -11407,6 +11770,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.file_at_boundary",
         "A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned.",
     ),
+    dg(
+        "bynk.types.float_literal_pattern",
+        "A `Float` literal is used as a pattern, at any depth; floating-point equality is exact and `NaN` never equals itself.",
+        &["literal_pattern"],
+    ),
     d(
         "bynk.types.form_uncodable",
         "`Form.decode` or `Form.encode` names a type that is not a record of form fields (a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`).",
@@ -11447,6 +11815,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.if_without_else_requires_unit",
         "An `if` with no `else` branch has a non-unit then-branch; the missing else defaults to `()`, so the branch must be `()` or `Effect[()]`.",
         &["if_expr"],
+    ),
+    dg(
+        "bynk.types.inbound_request_at_boundary",
+        "An `InboundRequest` or `Forwarded`, or a type holding one, where a value is stored, sent or returned across a boundary.",
+        &["http_handler"],
     ),
     d(
         "bynk.types.interpolation_non_scalar",

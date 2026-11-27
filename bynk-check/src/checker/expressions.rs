@@ -3,6 +3,7 @@
 //! Split out of `checker.rs` (v0.29.10) verbatim; the parent module
 //! re-exports these via `use expressions::*`.
 
+use super::pattern_literals::{is_float_literal, skips_duplicate_check};
 use super::usefulness::{Coverage, FUTURE_VARIANT_CLOSE, FUTURE_VARIANT_OPEN};
 use super::*;
 
@@ -80,7 +81,7 @@ pub(crate) fn check_ident_at(
         && let Some(decl) = ctx.input.fns.get(&id.name)
     {
         let decl = Arc::clone(decl);
-        require_callee_given(id, &decl, ctx);
+        require_callee_given(id, &decl, None, ctx);
         let decl = &decl;
         ctx.callees
             .insert(expr_id, Callee::FnValue(Arc::clone(decl), witnesses));
@@ -93,7 +94,7 @@ pub(crate) fn check_ident_at(
     {
         // #2868: naming a `given` function carries its capabilities along.
         let decl = Arc::clone(decl);
-        require_callee_given(id, &decl, ctx);
+        require_callee_given(id, &decl, None, ctx);
         let decl = &decl;
         // #2719: every function named as a value is recorded (with no
         // witnesses when it has no `Ord` bound), so the needs-context analysis
@@ -419,6 +420,20 @@ pub(crate) fn check_ident(
     {
         err = err.with_note(format!(
             "`{}` is a capability: only a handler or function body that is `given` it can call it, and this position is pure",
+            id.name
+        ));
+    }
+    // #3959: a commons function's capability parameter is never a value either.
+    if ctx.input.is_commons
+        && ctx.caps.capabilities.contains_key(&id.name)
+        && !ctx
+            .input
+            .cross_context
+            .flattened_caps
+            .contains_key(&id.name)
+    {
+        err = err.with_note(format!(
+            "`{0}` is a capability parameter of this function: it names a capability, never a value; call its operations (`{0}.get(…)`), or bind a callee's parameter to it (`given Store = {0}`)",
             id.name
         ));
     }
@@ -2153,7 +2168,14 @@ pub(crate) fn variant_owner<'a, D: AsRef<TypeDecl>>(
     if let [only] = owners {
         return Some(only);
     }
-    let exp = expected?;
+    let mut exp = expected?;
+    // #3752 (§12): a body returning `Effect[T]` is checked against it, and a
+    // variant is never itself an `Effect`, so the sum it names is `T`'s. Without
+    // this, `bynk`'s `PassThrough.Forward` would make an email handler's bare
+    // `Forward` ambiguous beside `EmailVerdict.Forward`.
+    if let Ty::Effect(inner) = &*tys.get(exp) {
+        exp = *inner;
+    }
     let Ty::Named { name, .. } = &*tys.get(exp) else {
         return None;
     };
@@ -4358,7 +4380,11 @@ pub(super) fn literal_base_of(ty: TyId, tys: &Types) -> Option<BaseType> {
         } => *b,
         _ => return None,
     };
-    matches!(base, BaseType::Int | BaseType::String | BaseType::Bool).then_some(base)
+    matches!(
+        base,
+        BaseType::Int | BaseType::String | BaseType::Bool | BaseType::Decimal
+    )
+    .then_some(base)
 }
 
 /// The base type a literal pattern matches against.
@@ -4367,6 +4393,8 @@ fn literal_value_base(value: &LiteralValue) -> BaseType {
         LiteralValue::Int(_) => BaseType::Int,
         LiteralValue::Str(_) => BaseType::String,
         LiteralValue::Bool(_) => BaseType::Bool,
+        LiteralValue::Decimal { .. } => BaseType::Decimal,
+        LiteralValue::Float(_) => BaseType::Float,
     }
 }
 
@@ -4470,7 +4498,7 @@ pub(crate) fn check_match(
     } else if arms.iter().any(|a| {
         pattern_alternatives(&a.pattern)
             .iter()
-            .any(|p| matches!(p, Pattern::List { .. } | Pattern::Range(_)))
+            .any(|p| matches!(p, Pattern::List { .. } | Pattern::Range(_)) || is_float_literal(p))
     }) {
         // #2680, #2699: a list or range pattern on a value that is not a list
         // or an `Int` (a record, a `Set`, a `Float`, a function) is that
@@ -4486,7 +4514,7 @@ pub(crate) fn check_match(
             "bynk.types.match_non_sum_discriminant",
             discriminant.span,
             format!(
-                "cannot match on a value of type `{}` — `match` requires a sum, `Result`, `Option`, or a primitive `Int`/`String`/`Bool`",
+                "cannot match on a value of type `{}` — `match` requires a sum, `Result`, `Option`, or a primitive `Int`/`String`/`Bool`/`Decimal`",
                 disc_ty.display(tys)
             ),
         ));
@@ -4529,8 +4557,7 @@ pub(crate) fn check_match(
                 // A list or range pattern's overlap with another is the
                 // usefulness engine's to judge (`unreachable_arm`): `[x, ..]`
                 // after `[_, ..]`, or `0..5` after `0..9`, is not a mere duplicate.
-                if cand.is_irrefutable() || matches!(cand, Pattern::List { .. } | Pattern::Range(_))
-                {
+                if skips_duplicate_check(cand) {
                     continue;
                 }
                 if seen.iter().any(|p| patterns_equal(p, cand)) {
@@ -5025,7 +5052,21 @@ fn warn_unreachable_undecodable(variant: &Ident, ty: TyId, ctx: &mut Ctx) {
     );
 }
 
+/// A whole pattern, at a `match` arm (and so `let … else`, a destructuring
+/// `let` and a lambda parameter pattern): its duplicate bindings (#4550), then
+/// [`check_sub_pattern`], which recurses through the pattern.
 fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
+    report_duplicate_bindings(pat, ctx);
+    check_sub_pattern(pat, ty, ctx);
+}
+
+/// #4550: a name bound twice in one pattern is `bynk.types.duplicate_pattern_binding`.
+fn report_duplicate_bindings(pat: &Pattern, ctx: &mut Ctx) {
+    ctx.errors
+        .extend(crate::duplicate_bindings::duplicate_binding_errors(pat));
+}
+
+fn check_sub_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
     let tys = ctx.tys;
     match pat {
         Pattern::Wildcard(_) => {}
@@ -5041,7 +5082,9 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             ctx.bind(id.name.clone(), ty);
         }
         Pattern::Literal { value, span, .. } => {
-            if let Some(base) = literal_base_of(ty, tys) {
+            if let Some(e) = super::pattern_literals::float_literal_pattern(value, *span) {
+                ctx.errors.push(e);
+            } else if let Some(base) = literal_base_of(ty, tys) {
                 let lit_base = literal_value_base(value);
                 if lit_base != base {
                     ctx.errors.push(CompileError::new(
@@ -5060,7 +5103,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                     "bynk.types.pattern_type_mismatch",
                     *span,
                     format!(
-                        "literal pattern `{}` cannot match a value of type `{}` — literal patterns match `Int`/`String`/`Bool` scrutinees",
+                        "literal pattern `{}` cannot match a value of type `{}` — literal patterns match `Int`/`String`/`Bool`/`Decimal` scrutinees",
                         value.describe(),
                         ty.display(tys)
                     ),
@@ -5100,8 +5143,10 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             predicate,
             span,
         } => {
-            check_pattern(inner, ty, ctx);
-            if let Some(base) = literal_base_of(ty, tys) {
+            check_sub_pattern(inner, ty, ctx);
+            // A refined pattern matches an `Int` or a `String`; a `Decimal` has literal patterns
+            // (#3973) but no refined ones, which keep the error below as they always had.
+            if let Some(base) = literal_base_of(ty, tys).filter(|b| *b != BaseType::Decimal) {
                 check_refinement(base, *span, Some(predicate), ctx.errors);
                 // #3972: on an `Int` a range pattern is the stronger spelling.
                 if base == BaseType::Int
@@ -5232,7 +5277,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                                 bind_as_error(pattern, ctx);
                                 continue;
                             };
-                            check_pattern(pattern, field_ty, ctx);
+                            check_sub_pattern(pattern, field_ty, ctx);
                         }
                         PatternBindingKind::Positional { .. } => {
                             ctx.errors.push(CompileError::new(
@@ -5266,7 +5311,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             } else {
                 for (b, (_, field_ty)) in bindings.iter().zip(payload.iter()) {
                     let field_ty = *field_ty;
-                    check_pattern(b.pattern(), field_ty, ctx);
+                    check_sub_pattern(b.pattern(), field_ty, ctx);
                 }
             }
         }
@@ -5275,7 +5320,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
         // #3971: `p as name` checks `p`, then binds `name` to the whole value
         // at this position's type.
         Pattern::As { inner, name, .. } => {
-            check_pattern(inner, ty, ctx);
+            check_sub_pattern(inner, ty, ctx);
             ctx.pattern_binding_types.insert(name.span, ty);
             ctx.bind(name.name.clone(), ty);
             ctx.errors.extend(super::pattern_as::as_on_wildcard(pat));
@@ -5287,7 +5332,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
         // cross-alternative rules by reading back what that just wrote.
         Pattern::Or(alts, _) => {
             for alt in alts {
-                check_pattern(alt, ty, ctx);
+                check_sub_pattern(alt, ty, ctx);
             }
             check_or_pattern_bindings(alts, ctx);
         }
@@ -5395,7 +5440,7 @@ fn check_record_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
         );
         let field_ty = field_ty.unwrap_or_else(|| tys.intern(Ty::Error));
         match sub {
-            Some(p) => check_pattern(p, field_ty, ctx),
+            Some(p) => check_sub_pattern(p, field_ty, ctx),
             None => {
                 ctx.pattern_binding_types.insert(name.span, field_ty);
                 ctx.bind(name.name.clone(), field_ty);
@@ -5439,7 +5484,7 @@ fn check_list_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
         }
     };
     for e in elems {
-        check_pattern(e, elem_ty, ctx);
+        check_sub_pattern(e, elem_ty, ctx);
     }
     if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
         ctx.pattern_binding_types.insert(binder.span, ty);
@@ -5788,6 +5833,7 @@ pub(crate) fn check_is(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    report_duplicate_bindings(pattern, ctx);
     let value_ty = type_of(value, None, ctx)?;
     let variants = variants_of(value_ty, &ctx.input.types, tys);
     check_is_pattern(pattern, value_ty, &variants, ctx);
@@ -5997,7 +6043,7 @@ fn check_is_pattern(
         // are collected separately by `gather_pattern_bindings`.
         Pattern::Record { .. } | Pattern::List { .. } => {
             ctx.push_scope();
-            check_pattern(pattern, value_ty, ctx);
+            check_sub_pattern(pattern, value_ty, ctx);
             ctx.pop_scope();
         }
         // #474 §2.3.6: an or-pattern is legal after `is` (unlike a literal —
@@ -6066,7 +6112,7 @@ fn validate_is_pattern(pattern: &Pattern, ty: TyId, ctx: &mut Ctx) {
     // #2641: a nested record pattern is checked in full, in a scratch scope.
     if let Pattern::Record { .. } | Pattern::List { .. } = pattern {
         ctx.push_scope();
-        check_pattern(pattern, ty, ctx);
+        check_sub_pattern(pattern, ty, ctx);
         ctx.pop_scope();
         return;
     }

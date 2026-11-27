@@ -468,10 +468,10 @@ mod tests {
             render_rule(&g, "match_arm").unwrap(),
             "(pattern | refined_pattern) (\"if\" expression)? \"=>\" expression \",\"?"
         );
-        // `http_method` is a plain choice, unchanged.
+        // `http_method` is a plain choice, unchanged (#3752 adds `ANY`).
         assert_eq!(
             render_rule(&g, "http_method").unwrap(),
-            "\"GET\" | \"POST\" | \"PUT\" | \"PATCH\" | \"DELETE\""
+            "\"GET\" | \"POST\" | \"PUT\" | \"PATCH\" | \"DELETE\" | \"ANY\""
         );
         // `http_handler` references `_type_ref` and `block` — display, not raw.
         let http = render_rule(&g, "http_handler").unwrap();
@@ -597,7 +597,9 @@ mod tests {
         // #3975 (wire names) added: _variant_annotation. Net +1.
         // #3971 (`pattern as name`) added: as_pattern, _is_as_pattern, _let_as_pattern,
         // _lambda_as_pattern. Net +4.
-        assert_eq!(rules.len(), 209);
+        // #3959 (capability parameters) added: capability_parameter,
+        // capability_bindings, capability_binding, _call_arguments. Net +4.
+        assert_eq!(rules.len(), 213);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

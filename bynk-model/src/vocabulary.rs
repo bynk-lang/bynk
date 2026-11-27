@@ -517,6 +517,9 @@ pub enum ActorSeamIr {
     /// #3386: a single `SignedCookie` actor: the session cookie is read, verified
     /// and its `sub` minted into the identity at the edge.
     SignedCookie(bynk_check::actors::SignedCookieSeam),
+    /// #3939: a single `ApiKey` actor: the key is read, parsed, digested under the pepper and
+    /// looked up in the generated key store at the edge, which answers the identity.
+    ApiKey(bynk_check::api_key::ApiKeySeam),
     /// A cross-context `on call … by c: Caller` handler's own binder name —
     /// `caller_binder_for`'s return type is already the bare `Option<String>`
     /// the other four resolvers reduce a whole struct down to one field for.
@@ -528,18 +531,33 @@ pub enum ActorSeamIr {
 }
 
 impl ActorSeamIr {
+    /// The binder a single-actor seam threads its identity into (`deps.identity`): the `by`
+    /// clause's binder, if any. A sum threads `deps.who` instead, so it has none here.
+    pub fn deps_identity_binder(&self) -> Option<String> {
+        match self {
+            ActorSeamIr::Caller(binder) | ActorSeamIr::Sender(binder) => Some(binder.clone()),
+            ActorSeamIr::Bearer(s) => s.binder.clone(),
+            ActorSeamIr::Oidc(s) => s.binder.clone(),
+            ActorSeamIr::SignedCookie(s) => s.binder.clone(),
+            ActorSeamIr::ApiKey(s) => s.binder.clone(),
+            ActorSeamIr::Sum(_) | ActorSeamIr::CallSum(_) | ActorSeamIr::None => None,
+        }
+    }
+
     /// The identity type a Bearer or `SignedCookie` seam mints from the verified `sub`
     /// and threads into `deps.identity`, when the handler's `by` clause binds it.
     pub fn captured_identity_type(&self) -> Option<&str> {
         match self {
             ActorSeamIr::Bearer(s) if s.binder.is_some() => Some(&s.identity_type),
             ActorSeamIr::SignedCookie(s) if s.binder.is_some() => Some(&s.identity_type),
+            ActorSeamIr::ApiKey(s) if s.binder.is_some() => Some(&s.identity_type),
             ActorSeamIr::None
             | ActorSeamIr::Sum(_)
             | ActorSeamIr::CallSum(_)
             | ActorSeamIr::Bearer(_)
             | ActorSeamIr::Oidc(_)
             | ActorSeamIr::SignedCookie(_)
+            | ActorSeamIr::ApiKey(_)
             | ActorSeamIr::Caller(_)
             | ActorSeamIr::Sender(_) => None,
         }
@@ -588,6 +606,8 @@ pub enum IrHttpMethod {
     Put,
     Patch,
     Delete,
+    /// #3752 (D7): a pass-through route's `ANY`.
+    Any,
 }
 
 impl IrHttpMethod {
@@ -600,6 +620,7 @@ impl IrHttpMethod {
             IrHttpMethod::Put => "PUT",
             IrHttpMethod::Patch => "PATCH",
             IrHttpMethod::Delete => "DELETE",
+            IrHttpMethod::Any => "ANY",
         }
     }
 
@@ -612,6 +633,7 @@ impl IrHttpMethod {
             "PUT" => Some(IrHttpMethod::Put),
             "PATCH" => Some(IrHttpMethod::Patch),
             "DELETE" => Some(IrHttpMethod::Delete),
+            "ANY" => Some(IrHttpMethod::Any),
             _ => None,
         }
     }
@@ -627,6 +649,7 @@ impl From<bynk_syntax::ast::HttpMethod> for IrHttpMethod {
             HttpMethod::Put => IrHttpMethod::Put,
             HttpMethod::Patch => IrHttpMethod::Patch,
             HttpMethod::Delete => IrHttpMethod::Delete,
+            HttpMethod::Any => IrHttpMethod::Any,
         }
     }
 }
@@ -799,6 +822,10 @@ fn pattern_has_nested_test(pat: &Pattern) -> bool {
             .any(|p| !p.bound_names().is_empty() || pattern_has_nested_test(p)),
         // #3971: `as` binds the whole value, which a `case` label cannot.
         Pattern::As { .. } => true,
-        Pattern::Wildcard(_) | Pattern::Binding(_) | Pattern::Literal { .. } => false,
+        // #3973: a `Decimal` is tested by value (`__bynkDecimalEqual`), which no `case` label is.
+        Pattern::Literal { value, .. } => {
+            matches!(value, bynk_syntax::ast::LiteralValue::Decimal { .. })
+        }
+        Pattern::Wildcard(_) | Pattern::Binding(_) => false,
     }
 }

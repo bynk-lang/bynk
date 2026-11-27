@@ -1,0 +1,6 @@
+[project]
+name = "container-instances-string-to-keyed"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.cloudflare.Container"]

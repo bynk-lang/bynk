@@ -34,6 +34,7 @@ export const UserId = {
 
 export const Audio = {
   maxFrame: 8,
+  encodeOut: undefined,
   async open(connection: Connection<globalThis.Uint8Array>, room: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
     const __r0 = await connection.send(new globalThis.TextEncoder().encode("hello"));
     const __r1 = await __makeRoom(room).join(deps.identity, connection, deps);

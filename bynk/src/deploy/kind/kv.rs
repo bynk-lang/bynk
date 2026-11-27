@@ -1089,7 +1089,7 @@ mod tests {
                 resources: &resources,
                 order: &order,
             };
-            crate::deploy::gates::resource_credentials(&project, orphans, prune, missing)
+            crate::deploy::gates::resource_credentials(&project, orphans, &[], &[], prune, missing)
         };
         let create = run(&["shop", "shop-cart"], &[], false).unwrap_err();
         assert_eq!(

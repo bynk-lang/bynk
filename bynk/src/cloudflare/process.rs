@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 
 use crate::probe::Provenance;
 
-use super::api::{Op, PushCall, PushRun, VectorizeOp};
+use super::api::{Op, PushCall, PushRun};
 use super::error::{Exit, Failure, WranglerError};
 
 /// The process adapter: wrangler as `provenance` resolves it, run from `project_root`.
@@ -111,21 +111,6 @@ impl<'a> Wrangler<'a> {
 
     fn run_from_root(&self, op: Op<'_>) -> Result<String, WranglerError> {
         self.run(&op, self.project_root, false)
-    }
-
-    /// Run `op` from `dir` with both streams discarded: answered by its exit code alone.
-    fn status(&self, op: &Op<'_>, dir: &Path) -> Result<(), WranglerError> {
-        let status = self
-            .command(op, dir)?
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map_err(|e| WranglerError::new(op, Failure::Start(e)))?;
-        if status.success() {
-            Ok(())
-        } else {
-            Err(WranglerError::exited(op, &status, "", ""))
-        }
     }
 
     /// Run `command` (spawned for `op`) with `stdin` on its stdin and both streams captured.
@@ -250,20 +235,6 @@ pub(crate) fn tee_stderr(child: &mut Child) -> Option<JoinHandle<String>> {
 /// Each operation that still runs as a wrangler process; [`super::Account`] routes the trait's
 /// methods here.
 impl Wrangler<'_> {
-    pub(crate) fn queue_create(&self, name: &str) -> Result<(), WranglerError> {
-        self.run_from_root(Op::QueueCreate { name }).map(drop)
-    }
-
-    /// Answered by the exit code alone, both streams discarded: the reason to ask `queues info`
-    /// rather than read a create's complaint (ADR 0194 D2).
-    pub(crate) fn queue_info(&self, name: &str) -> Result<(), WranglerError> {
-        self.status(&Op::QueueInfo { name }, self.project_root)
-    }
-
-    pub(crate) fn queue_delete(&self, name: &str) -> Result<(), WranglerError> {
-        self.run_from_root(Op::QueueDelete { name }).map(drop)
-    }
-
     pub(crate) fn d1_migrations_apply(
         &self,
         worker_dir: &Path,
@@ -275,10 +246,6 @@ impl Wrangler<'_> {
             environment,
         };
         self.run(&op, worker_dir, true).map(drop)
-    }
-
-    pub(crate) fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {
-        self.run_from_root(Op::Vectorize(op))
     }
 
     pub(crate) fn push(&self, call: PushCall<'_>) -> Result<PushRun, WranglerError> {
@@ -462,7 +429,7 @@ mod tests {
         let log = root.join("calls.log");
         let script = format!("echo \"$PWD $*\" >> '{}'", log.display());
         let api = Wrangler::scripted(&script, &root);
-        api.queue_create("jobs").unwrap();
+        api.worker_deployments("jobs").unwrap();
         api.secret_list(&worker, "staging").unwrap();
         api.d1_migrations_apply(&worker, "DB", "default").unwrap();
         let calls = std::fs::read_to_string(&log).unwrap();
@@ -471,7 +438,7 @@ mod tests {
         assert_eq!(
             calls,
             format!(
-                "{} queues create jobs\n{} secret list --format json --env staging\n{} d1 migrations apply DB --remote\n",
+                "{} deployments list --name jobs --json\n{} secret list --format json --env staging\n{} d1 migrations apply DB --remote\n",
                 root_at.display(),
                 worker_at.display(),
                 worker_at.display()
@@ -573,7 +540,7 @@ mod tests {
         let api = Wrangler::new(&missing, Path::new("."));
         assert_eq!(api.whoami().unwrap_err().to_string(), "wrangler not found");
         assert_eq!(
-            api.queue_info("q").unwrap_err().to_string(),
+            api.worker_deployments("q").unwrap_err().to_string(),
             "wrangler not found"
         );
     }

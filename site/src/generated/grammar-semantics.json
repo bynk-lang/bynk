@@ -152,6 +152,30 @@
       "summary": "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value."
     },
     {
+      "code": "bynk.given.binding_duplicate",
+      "summary": "A call binds one of its callee's capability parameters more than once."
+    },
+    {
+      "code": "bynk.given.binding_kind_mismatch",
+      "summary": "A call binds a capability parameter to a capability that is not of the parameter's kind (a `D1` instance for a `Kv` parameter)."
+    },
+    {
+      "code": "bynk.given.binding_missing",
+      "summary": "A call leaves one of its callee's capability parameters unbound; the fix is machine-applicable only when the caller holds exactly one candidate."
+    },
+    {
+      "code": "bynk.given.binding_shared",
+      "summary": "A call binds a shared capability of its callee (`given Logger = Logger`); only capability parameters are bound."
+    },
+    {
+      "code": "bynk.given.binding_unknown",
+      "summary": "A call binds a name that is not one of its callee's capability parameters, or binds on a callee that has none."
+    },
+    {
+      "code": "bynk.given.parameterised_fn_value",
+      "summary": "A function with capability parameters is named as a value; a lambda that binds them takes its place."
+    },
+    {
       "code": "bynk.resolve.arity_mismatch",
       "summary": "A function was called with the wrong number of arguments."
     },
@@ -502,8 +526,12 @@
       "summary": "An `adapter` used a whole-unit or aliased `consumes`; adapters must select capabilities with `consumes U { Cap, … }`."
     },
     {
+      "code": "bynk.commons.capability_unused",
+      "summary": "A commons selects a first-party capability in its `consumes` that no function's `given` names (warning)."
+    },
+    {
       "code": "bynk.commons.consumes_not_types",
-      "summary": "A commons `consumes` something other than a braced list of types an adapter exports: a whole-unit or aliased form, a capability, an unknown name, or a context."
+      "summary": "A commons `consumes` something other than a braced list of types an adapter exports and capabilities a first-party unit exports: a whole-unit or aliased form, a project adapter's capability, an unknown name, or a context."
     },
     {
       "code": "bynk.consumes.alias_conflict",
@@ -970,16 +998,28 @@
       "summary": "`given B.Cap` or `consumes B { Cap }` names a capability the consumed context does not export."
     },
     {
-      "code": "bynk.given.fn_outside_context",
-      "summary": "A function in a commons (or a suite) declares `given`; only a context function can."
+      "code": "bynk.given.fn_unsupported",
+      "summary": "A `given` clause on a method, on a function that does not return `Effect[T]`, on an adapter's function, or naming `Events`."
     },
     {
-      "code": "bynk.given.fn_unsupported",
-      "summary": "A `given` clause on a method, on a function that does not return `Effect[T]`, or naming `Events`."
+      "code": "bynk.given.kind_needs_parameter",
+      "summary": "A commons function names an instantiable kind bare (`given Kv`); it must be a capability parameter (`given Store: Kv`)."
     },
     {
       "code": "bynk.given.missing_for_call",
       "summary": "A call to a function that declares `given` from a body that does not declare those capabilities."
+    },
+    {
+      "code": "bynk.given.parameter_name_conflict",
+      "summary": "A capability parameter shadows a visible capability or kind, a type parameter, or another capability parameter."
+    },
+    {
+      "code": "bynk.given.parameter_outside_commons",
+      "summary": "`given Name: Kind` on a context function, a method, a handler, a provider or a suite helper; only a commons function takes capability parameters."
+    },
+    {
+      "code": "bynk.given.shared_as_parameter",
+      "summary": "A capability with no instances bounds a capability parameter (`given L: Logger`); it is named bare, as a shared capability."
     },
     {
       "code": "bynk.given.undeclared_capability",
@@ -1016,6 +1056,10 @@
     {
       "code": "bynk.http.body_on_get_or_delete",
       "summary": "A GET or DELETE handler declares a `body` parameter."
+    },
+    {
+      "code": "bynk.http.cache_on_pass_through",
+      "summary": "An `on ANY` pass-through route carries `@cache`; the upstream's `Cache-Control` is its answer's freshness."
     },
     {
       "code": "bynk.http.cache_public_reads_cookies",
@@ -1086,6 +1130,10 @@
       "summary": "A `RequestCookies` appears on a handler that is not an HTTP route."
     },
     {
+      "code": "bynk.http.cors_with_pass_through",
+      "summary": "A service that declares an `on ANY` pass-through route also declares `cors { }`."
+    },
+    {
       "code": "bynk.http.duplicate_route",
       "summary": "Two handlers share the same method and route."
     },
@@ -1106,6 +1154,10 @@
       "summary": "A field of a `@form` body record has a type a form cannot carry."
     },
     {
+      "code": "bynk.http.handler_name_collision",
+      "summary": "Two HTTP handlers of a context would be emitted under one method name (`/a-b` and `/a_b` are both `http_GET_a_b`)."
+    },
+    {
       "code": "bynk.http.headers_field_consumed",
       "summary": "A required `headers` field reads a header the route's actor consumes (`authorization`, a signature header, or the session cookie out of `cookie`), so it is always absent and every request answers `400`."
     },
@@ -1122,8 +1174,20 @@
       "summary": "An HTTP handler's `headers` parameter is neither a record type nor `RequestHeaders`."
     },
     {
+      "code": "bynk.http.inbound_request_not_pass_through",
+      "summary": "An `InboundRequest` parameter on a route that is not `on ANY`, or not named `request`."
+    },
+    {
       "code": "bynk.http.invalid_path",
       "summary": "An HTTP route path is malformed."
+    },
+    {
+      "code": "bynk.http.pass_through_not_emitted",
+      "summary": "A build reaches an `on ANY` pass-through route, which this release checks but does not yet build."
+    },
+    {
+      "code": "bynk.http.pass_through_signature",
+      "summary": "An `on ANY` route does not return `Effect[PassThrough]` or takes a parameter it may not, or another route returns `Effect[PassThrough]`."
     },
     {
       "code": "bynk.http.path_param_not_stringy",
@@ -1147,7 +1211,15 @@
     },
     {
       "code": "bynk.http.reserved_route_syntax",
-      "summary": "A route segment contains `*`, `{` or `}`, which are reserved for a future route form."
+      "summary": "A route segment contains `{` or `}`, or a `*` other than a final `*name` rest, which are reserved for a future route form."
+    },
+    {
+      "code": "bynk.http.rest_param_type",
+      "summary": "The parameter a route's `*name` rest segment binds is not typed `String`."
+    },
+    {
+      "code": "bynk.http.rest_unnamed",
+      "summary": "A route's last segment is a bare `*`, a rest segment with no name to bind."
     },
     {
       "code": "bynk.http.return_not_effect_http_result",
@@ -1156,6 +1228,10 @@
     {
       "code": "bynk.http.unbound_path_param",
       "summary": "A `:name` route segment has no matching handler parameter."
+    },
+    {
+      "code": "bynk.types.inbound_request_at_boundary",
+      "summary": "An `InboundRequest` or `Forwarded`, or a type holding one, where a value is stored, sent or returned across a boundary."
     }
   ],
   "identifier": [
@@ -1193,6 +1269,10 @@
     }
   ],
   "is_expr": [
+    {
+      "code": "bynk.types.duplicate_pattern_binding",
+      "summary": "A pattern binds the same name more than once."
+    },
     {
       "code": "bynk.types.is_base_mismatch",
       "summary": "An `is` refinement check is applied to a value of the wrong base type."
@@ -1302,10 +1382,20 @@
       "summary": "A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`)."
     }
   ],
+  "literal_pattern": [
+    {
+      "code": "bynk.types.float_literal_pattern",
+      "summary": "A `Float` literal is used as a pattern, at any depth; floating-point equality is exact and `NaN` never equals itself."
+    }
+  ],
   "match_arm": [
     {
       "code": "bynk.types.duplicate_literal_arm",
       "summary": "A `match` has two arms for the same literal value."
+    },
+    {
+      "code": "bynk.types.duplicate_pattern_binding",
+      "summary": "A pattern binds the same name more than once."
     },
     {
       "code": "bynk.types.duplicate_variant_arm",

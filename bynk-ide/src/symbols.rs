@@ -922,6 +922,11 @@ pub fn describe_path_param_at(source: &str, offset: usize) -> Option<String> {
                 continue;
             };
             for p in &h.params {
+                if span_covers(p.name.span, offset)
+                    && bynk_check::http_rest::rest_name(path) == Some(p.name.name.as_str())
+                {
+                    return Some(rest_param_hover(&p.name.name));
+                }
                 if !span_covers(p.name.span, offset)
                     || !path
                         .split('/')
@@ -977,6 +982,20 @@ pub fn describe_path_param_at(source: &str, offset: usize) -> Option<String> {
         }
     }
     None
+}
+
+/// #3752 (D3): the hover for a route's `*name` rest parameter.
+fn rest_param_hover(name: &str) -> String {
+    format!(
+        "**`{name}`** — a rest parameter: the `*{name}` segment, every remaining segment of the path, \
+         as a `String`.\n\n\
+         - **Raw:** still percent-encoded, as received; `{name}.percentDecode()` decodes it.\n\
+         - **Shape:** starts with `/` unless empty, and keeps a trailing slash and empty segments \
+         (`/files/*{name}` binds `\"\"` for `/files`, `\"/\"` for `/files/` and `\"/a/b.png\"` for \
+         `/files/a/b.png`); never the query.\n\
+         - **Order:** it matches zero or more segments, and loses to a literal or a `:name` at \
+         the position where it starts."
+    )
 }
 
 /// `a `String``, `an `Int``: a base type as a noun phrase.
@@ -4193,6 +4212,11 @@ pub(crate) fn describe_service(s: &ServiceDecl) -> String {
     out
 }
 
+/// A store kind as written, `Map[String, Order]`.
+pub fn store_kind_text(k: &StoreKind) -> String {
+    store_kind_str(k)
+}
+
 /// v0.123 (slice 2): a store field's kind — `Cell[Int]`, `Map[K, V]`, or a bare
 /// head with no type args.
 fn store_kind_str(k: &StoreKind) -> String {
@@ -6112,6 +6136,18 @@ mod tests {
         assert!(
             !other.contains("variant name") && !other.contains("read as a"),
             "{other}"
+        );
+    }
+
+    #[test]
+    fn hover_on_a_rest_parameter_says_it_is_raw_and_weakest() {
+        let svc = "context api\nservice api from http {\n  on GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(key)\n  }\n}\n";
+        let h = describe_path_param_at(svc, svc.find("key: String").unwrap()).expect("hovers");
+        assert!(
+            h.contains("a rest parameter")
+                && h.contains("percent-encoded")
+                && h.contains("zero or more"),
+            "{h}"
         );
     }
 

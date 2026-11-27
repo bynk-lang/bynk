@@ -413,7 +413,7 @@ impl Lowering<'_, '_> {
                 (Space::Int, LiteralValue::Int(v)) => {
                     Some(Pat::Ctor(Constructor::IntRange(*v, *v), Vec::new()))
                 }
-                (Space::Infinite, LiteralValue::Str(_)) => {
+                (Space::Infinite, LiteralValue::Str(_) | LiteralValue::Decimal { .. }) => {
                     Some(Pat::Ctor(Constructor::Literal(value.clone()), Vec::new()))
                 }
                 _ => None,

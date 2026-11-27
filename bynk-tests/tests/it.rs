@@ -51,6 +51,8 @@ mod integration {
     mod by_on_agent;
     #[path = "call_hierarchy_index.rs"]
     mod call_hierarchy_index;
+    #[path = "capability_binding_fix.rs"]
+    mod capability_binding_fix;
     #[path = "capability_paths.rs"]
     mod capability_paths;
     #[path = "carrier_source_map.rs"]
@@ -323,6 +325,8 @@ mod system {
     mod analyse_mode_corpus;
     #[path = "analytics_mapping_lock.rs"]
     mod analytics_mapping_lock;
+    #[path = "api_key_seam.rs"]
+    mod api_key_seam;
     #[path = "asset_check_behaviour.rs"]
     mod asset_check_behaviour;
     #[path = "bearer_auth.rs"]
@@ -419,6 +423,8 @@ mod system {
     mod examples;
     #[path = "expect_is_narrowing_behaviour.rs"]
     mod expect_is_narrowing_behaviour;
+    #[path = "expect_literal_narrowing_behaviour.rs"]
+    mod expect_literal_narrowing_behaviour;
     #[path = "expect_was_behaviour.rs"]
     mod expect_was_behaviour;
     #[path = "failure_explanation_behaviour.rs"]
@@ -465,10 +471,14 @@ mod system {
     mod http_recursive_body_behaviour;
     #[path = "http_response_headers.rs"]
     mod http_response_headers;
+    #[path = "http_rest_segment_behaviour.rs"]
+    mod http_rest_segment_behaviour;
     #[path = "http_security_behaviour.rs"]
     mod http_security_behaviour;
     #[path = "idempotency_workerd.rs"]
     mod idempotency_workerd;
+    #[path = "if_match_narrowing_behaviour.rs"]
+    mod if_match_narrowing_behaviour;
     #[path = "inline_value_names.rs"]
     mod inline_value_names;
     #[path = "int_binding_arithmetic_behaviour.rs"]
@@ -483,6 +493,8 @@ mod system {
     mod large_suite_behaviour;
     #[path = "let_else_staircase.rs"]
     mod let_else_staircase;
+    #[path = "login_csrf_seam.rs"]
+    mod login_csrf_seam;
     #[path = "malformed_project_config_behaviour.rs"]
     mod malformed_project_config_behaviour;
     #[path = "multi_actor_sum.rs"]
@@ -507,6 +519,8 @@ mod system {
     mod par_gate_workerd;
     #[path = "par_traverse_behaviour.rs"]
     mod par_traverse_behaviour;
+    #[path = "pass_through_check_behaviour.rs"]
+    mod pass_through_check_behaviour;
     #[path = "property_behaviour.rs"]
     mod property_behaviour;
     #[path = "question_in_case_behaviour.rs"]

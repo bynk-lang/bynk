@@ -101,7 +101,8 @@ impl StabilityPolicy {
     /// Whether using `path` here is refused: it is experimental and no `allow`
     /// entry covers it.
     pub fn blocks(&self, path: &str) -> bool {
-        self.is_experimental(path) && !firstparty::allows(&self.allow, path)
+        let gate = bynk_std::gate_of(path);
+        self.is_experimental(gate) && !firstparty::allows(&self.allow, gate)
     }
 
     /// The error for a use of `path` at `span`, when [`Self::blocks`] refuses it.
@@ -113,7 +114,8 @@ impl StabilityPolicy {
                 format!("`{path}` is experimental: it may change or disappear in any release"),
             )
             .with_note(format!(
-                "to use it anyway, add \"{path}\" to `[unstable] allow` in `bynk.toml`"
+                "to use it anyway, add \"{}\" to `[unstable] allow` in `bynk.toml`",
+                bynk_std::gate_of(path)
             ))
         })
     }
@@ -422,6 +424,11 @@ mod tests {
                 "bynk.Fetch.receiveStream",
                 "bynk.Fetch.sendStream",
                 "bynk.Logger.log",
+                "bynk.Upstream",
+                "bynk.InboundRequest",
+                "bynk.Forwarded",
+                "bynk.PassThrough",
+                "bynk.UpstreamError",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
@@ -449,10 +456,38 @@ mod tests {
                 "bynk.cloudflare.Kv.getValue",
                 "bynk.cloudflare.Kv.putValue",
                 "bynk.crypto",
-                "bynk.RequestHeaders.entries"
+                "bynk.RequestHeaders.entries",
+                "bynk.actor.ApiKey",
+                "bynk.given.parameters",
+                "bynk.http.ANY",
+                "bynk.http.rest"
             ]
         );
+        // #3959: capability parameters are one built-in experimental entry.
+        assert!(p.blocks("bynk.given.parameters"));
+        assert!(firstparty::names_first_party_item("bynk.given.parameters"));
         assert!(!p.blocks("bynk.cloudflare.Kv.list"));
+        // #3939 (track §17): the `ApiKey` scheme, its types and its members, behind one name.
+        assert!(p.blocks("bynk.actor.ApiKey"));
+        for t in [
+            "ApiKeyId",
+            "ApiKeyLabel",
+            "ApiKeySecret",
+            "ApiKeyValue",
+            "TooManyKeys",
+        ] {
+            assert!(p.blocks(&format!("bynk.{t}")), "{t}");
+        }
+        let allowed = StabilityPolicy {
+            allow: vec!["bynk.actor.ApiKey".to_string()],
+            ..p.clone()
+        };
+        assert!(!allowed.blocks("bynk.actor.ApiKey"));
+        assert!(
+            !allowed.blocks("bynk.ApiKeySecret"),
+            "the one name admits the types too"
+        );
+        assert!(firstparty::names_first_party_item("bynk.actor.ApiKey"));
         // #3752 (D12): a method of a built-in type, alone; its other methods
         // are stable, and an allow entry naming it is a first-party item.
         assert!(p.blocks("bynk.RequestHeaders.entries"));

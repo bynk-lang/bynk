@@ -16,7 +16,11 @@ async function test_parTraverseWith_keeps_input_order() {
   try {
     const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -30,9 +34,12 @@ async function test_parTraverseWith_keeps_input_order() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -42,6 +49,8 @@ async function test_parTraverseWith_keeps_input_order() {
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const out = await tenfold.call([3, 1, 2], deps);
     if (!(__bynkEq(out, [30, 10, 20]))) { throw __bynkExpectFailure("tests/demo/fan.bynk:5:9", 103, 122, "expect out == [30, 10, 20]\n  expected: out == [30, 10, 20]\n  actual:   " + __bynkShow((out)) + " == " + __bynkShow(([30, 10, 20]))); }
@@ -61,7 +70,11 @@ async function test_parForEachWith_runs_every_step() {
   try {
     const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -75,9 +88,12 @@ async function test_parForEachWith_runs_every_step() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -87,6 +103,8 @@ async function test_parForEachWith_runs_every_step() {
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await touch.call([1, 2, 3], deps);
     if (!(1 === 1)) { throw __bynkExpectFailure("tests/demo/fan.bynk:12:9", 291, 297, "expect 1 == 1\n  expected: 1 == 1\n  actual:   " + __bynkShow((1)) + " == " + __bynkShow((1))); }
@@ -104,7 +122,11 @@ async function test_parTraverseAllWith_collects_every_result() {
   try {
     const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -118,9 +140,12 @@ async function test_parTraverseAllWith_collects_every_result() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -130,6 +155,8 @@ async function test_parTraverseAllWith_collects_every_result() {
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const rs = await collect.call([1, 2, 3], 2, deps);
     if (!((rs).length === 3)) { throw __bynkExpectFailure("tests/demo/fan.bynk:17:9", 397, 413, "expect rs.length() == 3\n  expected: rs.length() == 3\n  actual:   " + __bynkShow(((rs).length)) + " == " + __bynkShow((3))); }
@@ -147,7 +174,11 @@ async function test_parTraverseTryWith_returns_every_value_in_input_order_when_a
   try {
     const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -161,9 +192,12 @@ async function test_parTraverseTryWith_returns_every_value_in_input_order_when_a
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -173,6 +207,8 @@ async function test_parTraverseTryWith_returns_every_value_in_input_order_when_a
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const r = await tryAll.call([1, 2], 2, deps);
     if (!(__bynkEq(r, Ok([1, 2])))) { throw __bynkExpectFailure("tests/demo/fan.bynk:22:9", 538, 553, "expect r == Ok([1, 2])\n  expected: r == Ok([1, 2])\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Ok([1, 2])))); }
@@ -190,7 +226,11 @@ async function test_parTraverseTryWith_returns_the_first_Err_in_input_order__and
   try {
     const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -204,9 +244,12 @@ async function test_parTraverseTryWith_returns_the_first_Err_in_input_order__and
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -216,6 +259,8 @@ async function test_parTraverseTryWith_returns_the_first_Err_in_input_order__and
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const wide = await tryAll.call([1, 3, 4], 3, deps);
     if (!(__bynkEq(wide, Err("big")))) { throw __bynkExpectFailure("tests/demo/fan.bynk:27:9", 702, 720, "expect wide == Err(\"big\")\n  expected: wide == Err(\"big\")\n  actual:   " + __bynkShow((wide)) + " == " + __bynkShow((Err("big")))); }

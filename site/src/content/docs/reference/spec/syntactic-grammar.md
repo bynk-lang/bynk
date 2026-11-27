@@ -579,6 +579,15 @@ Well-formedness: §5.
 `given` and a comma-separated list of the capabilities a handler or provider may
 use. Well-formedness: §5.
 
+### §4.3.10a capability_parameter
+
+{{#grammar capability_parameter}}
+
+A commons free function's capability parameter (#3959, experimental): a name for
+the instance each caller binds, and the instantiable kind that bounds it. A `:` after
+a bare capability name in a `given` clause is unambiguous, since the clause is
+followed by `where`, a contract clause or `{`. Well-formedness: §5.
+
 ## §4.4 Services & handlers
 
 A `service` groups the handlers that respond to calls and external triggers.
@@ -1144,6 +1153,25 @@ reserved parse error), and parenthesised arguments — a function call, a
 variant construction, an agent instantiation, or (v0.20a) the **application
 of a function-typed value** in scope. Well-formedness: §5.
 
+### §4.6.10a _call_arguments
+
+{{#grammar _call_arguments}}
+
+The ordinary arguments, then (#3959, experimental) the capability bindings. `given`
+cannot start an expression, so it ends the ordinary arguments; no trailing comma
+follows the last binding.
+
+### §4.6.10b capability_bindings
+
+{{#grammar capability_bindings}}
+
+### §4.6.10c capability_binding
+
+{{#grammar capability_binding}}
+
+One binding: the callee's capability parameter, `=`, and a capability the caller
+holds. Well-formedness: §5.
+
 ### §4.6.11 record_construction
 
 {{#grammar record_construction}}
@@ -1311,8 +1339,11 @@ or `field: _` to ignore it.
 
 {{#grammar literal_pattern}}
 
-An integer (optionally negated), a string, or a boolean, matching a primitive
-scrutinee by value. Exhaustiveness: [§5.6](/reference/spec/static-semantics/#56-pattern-matching).
+An integer (optionally negated), a string, a boolean, or a `Decimal` literal
+(optionally negated), matching a primitive scrutinee by value. A `Float` literal is
+admitted by the grammar so that the checker can refuse it with a reason
+(`bynk.types.float_literal_pattern`, §5.6). Exhaustiveness:
+[§5.6](/reference/spec/static-semantics/#56-pattern-matching).
 
 ### §4.7.8 or_pattern
 

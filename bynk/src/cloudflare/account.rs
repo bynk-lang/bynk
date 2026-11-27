@@ -11,10 +11,11 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use super::api::{CloudflareApi, PushCall, PushRun, VectorizeOp};
+use super::api::{CloudflareApi, PushCall, PushRun};
 use super::error::{CloudflareError, WranglerError};
 use super::paging::{MissingTotal, Numbered, Page};
 use super::process::Wrangler;
+use super::rest::vectorize::IndexConfig;
 use super::rest::{self, Purpose, Request, Rest};
 
 /// The account, over both transports.
@@ -84,6 +85,17 @@ fn bucket_name(name: &str) -> Result<(), CloudflareError> {
     }
 }
 
+/// `name`, refused unless it can be a Vectorize index name, before it reaches a request path.
+fn index_name(name: &str) -> Result<(), CloudflareError> {
+    if rest::vectorize::is_index_name(name) {
+        Ok(())
+    } else {
+        Err(CloudflareError::Other(format!(
+            "`{name}` is not a valid Vectorize index name, so nothing was sent"
+        )))
+    }
+}
+
 /// An answer that succeeded but did not hold what the operation reads.
 fn unreadable(request: &Request, missing: &str) -> CloudflareError {
     let method = match request.method {
@@ -98,16 +110,73 @@ fn unreadable(request: &Request, missing: &str) -> CloudflareError {
 }
 
 impl CloudflareApi for Account<'_> {
-    fn queue_create(&self, name: &str) -> Result<(), WranglerError> {
-        self.wrangler.queue_create(name)
+    fn queue_create(&self, name: &str) -> Result<(), CloudflareError> {
+        self.send(Purpose::Queues, &rest::queues::create(name))
+            .map(drop)
     }
 
-    fn queue_info(&self, name: &str) -> Result<(), WranglerError> {
-        self.wrangler.queue_info(name)
+    /// Every page until the exact name turns up, to `total_pages` (or while full), never past
+    /// [`rest::queues::MAX_PAGES`] or a page that brings no queue not already seen.
+    fn queue_find(&self, name: &str) -> Result<Option<String>, CloudflareError> {
+        let mut found = None;
+        let mut cut_short = None;
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        let rule = Numbered {
+            cap: Some(rest::queues::MAX_PAGES),
+            missing_total: MissingTotal::WhileFull,
+            stop_on_empty: false,
+        };
+        rule.follow(|page| -> Result<Page, CloudflareError> {
+            let request = rest::queues::list_page(page);
+            let body = self.send(Purpose::Queues, &request)?;
+            let (id, entries) = rest::queues::found(&body, name)
+                .ok_or_else(|| unreadable(&request, "`result` list"))?;
+            let before = seen.len();
+            seen.extend(rest::queues::ids(&body));
+            let repeated = entries > 0 && seen.len() == before;
+            let read = Page::of(&body, entries);
+            let more = read.total_pages.map_or_else(
+                || {
+                    read.per_page
+                        .is_some_and(|per| entries as u64 >= per && entries > 0)
+                },
+                |total| page < total,
+            );
+            // #4582 review: a listing that stops before its end without the name has not said
+            // the queue is absent, and reading it so would let `--prune` forget a live queue.
+            if id.is_none() && more && (repeated || page == rest::queues::MAX_PAGES) {
+                cut_short = Some(if repeated {
+                    format!("page {page} repeated an earlier one")
+                } else {
+                    format!("it did not end within {} pages", rest::queues::MAX_PAGES)
+                });
+            }
+            let done = id.is_some() || repeated;
+            if found.is_none() {
+                found = id;
+            }
+            Ok(read.done_if(done))
+        })?;
+        match (found, cut_short) {
+            (Some(id), _) => Ok(Some(id)),
+            (None, Some(why)) => Err(CloudflareError::Other(format!(
+                "the account's queue listing could not be read to its end ({why}), so whether the queue `{name}` exists is not known"
+            ))),
+            (None, None) => Ok(None),
+        }
     }
 
-    fn queue_delete(&self, name: &str) -> Result<(), WranglerError> {
-        self.wrangler.queue_delete(name)
+    fn queue_delete(&self, name: &str) -> Result<bool, CloudflareError> {
+        let Some(id) = self.queue_find(name)? else {
+            return Ok(false);
+        };
+        if !rest::queues::is_queue_id(&id) {
+            return Err(CloudflareError::Other(format!(
+                "the queue `{name}` has the id `{id}`, which is not a queue id, so nothing was deleted"
+            )));
+        }
+        self.send(Purpose::Queues, &rest::queues::delete(&id))
+            .map(|_| true)
     }
 
     fn kv_create(&self, title: &str) -> Result<String, CloudflareError> {
@@ -204,8 +273,76 @@ impl CloudflareApi for Account<'_> {
         }
     }
 
-    fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {
-        self.wrangler.vectorize(op)
+    /// Followed while a page is full, which, with no paging documented, is one request; never
+    /// past [`rest::vectorize::MAX_PAGES`], and not past a page that brings no name not already
+    /// listed (an endpoint that ignored `?page=N` would repeat its first).
+    fn vectorize_names(&self) -> Result<Vec<String>, CloudflareError> {
+        let mut names: Vec<String> = Vec::new();
+        let rule = Numbered {
+            cap: Some(rest::vectorize::MAX_PAGES),
+            missing_total: MissingTotal::WhileFull,
+            stop_on_empty: false,
+        };
+        rule.follow(|page| -> Result<Page, CloudflareError> {
+            let request = rest::vectorize::list_page(page);
+            let body = self.send(Purpose::Vectorize, &request)?;
+            let (listed, entries) = rest::vectorize::listed(&body)
+                .ok_or_else(|| unreadable(&request, "list of index names"))?;
+            let fresh: Vec<String> = listed.into_iter().filter(|n| !names.contains(n)).collect();
+            let repeated = fresh.is_empty();
+            names.extend(fresh);
+            Ok(Page::of(&body, entries).done_if(repeated))
+        })?;
+        Ok(names)
+    }
+
+    fn vectorize_config(&self, name: &str) -> Result<IndexConfig, CloudflareError> {
+        index_name(name)?;
+        let request = rest::vectorize::get(name);
+        let body = self.send(Purpose::Vectorize, &request)?;
+        rest::vectorize::config(&body).ok_or_else(|| unreadable(&request, "dimensions and metric"))
+    }
+
+    fn vectorize_create(
+        &self,
+        name: &str,
+        dimensions: i64,
+        metric: &str,
+    ) -> Result<(), CloudflareError> {
+        index_name(name)?;
+        self.send(
+            Purpose::Vectorize,
+            &rest::vectorize::create(name, dimensions, metric),
+        )
+        .map(drop)
+    }
+
+    fn vectorize_metadata_indexes(&self, name: &str) -> Result<Vec<String>, CloudflareError> {
+        index_name(name)?;
+        let request = rest::vectorize::metadata_list(name);
+        let body = self.send(Purpose::Vectorize, &request)?;
+        rest::vectorize::metadata(&body)
+            .ok_or_else(|| unreadable(&request, "list of metadata indexes"))
+    }
+
+    fn vectorize_create_metadata_index(
+        &self,
+        name: &str,
+        property: &str,
+        ty: &str,
+    ) -> Result<(), CloudflareError> {
+        index_name(name)?;
+        self.send(
+            Purpose::Vectorize,
+            &rest::vectorize::metadata_create(name, property, ty),
+        )
+        .map(drop)
+    }
+
+    fn vectorize_delete(&self, name: &str) -> Result<(), CloudflareError> {
+        index_name(name)?;
+        self.send(Purpose::Vectorize, &rest::vectorize::delete(name))
+            .map(drop)
     }
 
     fn push(&self, call: PushCall<'_>) -> Result<PushRun, WranglerError> {
@@ -442,6 +579,108 @@ mod tests {
             r#"{"success":true,"result":[{"name":"shop-db-old","uuid":"u"}],"result_info":{"page":1,"per_page":100,"count":1}}"#,
         )]);
         assert_eq!(account(base, &root).d1_find("shop-db").unwrap(), None);
+    }
+
+    /// #4568 review: the index listing is followed while pages are full, and stops at a page
+    /// that brings no new name, so an endpoint that ignored `?page=N` is asked twice, not forever.
+    #[test]
+    fn the_index_listing_follows_full_pages_and_stops_on_a_repeat() {
+        let page = |from: usize, to: usize| -> &'static str {
+            Box::leak(
+                format!(
+                    r#"{{"success":true,"result":[{}],"result_info":{{"per_page":2}}}}"#,
+                    (from..to)
+                        .map(|i| format!(r#"{{"name":"ix-{i}"}}"#))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+                .into_boxed_str(),
+            )
+        };
+        let root = std::env::temp_dir();
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, page(0, 2)),
+            (200, page(2, 4)),
+            (200, page(4, 5)),
+        ]));
+        let (base, seen) = answering_in_turn(answers);
+        assert_eq!(
+            account(base, &root).vectorize_names().unwrap(),
+            ["ix-0", "ix-1", "ix-2", "ix-3", "ix-4"]
+        );
+        assert_eq!(
+            seen.join().unwrap(),
+            [
+                "GET /accounts/acct/vectorize/v2/indexes?page=1",
+                "GET /accounts/acct/vectorize/v2/indexes?page=2",
+                "GET /accounts/acct/vectorize/v2/indexes?page=3",
+            ]
+        );
+        let answers: &'static [(u16, &'static str)] =
+            Box::leak(Box::new([(200, page(0, 2)), (200, page(0, 2))]));
+        let (base, seen) = answering_in_turn(answers);
+        assert_eq!(
+            account(base, &root).vectorize_names().unwrap(),
+            ["ix-0", "ix-1"]
+        );
+        assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
+    }
+
+    /// 1D.4d: the queues listing is followed while pages are full (when `total_pages` is left out)
+    /// until the exact name turns up, and stops at a page that brings no new queue, so an answer
+    /// that ignored `page=N` is asked twice, not forever; that stop, without the name, is an error,
+    /// not an absent queue (#4582 review).
+    #[test]
+    fn a_queue_is_found_across_full_pages_and_a_repeated_page_ends_the_lookup() {
+        let full = |from: usize| -> &'static str {
+            Box::leak(
+                format!(
+                    r#"{{"success":true,"result":[{}],"result_info":{{"per_page":2}}}}"#,
+                    (from..from + 2)
+                        .map(|i| format!(r#"{{"queue_id":"q{i}","queue_name":"other-{i}"}}"#))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+                .into_boxed_str(),
+            )
+        };
+        let root = std::env::temp_dir();
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, full(0)),
+            (200, full(2)),
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"theone","queue_name":"jobs"}],"result_info":{"per_page":2}}"#,
+            ),
+        ]));
+        let (base, seen) = answering_in_turn(answers);
+        assert_eq!(
+            account(base, &root).queue_find("jobs").unwrap().as_deref(),
+            Some("theone")
+        );
+        assert_eq!(seen.join().unwrap().len(), 3);
+        let answers: &'static [(u16, &'static str)] =
+            Box::leak(Box::new([(200, full(0)), (200, full(0))]));
+        let (base, seen) = answering_in_turn(answers);
+        let said = account(base, &root)
+            .queue_find("jobs")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            said.contains("could not be read to its end (page 2 repeated an earlier one)"),
+            "{said}"
+        );
+        assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
+        // A short last page without the name is the listing's end: the queue is absent.
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, full(0)),
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"q9","queue_name":"other"}],"result_info":{"per_page":2}}"#,
+            ),
+        ]));
+        let (base, _) = answering_in_turn(answers);
+        assert_eq!(account(base, &root).queue_find("jobs").unwrap(), None);
     }
 
     /// 1D.4b: the account answers for its own bucket; a 404 is a bucket it does not hold, and

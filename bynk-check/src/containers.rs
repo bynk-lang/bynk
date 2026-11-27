@@ -6,12 +6,15 @@
 //! about the project's files, which the driver answers
 //! ([`dockerfile_problem`]); the checker has no filesystem.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 use bynk_project::{ParsedFile, UnitKind};
-use bynk_syntax::ast::CommonsItem;
+use bynk_syntax::ast::{
+    Block, CommonsItem, Expr, ExprKind, Handler, HandlerKind, MatchBody, ServiceProtocol, Statement,
+};
 use bynk_syntax::error::CompileError;
+use bynk_syntax::span::Span;
 
 use crate::firstparty;
 use crate::project_model::ErrorSink;
@@ -189,9 +192,449 @@ pub fn phase_container_builds(
     }
 }
 
+/// Why `name` cannot be a container's `@instances(by: …)` key, or `None` when it can: the type
+/// must be declared in the context, and be a refined type with a refinement or an opaque type, over
+/// `String`. The key's construction (`.of`, an opaque constructor) is where an author bounds the set
+/// of names, so a plain alias of `String` that adds no check does not qualify.
+pub fn instance_key_problem(
+    name: &str,
+    types: &HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Option<String> {
+    use bynk_syntax::ast::{BaseType, TypeBody};
+    let Some(decl) = types.get(name) else {
+        return Some(format!("`{name}` is not a type declared in this context"));
+    };
+    match &decl.body {
+        TypeBody::Refined {
+            base: BaseType::String,
+            refinement: Some(_),
+            ..
+        }
+        | TypeBody::Opaque {
+            base: BaseType::String,
+            ..
+        } => None,
+        _ => Some(format!(
+            "`{name}` is not a refined or opaque type over `String`, so it would not bound the names"
+        )),
+    }
+}
+
+/// Re-types the first parameter of the operations that name an instance, from `String` to the
+/// instance's key type `key` (`@instances(by: key)`).
+pub fn key_instance_operations(ops: &mut [bynk_syntax::ast::CapabilityOp], key: &str) {
+    for op in ops
+        .iter_mut()
+        .filter(|op| INSTANCE_OPERATIONS.contains(&op.name.name.as_str()))
+    {
+        if let Some(first) = op.params.first_mut() {
+            let span = first.type_ref.span();
+            first.type_ref = bynk_syntax::ast::TypeRef::Named(bynk_syntax::ast::Ident {
+                name: key.to_string(),
+                span,
+            });
+        }
+    }
+}
+
+/// The `Container` operations whose first argument names the instance.
+const INSTANCE_OPERATIONS: &[&str] = &["send", "receiveBytes", "sendBytes"];
+
+/// One call that names a container instance from request input.
+#[derive(Debug, PartialEq, Eq)]
+pub struct InstanceFromInput {
+    /// The instance argument.
+    pub span: Span,
+    /// `Renderer.send`.
+    pub call: String,
+    /// The handler input the name depends on (`tenant`).
+    pub input: String,
+}
+
+/// The names that depend on a handler input, each with the input it came from.
+type Inputs = HashMap<String, String>;
+
+/// `inputs` less the names a new scope binds, which shadow them.
+fn without<'a>(inputs: &Inputs, names: impl IntoIterator<Item = &'a str>) -> Inputs {
+    let mut scope = inputs.clone();
+    for name in names {
+        scope.remove(name);
+    }
+    scope
+}
+
+/// The first handler input `e` depends on, or `None`.
+///
+/// A value depends on an input when it mentions one, or a local bound from one: an interpolation,
+/// a method call on it, an `if`. It does not follow a call to a function (`normalise(tenant)`): that
+/// is where an author bounds the set, so a name laundered through one is not warned about, rather
+/// than warned about wrongly (#4112). A lambda is not entered either.
+///
+/// It does not look at a value's type, so a `Bool`-valued input, or an enum interpolated directly,
+/// still counts as an input although the name can take only a few values; mapping it through a
+/// `match` onto its names is how a closed set is written (and is not warned about).
+///
+/// A binding that reuses an input's name (`let tenant = "shared"`, a match arm's pattern, a
+/// block's own `let`) stops the name being an input in its scope.
+fn depends_on_input(e: &Expr, inputs: &Inputs) -> Option<String> {
+    match &e.kind {
+        ExprKind::Ident(id) => inputs.get(&id.name).cloned(),
+        ExprKind::Call { .. } | ExprKind::Lambda(_) => None,
+        // The value of a `match` or an `if` is one of its branches, not what it tests: mapping a
+        // value onto a closed set (`match plan { Free => "free", Pro => "pro" }`) is how a set is
+        // bounded, so the scrutinee and the condition are not followed, only the branches.
+        ExprKind::Match { arms, .. } => arms.iter().find_map(|arm| {
+            let scope = without(
+                inputs,
+                arm.pattern
+                    .bound_names()
+                    .into_iter()
+                    .map(|i| i.name.as_str()),
+            );
+            match &arm.body {
+                MatchBody::Expr(body) => depends_on_input(body, &scope),
+                MatchBody::Block(block) => block_depends_on_input(block, &scope),
+            }
+        }),
+        ExprKind::If {
+            then_block,
+            else_block,
+            ..
+        } => block_depends_on_input(then_block, inputs)
+            .or_else(|| block_depends_on_input(else_block, inputs)),
+        ExprKind::Block(block) => block_depends_on_input(block, inputs),
+        _ => bynk_syntax::ast::expr_children(e)
+            .into_iter()
+            .find_map(|c| depends_on_input(c, inputs)),
+    }
+}
+
+/// [`depends_on_input`] for a block's value, its tail, after the block's own bindings.
+fn block_depends_on_input(block: &Block, inputs: &Inputs) -> Option<String> {
+    let mut scope = inputs.clone();
+    for statement in &block.statements {
+        bind_statement(&mut scope, statement);
+    }
+    depends_on_input(&block.tail, &scope)
+}
+
+/// What `statement` does to which names depend on an input once it has run. A pure `let x = …`
+/// from an input makes `x` an input; any other binding of `x` (from something that does not
+/// depend on an input, or from an effect's result, which is not followed) makes it not one, so a
+/// parameter that is rebound stops being an input.
+fn bind_statement(inputs: &mut Inputs, statement: &Statement) {
+    match statement {
+        Statement::Let(l) => match depends_on_input(&l.value, inputs) {
+            Some(origin) => {
+                inputs.insert(l.name.name.clone(), origin);
+            }
+            None => {
+                inputs.remove(&l.name.name);
+            }
+        },
+        Statement::EffectLet(l) => {
+            inputs.remove(&l.name.name);
+        }
+        Statement::Par(p) => {
+            for inner in &p.statements {
+                if let Statement::Let(l) | Statement::EffectLet(l) = inner {
+                    inputs.remove(&l.name.name);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Every call in `e` of an instance operation on a container in `containers`.
+fn collect_instance_calls(
+    e: &Expr,
+    containers: &HashSet<String>,
+    inputs: &Inputs,
+    out: &mut Vec<InstanceFromInput>,
+) {
+    if let ExprKind::MethodCall {
+        receiver,
+        method,
+        args,
+        ..
+    } = &e.kind
+        && INSTANCE_OPERATIONS.contains(&method.name.as_str())
+        && let ExprKind::Ident(cap) = &receiver.kind
+        && containers.contains(&cap.name)
+        && let Some(instance) = args.first()
+        && let Some(input) = depends_on_input(instance, inputs)
+    {
+        out.push(InstanceFromInput {
+            span: instance.span,
+            call: format!("{}.{}", cap.name, method.name),
+            input,
+        });
+    }
+    match &e.kind {
+        ExprKind::Block(block) => collect_in_block(block, containers, inputs, out),
+        ExprKind::If {
+            cond,
+            then_block,
+            else_block,
+        } => {
+            collect_instance_calls(cond, containers, inputs, out);
+            collect_in_block(then_block, containers, inputs, out);
+            collect_in_block(else_block, containers, inputs, out);
+        }
+        ExprKind::Match { discriminant, arms } => {
+            collect_instance_calls(discriminant, containers, inputs, out);
+            for arm in arms {
+                let scope = without(
+                    inputs,
+                    arm.pattern
+                        .bound_names()
+                        .into_iter()
+                        .map(|i| i.name.as_str()),
+                );
+                if let Some(guard) = &arm.guard {
+                    collect_instance_calls(guard, containers, &scope, out);
+                }
+                match &arm.body {
+                    MatchBody::Expr(body) => collect_instance_calls(body, containers, &scope, out),
+                    MatchBody::Block(block) => collect_in_block(block, containers, &scope, out),
+                }
+            }
+        }
+        ExprKind::Lambda(l) => {
+            let scope = without(inputs, l.params.iter().map(|p| p.name.name.as_str()));
+            collect_instance_calls(&l.body, containers, &scope, out);
+        }
+        _ => {
+            for child in bynk_syntax::ast::expr_children(e) {
+                collect_instance_calls(child, containers, inputs, out);
+            }
+        }
+    }
+}
+
+/// [`collect_instance_calls`] through a block's statements in order, each seeing what the ones
+/// before it bound, then its tail.
+fn collect_in_block(
+    block: &Block,
+    containers: &HashSet<String>,
+    inputs: &Inputs,
+    out: &mut Vec<InstanceFromInput>,
+) {
+    let mut scope = inputs.clone();
+    for statement in &block.statements {
+        let mut exprs: Vec<&Expr> = Vec::new();
+        bynk_syntax::ast::statement_exprs(statement, &mut exprs);
+        for e in exprs {
+            collect_instance_calls(e, containers, &scope, out);
+        }
+        bind_statement(&mut scope, statement);
+    }
+    collect_instance_calls(&block.tail, containers, &scope, out);
+}
+
+/// The calls in `handler` that name a container instance (one of `containers`) from the handler's
+/// own input: a path, query, header, cookie or body parameter, or a local bound from one, in
+/// statement order.
+///
+/// The check follows values through pure `let`s, in the handler body and in the blocks inside it,
+/// and stops at what it cannot follow: a binding from the result of an effect, a function's result,
+/// a lambda. So it can miss a name; a name that is rebound (to anything but a value that depends on
+/// an input) is no longer one, so it does not report one wrongly for that.
+pub fn instances_from_input(
+    handler: &Handler,
+    containers: &HashSet<String>,
+) -> Vec<InstanceFromInput> {
+    // Each name that depends on an input, with the input it came from (a parameter, or the
+    // parameter a local was bound from).
+    let inputs: Inputs = handler
+        .params
+        .iter()
+        .map(|p| (p.name.name.clone(), p.name.name.clone()))
+        .collect();
+    let mut found = Vec::new();
+    collect_in_block(&handler.body, containers, &inputs, &mut found);
+    found
+}
+
+/// `bynk.container.unbounded_instances` (a warning, #4112): a `Container` instance name built from
+/// a request's own input on a route whose caller is not authenticated. Every distinct name starts
+/// its own container, and a running container costs money, so anyone who can reach the route can
+/// start as many as they have values to send.
+pub fn phase_container_instance_names(
+    groups: &BTreeMap<String, Vec<usize>>,
+    parsed: &[ParsedFile],
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut ErrorSink,
+) {
+    for (name, indices) in groups {
+        let Some(table) = unit_tables.get(name) else {
+            continue;
+        };
+        let containers: HashSet<String> = table
+            .derived
+            .iter()
+            // A keyed instance (`@instances(by: K)`, #4112) takes the key type, whose construction is
+            // where the names are bounded: it is not warned about.
+            .filter(|(_, d)| d.is_container() && d.instance_key().is_none())
+            .map(|(cap, _)| cap.clone())
+            .collect();
+        if containers.is_empty() {
+            continue;
+        }
+        for &i in indices {
+            if parsed[i].is_synthetic() {
+                continue;
+            }
+            let path = parsed[i].identity_path();
+            for item in parsed[i].items() {
+                let CommonsItem::Service(svc) = item else {
+                    continue;
+                };
+                if !matches!(svc.protocol, ServiceProtocol::Http) {
+                    continue;
+                }
+                for h in &svc.handlers {
+                    let HandlerKind::Http {
+                        method,
+                        path: route,
+                    } = &h.kind
+                    else {
+                        continue;
+                    };
+                    let Some(by) = h.by_clause.as_ref().or(svc.default_by.as_ref()) else {
+                        continue;
+                    };
+                    if !crate::actors::sum_has_open_member(by, &table.actors) {
+                        continue;
+                    }
+                    for call in instances_from_input(h, &containers) {
+                        errors.push_for(
+                            Some(&path),
+                            CompileError::new(
+                                "bynk.container.unbounded_instances",
+                                call.span,
+                                format!(
+                                    "`{}` names a container instance from `{}`, which any caller of `{} {route}` chooses, and each distinct name starts its own container",
+                                    call.call,
+                                    call.input,
+                                    method.as_str()
+                                ),
+                            )
+                            .with_note(
+                                "a running container costs money, and nothing here limits how many names a caller can send; serve the route `by` an authenticated actor, or choose the name from a fixed set (an enum's names, a constant, the authenticated identity)",
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The calls `instances_from_input` finds in the first service handler of `src`, as
+    /// `(call, input)`.
+    fn found(src: &str) -> Vec<(String, String)> {
+        let tokens = bynk_syntax::lexer::tokenize(src).expect("lex");
+        let unit = bynk_syntax::parser::parse_unit(&tokens, src).expect("parse");
+        let bynk_syntax::ast::SourceUnit::Context(ctx) = unit else {
+            panic!("expected a context unit");
+        };
+        let containers: HashSet<String> = ["Renderer".to_string()].into();
+        ctx.items
+            .iter()
+            .filter_map(|i| match i {
+                CommonsItem::Service(s) => s.handlers.first(),
+                _ => None,
+            })
+            .flat_map(|h| instances_from_input(h, &containers))
+            .map(|c| (c.call, c.input))
+            .collect()
+    }
+
+    fn handler(body: &str) -> String {
+        format!(
+            "context t\n\nservice api from http {{\n  on GET(\"/x/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor {{\n{body}\n  }}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn an_instance_name_from_a_parameter_is_found_through_interpolation_and_locals() {
+        let direct = handler("    let r <- Renderer.send(tenant, req)\n    Ok(\"\")");
+        assert_eq!(found(&direct), [("Renderer.send".into(), "tenant".into())]);
+        let interpolated =
+            handler("    let r <- Renderer.send(\"t-\\(tenant)\", req)\n    Ok(\"\")");
+        assert_eq!(found(&interpolated).len(), 1);
+        // A local keeps the input it came from, through a chain of locals.
+        let chained = handler(
+            "    let a = tenant.toLower()\n    let b = a.concat(\"-x\")\n    let r <- Renderer.receiveBytes(b, req)\n    Ok(\"\")",
+        );
+        assert_eq!(
+            found(&chained),
+            [("Renderer.receiveBytes".into(), "tenant".into())]
+        );
+    }
+
+    #[test]
+    fn a_bounded_name_is_not_found() {
+        for body in [
+            "    let r <- Renderer.send(\"shared\", req)\n    Ok(\"\")",
+            // Through a function: where a set is bounded, so not followed.
+            "    let r <- Renderer.send(shard(tenant), req)\n    Ok(\"\")",
+            // What a `match` tests is not what it yields.
+            "    let n = match tenant {\n      \"a\" => \"one\"\n      _ => \"two\"\n    }\n    let r <- Renderer.send(n, req)\n    Ok(\"\")",
+            // Another capability's `send`.
+            "    let r <- Other.send(tenant, req)\n    Ok(\"\")",
+            // An effect result is not followed.
+            "    let n <- Lookup.get(tenant)\n    let r <- Renderer.send(n, req)\n    Ok(\"\")",
+        ] {
+            assert_eq!(found(&handler(body)), [], "{body}");
+        }
+    }
+
+    #[test]
+    fn a_rebound_parameter_is_no_longer_an_input() {
+        for body in [
+            // A pure `let` of something that does not depend on an input.
+            "    let tenant = \"shared\"\n    let r <- Renderer.send(tenant, req)\n    Ok(\"\")",
+            // An effect bind: its result is not followed.
+            "    let tenant <- Tenants.canonical(tenant)\n    let r <- Renderer.send(tenant, req)\n    Ok(\"\")",
+            // A block's own `let`.
+            "    let n = if true {\n      let tenant = \"shared\"\n      tenant\n    } else {\n      \"x\"\n    }\n    let r <- Renderer.send(n, req)\n    Ok(\"\")",
+            // A match arm's pattern reusing the name.
+            "    let n = match Plans.pick() {\n      tenant => tenant\n    }\n    let r <- Renderer.send(n, req)\n    Ok(\"\")",
+            // The same, with the call inside the arm.
+            "    match Plans.pick() {\n      tenant => Renderer.send(tenant, req)\n    }",
+            // A lambda parameter reusing the name, with the call inside the lambda.
+            "    let f = (tenant) => Renderer.send(tenant, req)\n    Ok(\"\")",
+        ] {
+            assert_eq!(found(&handler(body)), [], "{body}");
+        }
+    }
+
+    #[test]
+    fn a_name_still_depends_on_an_input_inside_a_nested_scope() {
+        for body in [
+            // A block that uses the parameter, not a rebound name.
+            "    let n = if true {\n      let other = \"x\"\n      tenant\n    } else {\n      \"x\"\n    }\n    let r <- Renderer.send(n, req)\n    Ok(\"\")",
+            // The call inside an `if` branch.
+            "    if true {\n      Renderer.send(tenant, req)\n    } else {\n      Ok(\"\")\n    }",
+            // A match arm that binds another name.
+            "    match Plans.pick() {\n      other => Renderer.send(tenant, req)\n    }",
+            // Rebinding to a value that depends on the input keeps it one.
+            "    let tenant = tenant.toLower()\n    let r <- Renderer.send(tenant, req)\n    Ok(\"\")",
+        ] {
+            assert_eq!(
+                found(&handler(body)),
+                [("Renderer.send".into(), "tenant".into())],
+                "{body}"
+            );
+        }
+    }
 
     #[test]
     fn a_build_path_stays_inside_the_project() {

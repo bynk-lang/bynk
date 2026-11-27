@@ -159,6 +159,44 @@ export function __bynkBytesFromBase64Url(s: string): Option<Uint8Array> {
   return decoded;
 }
 
+// #3939: the one constant-time comparison of two byte strings. `bynk.crypto`'s `Crypto.equal` (and
+// its password check) and the `ApiKey` key store both call it, so there is one implementation.
+// `native` is the platform's own constant-time primitive where there is one (`crypto.subtle.
+// timingSafeEqual` on Workers, `node:crypto`'s `timingSafeEqual` on Node); without it, both values
+// are HMACed under a fresh random key and compared with `subtle.verify`, whose comparison is
+// constant time. The length is not a secret, so unequal lengths are unequal at once.
+export type TimingSafeEqual = (a: Uint8Array, b: Uint8Array) => boolean;
+
+export async function constantTimeEqualBytes(
+  a: Uint8Array,
+  b: Uint8Array,
+  native: TimingSafeEqual | undefined,
+): Promise<boolean> {
+  if (a.length !== b.length) {
+    return false;
+  }
+  if (native) {
+    return native(a, b);
+  }
+  const s = globalThis.crypto.subtle;
+  const key = await s.generateKey({ name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+  const mac = await s.sign("HMAC", key, a as BufferSource);
+  return s.verify("HMAC", key, mac, b as BufferSource);
+}
+
+// The platform's constant-time primitive, where the running platform has one: Workers' `crypto.
+// subtle.timingSafeEqual`, else Node's `node:crypto` (through `process.getBuiltinModule`, so no
+// import of a Node module), else none, and `constantTimeEqualBytes` uses the double HMAC.
+export function platformTimingSafeEqualBytes(): TimingSafeEqual | undefined {
+  const s = (globalThis as { crypto?: { subtle?: { timingSafeEqual?: (a: BufferSource, b: BufferSource) => boolean } } })
+    .crypto?.subtle;
+  const workers = s?.timingSafeEqual;
+  if (workers) return (a, b) => workers.call(s, a as BufferSource, b as BufferSource);
+  const proc = (globalThis as { process?: { getBuiltinModule?: (id: string) => unknown } }).process;
+  const node = proc?.getBuiltinModule?.("node:crypto") as { timingSafeEqual?: TimingSafeEqual } | undefined;
+  return node?.timingSafeEqual ? (a, b) => node.timingSafeEqual!(a, b) : undefined;
+}
+
 // String measures that the language defines independently of the host's UTF-16
 // representation (#3949).
 

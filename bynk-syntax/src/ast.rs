@@ -734,6 +734,22 @@ pub struct CapRef {
     pub context: Option<QualifiedName>,
     /// The capability's simple name (also the local deps key).
     pub name: Ident,
+    /// #3959: a commons function's capability parameter, `given Store: Kv`,
+    /// carries its bound kind here; `name` is then the parameter. `None` for
+    /// every plain capability reference.
+    pub bound: Option<Ident>,
+    pub span: Span,
+}
+
+/// #3959: one binding of a capability parameter at a call, `Store = Sessions`,
+/// written after the ordinary arguments behind `given`
+/// (`cached(id, load, given Store = Sessions)`).
+#[derive(Debug, Clone)]
+pub struct CapBinding {
+    /// The callee's capability parameter.
+    pub param: Ident,
+    /// The caller's capability bound to it.
+    pub value: CapRef,
     pub span: Span,
 }
 
@@ -760,6 +776,11 @@ impl CapRef {
     /// a dotted string, if any.
     pub fn prefix(&self) -> Option<String> {
         self.context.as_ref().map(|q| q.joined())
+    }
+
+    /// #3959: whether this is a capability parameter (`Store: Kv`).
+    pub fn is_parameter(&self) -> bool {
+        self.bound.is_some()
     }
 }
 
@@ -2622,6 +2643,9 @@ pub enum HttpMethod {
     Put,
     Patch,
     Delete,
+    /// #3752 (D7): `on ANY("…")`, a pass-through route that answers every method
+    /// the platform delivers and returns `Effect[PassThrough]`.
+    Any,
 }
 
 impl HttpMethod {
@@ -2632,6 +2656,7 @@ impl HttpMethod {
             HttpMethod::Put => "PUT",
             HttpMethod::Patch => "PATCH",
             HttpMethod::Delete => "DELETE",
+            HttpMethod::Any => "ANY",
         }
     }
 
@@ -2642,6 +2667,7 @@ impl HttpMethod {
             "PUT" => Some(HttpMethod::Put),
             "PATCH" => Some(HttpMethod::Patch),
             "DELETE" => Some(HttpMethod::Delete),
+            "ANY" => Some(HttpMethod::Any),
             _ => None,
         }
     }
@@ -5247,6 +5273,10 @@ pub enum ExprKind {
         /// v0.20a: explicit type arguments (`name[T](…)`); empty when absent.
         type_args: Vec<TypeRef>,
         args: Vec<Expr>,
+        /// #3959: the capability bindings after the arguments
+        /// (`f(x, given Store = Sessions)`); `None` when there are none. Boxed
+        /// to keep [`Expr`] within its size budget: almost no call has any.
+        bindings: Option<Box<[CapBinding]>>,
         /// #3110: the comments between the arguments; `None` when there are none.
         trivia: Option<Box<ListTrivia>>,
     },
@@ -5798,15 +5828,61 @@ pub enum LiteralValue {
     Int(i64),
     Str(String),
     Bool(bool),
+    /// A `Decimal` literal pattern (#3973), kept in its normal form so that `20d`, `20.0d` and
+    /// `20.00d` are equal: a `Decimal` pattern matches by value, as `==` does. The scale the
+    /// author wrote is kept in the pattern's source text, which only the formatter reads.
+    Decimal {
+        coef: String,
+        scale: u32,
+    },
+    /// A `Float` literal as written. The parser admits it so the checker can say why a `Float`
+    /// cannot be matched against a literal (`bynk.types.float_literal_pattern`); it never
+    /// reaches the emitter.
+    Float(String),
 }
 
 impl LiteralValue {
-    /// A human-readable rendering for diagnostics (`31`, `"english"`, `true`).
+    /// The normal form of a `Decimal` literal: an optional `-`, the digits without leading zeros
+    /// and a scale with no trailing zero in the fraction, so equal values are equal here. Zero
+    /// is `0` at scale 0, with no sign.
+    pub fn decimal(negative: bool, digits: &str, scale: u32) -> LiteralValue {
+        let mut coef = digits.trim_start_matches('0').to_string();
+        let mut scale = scale;
+        while scale > 0 && coef.ends_with('0') {
+            coef.pop();
+            scale -= 1;
+        }
+        if coef.is_empty() {
+            return LiteralValue::Decimal {
+                coef: "0".to_string(),
+                scale: 0,
+            };
+        }
+        if negative {
+            coef.insert(0, '-');
+        }
+        LiteralValue::Decimal { coef, scale }
+    }
+
+    /// A human-readable rendering for diagnostics (`31`, `"english"`, `true`, `1.2d`).
     pub fn describe(&self) -> String {
         match self {
             LiteralValue::Int(n) => n.to_string(),
             LiteralValue::Str(s) => format!("{s:?}"),
             LiteralValue::Bool(b) => b.to_string(),
+            LiteralValue::Decimal { coef, scale } => {
+                let (sign, digits) = coef
+                    .strip_prefix('-')
+                    .map_or(("", coef.as_str()), |d| ("-", d));
+                let scale = *scale as usize;
+                if scale == 0 {
+                    return format!("{sign}{digits}d");
+                }
+                let padded = format!("{digits:0>width$}", width = scale + 1);
+                let (int, frac) = padded.split_at(padded.len() - scale);
+                format!("{sign}{int}.{frac}d")
+            }
+            LiteralValue::Float(text) => text.clone(),
         }
     }
 }

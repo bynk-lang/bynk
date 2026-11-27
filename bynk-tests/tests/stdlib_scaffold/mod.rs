@@ -29,17 +29,20 @@ pub fn units(platform: Platform) -> impl Iterator<Item = &'static Unit> {
 }
 
 /// The capabilities an adapter's source exports: its `exports capability { … }`
-/// line.
+/// list, on one line or wrapped by `bynk-fmt` over several.
 pub fn exported_capabilities(unit: &Unit) -> Vec<&'static str> {
-    let line = unit
+    let (_, after) = unit
         .source
-        .lines()
-        .find(|l| l.trim_start().starts_with("exports capability {"))
+        .split_once("exports capability {")
         .unwrap_or_else(|| panic!("{} declares no `exports capability`", unit.name));
-    line.split_once('{')
-        .and_then(|(_, rest)| rest.split_once('}'))
-        .map(|(names, _)| names.split(',').map(str::trim).collect())
-        .unwrap_or_default()
+    let (names, _) = after
+        .split_once('}')
+        .unwrap_or_else(|| panic!("{}: an unclosed `exports capability`", unit.name));
+    names
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 /// The scaffold's one source file for `platform`.

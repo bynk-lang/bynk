@@ -1,0 +1,12 @@
+{
+  "blurb": "A `*name` rest segment binds the rest of the path as it was received: one text value, still percent-encoded, that starts with `/` unless it is empty and keeps empty segments and a trailing slash. Only `String` can hold that faithfully, so the parameter it binds must be typed `String`. Decode it in the handler with `percentDecode()` (which is `None` for a malformed escape), or parse it there. A `:name` parameter may take other types; see `bynk.http.path_param_not_stringy`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.rest_param_type",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/files/*key\") (key: Int) -> Effect[HttpResult[String]] by v: Visitor { … }      // ✗\n\non GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "The parameter a route's `*name` rest segment binds is not typed `String`."
+}

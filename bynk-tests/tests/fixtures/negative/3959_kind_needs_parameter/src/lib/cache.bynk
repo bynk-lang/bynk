@@ -1,0 +1,11 @@
+---
+#3959, track §11 and §14.1 `bynk.given.kind_needs_parameter`: a commons never names an
+instantiable kind bare, so a library never silently means "the caller's default instance".
+---
+commons lib.cache
+
+consumes bynk.cloudflare { Kv }
+
+fn forget(key: String) -> Effect[()] given Kv {
+	Kv.delete(key)
+}

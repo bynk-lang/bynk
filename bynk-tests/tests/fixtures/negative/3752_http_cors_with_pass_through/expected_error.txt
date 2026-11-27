@@ -1,0 +1,2 @@
+bynk.http.cors_with_pass_through
+may not declare `cors { }`

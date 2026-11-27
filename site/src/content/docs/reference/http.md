@@ -15,14 +15,17 @@ service <Name> from http {
 }
 ```
 
-- **Methods:** `GET`, `POST`, `PUT`, `PATCH`, `DELETE`.
-- **Route:** must start with `/`; a `:name` segment is a path parameter.
-- **Reserved characters:** `*`, `{` and `}` are reserved in a route, in any
-  segment and inside a `:name`, for a future form that matches the rest of a
-  path (`bynk.http.reserved_route_syntax`). To match one literally, take the
-  segment as a `:name` parameter and check it in the handler.
+- **Methods:** `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `ANY` for a
+  [pass-through route](#pass-through-routes).
+- **Route:** must start with `/`; a `:name` segment is a path parameter, and a
+  final `*name` segment is a [rest segment](#rest-segments) that matches the rest
+  of the path (experimental).
+- **Reserved characters:** `{` and `}` are reserved in a route, in any segment and
+  inside a `:name`, for a future in-segment form, and so is `*` anywhere but the
+  start of the last segment (`bynk.http.reserved_route_syntax`). To match one
+  literally, take the segment as a `:name` parameter and check it in the handler.
 - **Parameters:** each parameter is a path parameter (matching a `:name`
-  segment), the special `body` parameter, or the special
+  segment, or a `*name` rest), the special `body` parameter, or the special
   [`headers`](#request-headers), [`query`](#query-strings), [`cookies`](#cookies) or [`cf`](#request-cf) parameter. A path parameter's type is one a typed [`query`](#query-strings) field takes, less
   `Option` and `List` (`bynk.http.path_param_not_stringy`): a `String`, `Int`, `Bool` or
   `Decimal`, an enum, or a refined or opaque type over one of those; see
@@ -56,7 +59,8 @@ is given, so it gets the `415`.
 ### How a route is chosen {#route-order}
 
 Routes with the same method are compared segment by segment, left to right. At the
-first segment where they differ, a literal segment beats a `:name` segment. So
+first segment where they differ, a literal segment beats a `:name` segment, and a
+`:name` segment beats a [`*name` rest](#rest-segments). So
 `GET /users/me` answers `/users/me`, and `GET /users/:id` answers every other
 `/users/<x>`, whichever is declared first and however the parameter is named:
 
@@ -83,6 +87,13 @@ service api from http {
   of the shape. It is checked within a context, and across the members of a
   [worker group](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/),
   whose contexts share one router.
+- **A rest is the weakest segment.** It matches zero or more segments, and where it
+  matches zero it still loses at the position it starts, so `GET /blog` beats
+  `GET /blog/*path` for `/blog` and, since empty segments don't count, for `/blog/` too.
+  `GET /a/b/*y` beats `GET /a/*x` for `/a/b/c`, and `GET /a/:id` beats `GET /a/*x` for
+  `/a/1` while `/a/1/2` goes to the rest. Two rests at one position (`/a/*x` beside
+  `/a/*y`) leave the second unreachable; `/a/:p` beside `/a/*x` doesn't, because the
+  rest still answers `/a` and `/a/1/2`.
 - **Methods.** A request is matched by method and path. The `Allow` set for a path
   (see [Method semantics](#method-semantics)) is the union over the routes that
   match it, so an overlap can't hide a method.
@@ -121,6 +132,137 @@ on GET("/orders/status/:s") (s: Status) -> Effect[HttpResult[List[Order]]] by v:
   `Bool` is `true` or `false` only (`on` and `off` are a form's convention).
 - `bynk client` takes the typed value and writes it as the segment (`String(n)`, the
   variant name), and `bynk openapi` gives the parameter its type, `format` and `enum`.
+
+### Rest segments {#rest-segments}
+
+A route whose last segment is `*name` matches every path that starts with the
+segments before it, however many segments follow, none included. It binds the
+handler parameter `name`, which must be a `String` (`bynk.http.rest_param_type`), to
+the rest of the path **as it was received**: still percent-encoded, starting with
+`/` unless it is empty, with a trailing slash and empty segments kept, and without
+the query. For `on GET("/blog/*path")`:
+
+| Request path | `path` |
+|---|---|
+| `/blog` | `""` |
+| `/blog/` | `"/"` |
+| `/blog/posts/money/` | `"/posts/money/"` |
+| `/blog//x` | `"//x"` |
+| `/blog/caf%C3%A9` | `"/caf%C3%A9"` |
+| `/blog/a%2Fb` | `"/a%2Fb"` |
+
+```bynk,ignore
+consumes bynk.cloudflare { R2 }
+
+capability Files = R2
+
+service files from http {
+	on GET("/files/*key") (key: String) -> Effect[HttpResult[Bytes]] by v: Visitor given Files {
+		match key.percentDecode() {
+			Some(k) => {
+				let got <- Files.get(k.slice(1, k.length()))
+				match got {
+					Some(bytes) => Raw(bytes, "application/octet-stream")
+					None => NotFound
+				}
+			}
+			None => BadRequest("the key is not valid percent-encoding")
+		}
+	}
+}
+```
+
+- **Raw, so nothing is lost.** The router never decodes the rest, so `%2F` and `/`, or
+  `%20` and `+`, stay distinct, and a handler that forwards or looks up the path sees
+  exactly what the client sent. Decode it with `percentDecode()`, which is `None` for a
+  malformed escape. A malformed escape *inside* the rest is the handler's to judge; one in
+  a segment before it is the usual `400 MalformedPath`.
+- **No dot segments.** A request URL is parsed before routing, which resolves `.`, `..`,
+  `%2e` and `%2e%2e`, so the rest never climbs out of its prefix. The router checks again
+  and answers `400 MalformedPath` if one appears (a host that doesn't normalise).
+- **Rules.** The rest is the route's last segment, a whole segment, and named:
+  `/files/*key/raw` and `/files/*key.txt` are `bynk.http.reserved_route_syntax`, and a
+  bare `/files/*` is `bynk.http.rest_unnamed`. Segments before it may be literals or
+  `:name` parameters (`/t/:tenant/*key`).
+- **A root catch-all** `on GET("/*path")` is allowed, and answers what no other route
+  matches. It never answers under `/_bynk/`: the prefixes the runtime serves are
+  dispatched first, and a rest never matches the others.
+- **Method semantics are unchanged.** A rest route keeps `HEAD` from `GET`, `OPTIONS` and
+  `405` with `Allow` (the union over every route that matches the path), the weak `ETag`,
+  CORS and the security headers, like any route.
+- **Leaving it out.** [`bynk client`](/reference/http-client/#routes-left-out) and
+  `bynk openapi` leave a rest route out and name it on stderr: an OpenAPI path parameter
+  can't contain `/`, and a client that sent the rest as one segment would encode its
+  slashes.
+- **Experimental.** A rest segment needs `bynk.http.rest` in `bynk.toml`'s
+  `[unstable] allow`.
+
+A handler's emitted name comes from its route (`http_GET_files_Rest_key` here), and two
+routes of a context whose names would be the same (`/a-b`, `/a_b` and `/a/b`), in one
+service or in two, are `bynk.http.handler_name_collision`.
+
+## Pass-through routes {#pass-through-routes}
+
+A pass-through route hands a request to another site and sends its answer back: a reverse
+proxy that puts a site under a path. It is declared with **`ANY`** and returns
+**`Effect[PassThrough]`**:
+
+```bynk,ignore
+consumes bynk { Upstream, InboundRequest, PassThrough, UpstreamError }
+
+capability Pages = Upstream @origin("https://bynk-blog.pages.dev") @timeout(30.seconds)
+
+service proxy from http {
+	on ANY("/blog/*path") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor given Pages {
+		if path == "" {
+			let q = request.query()
+			Respond(PermanentRedirect(if q == "" { "/blog/" } else { "/blog/?\(q)" }))
+		} else {
+			let got <- Pages.forward(request, path)
+			match got {
+				Ok(response) => Forward(response)
+				Err(Timeout) => Respond(GatewayTimeout("the blog did not answer in time"))
+				Err(_) => Respond(BadGateway("the blog could not be reached"))
+			}
+		}
+	}
+}
+```
+
+- **`ANY`** answers every method the platform delivers, `HEAD` and `OPTIONS` included,
+  because the upstream has its own method contract. An `ANY` route must return
+  `Effect[PassThrough]`, and no other route may (`bynk.http.pass_through_signature`).
+- **`PassThrough`** is `Forward(response)`, an upstream's answer from
+  [`Upstream.forward`](/reference/bynk-capabilities/#upstream), or `Respond(result)`, any
+  `HttpResult[()]` answered locally. Where a program's own sum also declares `Forward` or
+  `Respond` and both are in scope, qualify the one you mean (`PassThrough.Forward(…)`).
+- **Parameters.** An `ANY` route takes its path parameters, a [rest](#rest-segments),
+  `request: InboundRequest` and `cf`. The body belongs to the upstream, so `body`, `@raw`,
+  `@form` and `@multipart` are refused, and `headers`, `query` and `cookies` are read through
+  `request` (`bynk.http.pass_through_signature`).
+- **`InboundRequest`** has `method()` (upper case), `headers()` (the
+  [`RequestHeaders`](#request-headers) view, the consumed credential hidden) and `query()` (the
+  raw query string, without `?`). Only an `ANY` route takes one, as `request`
+  (`bynk.http.inbound_request_not_pass_through`).
+- **No `@cache`** (`bynk.http.cache_on_pass_through`): the upstream's `Cache-Control` is a
+  forwarded answer's freshness. **No `cors { }`** in a service that declares an `ANY` route
+  (`bynk.http.cors_with_pass_through`): put the proxy in its own `from http` service.
+- **Which route answers.** An `ANY` route takes part in [route order](#route-order) with every
+  ordinary route, whatever its method. It answers a request only where it is strictly more
+  specific than every ordinary route matching the path; at equal shape the ordinary route
+  wins. So a root catch-all `ANY("/*path")` beside `GET /api/items` leaves `/api/items` its own
+  `405`, `Allow` and preflight. An `ANY` route that ordinary routes always beat is
+  `bynk.http.unreachable_route`.
+- **Leaving it out.** `bynk client` and `bynk openapi` leave a pass-through route out and name
+  it on stderr: it answers with whatever its upstream does.
+- **Experimental.** It needs `bynk.http.ANY` (and `bynk.http.rest` for a rest) in
+  `[unstable] allow`, beside the `bynk` items it uses.
+
+> [!NOTE]
+> This release checks a pass-through route. Its router, which forwards the request and
+> passes the answer through without the `ETag`, `HEAD`, `OPTIONS`, `405` and CORS behaviour
+> an ordinary route gets, arrives in the next increment. Until then a build with a
+> pass-through route is refused (`bynk.http.pass_through_not_emitted`).
 
 ## Request headers
 
