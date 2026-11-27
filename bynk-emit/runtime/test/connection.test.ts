@@ -436,13 +436,13 @@ test("a JSON frame is written by the codec registered for the service its socket
   // The size ceiling is judged on what goes out, not on the runtime shape.
   const small = fakeSocket({ connId: "c", max: 20, svc: "codec-test" });
   await assert.rejects(new WorkersConnection<never>(small, "c").send({ note: { tag: "Some", value: "xxxxxxxxxxxx" } } as never), /over the service's maxFrame of 20/);
-  // A socket that names no service, or one nothing registered, is sent as it always was.
+  // A socket that names no service is sent as it always was; one that names a service nothing registered faults.
   const old = fakeSocket({ connId: "c" });
   await new WorkersConnection<unknown>(old, "c").send({ tag: "None" });
   assert.equal(old.sent[0], '{"tag":"None"}');
   const unknown = fakeSocket({ connId: "c", svc: "not-registered" });
-  await new WorkersConnection<unknown>(unknown, "c").send({ a: 1 });
-  assert.equal(unknown.sent[0], '{"a":1}');
+  await assert.rejects(() => new WorkersConnection<unknown>(unknown, "c").send({ a: 1 }), /no frame encoder is registered/);
+  assert.equal(unknown.sent.length, 0);
   // A binary service keeps its frames binary: it has no `svc`, so no codec.
   const bin = fakeSocket({ connId: "c", bin: true, svc: "codec-test" });
   await new WorkersConnection<unknown>(bin, "c").send(new Uint8Array([1, 2]));

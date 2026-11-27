@@ -55,7 +55,7 @@ const frameEncoder = new TextEncoder();
 // goes out as the codec writes it, never as the runtime's own shape. A socket holds no function, so its
 // attachment records the service's name (`svc`) and the module that hosts the sockets registers the encoder
 // under that name when it loads. A socket accepted before this has no `svc` and is sent as it always was,
-// until it reconnects.
+// until it reconnects. One that names a service no encoder is registered for faults.
 const frameEncoders = new Map<string, (frame: never) => unknown>();
 
 export function registerFrameEncoder<F>(service: string, encode: (frame: F) => unknown): void {
@@ -63,8 +63,12 @@ export function registerFrameEncoder<F>(service: string, encode: (frame: F) => u
 }
 
 function encodedFrame(frame: unknown, service: string | undefined): unknown {
-  const encode = service === undefined ? undefined : frameEncoders.get(service);
-  return encode === undefined ? frame : (encode as (frame: unknown) => unknown)(frame);
+  if (service === undefined) return frame;
+  const encode = frameEncoders.get(service);
+  // A socket that names its service was accepted by a module that registers the encoder, so a missing one is an
+  // emitter bug; sending the runtime shape would break the wire form without a trace, so the send faults.
+  if (encode === undefined) throw new Error(`Connection.send: no frame encoder is registered for the service ${service}`);
+  return (encode as (frame: unknown) => unknown)(frame);
 }
 
 function outboundFrame(frame: unknown, binary?: boolean): { data: string | Uint8Array; size: number } {

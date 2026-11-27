@@ -1,0 +1,8 @@
+// #4549: the frames a case reads back are the values the server sent, written by the frame type's codec.
+suite feed {
+  case "a sum frame with a Decimal and a list of options is sent" {
+    let tc = TestConnection[Tick]()
+    let _ <- Ticker.open(tc, DeskId.unsafe("d1")) by Public
+    expect tc.sent() == [Quote(Reading { price: 1.50d, marks: [Some(1), None] }), Gone]
+  }
+}
