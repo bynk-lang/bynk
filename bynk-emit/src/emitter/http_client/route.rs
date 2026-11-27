@@ -464,7 +464,11 @@ impl Gen {
 
     /// The parameter list, the body of the encoding thunk and the types of the
     /// arguments the route takes beyond the boundary's own (`query`, `cookies`).
-    fn encoding(&mut self, r: &RouteInput, rp: &RoutePlan) -> Result<Encoding, ClientError> {
+    pub(super) fn encoding(
+        &mut self,
+        r: &RouteInput,
+        rp: &RoutePlan,
+    ) -> Result<Encoding, ClientError> {
         let mut signature: Vec<TsParam> = Vec::new();
         let mut build: Vec<TsStmt> = Vec::new();
         let mut params: Vec<TsObjectEntry> = Vec::new();
@@ -905,7 +909,7 @@ impl Gen {
 }
 
 /// A route's parameters, the statements of its encoding thunk and the argument types it declares.
-type Encoding = (Vec<TsParam>, Vec<TsStmt>, Vec<TsStmt>);
+pub(super) type Encoding = (Vec<TsParam>, Vec<TsStmt>, Vec<TsStmt>);
 
 /// A record argument's type, its encoding and what that needs.
 struct RecordArg {
@@ -936,7 +940,7 @@ impl RecordArg {
 // ---------------------------------------------------------------------
 
 /// `(a, b) => body`.
-fn arrow(params: Vec<&str>, body: TsExpr) -> TsExpr {
+pub(super) fn arrow(params: Vec<&str>, body: TsExpr) -> TsExpr {
     TsExpr::Arrow {
         params: params.into_iter().map(|p| TsParam::new(p, None)).collect(),
         is_async: false,
@@ -947,7 +951,7 @@ fn arrow(params: Vec<&str>, body: TsExpr) -> TsExpr {
 }
 
 /// A one-line object literal of `key: value` entries.
-fn object_of(fields: Vec<(&str, TsExpr)>) -> TsExpr {
+pub(super) fn object_of(fields: Vec<(&str, TsExpr)>) -> TsExpr {
     TsExpr::object(
         fields
             .into_iter()
@@ -991,7 +995,7 @@ fn field_spec(field: &str, wire: Option<String>) -> TsExpr {
 }
 
 /// `const <local> = __checked(value, decoder, "at"); if (<local>.tag === "Err") return <local>;`
-fn checked_stmts(local: &str, value: TsExpr, decoder: TsExpr, at: &str) -> Vec<TsStmt> {
+pub(super) fn checked_stmts(local: &str, value: TsExpr, decoder: TsExpr, at: &str) -> Vec<TsStmt> {
     vec![
         const_typed(
             local,
