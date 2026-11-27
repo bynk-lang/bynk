@@ -582,6 +582,7 @@ fn lower_test_connection(op: TestConnectionOp, recv: bynk_ts::TsExpr) -> bynk_ts
         TestConnectionOp::Closed => member(recv, "closed"),
         TestConnectionOp::CloseCode => call(member(recv, "closeCodeOption"), vec![]),
         TestConnectionOp::CloseReason => call(member(recv, "closeReasonOption"), vec![]),
+        TestConnectionOp::RefusedWith => call(member(recv, "refusedWithOption"), vec![]),
         TestConnectionOp::Connection => call(member(recv, "mint"), vec![]),
     }
 }
@@ -750,6 +751,7 @@ mod tests {
             (TestConnectionOp::Closed, "c.closed"),
             (TestConnectionOp::CloseCode, "c.closeCodeOption()"),
             (TestConnectionOp::CloseReason, "c.closeReasonOption()"),
+            (TestConnectionOp::RefusedWith, "c.refusedWithOption()"),
             (TestConnectionOp::Connection, "c.mint()"),
         ] {
             assert_eq!(printed(lower_test_connection(op, node("c"))), want);

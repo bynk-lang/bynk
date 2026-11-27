@@ -1509,6 +1509,11 @@ pub(crate) fn check_test_connection_method(
             let string = tys.intern(Ty::Base(BaseType::String));
             Some(tys.intern(Ty::Option(string)))
         }
+        // #3901: the status a `system` case's upgrade was refused with (`401`, `403`, `400`), when it was.
+        Some(TestConnectionOp::RefusedWith) => {
+            let int = tys.intern(Ty::Base(BaseType::Int));
+            Some(tys.intern(Ty::Option(int)))
+        }
         Some(TestConnectionOp::Connection) => Some(tys.intern(Ty::Connection(frame))),
         None => None,
     };
@@ -1517,7 +1522,7 @@ pub(crate) fn check_test_connection_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "`TestConnection[{}]` has no method `{}` — it has `sent()`, `closed()`, `closeCode()`, `closeReason()` and `connection()`",
+                "`TestConnection[{}]` has no method `{}` — it has `sent()`, `closed()`, `closeCode()`, `closeReason()`, `refusedWith()` and `connection()`",
                 frame.display(tys),
                 method.name
             ),

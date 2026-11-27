@@ -475,6 +475,7 @@ kernel_ops! {
         Closed = "closed", "closed() -> Bool";
         CloseCode = "closeCode", "closeCode() -> Option[Int]";
         CloseReason = "closeReason", "closeReason() -> Option[String]";
+        RefusedWith = "refusedWith", "refusedWith() -> Option[Int]";
         Connection = "connection", "connection() -> Connection[F]";
     }
 

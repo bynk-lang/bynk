@@ -254,6 +254,26 @@ both from the connection, as the platform does. To test an agent without the
 service, pass it `tc.connection()`. See [Driving a WebSocket
 service](/reference/testing/#websocket-address).
 
+### And through the real upgrade
+
+The same case, in a `suite … as system`, performs a real upgrade through the
+deployable Worker and its Durable Object, with the credential a browser would
+offer. That tests what the in-process case cannot: the handshake, the
+authentication at the edge, the routing to the object and the decoding of every
+frame. A refused upgrade is read with `tc.refusedWith()`:
+
+```bynk,fragment
+suite chat as system {
+	case "a stranger is refused at the edge" {
+		let tc = TestConnection[ServerFrame]()
+		let _ <- ChatGateway.open(tc, "r1") by Nobody
+		expect tc.refusedWith() == Some(401)
+	}
+}
+```
+
+See [WebSocket at `system`](/reference/testing/#websocket-system).
+
 ## Build and run
 
 On `--target workers` the upgrade is authenticated in the Worker and the socket is

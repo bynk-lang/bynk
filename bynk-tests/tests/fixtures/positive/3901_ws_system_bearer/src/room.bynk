@@ -1,0 +1,35 @@
+context room
+
+type UserId = String where NonEmpty
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+// #3901: a `Bearer` actor with a declared `issuer` and `audience`, driven at `system` through a real upgrade:
+// the credential the case presents is offered as `["bynk.bearer", token]`, and the Worker's seam decides.
+actor Member { auth = Bearer(secret = "ROOM_SECRET", issuer = "web", audience = "rooms"), identity = UserId }
+
+service lobby from websocket(in: Frame, out: Frame) {
+  on open(room: RoomKey) -> Effect[()] by who: Member {
+    let _ <- connection.send(Frame { text: "hello" })
+    let _ <- Rooms(room).keep(who.identity, connection)
+  }
+
+  on close(room: RoomKey) -> Effect[()] by who: Member {
+    let _ <- Rooms(room).drop(who.identity)
+  }
+}
+
+agent Rooms {
+  key id: RoomKey
+  store held: Map[UserId, Connection[Frame]]
+
+  on call keep(u: UserId, conn: Connection[Frame]) -> Effect[()] {
+    let _ <- held.put(u, conn)
+    ()
+  }
+
+  on call drop(u: UserId) -> Effect[()] {
+    let _ <- held.remove(u)
+    ()
+  }
+}

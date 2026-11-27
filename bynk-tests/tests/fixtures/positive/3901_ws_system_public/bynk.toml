@@ -1,0 +1,6 @@
+[project]
+name = "ws-system-public"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
