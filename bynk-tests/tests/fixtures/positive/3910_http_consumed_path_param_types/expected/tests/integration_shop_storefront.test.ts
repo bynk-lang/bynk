@@ -33,37 +33,37 @@ function __makeHarness() {
 }
 
 <<bynk-shared: testing/jwt_signer>>
-async function __sysdrive_api_http_GET_orders_Param_id(id: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_api_http_GET_orders_Param_id(id: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/orders/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.SHOP_STOREFRONT.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_GET_orders_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_raw_api_http_GET_orders_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/orders/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.SHOP_STOREFRONT.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_GET_modes_Param_m(m: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_api_http_GET_modes_Param_m(m: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/modes/${__cookieValue("enum", m)}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.SHOP_STOREFRONT.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_GET_modes_Param_m(m: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_raw_api_http_GET_modes_Param_m(m: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/modes/${m}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.SHOP_STOREFRONT.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_GET_prices_Param_p(p: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_api_http_GET_prices_Param_p(p: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/prices/${__bynkDecimalToString(p)}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.SHOP_STOREFRONT.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_GET_prices_Param_p(p: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_raw_api_http_GET_prices_Param_p(p: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/prices/${p}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.SHOP_STOREFRONT.fetch(__req);

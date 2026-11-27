@@ -534,7 +534,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         .or_else(|| crate::symbols::describe_firstparty_symbol(&name))
         // #2620: the ambient `unreachable`/`todo`, last, so a declaration of the
         // same name (which shadows the built-in) is answered by a rung above.
-        .or_else(|| describe_fault_builtin(&name, &text[span.end..]))
+        .or_else(|| describe_ambient_builtin(&name, &text[span.end..]))
         // #2867: the `IsoDate` refinement predicate, in a `where` clause.
         .or_else(|| describe_iso_date_predicate(&name, &text[..span.start]))
 }
@@ -692,6 +692,30 @@ fn typed_read_columns(
     });
     cols.map_or_else(String::new, |c| {
         format!("\n\nThe compiler writes `SELECT {c}` ahead of the literal.")
+    })
+}
+
+/// The ambient built-ins with no declaration of their own, last, so a
+/// declaration of the same name (which shadows the built-in) is answered by a
+/// rung above: the fault built-ins (#2620) and the `HttpResult` type (#4536).
+fn describe_ambient_builtin(name: &str, after: &str) -> Option<String> {
+    describe_fault_builtin(name, after).or_else(|| describe_http_result(name))
+}
+
+/// #4536: hover for the built-in `HttpResult` type, which says it is
+/// extensible ([`bynk_syntax::ast::HTTP_RESULT_EXTENSIBLE`]) in the words the
+/// extensible first-party enums use.
+fn describe_http_result(name: &str) -> Option<String> {
+    (name == "HttpResult").then(|| {
+        let mut out = "```bynk\nHttpResult[T]\n```\n\nA handler's HTTP answer: a status from the \
+                       RFC 9110 vocabulary, with `T` the success body."
+            .to_string();
+        if bynk_syntax::ast::HTTP_RESULT_EXTENSIBLE {
+            out.push_str(
+                "\n\n**Extensible**: it may gain variants in a minor release, so a `match` on it needs a wildcard arm.",
+            );
+        }
+        out
     })
 }
 
@@ -1280,6 +1304,15 @@ mod tests {
             path: None,
             files: None,
         })
+    }
+
+    /// #4536: the built-in `HttpResult` hovers as extensible, as `FetchError` does.
+    #[test]
+    fn the_built_in_http_result_hovers_as_extensible() {
+        let src = "context demo.m\n\nservice s from http {\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor { Ok(\"x\") }\n}\n";
+        let h = hover_at(src, "HttpResult", 0).expect("HttpResult hovers");
+        assert!(h.contains("**Extensible**"), "{h}");
+        assert!(h.contains("wildcard"), "{h}");
     }
 
     const GENERATE_VALUE: &str = "context demo.m\n\nconsumes bynk.cloudflare { Ai, GenerateRequest }\n\ntype Severity = enum { Low, High }\ntype Triage = { severity: Severity, summary: String where MaxLength(200) }\ntype Tree = { children: List[Tree] }\n\nservice s {\n  on call() -> Effect[()] by Caller given Ai {\n    let a <- Ai.generateValue[Triage](\"m\", GenerateRequest { messages: [] })\n    let b <- Ai.generateValue[Tree](\"m\", GenerateRequest { messages: [] })\n    ()\n  }\n}\n";

@@ -1,0 +1,29 @@
+context login
+
+// #4115: a `Response` carries every `set-cookie` value separately, as received. `headers` keeps
+// the joined value for compatibility, which cannot be split back (an `Expires` holds a comma).
+
+consumes bynk { Fetch, Request, Method }
+
+service session {
+	on call(url: String) -> Effect[String] by Caller given Fetch {
+		let res <- Fetch.send(Request { method: Post, url: url })
+		match res {
+			Ok(r) => match r.setCookies.find((c) => c.startsWith("session=")) {
+				Some(c) => Effect.pure(c),
+				None => Effect.pure("no session cookie"),
+			},
+			Err(_) => Effect.pure("failed"),
+		}
+	}
+}
+
+service count {
+	on call(url: String) -> Effect[Int] by Caller given Fetch {
+		let res <- Fetch.send(Request { method: Get, url: url })
+		match res {
+			Ok(r) => Effect.pure(r.setCookies.length()),
+			Err(_) => Effect.pure(-1),
+		}
+	}
+}

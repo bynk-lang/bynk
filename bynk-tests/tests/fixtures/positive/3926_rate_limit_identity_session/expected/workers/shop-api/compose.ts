@@ -48,7 +48,7 @@ export function compose(env: Env) {
       if (!__live) return { tag: "Err", error: HttpResult.Unauthorized };
       return { tag: "Ok", value: { key: "identity:Member:".concat(globalThis.String(__session.value.sub)), principal: { ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value } } };
     },
-    async http_POST_rename_from(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: string, principal: any) {
+    async http_POST_rename_from(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, body: string, principal: any) {
       return handlers.api.http_POST_rename_from(headers, body, { ...deps, ...principal });
     },
     async http_POST_logout(request: globalThis.Request) {

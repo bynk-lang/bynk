@@ -149,7 +149,7 @@ class __Stub_Backend {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a stubbed byte response is read") {
-      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: new globalThis.TextEncoder().encode("abc") });
+      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: new globalThis.TextEncoder().encode("abc"), setCookies: [] });
     }
     throw new globalThis.Error("bynk: no stub clause matched for Backend.receiveBytes");
   }
@@ -274,7 +274,7 @@ class __Stub_Backend {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a stubbed response is returned") {
-      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: "[]" });
+      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: "[]", setCookies: [] });
     }
     if (this.__case === "a stubbed network error is matched") {
       return Err(FetchError.Network);
@@ -402,7 +402,7 @@ class __Stub_Backend {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a stubbed sendBytes answers its status") {
-      return Ok({ status: 201, headers: new globalThis.Map<string, string>(), body: new globalThis.Uint8Array() });
+      return Ok({ status: 201, headers: new globalThis.Map<string, string>(), body: new globalThis.Uint8Array(), setCookies: [] });
     }
     throw new globalThis.Error("bynk: no stub clause matched for Backend.sendBytes");
   }

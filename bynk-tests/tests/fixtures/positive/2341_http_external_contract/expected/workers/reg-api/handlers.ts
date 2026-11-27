@@ -22,7 +22,7 @@ export function problem(code: string, message: string): globalThis.Uint8Array {
 }
 
 export const api = {
-  async http_GET_whoami(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: {}): globalThis.Promise<HttpResult<string>> {
+  async http_GET_whoami(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, deps: {}): globalThis.Promise<HttpResult<string>> {
     const __r0 = headers.bearer();
     switch (__r0.tag) {
       case "Some": {
@@ -35,7 +35,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
-  async http_PUT_packages_Param_name(name: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: {}): globalThis.Promise<HttpResult<string>> {
+  async http_PUT_packages_Param_name(name: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, deps: {}): globalThis.Promise<HttpResult<string>> {
     const __r0 = headers.get("x-request-id");
     switch (__r0.tag) {
       case "Some": {
@@ -48,7 +48,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
-  async http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: { who: { tag: "Sender" } | { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } }): globalThis.Promise<HttpResult<string>> {
+  async http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, deps: { who: { tag: "Sender" } | { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } }): globalThis.Promise<HttpResult<string>> {
     const traceId = ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(headers.get("x-trace"), "-");
     switch (deps.who.tag) {
       case "Sender": {

@@ -13,7 +13,7 @@ export interface Env {
 export function compose(env: Env) {
   const deps = {};
   return {
-    async http_GET_bearer(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
+    async http_GET_bearer(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }) {
       const __authz = request.headers.get("Authorization");
       if (__authz === null || !__authz.startsWith("Bearer ")) return HttpResult.Unauthorized;
       const __secret = (env as unknown as globalThis.Record<string, unknown>)["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["AUTH_JWT_SECRET"];
@@ -24,7 +24,7 @@ export function compose(env: Env) {
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_GET_bearer(headers, { ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
-    async http_GET_bearer_raw(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
+    async http_GET_bearer_raw(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }) {
       const __authz = request.headers.get("Authorization");
       if (__authz === null || !__authz.startsWith("Bearer ")) return HttpResult.Unauthorized;
       const __secret = (env as unknown as globalThis.Record<string, unknown>)["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["AUTH_JWT_SECRET"];
@@ -33,7 +33,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_GET_bearer_raw(headers, deps);
     },
-    async http_GET_oidc(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
+    async http_GET_oidc(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }) {
       const __authz = request.headers.get("Authorization");
       if (__authz === null || !__authz.startsWith("Bearer ")) return HttpResult.Unauthorized;
       const __claims = await __verifyOidcJwt(__authz.slice(7), "https://issuer.example.com", "bynk-registry", "https://issuer.example.com/.well-known/jwks.json");
@@ -42,7 +42,7 @@ export function compose(env: Env) {
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_GET_oidc(headers, { ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
-    async http_GET_sum(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
+    async http_GET_sum(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }) {
       let __who: any = undefined;
       if (__who === undefined) {
         const __authz = request.headers.get("Authorization");
@@ -63,7 +63,7 @@ export function compose(env: Env) {
       if (__who === undefined) return HttpResult.Unauthorized;
       return handlers.api.http_GET_sum(headers, { ...deps, who: __who });
     },
-    async http_POST_either(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
+    async http_POST_either(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }) {
       let __bytes: globalThis.Uint8Array | undefined;
       try {
         __bytes = await __readBodyCapped(request, 1048576);
@@ -96,10 +96,10 @@ export function compose(env: Env) {
       const body = __r_body.value;
       return handlers.api.http_POST_either(headers, body, { ...deps, who: __who });
     },
-    async http_POST_hook(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: string) {
+    async http_POST_hook(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, body: string) {
       return handlers.api.http_POST_hook(headers, body, deps);
     },
-    async http_GET_open(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
+    async http_GET_open(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }) {
       return handlers.api.http_GET_open(headers, deps);
     },
   };

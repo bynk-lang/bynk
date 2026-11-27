@@ -1,0 +1,9 @@
+context demo
+
+// #3752 (D12): `RequestHeaders.entries()` ships experimental, though
+// `RequestHeaders` is stable.
+service api from http {
+  on GET("/h") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("\(headers.entries().length())")
+  }
+}
