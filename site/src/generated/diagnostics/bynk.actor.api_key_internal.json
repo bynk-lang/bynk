@@ -1,0 +1,10 @@
+{
+  "blurb": "`ApiKey` names an actor scheme, not a value, so a program has no `ApiKey` members to call. The key store the compiler generates for an `ApiKey` actor compares digests with an internal constant-time comparison, the same one `bynk.crypto`'s `Crypto.equal` uses, which only that generated code can reach. To compare a secret in your own code, use `Secret.matches` or `Crypto.equal`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.api_key_internal",
+  "constructs": [],
+  "example": "let same <- ApiKey.equal(a, b)   // ✗ internal to the generated key store\n\nlet same <- Crypto.equal(a, b)   // ✓",
+  "severity": "error",
+  "summary": "A program names `ApiKey.equal`, the generated key store's internal comparison (#3939)."
+}
