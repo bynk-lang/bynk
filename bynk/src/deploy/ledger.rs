@@ -1077,7 +1077,7 @@ impl DeployLock {
 /// independently too — the `kv` line is prunable, the `workers` line is
 /// report-only (a whole-Worker delete is a materially larger blast radius
 /// than a namespace or a queue, and out of this slice's scope).
-#[derive(Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Orphans {
     pub(crate) kv: Vec<OrphanKv>,
     /// P5 (#2323): recorded R2 buckets the build no longer declares. Reported
@@ -1113,6 +1113,11 @@ pub(crate) struct Orphans {
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) worker_agent_state: BTreeMap<String, BTreeMap<String, Vec<String>>>,
     pub(crate) queues: Vec<String>,
+    /// #4601: the project's own Workers each orphaned queue's prune detaches first, by ledger
+    /// name, read from the account just before `--prune` asks ([`super::kind::vet_orphan_queues`]).
+    /// Empty in the plan: the plan never calls Cloudflare.
+    #[serde(skip)]
+    pub(crate) queue_detaching: BTreeMap<String, Vec<String>>,
 }
 
 impl Orphans {
@@ -1162,6 +1167,7 @@ impl Orphans {
                 })
                 .collect(),
             worker_scripts: BTreeMap::new(),
+            queue_detaching: self.queue_detaching.clone(),
             worker_agent_state: self
                 .worker_agent_state
                 .iter()
@@ -1171,6 +1177,17 @@ impl Orphans {
         };
         show_kind_orphans(self, environment, &mut shown);
         shown
+    }
+}
+
+impl Environment {
+    /// #4601: the script name, on Cloudflare in `environment`, of every Worker this ledger records
+    /// for it: the project's own Workers, the only queue consumers `--prune` detaches.
+    pub(crate) fn worker_scripts(&self, environment: &str) -> BTreeSet<String> {
+        self.workers
+            .iter()
+            .map(|(key, record)| env_qualify(environment, record.script.as_deref().unwrap_or(key)))
+            .collect()
     }
 }
 
@@ -1229,6 +1246,7 @@ pub(crate) fn find_orphans(
             .map(|(worker, record)| (worker.clone(), record.fresh_agents.clone()))
             .collect(),
         queues: Vec::new(),
+        queue_detaching: BTreeMap::new(),
     };
     // 1D.1 (#3929): each converted kind's orphans.
     find_kind_orphans(&OrphanCx { env, resources }, &mut orphans);

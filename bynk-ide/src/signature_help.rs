@@ -531,6 +531,13 @@ pub(crate) fn typed_read(base: &str, member: &str) -> Option<&'static str> {
             "generateValue[T](model: String, request: GenerateRequest) -> Effect[Result[T, AiError]]",
         ),
         ("Analytics", "writeValue") => Some("writeValue[T](value: T) -> Effect[()]"),
+        // #4101: a derived `Vectorize`'s typed reads, each match's metadata read as `M` on its own.
+        ("Vectorize", "queryValue") => Some(
+            "queryValue[M](vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatchOf[M]], VectorError]]",
+        ),
+        ("Vectorize", "getByIdsValue") => Some(
+            "getByIdsValue[M](ids: List[String]) -> Effect[Result[List[VectorReadOf[M]], VectorError]]",
+        ),
         ("AnalyticsSql", "select") => Some(
             "select[T](dataset: Analytics instance, tail: String, params: List[SqlValue]) -> Effect[Result[List[T], AnalyticsReadError]]",
         ),
@@ -539,8 +546,15 @@ pub(crate) fn typed_read(base: &str, member: &str) -> Option<&'static str> {
 }
 
 /// The bases whose derived instances have the compiler-lowered typed reads.
-pub(crate) const TYPED_READ_BASES: [&str; 6] =
-    ["D1", "Postgres", "MySql", "Analytics", "AnalyticsSql", "Ai"];
+pub(crate) const TYPED_READ_BASES: [&str; 7] = [
+    "D1",
+    "Postgres",
+    "MySql",
+    "Analytics",
+    "AnalyticsSql",
+    "Ai",
+    "Vectorize",
+];
 
 /// Whether `label` is the typed-read signature of the member `callee` names, so a
 /// user's own `select` operation is never taken for one.
@@ -801,6 +815,22 @@ mod tests {
         // A project's own `Ai` is not the first-party one, so it has no such operation.
         let own = "context a\n\ncapability Ai {\n  fn ask(q: String) -> Effect[String]\n}\n";
         assert!(resolve_label("Ai.generateValue", own, None).is_none());
+    }
+
+    /// #4101: a derived `Vectorize` has the typed reads, which are lowered over `query` and `getByIds`.
+    #[test]
+    fn a_derived_vectorize_has_the_typed_reads() {
+        const DOC: &str = "context a\n\nconsumes bynk.cloudflare { Vectorize }\n\ncapability Docs = Vectorize @dimensions(32) @metric(\"cosine\")\n";
+        let q = resolve_label("Docs.queryValue", DOC, None).expect("queryValue");
+        assert!(
+            q.starts_with("queryValue[M](vector: List[Float], options: QueryOptions)"),
+            "{q}"
+        );
+        assert!(q.contains("VectorMatchOf[M]"), "{q}");
+        let g = resolve_label("Docs.getByIdsValue", DOC, None).expect("getByIdsValue");
+        assert!(g.contains("VectorReadOf[M]"), "{g}");
+        // The text operations keep theirs.
+        assert!(resolve_label("Docs.query", DOC, None).is_some());
     }
 
     /// Hyperdrive H3 (#3320): a derived `Postgres` has them too, over `PgValue`

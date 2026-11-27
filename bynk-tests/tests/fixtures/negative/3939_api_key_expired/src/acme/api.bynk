@@ -1,0 +1,16 @@
+context acme.api
+
+consumes bynk.cloudflare { RateLimit }
+
+type AccountId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"), identity = AccountId }
+
+capability PerIp = RateLimit @limit(100) @period(60.seconds)
+
+service keys from http {
+	@rateLimit(PerIp, key: clientIp)
+	on GET("/key") () -> Effect[HttpResult[String]] by c: Client {
+		Ok(c.identity)
+	}
+}

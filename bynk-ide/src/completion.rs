@@ -3224,7 +3224,13 @@ fn member_candidates_from(
         .as_deref()
         .filter(|b| crate::signature_help::TYPED_READ_BASES.contains(b))
     {
-        for member in ["select", "firstAs", "writeValue"] {
+        for member in [
+            "select",
+            "firstAs",
+            "writeValue",
+            "queryValue",
+            "getByIdsValue",
+        ] {
             if let Some(sig) = crate::signature_help::typed_read(base, member)
                 && seen.insert(member.to_string())
             {
@@ -5481,6 +5487,33 @@ mod tests {
         let items = complete("    Ai.", own, None);
         assert!(find(&items, "generateValue", CompletionKind::Member).is_none());
         assert!(find(&items, "ask", CompletionKind::Member).is_some());
+    }
+
+    /// #4101: a derived `Vectorize` offers the typed reads beside the text operations.
+    #[test]
+    fn a_derived_vectorize_offers_the_typed_reads() {
+        let doc = "context a.b\n\nconsumes bynk.cloudflare { Vectorize }\n\ncapability Docs = Vectorize @dimensions(32) @metric(\"cosine\")\n";
+        let items = complete("    Docs.", doc, None);
+        for op in [
+            "queryValue",
+            "getByIdsValue",
+            "query",
+            "getByIds",
+            "upsertValue",
+        ] {
+            assert!(
+                find(&items, op, CompletionKind::Member).is_some(),
+                "`{op}` offered"
+            );
+        }
+        let q = find(&items, "queryValue", CompletionKind::Member).expect("`queryValue`");
+        assert!(
+            q.detail
+                .as_deref()
+                .is_some_and(|d| d.contains("VectorMatchOf[M]")),
+            "{:?}",
+            q.detail
+        );
     }
 
     #[test]

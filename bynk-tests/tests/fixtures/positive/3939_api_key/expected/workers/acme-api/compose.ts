@@ -17,7 +17,7 @@ export interface Env {
 type __DurableObjectNamespace = { idFromName(name: string): { toString(): string }; idFromString(id: string): { toString(): string }; get(id: any): any };
 
 export function compose(env: Env) {
-  const Clock = new bynk__binding.ClockProvider();
+  const Clock = (env as unknown as { __bynkClock?: bynk__binding.ClockProvider }).__bynkClock ?? new bynk__binding.ClockProvider();
   const PerIp = new bynk_cloudflare__binding.WorkersRateLimit(env, "RATELIMIT_PER_IP");
   const deps = { Clock, PerIp, env, __apiKey: { Client: { secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"] } } };
   return {
