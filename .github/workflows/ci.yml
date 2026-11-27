@@ -1063,12 +1063,7 @@ jobs:
       && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
       && needs.changes.outputs.test_other != '[]'
     runs-on: ${{ matrix.os }}
-    # #4579: Windows gets 60 minutes. The wrangler-based tests wait for wrangler's own `Ready on`
-    # line (`wrangler::wait_until_ready`, #4521), which Windows logs late: the suite took 658 s
-    # before #4521, 1457 s after it (about 2 minutes per boot), and past 40 minutes once #4566
-    # moved the remaining workerd tests onto the same wait (no test failed; the job was cancelled).
-    # Lower this again when #4579 finds why Ready is late there.
-    timeout-minutes: ${{ matrix.os == 'windows-latest' && 60 || 40 }}
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
