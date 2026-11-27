@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::model::GroupNames;
 use super::model::account_name_problem;
@@ -426,62 +426,17 @@ fn deploy(
         .collect();
     let run_stop = |stop: Stop, warnings: &[Entry]| stop.with_run(&order_names, warnings);
 
-    // #3562 (G5): a context with agent state that would change scripts is refused before
-    // anything is pushed, `--dry-run` included.
-    // #3565: the Workers that declare routes or custom domains, whose move sets are refused in v1.
-    let attached = attached_workers(project_root);
-    let agents = checked_agent_moves(&lock, opts, &resources, &order, &groups, &attached);
-    agents.eprint();
-    if !agents.may_go_on() {
-        // #3797: the refusals, with what the run knew, for a client that asked for JSON.
-        return Err(Stop {
-            order: order_names.clone(),
-            refusals: agents.refusals,
-            warnings: agents.warnings,
-            ..Stop::from(ExitCode::FAILURE)
-        });
-    }
+    // #3562 (G5), #3565: the agent moves, refused or planned before anything is pushed.
     let AgentGate {
         moves,
         warnings,
         planned: planned_moves,
         placed,
         ..
-    } = agents;
-
-    // #3565 (D8): `--cancel-move` names a move under way, which this run cancels instead of
-    // deploying anything else.
-    let cancelling = match &opts.cancel_move {
-        None => None,
-        Some(name) => {
-            let found = placed.as_ref().and_then(|p| {
-                p.sets.iter().zip(&p.resumes).position(|(set, resumes)| {
-                    resumes.is_some()
-                        && set.moves.iter().any(|m| {
-                            crate::deploy::agent_move::is_named(
-                                &m.context,
-                                std::slice::from_ref(name),
-                            )
-                        })
-                })
-            });
-            match found {
-                Some(n) => Some(n),
-                None => {
-                    let entry = Entry::new(
-                        crate::deploy::agent_move::CANCEL_MOVE_UNUSED,
-                        format!(
-                            "`--cancel-move {name}` names no context of an agent move under way in `{}`",
-                            opts.environment
-                        ),
-                    )
-                    .with("name", name.as_str());
-                    emsg!("bynk: error: {}", entry.line());
-                    return Err(run_stop(Stop::refused(entry), &warnings));
-                }
-            }
-        }
-    };
+    } = agent_gate(project_root, &lock, opts, (&resources, &order, &groups))
+        .map_err(|stop| run_stop(stop, &[]))?;
+    let cancelling =
+        cancelling_set(opts, placed.as_ref()).map_err(|stop| run_stop(stop, &warnings))?;
 
     check_foreign_pins(project_root, &workers_dir, &order, opts)
         .map_err(|stop| run_stop(stop, &warnings))?;
@@ -568,39 +523,10 @@ fn deploy(
     }
     let plan = print_plan_then_forward_warnings(plan, opts, &order, &resources, project_root);
     if opts.dry_run {
-        if let (Some(n), Some(placed)) = (cancelling, &placed)
-            && let Some(r) = &placed.resumes[n]
-        {
-            colour::eprint(&format!(
-                "bynk: --cancel-move would cancel the agent move `{}` (at step `{}`); --dry-run pushes nothing\n",
-                r.move_id, r.step
-            ));
-        }
+        note_dry_cancel(cancelling, placed.as_ref());
         return Ok(());
     }
-    // #3565 (slice 4b): a run that moves agents builds their phase variants beside each Worker's
-    // own files, which are byte-identical to the plan's build.
-    if let Some(placed) = &placed {
-        let variants = crate::deploy::move_run::variants(
-            placed,
-            lock.open_moves(&opts.environment),
-            &resources,
-            &opts.environment,
-        );
-        if workers::compile_built(
-            project_root,
-            &build_dir,
-            workers::Build::new(true, false)
-                .no_install(opts.no_install)
-                .environment(&opts.environment)
-                .moves(variants),
-            bynk_driver::progress::terminal_sink(),
-        )
-        .is_none()
-        {
-            return Err(ExitCode::FAILURE.into());
-        }
-    }
+    build_move_variants(project_root, &build_dir, opts, &placed, &lock, &resources)?;
     if let Some(refusal) = recreate {
         emsg!("bynk: error: {refusal}");
         return Err(ExitCode::FAILURE.into());
@@ -674,27 +600,11 @@ fn deploy(
         &secret_source,
     )?;
     sweep_and_report_stale_uploads();
-    // #3565 (D7): a run that moves agents reads the account's namespaces and deployments.
-    let move_rest = match &placed {
-        Some(_) => match crate::cloudflare::rest::for_purpose(
-            "agent move",
-            crate::migrate::SWEEP_TOKEN_NEEDS,
-        ) {
-            Ok(rest) => Some(rest),
-            Err(e) => {
-                emsg!("bynk: error: {e}");
-                return Err(ExitCode::FAILURE.into());
-            }
-        },
-        None => None,
-    };
-    let move_account = move_rest.map(|rest| crate::deploy::revert::LiveAccount { rest, api: &api });
+    let move_account = move_account(placed.is_some(), &api)?;
     let mut writer = LedgerWriter::new(&mut lock, &lock_path);
     let apply = PlanApply {
         placed: placed.as_ref(),
-        move_account: move_account
-            .as_ref()
-            .map(|a| a as &dyn crate::deploy::move_apply::MoveAccount),
+        move_account: move_account.as_ref().map(|a| a as _),
         move_api: placed.as_ref().map(|_| &api),
         plan: &plan,
         order: &order,
@@ -717,6 +627,122 @@ fn deploy(
     apply_plan(&apply, &mut writer)?;
     prune_plan(&apply, &mut writer)?;
     Ok(())
+}
+
+/// #3562 (G5), #3565: the agent moves of the run, refused before anything is pushed (`--dry-run`
+/// included), or checked and planned. The Workers that declare routes or custom domains have
+/// their move sets refused in v1 (D12).
+fn agent_gate(
+    project_root: &Path,
+    lock: &crate::deploy::ledger::DeployLock,
+    opts: &DeployOptions,
+    (resources, order, groups): (&BTreeMap<String, Resources>, &[String], &GroupNames),
+) -> Result<AgentGate, Stop> {
+    let attached = attached_workers(project_root);
+    let agents = checked_agent_moves(lock, opts, resources, order, groups, &attached);
+    agents.eprint();
+    if !agents.may_go_on() {
+        // #3797: the refusals, with what the run knew, for a client that asked for JSON.
+        return Err(Stop {
+            refusals: agents.refusals,
+            warnings: agents.warnings,
+            ..Stop::from(ExitCode::FAILURE)
+        });
+    }
+    Ok(agents)
+}
+
+/// #3565 (D8): the move set `--cancel-move` names, a move under way, which the run cancels instead
+/// of deploying anything else; `None` without the flag.
+fn cancelling_set(
+    opts: &DeployOptions,
+    placed: Option<&crate::deploy::agent_move::Placed>,
+) -> Result<Option<usize>, Stop> {
+    let Some(name) = &opts.cancel_move else {
+        return Ok(None);
+    };
+    let found = placed.and_then(|p| {
+        p.sets.iter().zip(&p.resumes).position(|(set, resumes)| {
+            resumes.is_some()
+                && set.moves.iter().any(|m| {
+                    crate::deploy::agent_move::is_named(&m.context, std::slice::from_ref(name))
+                })
+        })
+    });
+    if found.is_some() {
+        return Ok(found);
+    }
+    let entry = Entry::new(
+        crate::deploy::agent_move::CANCEL_MOVE_UNUSED,
+        format!(
+            "`--cancel-move {name}` names no context of an agent move under way in `{}`",
+            opts.environment
+        ),
+    )
+    .with("name", name.as_str());
+    emsg!("bynk: error: {}", entry.line());
+    Err(Stop::refused(entry))
+}
+
+/// #3565 (D8): what `--cancel-move` would cancel, said by a dry run, which pushes nothing.
+fn note_dry_cancel(cancelling: Option<usize>, placed: Option<&crate::deploy::agent_move::Placed>) {
+    if let (Some(n), Some(placed)) = (cancelling, placed)
+        && let Some(r) = &placed.resumes[n]
+    {
+        colour::eprint(&format!(
+            "bynk: --cancel-move would cancel the agent move `{}` (at step `{}`); --dry-run pushes nothing\n",
+            r.move_id, r.step
+        ));
+    }
+}
+
+/// #3565 (slice 4b): a run that moves agents builds their phase variants beside each Worker's own
+/// files, which stay byte-identical to the plan's build.
+fn build_move_variants(
+    project_root: &Path,
+    build_dir: &Path,
+    opts: &DeployOptions,
+    placed: &Option<crate::deploy::agent_move::Placed>,
+    lock: &crate::deploy::ledger::DeployLock,
+    resources: &BTreeMap<String, Resources>,
+) -> Result<(), Stop> {
+    let Some(placed) = placed else {
+        return Ok(());
+    };
+    let variants = crate::deploy::move_run::variants(
+        placed,
+        lock.open_moves(&opts.environment),
+        resources,
+        &opts.environment,
+    );
+    workers::compile_built(
+        project_root,
+        build_dir,
+        workers::Build::new(true, false)
+            .no_install(opts.no_install)
+            .environment(&opts.environment)
+            .moves(variants),
+        bynk_driver::progress::terminal_sink(),
+    )
+    .map(drop)
+    .ok_or_else(|| ExitCode::FAILURE.into())
+}
+
+/// #3565 (D7): the account a run that moves agents reads the namespaces and deployments of;
+/// `None` for a run that moves none.
+fn move_account<'a>(
+    moving: bool,
+    api: &'a dyn crate::cloudflare::CloudflareApi,
+) -> Result<Option<crate::deploy::revert::LiveAccount<'a>>, Stop> {
+    if !moving {
+        return Ok(None);
+    }
+    crate::cloudflare::rest::for_purpose("agent move", crate::migrate::SWEEP_TOKEN_NEEDS)
+        .map(|rest| Some(crate::deploy::revert::LiveAccount { rest, api }))
+        .map_err(|e| {
+            emsg!("bynk: error: {e}");
+            ExitCode::FAILURE.into()
+        })
 }
 
 /// #3565 (D12): each `[deploy.workers.<key>]` Worker that declares `routes` or `custom_domains`,
