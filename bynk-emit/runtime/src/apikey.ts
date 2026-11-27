@@ -390,7 +390,7 @@ export function apiKeyFirstDigest(digests: readonly ApiKeyDigest[]): Uint8Array 
 }
 
 /** #3939 (slice 3): the `kid` of the pepper now live (`secret`'s). A record `verify` admits under
- *  any other is re-hashed under this one, in the same commit (§7). */
+ *  any other is re-hashed under this one by `touch`, the next commit (ADR Decision C). */
 export function apiKeyCurrentKid(digests: readonly ApiKeyDigest[]): string {
   return digests[0].kid;
 }
@@ -563,7 +563,10 @@ export async function apiKeyList<R>(
   if (handle.tag !== "Some") return [] as unknown as R;
   const h = handle.value;
   const keys = store(h);
-  await keys.expire(nowMs, deps);
+  // `expire` writes, so it is called only when some key has expired: a `list` with nothing to
+  // remove commits nothing.
+  const expiring = await keys.expiresOf(deps);
+  if ([...expiring.values()].some((t) => t <= nowMs)) await keys.expire(nowMs, deps);
   const labels = await keys.labelsOf(deps);
   const created = await keys.createdOf(deps);
   const expires = await keys.expiresOf(deps);

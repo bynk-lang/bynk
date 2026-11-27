@@ -358,7 +358,7 @@ assert((await req("GET", "/me", bearer(used.key), undefined, rotating)).status =
   assert((await req("GET", "/me", bearer(used.key), undefined, rotating)).status === 200, "the re-hashed key is admitted again");
   assert(storeWrites === w, "a second admission in the same rotation writes nothing");
 }
-assert(JSON.stringify(await pepperOf("acct-61", rotating)) === '["Current"]', "the admitted key was re-hashed under the new pepper in the same commit");
+assert(JSON.stringify(await pepperOf("acct-61", rotating)) === '["Current"]', "the admitted key was re-hashed under the new pepper by the same request (`touch`)");
 const swept = await req("POST", "/accounts/acct-62/sweep", {}, undefined, rotating);
 assert(swept.status === 200 && (await swept.json()) === 1, "sweep counts the idle key still under previous");
 const minted2 = (await (await req("POST", "/accounts/acct-61/keys", {}, { label: "after" }, rotating)).json()) as { key: string };

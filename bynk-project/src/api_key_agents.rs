@@ -101,8 +101,10 @@ fn api_key_identity(actor: &ActorDecl) -> Option<String> {
     }
 }
 
-/// `<Actor>Keys`. `verify` answers the identity a key was minted for, or `None`; `insert` answers
-/// 0 (stored), 1 (the identity holds the most keys it may) or 2 (the store is retired).
+/// `<Actor>Keys`. `verify` only reads: it answers `Some(<Actor>KeyCheck { identity, touch })` for
+/// an admitted key, else `None`, and the seam calls `touch` (last use, re-hash, live `kid`s) only on
+/// success when `touch` is true. `insert` answers 0 (stored), 1 (the identity holds the most keys it
+/// may) or 2 (the store is retired).
 fn keys_agent_text(actor: &str, agent: &str, identity: &str, check: &str) -> String {
     format!(
         "\n---\n{GENERATED_MARKER} `{actor}`: what `{agent}.verify` answers for an admitted key, its identity and whether `touch` must record its use, re-hash it or note the `kid`s now live.\n---\n\

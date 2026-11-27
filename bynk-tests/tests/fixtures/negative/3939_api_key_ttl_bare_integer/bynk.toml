@@ -1,0 +1,9 @@
+[project]
+name = "3939-api-key-ttl-bare-integer"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[unstable]
+allow = ["bynk.actor.ApiKey"]
