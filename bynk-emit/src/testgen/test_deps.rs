@@ -329,11 +329,7 @@ pub(super) fn emit_test_deps(
             },
         ));
     }
-    entries.extend(credential_keys_entries(
-        target_name,
-        target_kind,
-        unit_tables,
-    ));
+    entries.extend(credential_keys(target_name, target_kind, unit_tables));
     let mut entries: Vec<TsObjectEntry> = entries
         .into_iter()
         .map(|(k, v)| TsObjectEntry::prop(k, v))
@@ -1116,7 +1112,7 @@ pub(super) fn base64(bytes: &[u8]) -> String {
 
 /// `deps.__session` and (#3939) `deps.__apiKey`: the keys a handler's `Actor.issue` and
 /// `Actor.mint` take, both fixed in a test run.
-fn credential_keys_entries(
+fn credential_keys(
     target_name: &str,
     target_kind: UnitKind,
     unit_tables: &HashMap<String, UnitTable>,
