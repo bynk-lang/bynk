@@ -58,12 +58,6 @@ pub(crate) enum OpKind {
     QueueInfo,
     QueueDelete,
     D1MigrationsApply,
-    VectorizeList,
-    VectorizeGet,
-    VectorizeCreate,
-    VectorizeListMetadataIndex,
-    VectorizeCreateMetadataIndex,
-    VectorizeDelete,
     Push,
     TriggersDeploy,
     Whoami,
@@ -247,8 +241,6 @@ impl WranglerError {
     /// - A queue: "already exists" on either stream, wrangler being inconsistent about which. The
     ///   race-loser's path (ADR 0194 D2): a queue that was simply there was found by `queues
     ///   info` first.
-    /// - A metadata index: "metadata index already exists", as written: listed between the
-    ///   listing and the create, since Cloudflare builds them asynchronously.
     pub(crate) fn already_exists(&self) -> bool {
         let Some(said) = self.exit_said() else {
             return false;
@@ -256,9 +248,6 @@ impl WranglerError {
         let lower = said.to_ascii_lowercase();
         match self.op {
             Some(OpKind::QueueCreate) => lower.contains("already exists"),
-            Some(OpKind::VectorizeCreateMetadataIndex) => {
-                said.contains("metadata index already exists")
-            }
             _ => false,
         }
     }
@@ -340,13 +329,6 @@ mod tests {
     fn already_exists_is_read_per_operation() {
         let queue = Op::QueueCreate { name: "q" };
         assert!(exit(&queue, 1, "Queue Already Exists", "").already_exists());
-        let meta = Op::Vectorize(VectorizeOp::CreateMetadataIndex {
-            name: "i",
-            property: "p",
-            ty: "string",
-        });
-        assert!(exit(&meta, 1, "", "metadata index already exists [code: 40004]").already_exists());
-        assert!(!exit(&meta, 1, "", "Metadata Index Already Exists").already_exists());
         // Only a failed exit is ever benign, and only for a create.
         assert!(!WranglerError::missing(&queue).already_exists());
         assert!(!exit(&Op::Whoami, 1, "already exists", "").already_exists());
@@ -380,8 +362,6 @@ mod tests {
         // Only a delete is ever already gone.
         assert!(!exit(&Op::Whoami, 1, "", "does not exist").already_gone());
     }
-
-    use super::super::api::VectorizeOp;
 }
 
 /// Whether a failed push's teed output says the Worker it just uploaded does not exist: wrangler's

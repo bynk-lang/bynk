@@ -423,6 +423,9 @@
   "bynk.container.output_outside_project": [
     "/reference/capabilities/#derived-capabilities"
   ],
+  "bynk.container.unbounded_instances": [
+    "/reference/bynk-capabilities/#containers-container"
+  ],
   "bynk.context.consumes_cycle": [
     "/book/guides/projects-build-and-deployment/deploy-to-cloudflare/"
   ],

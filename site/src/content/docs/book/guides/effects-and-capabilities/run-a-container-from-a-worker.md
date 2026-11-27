@@ -2,8 +2,8 @@
 title: Run a container from a Worker
 ---
 **Goal:** run a server from a Docker image next to your Worker, call it from a
-handler over HTTP, give it a name per tenant, keep it small and let it sleep, and
-test the handler without starting anything.
+handler over HTTP, name its instances from who is calling, keep it small and let it
+sleep, and test the handler without starting anything.
 
 `Container` is **experimental**: it carries no compatibility promise yet. Opt in
 in `bynk.toml`:
@@ -48,13 +48,16 @@ containers, so the only limits are your account's. See Cloudflare's
 ## Call it
 
 ```bynk,fragment
+type TenantId = String where NonEmpty
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = TenantId }
+
 service render from http {
-	on GET("/render/:tenant") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {
+	on GET("/render") () -> Effect[HttpResult[String]] by m: Member given Renderer {
 		let req = Request {
 			method: Get,
 			url: "http://renderer/render",
 		}
-		let res <- Renderer.send("tenant-\(tenant)", req)
+		let res <- Renderer.send("tenant-\(m.identity)", req)
 		match res {
 			Ok(r) => Ok(r.body),
 			Err(Unavailable) => ServiceUnavailable("no capacity"),
@@ -67,9 +70,12 @@ service render from http {
 
 The first argument names an instance. The same name reaches the same running
 container, and a new name starts a new one, so a name per tenant gives each tenant
-a container of its own. Choose names with care: every distinct name can start
-another container on your account, and names appear in Cloudflare's dashboards and
-logs, so never put a credential in one. A name that is empty, over 256 bytes or
+a container of its own. Here the name comes from the authenticated identity, so a
+caller can only reach their own. Do not take it from the request instead, such as
+a path parameter on a route anyone can call: every distinct name starts another
+container on your account, so any caller could start as many as they like, and
+`bynk check` warns (`bynk.container.unbounded_instances`). Names appear in
+Cloudflare's dashboards and logs, so never put a credential in one. A name that is empty, over 256 bytes or
 holds a control character faults the call. The first call to an instance waits for
 the container to start, which takes noticeable time.
 
@@ -138,7 +144,7 @@ instance, until it is stubbed:
 ```bynk,fragment
 case "an unavailable container is answered" {
 	stub Renderer.send(_, _) returns Err(Unavailable)
-	let r <- render.GET("/render/:tenant", "acme") by Visitor
+	let r <- render.GET("/render") by Member("acme")
 	expect r is ServiceUnavailable("no capacity")
 }
 ```

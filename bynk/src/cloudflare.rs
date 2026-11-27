@@ -34,7 +34,9 @@ pub(crate) mod retry;
 pub(crate) use account::Account;
 #[cfg(test)]
 pub(crate) use api::Op;
-pub(crate) use api::{CloudflareApi, PushCall, VectorizeOp};
+#[cfg(test)]
+pub(crate) use api::VectorizeOp;
+pub(crate) use api::{CloudflareApi, PushCall};
 #[cfg(test)]
 pub(crate) use error::WranglerError;
 pub(crate) use error::{CloudflareError, Exit, Failure, push_lost_its_upload};

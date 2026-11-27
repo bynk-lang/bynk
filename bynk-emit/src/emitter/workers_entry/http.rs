@@ -56,6 +56,8 @@ pub(super) struct HttpRoute {
     /// owns the boundary, so the entry passes `request` (+ path params) and does
     /// not read or parse the body itself.
     pub(super) sum: bool,
+    /// #3825: the route issues a session and so runs the login-CSRF check, which needs the request.
+    pub(super) issues_cookie: bool,
     /// v0.140 (ADR 0163): the GET handler's `@cache` freshness policy, if declared.
     /// `Some` only for a `GET` carrying a well-formed `@cache`; drives the
     /// `applyCache` `Cache-Control` stamp. The conditional `ETag`/`304` half is
@@ -1167,7 +1169,12 @@ pub(super) fn emit_http_route_dispatch(
         let mut a = call_args;
         a.push(member(member(ident("__v"), "value"), "principal"));
         a
-    } else if route.bearer || route.sum || route.oidc || route.signed_cookie.is_some() {
+    } else if route.bearer
+        || route.sum
+        || route.oidc
+        || route.signed_cookie.is_some()
+        || route.issues_cookie
+    {
         // The Bearer, Oidc, and sum wrappers take the request first (they run the
         // verification seam); a sum wrapper also reads/parses the body itself,
         // so `call_args` here carries only the path params.
@@ -1811,6 +1818,11 @@ pub(super) fn collect_http_routes(
                     // boundary (raw read, first-wins resolution, body parse), so
                     // the entry just passes `request` and skips the body parse.
                     sum: bynk_check::actors::sum_members_for(h, &table.actors).is_some(),
+                    issues_cookie: bynk_check::actors::route_checks_issue_csrf(
+                        h,
+                        matches!(method, bynk_model::IrHttpMethod::Get),
+                        &table.actors,
+                    ),
                     // v0.140 (ADR 0163): the handler's `@cache` freshness policy, if
                     // any — lowered to a `Cache-Control` on this GET's responses.
                     cache: bynk_model::lower_route_cache_ir(h),

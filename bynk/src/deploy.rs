@@ -32,7 +32,11 @@ use std::process::ExitCode;
 use bynk_check::contract_compat::{Compatibility, ServiceShape, check_call};
 use serde::{Deserialize, Serialize};
 
-use crate::cloudflare::{Account, CloudflareApi, Exit, Failure, PushCall, VectorizeOp, Wrangler};
+#[cfg(test)]
+use crate::cloudflare::VectorizeOp;
+use crate::cloudflare::{
+    Account, CloudflareApi, CloudflareError, Exit, Failure, PushCall, Wrangler,
+};
 use crate::doctor::{self, Capability, Context, DoctorOptions};
 #[cfg(test)]
 use crate::probe::Provenance;
