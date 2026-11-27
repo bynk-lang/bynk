@@ -3,18 +3,18 @@
   "provides": {
     "listing": "afca6a450ae76cbc",
     "lookup": "ed68d225138bb7df",
-    "move": "4a82751d3eff94ba",
-    "overbound": "8600c19f50b94dfd",
-    "save": "6ec478f6b57fab97",
+    "move": "800bc2df821eac84",
+    "overbound": "e03ae0fce6e1975f",
+    "save": "fc979bf883752529",
     "setup": "9c9f7ed81132d5d4"
   },
   "expects": {},
   "provides_shapes": {
     "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"paid\",B(\"Int\")),F(\"receipt\",B(\"Bytes\")),F(\"total\",B(\"Int\")))),B(\"String\"))))",
     "lookup": "Svc(\"lookup\",P(\"id\",B(\"String\")),Ret(O(Rec(\"Order\",F(\"id\",B(\"String\")),F(\"paid\",B(\"Int\")),F(\"receipt\",B(\"Bytes\")),F(\"total\",B(\"Int\"))))))",
-    "move": "Svc(\"move\",P(\"source\",B(\"String\")),P(\"target\",B(\"String\")),Ret(R(B(\"Int\"),N(\"SqlError\"))))",
-    "overbound": "Svc(\"overbound\",P(\"id\",B(\"String\")),Ret(R(N(\"SqlRun\"),N(\"SqlError\"))))",
-    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"total\",B(\"Int\")),P(\"paid\",B(\"Bool\")),Ret(R(N(\"SqlRun\"),N(\"SqlError\"))))",
+    "move": "Svc(\"move\",P(\"source\",B(\"String\")),P(\"target\",B(\"String\")),Ret(R(B(\"Int\"),Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\")))))))",
+    "overbound": "Svc(\"overbound\",P(\"id\",B(\"String\")),Ret(R(Rec(\"SqlRun\",F(\"changes\",B(\"Int\")),F(\"lastRowId\",B(\"Int\"))),Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\")))))))",
+    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"total\",B(\"Int\")),P(\"paid\",B(\"Bool\")),Ret(R(Rec(\"SqlRun\",F(\"changes\",B(\"Int\")),F(\"lastRowId\",B(\"Int\"))),Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\")))))))",
     "setup": "Svc(\"setup\",Ret(B(\"Bool\")))"
   }
 }

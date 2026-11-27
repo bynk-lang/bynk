@@ -48,7 +48,7 @@ export function __deserialise_Receipt(json: __JsonValue, path: string = "$"): Re
     return Err({ kind: "StructuralMismatch", path: `${path}.parts`, expected: "number", actual: typeof obj["parts"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["parts"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.parts`, expected: "safe integer", actual: String(obj["parts"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.parts`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["parts"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __parts = obj["parts"];
   return Ok({ key: __key, parts: __parts } as Receipt);

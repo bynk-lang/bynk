@@ -42,7 +42,7 @@ export function __deserialise_ApiError(json: __JsonValue, path: string = "$"): R
       case "Failed":
         return Ok({ tag: "Failed" } as ApiError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -54,7 +54,7 @@ export function __deserialise_ApiError(json: __JsonValue, path: string = "$"): R
     case "Failed":
       return Ok({ tag: "Failed" } as ApiError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -74,7 +74,7 @@ export function __deserialise_Result_Int_ApiError(json: __JsonValue, path: strin
       return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["value"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = obj["value"];
     return Ok(Ok(__v) as Result<number, ApiError>);
@@ -84,7 +84,7 @@ export function __deserialise_Result_Int_ApiError(json: __JsonValue, path: strin
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<number, ApiError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_CounterError(value: demo_counter.CounterError): __JsonValue {
@@ -100,7 +100,7 @@ export function __deserialise_CounterError(json: __JsonValue, path: string = "$"
       case "Overflow":
         return Ok({ tag: "Overflow" } as demo_counter.CounterError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -112,7 +112,7 @@ export function __deserialise_CounterError(json: __JsonValue, path: string = "$"
     case "Overflow":
       return Ok({ tag: "Overflow" } as demo_counter.CounterError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -132,7 +132,7 @@ export function __deserialise_Result_Int_CounterError(json: __JsonValue, path: s
       return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["value"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = obj["value"];
     return Ok(Ok(__v) as Result<number, demo_counter.CounterError>);
@@ -142,5 +142,5 @@ export function __deserialise_Result_Int_CounterError(json: __JsonValue, path: s
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<number, demo_counter.CounterError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

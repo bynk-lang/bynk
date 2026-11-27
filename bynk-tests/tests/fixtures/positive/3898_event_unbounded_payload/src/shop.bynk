@@ -1,0 +1,51 @@
+context shop
+
+// Durable event delivery §8.1 (#3898): `bynk.event.unbounded_payload` warns where a large
+// event comes from, a `Bytes` or a collection of a non-scalar type with no refinement bounding
+// it, and not on a payload of scalars and `String`s. Each event says whether it warns.
+type Line = { sku: String, quantity: Int }
+
+type Status = enum { Open, Closed }
+
+type Blob = Bytes
+
+type Attachment = { name: String, body: Bytes }
+
+type Content =
+  | Text(body: String)
+  | Binary(data: Bytes)
+
+type Node = { label: String, children: List[Node] }
+
+// Warns: a bare `Bytes`.
+event Uploaded = { name: String, data: Bytes }
+
+// Warns: a `List` of records.
+event Ordered = { id: String, lines: List[Line] }
+
+// Does not warn: collections of scalars, an enum and an `Option` of a scalar.
+event Tagged = { id: String, tags: List[String], counts: Map[String, Int], states: List[Status], maybe: List[Option[Int]] }
+
+// Does not warn: a refinement bounds the collection.
+event Bounded = { lines: List[Line] where MaxLength(10) }
+
+// Warns: a named `Bytes` type.
+event Blobbed = { blob: Blob }
+
+// Warns: an `Option` of `Bytes`.
+event MaybeBytes = { data: Option[Bytes] }
+
+// Warns: `Bytes` reached through a nested record.
+event Attached = { attachment: Attachment }
+
+// Warns: `Bytes` reached through a sum variant's payload.
+event Posted = { content: Content }
+
+// Warns once: a recursive record, whose `List[Node]` is the unbounded part.
+event Treed = { root: Node }
+
+service onTagged from Events(Tagged) {
+  on event(e: Tagged) -> Effect[()] {
+    Effect.pure(())
+  }
+}

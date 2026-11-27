@@ -133,7 +133,7 @@ export function __deserialise_MessageArg(json: __JsonValue, path: string = "$"):
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "Whole", value: __value } as MessageArg);
@@ -143,7 +143,7 @@ export function __deserialise_MessageArg(json: __JsonValue, path: string = "$"):
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isFinite(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "finite number", actual: "non-finite number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "Num", value: __value } as MessageArg);
@@ -154,13 +154,13 @@ export function __deserialise_MessageArg(json: __JsonValue, path: string = "$"):
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof __value$ms });
       }
       if (!globalThis.Number.isSafeInteger(__value$ms)) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(__value$ms) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(__value$ms) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = __value$ms;
       return Ok({ tag: "Moment", value: __value } as MessageArg);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

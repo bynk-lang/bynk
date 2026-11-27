@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 import { SqlError, SqlRun, SqlValue } from "../../bynk/cloudflare.js";
@@ -73,7 +73,7 @@ export const listing = {
           try {
             __j = globalThis.JSON.parse(__s) as __JsonValue;
           } catch (__e) {
-            return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+            return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
           }
           const __r = __deserialise_List_Order(__j, "$");
           if (__r.tag === "Ok") return Ok(__r.value as readonly Order[]);
@@ -110,7 +110,7 @@ export const lookup = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Order(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Order);
@@ -184,14 +184,14 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "number", actual: typeof obj["total"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["total"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "safe integer", actual: String(obj["total"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["total"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __total = obj["total"];
   if (typeof obj["paid"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.paid`, expected: "number", actual: typeof obj["paid"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["paid"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.paid`, expected: "safe integer", actual: String(obj["paid"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.paid`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["paid"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __paid = obj["paid"];
   if (typeof obj["receipt"] !== "string") {
@@ -230,7 +230,7 @@ export function __deserialise_Result_List_Order_String(json: __JsonValue, path: 
     const __e = obj["error"];
     return Ok(Err(__e) as Result<readonly Order[], string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_List_Order(value: readonly Order[]): __JsonValue {
@@ -307,7 +307,7 @@ export function __deserialise_Result_Int_SqlError(json: __JsonValue, path: strin
       return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["value"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = obj["value"];
     return Ok(Ok(__v) as Result<number, SqlError>);
@@ -317,7 +317,7 @@ export function __deserialise_Result_Int_SqlError(json: __JsonValue, path: strin
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<number, SqlError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Result_SqlRun_SqlError(value: Result<SqlRun, SqlError>): __JsonValue {
@@ -341,5 +341,5 @@ export function __deserialise_Result_SqlRun_SqlError(json: __JsonValue, path: st
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<SqlRun, SqlError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

@@ -121,6 +121,7 @@ const ORDER: &[&str] = &[
     "__callServiceOutcome",
     "__callOutcome",
     "__boundaryError",
+    "__bynkJsonParseMessage",
     // `Bytes`, `Instant`, predicates, `par`, effects, faults, traces.
     "__bynkBytesEqual",
     "__bynkBytesToBase64",
@@ -244,6 +245,7 @@ const WORKER_ORDER: &[&str] = &[
     "__httpResultToResponse",
     "__tokenClaims",
     "__boundaryError",
+    "__bynkJsonParseMessage",
     "__bynkBytesFromBase64",
     "__oidcTrust",
     "__withPlainJson",

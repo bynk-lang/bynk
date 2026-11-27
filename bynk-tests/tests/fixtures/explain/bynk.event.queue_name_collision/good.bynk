@@ -1,0 +1,11 @@
+context shop
+
+event Paid = { id: String }
+
+service notify23278 from Events(Paid) {
+  on event(e: Paid) -> Effect[()] { Effect.pure(()) }
+}
+
+service notifyRefund from Events(Paid) {
+  on event(e: Paid) -> Effect[()] { Effect.pure(()) }
+}

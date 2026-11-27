@@ -3,7 +3,7 @@
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../../__bynk_runtime/boundary.js";
 
 import { SqlReadError } from "../../bynk/cloudflare.js";
 
@@ -29,7 +29,7 @@ export const listing = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_Item(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Item[]);
@@ -86,7 +86,7 @@ export function __deserialise_Result_List_Item_SqlReadError(json: __JsonValue, p
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<readonly Item[], SqlReadError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_List_Item(value: readonly Item[]): __JsonValue {

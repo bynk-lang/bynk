@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../../__bynk_runtime/boundary.js";
 
 import { SqlError, SqlRun, SqlValue } from "../../bynk/cloudflare.js";
 
@@ -103,7 +103,7 @@ export const listing = {
           try {
             __j = globalThis.JSON.parse(__s) as __JsonValue;
           } catch (__e) {
-            return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+            return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
           }
           const __flags = (__o: __JsonValue): void => {
             if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return;
@@ -149,7 +149,7 @@ export const lookup = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __flags = (__o: __JsonValue): void => {
           if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return;
@@ -191,7 +191,7 @@ export const strange = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __flags = (__o: __JsonValue): void => {
           if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return;
@@ -276,7 +276,7 @@ export function __deserialise_Item(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["qty"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["qty"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __qty = obj["qty"];
   return Ok({ id: __id, qty: __qty } as Item);
@@ -307,7 +307,7 @@ export function __deserialise_Result_List_Flag_String(json: __JsonValue, path: s
     const __e = obj["error"];
     return Ok(Err(__e) as Result<readonly Flag[], string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_List_Flag(value: readonly Flag[]): __JsonValue {
@@ -431,7 +431,7 @@ export function __deserialise_Result_SqlRun_SqlError(json: __JsonValue, path: st
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<SqlRun, SqlError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_List_Item(value: readonly Item[]): __JsonValue {
@@ -468,7 +468,7 @@ export function __deserialise_Result_Int_SqlError(json: __JsonValue, path: strin
       return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["value"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = obj["value"];
     return Ok(Ok(__v) as Result<number, SqlError>);
@@ -478,5 +478,5 @@ export function __deserialise_Result_Int_SqlError(json: __JsonValue, path: strin
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<number, SqlError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

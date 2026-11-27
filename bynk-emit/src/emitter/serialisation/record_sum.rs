@@ -23,7 +23,7 @@ use super::refined::emit_field_refinement_checks;
 use super::support::{
     DepthCodecs, boundary_result, case_, default_case, depth_for, depth_guard_decode,
     depth_guard_encode, depth_param, deserialise_params, err_structural_mismatch_top,
-    index_signature_record_ty, path_field,
+    index_signature_record_ty, path_field, tag_failure_class,
 };
 use super::{Qual, qual_provenance, qual_type};
 
@@ -605,7 +605,7 @@ pub(super) fn emit_sum_codec(
         .collect();
     deserialise_cases.push(default_case(vec![ret(err_structural_mismatch_top(
         "sum variant kind",
-        call(ident("String"), vec![ident(kind)]),
+        tag_failure_class(&ident(kind)),
     ))]));
     deserialise_body.push(switch_stmt(ident(kind), deserialise_cases));
 
@@ -645,7 +645,7 @@ fn bare_string_variant(sum: &WireSum, ts_type: &TsType, tag: &str) -> TsStmt {
         .collect();
     cases.push(default_case(vec![ret(err_structural_mismatch_top(
         "sum variant kind",
-        ident("json"),
+        tag_failure_class(&ident("json")),
     ))]));
     if_(
         strict_eq(typeof_expr(ident("json")), str_lit("string")),
@@ -751,7 +751,7 @@ mod emit_sum_codec_tests {
         );
         assert_eq!(
             render_decls(decls),
-            "export function __serialise_Parcel(value: Parcel): __JsonValue {\n  switch (value.tag) {\n    case \"Pending\":\n      return { kind: \"Pending\" };\n    case \"Shipped\": {\n      return { kind: \"Shipped\", tracking: value.tracking as __JsonValue, weight: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error(\"Int outside the safe-integer range at boundary\"); return v as __JsonValue; })(value.weight) };\n    }\n  }\n}\n\nexport function __deserialise_Parcel(json: __JsonValue, path: string = \"$\"): Result<Parcel, __BoundaryError> {\n  if (typeof json !== \"object\" || json === null || globalThis.Array.isArray(json)) {\n    return Err({ kind: \"StructuralMismatch\", path, expected: \"object\", actual: typeof json });\n  }\n  const obj = json as { [k: string]: __JsonValue };\n  const kind = obj[\"kind\"];\n  switch (kind) {\n    case \"Pending\":\n      return Ok({ tag: \"Pending\" } as Parcel);\n    case \"Shipped\": {\n      if (typeof obj[\"tracking\"] !== \"string\") {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.tracking`, expected: \"string\", actual: typeof obj[\"tracking\"] });\n      }\n      const __tracking = obj[\"tracking\"];\n      if (typeof obj[\"weight\"] !== \"number\") {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"number\", actual: typeof obj[\"weight\"] });\n      }\n      if (!globalThis.Number.isSafeInteger(obj[\"weight\"])) {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"safe integer\", actual: String(obj[\"weight\"]) });\n      }\n      const __weight = obj[\"weight\"];\n      return Ok({ tag: \"Shipped\", tracking: __tracking, weight: __weight } as Parcel);\n    }\n    default:\n      return Err({ kind: \"StructuralMismatch\", path, expected: \"sum variant kind\", actual: String(kind) });\n  }\n}\n"
+            "export function __serialise_Parcel(value: Parcel): __JsonValue {\n  switch (value.tag) {\n    case \"Pending\":\n      return { kind: \"Pending\" };\n    case \"Shipped\": {\n      return { kind: \"Shipped\", tracking: value.tracking as __JsonValue, weight: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error(\"Int outside the safe-integer range at boundary\"); return v as __JsonValue; })(value.weight) };\n    }\n  }\n}\n\nexport function __deserialise_Parcel(json: __JsonValue, path: string = \"$\"): Result<Parcel, __BoundaryError> {\n  if (typeof json !== \"object\" || json === null || globalThis.Array.isArray(json)) {\n    return Err({ kind: \"StructuralMismatch\", path, expected: \"object\", actual: typeof json });\n  }\n  const obj = json as { [k: string]: __JsonValue };\n  const kind = obj[\"kind\"];\n  switch (kind) {\n    case \"Pending\":\n      return Ok({ tag: \"Pending\" } as Parcel);\n    case \"Shipped\": {\n      if (typeof obj[\"tracking\"] !== \"string\") {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.tracking`, expected: \"string\", actual: typeof obj[\"tracking\"] });\n      }\n      const __tracking = obj[\"tracking\"];\n      if (typeof obj[\"weight\"] !== \"number\") {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"number\", actual: typeof obj[\"weight\"] });\n      }\n      if (!globalThis.Number.isSafeInteger(obj[\"weight\"])) {\n        return Err({ kind: \"StructuralMismatch\", path: `${path}.weight`, expected: \"safe integer\", actual: globalThis.Number.isInteger(obj[\"weight\"]) ? \"integer outside the safe range\" : \"non-integer number\" });\n      }\n      const __weight = obj[\"weight\"];\n      return Ok({ tag: \"Shipped\", tracking: __tracking, weight: __weight } as Parcel);\n    }\n    default:\n      return Err({ kind: \"StructuralMismatch\", path, expected: \"sum variant kind\", actual: typeof kind === \"string\" ? \"unrecognised variant\" : typeof kind });\n  }\n}\n"
         );
     }
 }

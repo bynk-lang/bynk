@@ -35,9 +35,9 @@ export default {
             case "close": {
               __route = "call close";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "3abd65d2c88fd7d3") {
-                globalThis.console.error("ContractMismatch shop.orders call close", { service: "close", expected: "3abd65d2c88fd7d3", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "close", expected: "3abd65d2c88fd7d3", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "19632117461c3d19") {
+                globalThis.console.error("ContractMismatch shop.orders call close", { service: "close", expected: "19632117461c3d19", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "close", expected: "19632117461c3d19", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {
@@ -102,7 +102,7 @@ export default {
               } catch {
                 return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
               }
-              const __r_amount = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(args);
+              const __r_amount = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(args);
               if (__r_amount.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_amount.error)), { status: 400, headers: { "content-type": "application/json" } });
               const amount = __r_amount.value;
               const result = await surface.pay(amount);

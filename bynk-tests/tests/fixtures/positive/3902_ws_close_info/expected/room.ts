@@ -67,7 +67,7 @@ const __entryFieldsOfRoom = [] as const;
 
 function __rehydrateRoomState(s: RoomState, stored: RoomState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "lastCode")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "lastCode", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lastCode", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.lastCode as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "lastCode", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "lastCode", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.lastCode as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Room", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).lastCode = __r.value as unknown as (typeof s)["lastCode"];
   }

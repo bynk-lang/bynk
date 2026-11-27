@@ -3,7 +3,7 @@
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
 import type { DecodeError } from "./__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "./__bynk_runtime/boundary.js";
 
 export interface Order {
   readonly id: string;
@@ -19,7 +19,7 @@ export function load(s: string): Result<Order, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Order(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Order);
@@ -52,7 +52,7 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["qty"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["qty"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __qty = obj["qty"];
   return Ok({ id: __id, qty: __qty } as Order);

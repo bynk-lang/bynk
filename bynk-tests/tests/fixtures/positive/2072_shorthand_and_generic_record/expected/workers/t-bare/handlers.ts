@@ -18,13 +18,13 @@ export type Page<T> = __CommonsPage<T> & { readonly __ctxBrand?: "t.bare" };
 export const paged = {
   async call(deps: { env: { T_PAY: __ServiceBinding }; identity: string }): globalThis.Promise<number> {
     const size = 1;
-    return __callService(deps.env.T_PAY, "paged", __serialise_Page_Cents({ items: [(250 as Cents), (3 as Cents)], size }), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "t.bare", "b47553082c55c98f", deps.env, "t.pay");
+    return __callService(deps.env.T_PAY, "paged", __serialise_Page_Cents({ items: [(250 as Cents), (3 as Cents)], size }), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "t.bare", "b47553082c55c98f", deps.env, "t.pay");
   },
 };
 
 export const listed = {
   async call(deps: { env: { T_PAY: __ServiceBinding }; identity: string }): globalThis.Promise<number> {
-    return __callService(deps.env.T_PAY, "paged", __serialise_Page_Cents({ items: [(7 as Cents)], size: 0 }), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "t.bare", "b47553082c55c98f", deps.env, "t.pay");
+    return __callService(deps.env.T_PAY, "paged", __serialise_Page_Cents({ items: [(7 as Cents)], size: 0 }), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "t.bare", "b47553082c55c98f", deps.env, "t.pay");
   },
 };
 
@@ -47,7 +47,7 @@ export function __deserialise_Page_Cents(json: __JsonValue, path: string = "$"):
     return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "number", actual: typeof obj["size"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["size"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: String(obj["size"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["size"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __size = obj["size"];
   return Ok({ items: __items, size: __size } as __CommonsPage<__CommonsCents>);

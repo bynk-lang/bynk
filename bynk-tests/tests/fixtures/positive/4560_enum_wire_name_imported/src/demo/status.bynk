@@ -1,0 +1,6 @@
+---
+#4560: the enum lives here, and is used from another commons.
+---
+commons demo.status
+
+type Status = enum { @name("open") Open, @name("shipped-out") Shipped, Delivered }

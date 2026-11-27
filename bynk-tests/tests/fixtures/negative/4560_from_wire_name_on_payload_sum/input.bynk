@@ -1,0 +1,7 @@
+commons demo {
+  type Shape = | Circle(r: Int) | Dot
+
+  fn wrong(text: String) -> Option[Shape] {
+    Shape.fromWireName(text)
+  }
+}

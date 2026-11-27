@@ -9,7 +9,7 @@ import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __StoreSet, __fillMap, __fillSet, __wireEntries, __wireMap, __wireSet } from "../__bynk_runtime/store.js";
 import { __readStored, __commitStored, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
 import { __attachLazy } from "../__bynk_runtime/lazy.js";
-import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 /**
@@ -314,7 +314,7 @@ export function keywordRoundTrip(k: Keyword): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Keyword(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Keyword);
@@ -400,7 +400,7 @@ export function roundTrip(l: Labelled): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Labelled(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Labelled);
@@ -450,7 +450,7 @@ const __entryFieldsOfBag = [{ name: "items", kind: "map" }, { name: "seen", kind
 function __rehydrateBagState(s: BagState, stored: BagState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "items")) {
     for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).items as object)) {
-      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
       if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error);
       ((s as unknown as globalThis.Record<string, unknown>).items as globalThis.Record<string, unknown>)[__k] = __r.value;
     }
@@ -487,7 +487,7 @@ function __encodeBagState(s: BagState): globalThis.Record<string, unknown> {
   return { ...s, items: __wireMap(s.items, (__v) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)), seen: __wireSet(s.seen) };
 }
 
-const __lazyFieldsOfBag = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: String(__v) } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); } }, { name: "seen", kind: "set", checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); } }] as const;
+const __lazyFieldsOfBag = [{ name: "items", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as number; return ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v); }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "items", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); } }, { name: "seen", kind: "set", checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "seen", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Bag", __r.error); } }] as const;
 
 export class Bag {
   state: __DurableObjectState;
@@ -579,21 +579,21 @@ export function __deserialise_Keyword(json: __JsonValue, path: string = "$"): Re
         return Err({ kind: "StructuralMismatch", path: `${path}.class`, expected: "number", actual: typeof obj["class"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["class"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.class`, expected: "safe integer", actual: String(obj["class"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.class`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["class"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __class = obj["class"];
       if (typeof obj["arguments"] !== "number") {
         return Err({ kind: "StructuralMismatch", path: `${path}.arguments`, expected: "number", actual: typeof obj["arguments"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["arguments"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.arguments`, expected: "safe integer", actual: String(obj["arguments"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.arguments`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["arguments"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __arguments = obj["arguments"];
       if (typeof obj["deps"] !== "number") {
         return Err({ kind: "StructuralMismatch", path: `${path}.deps`, expected: "number", actual: typeof obj["deps"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["deps"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.deps`, expected: "safe integer", actual: String(obj["deps"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.deps`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["deps"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __deps = obj["deps"];
       return Ok({ tag: "Kw", class: __class, arguments: __arguments, deps: __deps } as Keyword);
@@ -601,7 +601,7 @@ export function __deserialise_Keyword(json: __JsonValue, path: string = "$"): Re
     case "Bare":
       return Ok({ tag: "Bare" } as Keyword);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -632,7 +632,7 @@ export function __deserialise_Labelled(json: __JsonValue, path: string = "$"): R
         return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["n"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["n"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __n = obj["n"];
       return Ok({ tag: "Tagged", $tag: __tag, n: __n } as Labelled);
@@ -642,13 +642,13 @@ export function __deserialise_Labelled(json: __JsonValue, path: string = "$"): R
         return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["n"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["n"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __n = obj["n"];
       return Ok({ tag: "Plain", n: __n } as Labelled);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

@@ -61,7 +61,7 @@ export function __deserialise_Placed(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "number", actual: typeof obj["total"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["total"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "safe integer", actual: String(obj["total"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["total"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __total = obj["total"];
   if (!(__total >= 0)) {

@@ -27,7 +27,7 @@ const __entryFieldsOfTally = [] as const;
 
 function __rehydrateTallyState(s: TallyState, stored: TallyState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "n")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.n as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "n", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.n as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Tally", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).n = __r.value as unknown as (typeof s)["n"];
   }
@@ -85,7 +85,7 @@ export class Tally {
 }
 
 const __TallyWire: __AgentWire = {
-  bump: { args: [], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) } },
+  bump: { args: [], result: { enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) } },
 };
 
 export function __makeTally(key: string, env?: { TALLY?: __DurableObjectNamespace }): Tally {
@@ -127,7 +127,7 @@ export function __deserialise_Job(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path: `${path}.attempt`, expected: "number", actual: typeof obj["attempt"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["attempt"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.attempt`, expected: "safe integer", actual: String(obj["attempt"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.attempt`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["attempt"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __attempt = obj["attempt"];
   return Ok({ id: __id, attempt: __attempt } as Job);

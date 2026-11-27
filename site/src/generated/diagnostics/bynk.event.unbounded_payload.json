@@ -1,0 +1,10 @@
+{
+  "blurb": "On Workers an event will travel as one Cloudflare Queue message, which holds at most 128 KB, so an emission larger than about 127,000 bytes will fault its handler. Its size is known only at run time, so the compiler cannot check it, but it can point at where large events come from: a `Bytes` field, or a `List`, `Map` or `Set` of records, sums with payloads or other collections, with no refinement such as `MaxLength(n)` that bounds it. A payload of scalars, `String`s and enums does not warn. Store the large value elsewhere (R2 or D1) and send a reference to it; a collection can instead be bounded with `MaxLength(n)`. It is only a warning: a field that is small in practice may stay as it is.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.unbounded_payload",
+  "constructs": [],
+  "example": "event Uploaded = { name: String, data: Bytes }   // ⚠ `data` has no size bound\n\nevent Uploaded = { name: String, key: String }   // ✓ the bytes are stored in R2 under `key`",
+  "severity": "warning",
+  "summary": "An `event`'s payload reaches a `Bytes`, or a `List`, `Map` or `Set` of a non-scalar type that no refinement bounds (warning)."
+}

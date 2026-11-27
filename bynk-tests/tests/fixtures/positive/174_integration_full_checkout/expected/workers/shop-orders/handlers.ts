@@ -27,7 +27,7 @@ const __entryFieldsOfLedger = [] as const;
 
 function __rehydrateLedgerState(s: LedgerState, stored: LedgerState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "placed")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "placed", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "placed", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.placed as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "placed", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "placed", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.placed as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Ledger", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).placed = __r.value as unknown as (typeof s)["placed"];
   }
@@ -124,7 +124,7 @@ export function __deserialise_OrderError(json: __JsonValue, path: string = "$"):
       case "Rejected":
         return Ok({ tag: "Rejected" } as OrderError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -136,7 +136,7 @@ export function __deserialise_OrderError(json: __JsonValue, path: string = "$"):
     case "Rejected":
       return Ok({ tag: "Rejected" } as OrderError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -156,7 +156,7 @@ export function __deserialise_Result_Int_OrderError(json: __JsonValue, path: str
       return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["value"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = obj["value"];
     return Ok(Ok(__v) as Result<number, OrderError>);
@@ -166,7 +166,7 @@ export function __deserialise_Result_Int_OrderError(json: __JsonValue, path: str
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<number, OrderError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_PayError(value: shop_payment.PayError): __JsonValue {
@@ -182,7 +182,7 @@ export function __deserialise_PayError(json: __JsonValue, path: string = "$"): R
       case "Declined":
         return Ok({ tag: "Declined" } as shop_payment.PayError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -194,7 +194,7 @@ export function __deserialise_PayError(json: __JsonValue, path: string = "$"): R
     case "Declined":
       return Ok({ tag: "Declined" } as shop_payment.PayError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -214,7 +214,7 @@ export function __deserialise_Result_Int_PayError(json: __JsonValue, path: strin
       return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["value"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = obj["value"];
     return Ok(Ok(__v) as Result<number, shop_payment.PayError>);
@@ -224,5 +224,5 @@ export function __deserialise_Result_Int_PayError(json: __JsonValue, path: strin
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<number, shop_payment.PayError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

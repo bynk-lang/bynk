@@ -1,0 +1,1 @@
+bynk.types.method_not_found

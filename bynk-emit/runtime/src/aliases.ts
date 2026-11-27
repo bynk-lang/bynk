@@ -10,12 +10,13 @@ import { AGENT_WIRE_PASS, agentNamespace, StateRegistry, agentBusyAfter, agentBu
 import { bearerTrust, oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { apiKeyEqual, apiKeyList, apiKeyLiveKidsOf, apiKeyRevoke, apiKeySweep, apiKeyBadKey, apiKeyCountCompares, apiKeyExpectCompares, apiKeyForTest, apiKeyPeppersOf, apiKeyRevokedForTest, mintApiKey, apiKeyCurrentKid, apiKeyDummyDigest, apiKeyFirstDigest, apiKeyLiveKids, apiKeyNow, apiKeyPresented, apiKeyCredentialOf, apiKeyDigests, apiKeyIdOf, formatApiKey, freshApiKey, loadApiKeyPeppers, newApiKeyHandle, newApiKeyPepper, parseApiKey, parseApiKeyId } from "./apikey.ts";
 import { currentSession, expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
-import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, renameStoredFields, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
+import { boundaryError, callOutcome, jsonParseMessage, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, renameStoredFields, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, registerFrameEncoder, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketAuthExpired, webSocketBearerRefusal, webSocketClosing, webSocketAdmit, webSocketErrored, webSocketOriginAllowed, webSocketUpgradeResponse } from "./connection.ts";
 import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
 import { admitQueueBody } from "./queue_admit.ts";
+import { measureEvent } from "./queue_signing.ts";
 import { dmarcVerdictOf, handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
 import { checkUnique, commitStored, committedSize, eraseStored, markErased, newErasure, moveRenamedEntries, noteClock, readStored, readsLazily, storeKey, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
@@ -65,6 +66,7 @@ export {
   applyEdgeCache as __applyEdgeCache,
   applySecurityHeaders as __applySecurityHeaders,
   boundaryError as __boundaryError,
+  jsonParseMessage as __bynkJsonParseMessage,
   callOutcome as __callOutcome,
   callService as __callService,
   callServiceOutcome as __callServiceOutcome,
@@ -93,6 +95,7 @@ export {
   decodeAgentKey as __decodeAgentKey,
   deliverEvent as __deliverEvent,
   deserialiseEventEnvelope as __deserialiseEventEnvelope,
+  measureEvent as __bynkMeasureEvent,
   eventEnvelopeOf as __eventEnvelopeOf,
   currentTraceId as __currentTraceId,
   enterTrace as __enterTrace,

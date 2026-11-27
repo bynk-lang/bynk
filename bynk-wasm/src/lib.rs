@@ -691,6 +691,12 @@ fn complete_with(
             items: names.into_iter().map(to_candidate).collect(),
         };
     }
+    // #3959: a binding's right-hand side offers the caller's instances of the bound kind.
+    if let Some(names) = bynk_ide::binding_completion::candidates_at(source, offset, files) {
+        return CompleteResult {
+            items: names.into_iter().map(to_candidate).collect(),
+        };
+    }
     let mut items: Vec<CompletionCandidate> = completion::complete(line_prefix, source, files)
         .into_iter()
         .map(to_candidate)

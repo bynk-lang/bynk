@@ -97,6 +97,22 @@ pub struct WireArchHandlerUses {
     pub uses: Vec<WireArchUse>,
     /// Model-diagrams slice 5: the services and agents the handler calls.
     pub calls: Vec<WireArchCall>,
+    /// #3959: the instance each call binds to a commons function's capability
+    /// parameter. Omitted when the handler binds none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub bindings: Vec<WireArchBinding>,
+}
+
+/// #3959: one `given Param = Instance` binding of a call to a commons function.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WireArchBinding {
+    /// The commons function called.
+    pub function: String,
+    /// Its capability parameter.
+    pub parameter: String,
+    /// The handler's capability bound to it.
+    pub capability: String,
+    pub loc: WireLoc,
 }
 
 /// Model-diagrams slice 5: one service or agent a handler calls.
@@ -405,6 +421,18 @@ fn wire_uses(
                             container: c.container.clone(),
                             handler: c.handler.clone(),
                             loc: wire_loc(project_root, snapshots, &c.loc)?,
+                        })
+                    })
+                    .collect(),
+                bindings: h
+                    .bindings
+                    .iter()
+                    .filter_map(|b| {
+                        Some(WireArchBinding {
+                            function: b.function.clone(),
+                            parameter: b.parameter.clone(),
+                            capability: b.capability.clone(),
+                            loc: wire_loc(project_root, snapshots, &b.loc)?,
                         })
                     })
                     .collect(),

@@ -44,7 +44,7 @@ export function __deserialise_Tree(json: __JsonValue, path: string = "$", depth:
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       const __r_right = __deserialise_Tree(obj["right"], `${path}.right`, depth + 1);
@@ -53,7 +53,7 @@ export function __deserialise_Tree(json: __JsonValue, path: string = "$", depth:
       return Ok({ tag: "Node", left: __left, value: __value, right: __right } as Tree);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

@@ -5,7 +5,7 @@ import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 import * as __ns_demo_use from "./../demo/use.js";
 import * as __ns_demo_algo from "./../demo/algo.js";
 import * as __ns_demo_shapes from "./../demo/shapes.js";
@@ -66,7 +66,7 @@ async function test_decoding_agrees_across_units__a_refinement_violation_include
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Envelope_Card(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>);
@@ -78,7 +78,7 @@ async function test_decoding_agrees_across_units__a_refinement_violation_include
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Envelope_Card(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>);
@@ -92,7 +92,7 @@ async function test_decoding_agrees_across_units__a_refinement_violation_include
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Envelope_Card(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>);
@@ -104,7 +104,7 @@ async function test_decoding_agrees_across_units__a_refinement_violation_include
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Envelope_Card(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_shapes.Envelope<__ns_demo_shapes.Card>);
@@ -142,7 +142,7 @@ export function __deserialise_Card(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.rank`, expected: "number", actual: typeof obj["rank"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["rank"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.rank`, expected: "safe integer", actual: String(obj["rank"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.rank`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["rank"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __rank = obj["rank"];
   return Ok({ name: __name, rank: __rank } as __ns_demo_shapes.Card);

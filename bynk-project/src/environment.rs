@@ -372,6 +372,28 @@ mod tests {
     }
 
     #[test]
+    fn a_real_hash_collision_is_reported_and_its_names_coincide_under_a_long_environment() {
+        // `shop/notify23278` and `shop/notify24925` share the hash `7c6e4fd6` (found by search).
+        assert_eq!(event_queue_hash("shop/notify23278"), "7c6e4fd6");
+        assert_eq!(event_queue_hash("shop/notify24925"), "7c6e4fd6");
+        assert_eq!(
+            event_queue_collisions(&[("shop", "notify23278"), ("shop", "notify24925")]),
+            vec![(0, 1)]
+        );
+        // Distinct in `default`, where the slugs are kept whole...
+        assert_ne!(
+            event_queue_name("default", "shop", "notify23278"),
+            event_queue_name("default", "shop", "notify24925")
+        );
+        // ...and the same queue under an environment long enough to cut both to `shop-notify2`.
+        let long = "e".repeat(EVENT_QUEUE_ENVIRONMENT_MAX - 11);
+        assert_eq!(
+            event_queue_name(&long, "shop", "notify23278"),
+            event_queue_name(&long, "shop", "notify24925")
+        );
+    }
+
+    #[test]
     fn a_collision_is_judged_by_the_hash_and_the_truncated_slug() {
         // Agreeing on the first slug character is enough once the hashes agree, since the
         // longest environment keeps only that character.

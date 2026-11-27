@@ -11,7 +11,9 @@ use crate::ts_build::{
     strict_neq, typeof_expr,
 };
 
-use super::support::{Depth, depth_arg, err_structural_mismatch, json_kind_ts};
+use super::support::{
+    Depth, depth_arg, err_structural_mismatch, json_kind_ts, number_failure_class,
+};
 use super::wire_ref_of;
 
 #[cfg(test)]
@@ -202,7 +204,7 @@ pub(super) fn emit_field_deserialise_wire(
                     block(vec![ret(err_structural_mismatch(
                         path,
                         expected,
-                        call(ident("String"), vec![json.clone()]),
+                        number_failure_class(matches!(guard, BaseGuard::Integral), json),
                     ))]),
                 ));
             }
@@ -695,7 +697,7 @@ mod emit_field_deserialise_wire_tests {
             emit_field_deserialise_wire("name", &wire, &ident("json"), &ident("path"), None, &ru);
         assert_eq!(
             render(stmts),
-            "  if (typeof json !== \"number\") {\n    return Err({ kind: \"StructuralMismatch\", path: path, expected: \"number\", actual: typeof json });\n  }\n  if (!globalThis.Number.isSafeInteger(json)) {\n    return Err({ kind: \"StructuralMismatch\", path: path, expected: \"safe integer\", actual: String(json) });\n  }\n  if (!globalThis.Number.isFinite(json)) {\n    return Err({ kind: \"StructuralMismatch\", path: path, expected: \"finite number\", actual: String(json) });\n  }\n  const __name = json;\n"
+            "  if (typeof json !== \"number\") {\n    return Err({ kind: \"StructuralMismatch\", path: path, expected: \"number\", actual: typeof json });\n  }\n  if (!globalThis.Number.isSafeInteger(json)) {\n    return Err({ kind: \"StructuralMismatch\", path: path, expected: \"safe integer\", actual: globalThis.Number.isInteger(json) ? \"integer outside the safe range\" : \"non-integer number\" });\n  }\n  if (!globalThis.Number.isFinite(json)) {\n    return Err({ kind: \"StructuralMismatch\", path: path, expected: \"finite number\", actual: \"non-finite number\" });\n  }\n  const __name = json;\n"
         );
     }
 }

@@ -3,7 +3,7 @@
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 
 import { Money as __CommonsMoney } from "./money.js";
 
@@ -18,7 +18,7 @@ export const placeOrder = {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Money(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Money);
@@ -57,7 +57,7 @@ export function __deserialise_Money(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.minorUnits`, expected: "number", actual: typeof obj["minorUnits"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["minorUnits"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.minorUnits`, expected: "safe integer", actual: String(obj["minorUnits"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.minorUnits`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["minorUnits"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __minorUnits = obj["minorUnits"];
   if (!(__minorUnits >= 0)) {

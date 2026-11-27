@@ -268,3 +268,17 @@ test("InstantFromWire reads an offset timestamp and leaves anything else as it c
   }
   assert.equal(__bynkInstantFromWire(null), null);
 });
+
+test("__bynkPgRow with the MySQL flag reads a DATETIME at an Instant field and leaves a Postgres form alone", () => {
+  const row: Record<string, unknown> = { at: "2026-11-12 09:30:00", pg: "2026-11-12T09:30:00Z", wait: "1500" };
+  __bynkPgRow(row, ["at", "pg"], ["wait"], true);
+  assert.equal(row.at, Date.UTC(2026, 10, 12, 9, 30, 0));
+  assert.equal(row.pg, "2026-11-12T09:30:00Z");
+  assert.equal(row.wait, 1500);
+  const bad: Record<string, unknown> = { a: "2026-11-12", b: "0000-00-00 00:00:00", c: "x", d: "2026-11-12T09:30:00+01:00" };
+  __bynkPgRow(bad, ["a", "b", "c", "d"], [], true);
+  assert.deepEqual(bad, { a: "2026-11-12", b: "0000-00-00 00:00:00", c: "x", d: "2026-11-12T09:30:00+01:00" });
+  const frac: Record<string, unknown> = { at: "2026-11-12 09:30:00.250" };
+  __bynkPgRow(frac, ["at"], [], true);
+  assert.equal(frac.at, Date.UTC(2026, 10, 12, 9, 30, 0, 250));
+});

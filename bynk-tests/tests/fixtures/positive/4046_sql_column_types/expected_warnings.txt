@@ -1,0 +1,1 @@
+bynk.d1.column_affinity `logged` of `Orders.select`

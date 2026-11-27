@@ -1,10 +1,10 @@
 {
   "version": 1,
   "provides": {
-    "probe": "ceec73f86f992e92"
+    "probe": "da41aaeef60e3630"
   },
   "expects": {},
   "provides_shapes": {
-    "probe": "Svc(\"probe\",Ret(R(B(\"String\"),N(\"PgError\"))))"
+    "probe": "Svc(\"probe\",Ret(R(B(\"String\"),Sum(\"PgError\",V(\"PgConnection\",F(\"message\",B(\"String\"))),V(\"PgConstraint\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgFailed\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgSerialization\",F(\"message\",B(\"String\")))))))"
   }
 }

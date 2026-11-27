@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   canonicalJson,
+  EVENT_MESSAGE_BUDGET_BYTES,
+  EVENT_NEAR_LIMIT_BYTES,
+  eventMessageBytes,
+  measureEvent,
   queueReplayKey,
   signQueueMessage,
   verifyQueueMessage,
@@ -93,4 +97,85 @@ test("a body with a toJSON is signed as the transport would carry it", async () 
 test("a replay key is per consumer, source queue and message id", () => {
   assert.equal(queueReplayKey("shop.fulfil", "orders", "m-1"), "bynk.queue.shop.fulfil.orders.m-1");
   assert.notEqual(queueReplayKey("shop.fulfil", "orders", "m-1"), queueReplayKey("shop.audit", "orders", "m-1"));
+});
+
+// Durable event delivery §8.1 (#3898), D3: the size measurement `Events.emit` runs, warning only.
+test("an event's message size is measured as its signed queue message (D3)", () => {
+  const event = {
+    type: "Paid",
+    payload: { id: "a1" },
+    envelope: { eventId: "e1", publisherId: "shop.billing", emittedAt: 1_700_000_000_123, schemaVersion: 1 },
+  };
+  const expected = JSON.stringify({
+    bynk: { v: 1, from: "shop.billing", id: "e1", ts: 1_700_000_000, sig: "0".repeat(64) },
+    body: event,
+  });
+  assert.equal(eventMessageBytes(event), new TextEncoder().encode(expected).length);
+  // UTF-8, not UTF-16: a non-ASCII character counts its encoded bytes.
+  const wide = { ...event, payload: { id: "é1" } };
+  assert.equal(eventMessageBytes(wide), eventMessageBytes(event) + 1);
+});
+
+test("EventNearLimit warns once per event type, from 96,000 bytes, and returns the event (§8.1)", () => {
+  const warnings: unknown[][] = [];
+  const original = console.warn;
+  console.warn = (...args: unknown[]) => void warnings.push(args);
+  try {
+    const envelope = { eventId: "e1", publisherId: "shop", emittedAt: 0, schemaVersion: 1 };
+    const small = { type: "Small", payload: { s: "x" }, envelope };
+    const near = { type: "Near", payload: { s: "x".repeat(EVENT_NEAR_LIMIT_BYTES) }, envelope };
+    assert.equal(measureEvent(small), small);
+    assert.equal(warnings.length, 0);
+    assert.equal(measureEvent(near), near);
+    assert.equal(measureEvent(near), near);
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0][0], "EventNearLimit");
+    assert.deepEqual(Object.keys(warnings[0][1] as object), ["event", "size", "budget"]);
+    assert.equal((warnings[0][1] as { budget: number }).budget, EVENT_MESSAGE_BUDGET_BYTES);
+  } finally {
+    console.warn = original;
+  }
+});
+
+// Review of #4628: the measurement sizes the wire form, not the in-memory value.
+test("an event is measured as the wire carries it: Bytes as base64, Map and Set as arrays (D3)", () => {
+  const envelope = { eventId: "e1", publisherId: "shop", emittedAt: 0, schemaVersion: 1 };
+  const size = (payload: unknown) => eventMessageBytes({ type: "T", payload, envelope });
+  const base = size({ v: "" });
+  // 3,000 octets are 4,000 base64 characters on the wire, not ~10 bytes per octet.
+  assert.equal(size({ v: new Uint8Array(3000) }) - base, 4000);
+  // A Map is its entries and a Set its members, not `{}`.
+  const big = new Map(Array.from({ length: 1000 }, (_, i) => [`k${i}`, "x".repeat(100)] as const));
+  assert.ok(size({ v: big }) > 100_000);
+  assert.ok(size({ v: new Set(["a", "b"]) }) > base);
+});
+
+test("a value JSON.stringify refuses never faults the emission (D3, warn only)", () => {
+  const envelope = { eventId: "e1", publisherId: "shop", emittedAt: 0, schemaVersion: 1 };
+  // A Decimal's coefficient is a bigint, which `JSON.stringify` alone refuses.
+  const decimal = { type: "Priced", payload: { price: { coefficient: 120n, scale: 2 } }, envelope };
+  assert.equal(measureEvent(decimal), decimal);
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+  const odd = { type: "Odd", payload: cyclic, envelope };
+  assert.equal(measureEvent(odd), odd);
+});
+
+test("a type that stays small is sampled after 100 emissions, and a near one still warns", () => {
+  const warnings: unknown[][] = [];
+  const original = console.warn;
+  console.warn = (...args: unknown[]) => void warnings.push(args);
+  try {
+    const envelope = { eventId: "e1", publisherId: "shop", emittedAt: 0, schemaVersion: 1 };
+    let measured = 0;
+    const counting = { type: "Sampled", envelope, get payload() { measured++; return { s: "x" }; } };
+    for (let i = 0; i < 300; i++) measureEvent(counting);
+    assert.ok(measured >= 100 && measured < 110, `measured ${measured} of 300`);
+    // A near-limit emission on a sampled emission still warns.
+    const near = { type: "Sampled", payload: { s: "x".repeat(EVENT_NEAR_LIMIT_BYTES) }, envelope };
+    for (let i = 0; i < 200 && warnings.length === 0; i++) measureEvent(near);
+    assert.equal(warnings.length, 1);
+  } finally {
+    console.warn = original;
+  }
 });

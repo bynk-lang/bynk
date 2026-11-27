@@ -1,0 +1,2 @@
+bynk.types.variant_payload_mismatch argument 1 to variant `PgNumeric` has type `String`, but field `value` expects `Decimal`
+bynk.types.variant_payload_mismatch argument 1 to variant `MySqlDecimal` has type `String`, but field `value` expects `Decimal`

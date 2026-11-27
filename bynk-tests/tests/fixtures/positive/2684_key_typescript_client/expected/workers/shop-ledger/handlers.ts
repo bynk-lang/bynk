@@ -48,7 +48,7 @@ export function __deserialise_OrderId(json: __JsonValue, path: string = "$"): Re
     return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["n"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["n"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __n = obj["n"];
   return Ok({ region: __region, n: __n } as OrderId);
@@ -71,7 +71,7 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
       case "Shipped":
         return Ok({ tag: "Shipped" } as Status);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -85,7 +85,7 @@ export function __deserialise_Status(json: __JsonValue, path: string = "$"): Res
     case "Shipped":
       return Ok({ tag: "Shipped" } as Status);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -120,7 +120,7 @@ export function __deserialise_Map_OrderId_Int(json: __JsonValue, path: string = 
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
     }
     if (!globalThis.Number.isSafeInteger(entryV)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: globalThis.Number.isInteger(entryV) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = entryV;
     out.set(__k as OrderId, __v as number);

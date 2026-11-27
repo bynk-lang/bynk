@@ -41,7 +41,7 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "number", actual: typeof obj["total"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["total"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "safe integer", actual: String(obj["total"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["total"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __total = obj["total"];
   const __r_tags = __deserialise_Map_String_Int(obj["tags"], `${path}.tags`);
@@ -90,7 +90,7 @@ export function __deserialise_Result_List_Order_Unit(json: __JsonValue, path: st
     const __e = undefined;
     return Ok(Err(__e) as Result<readonly Order[], void>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_List_Order(value: readonly Order[]): __JsonValue {
@@ -146,7 +146,7 @@ export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
     }
     if (!globalThis.Number.isSafeInteger(entryV)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: globalThis.Number.isInteger(entryV) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = entryV;
     out.set(__k as string, __v as number);

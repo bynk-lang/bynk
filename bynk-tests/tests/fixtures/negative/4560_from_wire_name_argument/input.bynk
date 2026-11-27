@@ -1,0 +1,7 @@
+commons demo {
+  type Status = enum { Open, Shipped }
+
+  fn wrong() -> Option[Status] {
+    Status.fromWireName(1)
+  }
+}

@@ -19,6 +19,7 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Share a capability across contexts](/book/guides/effects-and-capabilities/share-across-contexts/)
 - [Wrap a library as an adapter](/book/guides/effects-and-capabilities/wrap-a-library/)
 - [Use more than one KV namespace](/book/guides/effects-and-capabilities/use-several-kv-namespaces/)
+- [Write a library that uses a capability](/book/guides/effects-and-capabilities/write-a-library-that-uses-a-capability/)
 - [Call a Worker outside the project](/book/guides/effects-and-capabilities/call-a-foreign-worker/)
 - [Call an mTLS origin](/book/guides/effects-and-capabilities/call-an-mtls-origin/)
 - [Read your analytics in the Worker](/book/guides/effects-and-capabilities/read-your-analytics-in-the-worker/)

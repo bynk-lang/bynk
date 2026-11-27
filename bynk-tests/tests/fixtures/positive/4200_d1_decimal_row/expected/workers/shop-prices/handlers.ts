@@ -4,7 +4,7 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../../__bynk_runtime/boundary.js";
 
 import { SqlError, SqlReadError, SqlRun, SqlValue } from "../../bynk/cloudflare.js";
 
@@ -59,7 +59,7 @@ export const listing = {
           try {
             __j = globalThis.JSON.parse(__s) as __JsonValue;
           } catch (__e) {
-            return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+            return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
           }
           const __r = __deserialise_List_Price(__j, "$");
           if (__r.tag === "Ok") return Ok(__r.value as readonly Price[]);
@@ -97,7 +97,7 @@ export const taxes = {
           try {
             __j = globalThis.JSON.parse(__s) as __JsonValue;
           } catch (__e) {
-            return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+            return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
           }
           const __r = __deserialise_List_Taxed(__j, "$");
           if (__r.tag === "Ok") return Ok(__r.value as readonly Taxed[]);
@@ -121,7 +121,7 @@ export const taxesTyped = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_Taxed(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Taxed[]);
@@ -215,7 +215,7 @@ export function __deserialise_Result_List_Price_String(json: __JsonValue, path: 
     const __e = obj["error"];
     return Ok(Err(__e) as Result<readonly Price[], string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_List_Price(value: readonly Price[]): __JsonValue {
@@ -258,7 +258,7 @@ export function __deserialise_Result_SqlRun_SqlError(json: __JsonValue, path: st
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<SqlRun, SqlError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Result_List_Taxed_String(value: Result<readonly Taxed[], string>): __JsonValue {
@@ -283,7 +283,7 @@ export function __deserialise_Result_List_Taxed_String(json: __JsonValue, path: 
     const __e = obj["error"];
     return Ok(Err(__e) as Result<readonly Taxed[], string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_List_Taxed(value: readonly Taxed[]): __JsonValue {
@@ -326,5 +326,5 @@ export function __deserialise_Result_List_Taxed_SqlReadError(json: __JsonValue, 
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<readonly Taxed[], SqlReadError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

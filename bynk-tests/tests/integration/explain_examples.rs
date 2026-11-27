@@ -126,6 +126,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/3536_unselected_type_warns` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.event.unbounded_payload",
+        "a warning; `positive/3898_event_unbounded_payload` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.http.cookie_untyped_has_field",
         "a warning; `positive/3446_cookie_untyped_has_field` holds it with `expected_warnings.txt`",
     ),
@@ -136,6 +140,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
     (
         "bynk.cron.uneven_step",
         "a warning; `positive/4058_cron_schedule_warnings` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.d1.column_affinity",
+        "a warning; `positive/4046_sql_column_types` holds it with `expected_warnings.txt`",
     ),
     (
         "bynk.d1.decimal_numeric_affinity",

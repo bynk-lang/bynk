@@ -369,6 +369,14 @@ pub enum Command {
         /// Repeatable; each context is named, never a blanket.
         #[arg(long = "accept-fresh-agent", value_name = "CONTEXT")]
         accept_fresh_agent: Vec<String>,
+        /// Move this context's agent state to the Worker script it is now planned
+        /// onto, with its data (#3565): the deploy pushes the receiving Worker, the
+        /// callers and the source in phases, so the agents keep their state, with a
+        /// window of about one push in which calls to the context fail. Repeatable;
+        /// each context is named, never a blanket. Planned with `--dry-run` in this
+        /// release.
+        #[arg(long = "move-agent", value_name = "CONTEXT")]
+        move_agent: Vec<String>,
         /// With `--context`: deploy a callee ahead of live callers still on an
         /// older contract, when every such change is compatible for them. The
         /// older contracts are recorded in `bynk.contracts.lock` (commit it),

@@ -1,0 +1,26 @@
+suite shop.orders
+
+consumes bynk.cloudflare { SqlReadError }
+
+case "a Decimal, an Instant, a Duration and an enum round-trip through D1" {
+  let at = Instant.fromEpochMillis(1_700_000_000_000)
+  let saved <- save.call("a", 12.50d, at, 90.seconds, Shipped)
+  expect saved is Ok(_)
+  let rows <- since.call(Instant.fromEpochMillis(0))
+  expect rows == Ok([Order { id: "a", total: 12.50d, placed: at, wait: 90.seconds, status: Shipped }])
+}
+
+case "a typed parameter filters on the stored milliseconds" {
+  let at = Instant.fromEpochMillis(1_700_000_000_000)
+  let saved <- save.call("b", 1.00d, at, 1.second, Open)
+  expect saved is Ok(_)
+  let rows <- since.call(Instant.fromEpochMillis(1_800_000_000_000))
+  expect rows == Ok([])
+}
+
+case "an Instant field over a TEXT column fails the decode" {
+  let saved <- save.call("c", 3.00d, Instant.fromEpochMillis(5), 1.second, Open)
+  expect saved is Ok(_)
+  let rows <- logs.call()
+  expect rows is Err(_)
+}

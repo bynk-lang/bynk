@@ -4,13 +4,13 @@
     "create": "1b77248f572f6a38",
     "fetch": "d2e0ee3665bb41fd",
     "packaged": "c65249dcb8da3d1b",
-    "touch": "25f222ff154143b0"
+    "touch": "2a54ac36e33053fb"
   },
   "expects": {},
   "provides_shapes": {
     "create": "Svc(\"create\",P(\"key\",B(\"String\")),P(\"payload\",B(\"Bytes\")),Ret(B(\"Bool\")))",
     "fetch": "Svc(\"fetch\",P(\"key\",B(\"String\")),Ret(O(B(\"Bytes\"))))",
     "packaged": "Svc(\"packaged\",P(\"key\",B(\"String\")),Ret(O(B(\"Bytes\"))))",
-    "touch": "Svc(\"touch\",P(\"id\",B(\"String\")),Ret(O(N(\"R2Object\"))))"
+    "touch": "Svc(\"touch\",P(\"id\",B(\"String\")),Ret(O(Rec(\"R2Object\",F(\"contentType\",O(B(\"String\"))),F(\"etag\",B(\"String\")),F(\"key\",B(\"String\")),F(\"metadata\",M(B(\"String\"),B(\"String\"))),F(\"size\",B(\"Int\")),F(\"uploaded\",B(\"Instant\"))))))"
   }
 }

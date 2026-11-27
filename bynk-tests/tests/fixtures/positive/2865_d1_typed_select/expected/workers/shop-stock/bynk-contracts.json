@@ -1,8 +1,8 @@
 {
   "version": 1,
   "provides": {
-    "listing": "c6f2bf0fd14ff097",
-    "lookup": "c3d24855e40b72af",
+    "listing": "c20b055c2c51e7bb",
+    "lookup": "8bf95edc6e2e9f33",
     "loose": "c37747d399f8c20e",
     "looseOne": "44dc53e8276ccc9c",
     "missing": "11fd15532308fa00",
@@ -12,8 +12,8 @@
   },
   "expects": {},
   "provides_shapes": {
-    "listing": "Svc(\"listing\",P(\"min\",B(\"Int\")),Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")),F(\"live\",B(\"Bool\")),F(\"note\",O(B(\"String\"))),F(\"qty\",B(\"Int\")))),N(\"SqlReadError\"))))",
-    "lookup": "Svc(\"lookup\",P(\"id\",B(\"String\")),Ret(R(O(Rec(\"Item\",F(\"id\",B(\"String\")),F(\"live\",B(\"Bool\")),F(\"note\",O(B(\"String\"))),F(\"qty\",B(\"Int\")))),N(\"SqlReadError\"))))",
+    "listing": "Svc(\"listing\",P(\"min\",B(\"Int\")),Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")),F(\"live\",B(\"Bool\")),F(\"note\",O(B(\"String\"))),F(\"qty\",B(\"Int\")))),Sum(\"SqlReadError\",V(\"Decode\",F(\"error\",N(\"DecodeError\"))),V(\"Sql\",F(\"error\",Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\"))))))))))",
+    "lookup": "Svc(\"lookup\",P(\"id\",B(\"String\")),Ret(R(O(Rec(\"Item\",F(\"id\",B(\"String\")),F(\"live\",B(\"Bool\")),F(\"note\",O(B(\"String\"))),F(\"qty\",B(\"Int\")))),Sum(\"SqlReadError\",V(\"Decode\",F(\"error\",N(\"DecodeError\"))),V(\"Sql\",F(\"error\",Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\"))))))))))",
     "loose": "Svc(\"loose\",Ret(B(\"String\")))",
     "looseOne": "Svc(\"looseOne\",Ret(B(\"String\")))",
     "missing": "Svc(\"missing\",Ret(B(\"String\")))",

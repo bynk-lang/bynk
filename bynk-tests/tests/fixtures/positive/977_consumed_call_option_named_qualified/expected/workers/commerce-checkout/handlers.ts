@@ -36,12 +36,12 @@ export function __deserialise_Result_Receipt_Int(json: __JsonValue, path: string
       return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "number", actual: typeof obj["error"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["error"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: String(obj["error"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["error"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __e = obj["error"];
     return Ok(Err(__e) as Result<Receipt, number>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Receipt(value: commerce_payment.Receipt): __JsonValue {
@@ -83,7 +83,7 @@ export function __deserialise_Region(json: __JsonValue, path: string = "$"): Res
       case "International":
         return Ok({ tag: "International" } as commerce_payment.Region);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -97,7 +97,7 @@ export function __deserialise_Region(json: __JsonValue, path: string = "$"): Res
     case "International":
       return Ok({ tag: "International" } as commerce_payment.Region);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

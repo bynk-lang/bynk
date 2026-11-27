@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 
 import { MetadataScope, Mutation, Vector, VectorError, VectorMatchOf, VectorOf, VectorReadOf } from "../bynk/cloudflare.js";
 
@@ -45,7 +45,7 @@ export const categories = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Meta(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Meta);
@@ -90,7 +90,7 @@ export const omitted = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Meta(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Meta);
@@ -133,7 +133,7 @@ export const fetch = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Meta(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Meta);
@@ -214,7 +214,7 @@ export function __deserialise_Meta(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.year`, expected: "number", actual: typeof obj["year"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["year"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.year`, expected: "safe integer", actual: String(obj["year"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.year`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["year"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __year = obj["year"];
   return Ok({ category: __category, year: __year } as Meta);
@@ -287,7 +287,7 @@ export function __deserialise_List_Float(json: __JsonValue, path: string = "$"):
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
     }
     if (!globalThis.Number.isFinite(item)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "finite number", actual: String(item) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "finite number", actual: "non-finite number" });
     }
     const __el = item;
     out.push(__el as number);

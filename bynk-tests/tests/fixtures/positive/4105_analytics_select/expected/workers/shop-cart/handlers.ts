@@ -4,7 +4,7 @@
 import { Ok, Err, Some, type Result } from "../../__bynk_runtime/result.js";
 import { __bynkPgRow } from "../../__bynk_runtime/time.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
@@ -68,7 +68,7 @@ export const api = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [], ["seats"]);
         if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
@@ -101,7 +101,7 @@ export const api = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [], ["seats"]);
         if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
@@ -134,7 +134,7 @@ export const api = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_Top(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Top[]);
@@ -164,7 +164,7 @@ export const api = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [], ["n"]);
         if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
@@ -213,7 +213,7 @@ export function __deserialise_ByCountry(json: __JsonValue, path: string = "$"): 
     return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["n"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["n"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __n = obj["n"];
   return Ok({ country: __country, n: __n } as ByCountry);
@@ -239,7 +239,7 @@ export function __deserialise_ByPlan(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.seats`, expected: "number", actual: typeof obj["seats"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["seats"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.seats`, expected: "safe integer", actual: String(obj["seats"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.seats`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["seats"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __seats = obj["seats"];
   return Ok({ plan: __plan, seats: __seats } as ByPlan);
@@ -265,7 +265,7 @@ export function __deserialise_Seats(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.seats`, expected: "number", actual: typeof obj["seats"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["seats"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.seats`, expected: "safe integer", actual: String(obj["seats"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.seats`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["seats"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __seats = obj["seats"];
   return Ok({ plan: __plan, seats: __seats } as Seats);
@@ -287,7 +287,7 @@ export function __deserialise_Top(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path: `${path}.top`, expected: "number", actual: typeof obj["top"] });
   }
   if (!globalThis.Number.isFinite(obj["top"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.top`, expected: "finite number", actual: String(obj["top"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.top`, expected: "finite number", actual: "non-finite number" });
   }
   const __top = obj["top"];
   if (typeof obj["label"] !== "string") {
