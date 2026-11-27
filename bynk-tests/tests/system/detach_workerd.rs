@@ -163,25 +163,28 @@ fn a_detached_fault_and_err_are_reported_on_workerd() {
     };
     let log = || fs::read_to_string(&log_path).unwrap_or_default();
 
-    let deadline = Instant::now() + Duration::from_secs(180);
-    let (status, body) = loop {
-        if let Ok(r) = get(port, "/err/boot") {
-            break r;
-        }
-        if Instant::now() > deadline {
-            let log = log();
-            drop(guard);
-            let _ = fs::remove_dir_all(&tmp);
-            if skip(&format!(
-                "the worker did not answer within the boot window (likely no network \
-                 to provision {WRANGLER})\n{log}"
-            )) {
-                return;
+    // The boot request is the one the first assertion reads, so the probe keeps its answer.
+    let booted = std::cell::RefCell::new(None);
+    if let Err(why) =
+        wrangler::wait_until_ready(&log_path, port, &|| match get(port, "/err/boot") {
+            Ok(r) => {
+                *booted.borrow_mut() = Some(r);
+                true
             }
-            unreachable!()
+            Err(_) => false,
+        })
+    {
+        let log = log();
+        drop(guard);
+        let _ = fs::remove_dir_all(&tmp);
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})\n{log}"
+        )) {
+            return;
         }
-        std::thread::sleep(Duration::from_millis(500));
-    };
+        unreachable!()
+    }
+    let (status, body) = booted.into_inner().expect("the probe answered");
     assert_eq!(
         status,
         200,

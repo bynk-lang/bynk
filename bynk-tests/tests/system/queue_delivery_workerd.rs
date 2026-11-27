@@ -181,24 +181,18 @@ fn a_message_retried_to_the_limit_reaches_the_dead_letter_consumer_on_workerd() 
     };
     let log = || fs::read_to_string(&log_path).unwrap_or_default();
 
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if matches!(get(port, "/send/boot"), Ok((200, _))) {
-            break;
+    if let Err(why) = wrangler::wait_until_ready(&log_path, port, &|| {
+        matches!(get(port, "/send/boot"), Ok((200, _)))
+    }) {
+        let log = log();
+        drop(guard);
+        let _ = fs::remove_dir_all(&tmp);
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})\n{log}"
+        )) {
+            return;
         }
-        if Instant::now() > deadline {
-            let log = log();
-            drop(guard);
-            let _ = fs::remove_dir_all(&tmp);
-            if skip(&format!(
-                "the worker did not answer within the boot window (likely no network \
-                 to provision {WRANGLER})\n{log}"
-            )) {
-                return;
-            }
-            unreachable!()
-        }
-        std::thread::sleep(Duration::from_millis(500));
+        unreachable!()
     }
     // Local queues deliver in batches, after a timeout, and retry after the delay: poll.
     let end = Instant::now() + Duration::from_secs(90);

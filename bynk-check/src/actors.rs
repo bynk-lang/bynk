@@ -383,6 +383,60 @@ pub fn ws_principal_seam_for(
     })
 }
 
+/// #3906: what a client presents on a `from websocket` upgrade, read from the `on open` handler's `by`
+/// clause: nothing for a `None` actor, the subprotocol pair for a `Bearer` or `Oidc` one, and, for a
+/// `SignedCookie` one, nothing the client sends (the browser sends the cookie).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WsClientCredential {
+    /// An anonymous upgrade (`Visitor`, or an actor with `auth = None`).
+    None,
+    /// `["bynk.bearer", token]`. `optional` when a member of an actor sum is anonymous, so the upgrade
+    /// is admitted without one.
+    Bearer { optional: bool },
+    /// `["bynk.oidc", token]`.
+    Oidc,
+    /// The browser's own session cookie.
+    Cookie,
+}
+
+/// The credential a client presents to the `on open` handler `handler` (see [`WsClientCredential`]). A
+/// refinement follows its base. The checker admits only `None`, `Bearer`, `Oidc` and `SignedCookie`
+/// actors here, and an `Oidc` or `SignedCookie` one only alone, so a sum is `Bearer` members and
+/// anonymous ones.
+pub fn ws_client_credential(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> WsClientCredential {
+    let Some(by) = handler.by_clause.as_ref() else {
+        return WsClientCredential::None;
+    };
+    let schemes: Vec<Scheme> = by
+        .actors
+        .iter()
+        .map(|a| {
+            let named = actors.get(&a.name);
+            let base = named
+                .and_then(|n| n.refinement.as_ref())
+                .and_then(|r| actors.get(&r.base.name))
+                .or(named);
+            base.and_then(|b| b.auth.as_ref())
+                .and_then(|i| Scheme::from_name(i.name.as_str()))
+                .unwrap_or(Scheme::None)
+        })
+        .collect();
+    if schemes.contains(&Scheme::Oidc) {
+        WsClientCredential::Oidc
+    } else if schemes.contains(&Scheme::SignedCookie) {
+        WsClientCredential::Cookie
+    } else if schemes.contains(&Scheme::Bearer) {
+        WsClientCredential::Bearer {
+            optional: schemes.iter().any(|s| *s != Scheme::Bearer),
+        }
+    } else {
+        WsClientCredential::None
+    }
+}
+
 /// #3821: the `iss`/`aud` the lone `Bearer` actor of a `by` clause declares (a refinement reads its
 /// base's), for the test tier: `by WrongIssuer` and `by WrongAudience` drive such a route when it
 /// declares the claim. `None` for a sum, and for any other scheme.

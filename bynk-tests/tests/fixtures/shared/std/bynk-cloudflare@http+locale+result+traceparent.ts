@@ -699,11 +699,31 @@ export class IdempotencyProvider implements Idempotency {
   }
 }
 
-// #3752 (pass-through HTTP, slice 3a): `Upstream` type-checks, but its exchange
-// arrives with the pass-through router. A build with a pass-through route, the only
-// place an `InboundRequest` comes from, is refused until then, so this never runs.
+// #3752 (D13): an `Upstream` instance (`capability Pages = Upstream @origin(…)`) is
+// built with its declared origin and head timeout and the runtime's one
+// `upstreamForward` (the emitted compose passes both), so every platform forwards
+// the same way: the path checked, the URL built textually and its origin compared
+// before anything is sent. Built any other way it reaches nothing.
+type UpstreamConfig = { readonly origin: string; readonly timeoutSecs: number };
+type UpstreamExchange = (
+  config: UpstreamConfig,
+  request: Parameters<Upstream["forward"]>[0],
+  path: string,
+) => Promise<unknown>;
+
 export class UpstreamProvider implements Upstream {
-  async forward(): Promise<never> {
-    throw new Error("bynk: `Upstream.forward` is not built yet (#3752)");
+  readonly #config: UpstreamConfig | undefined;
+  readonly #exchange: UpstreamExchange | undefined;
+
+  constructor(config?: UpstreamConfig, exchange?: UpstreamExchange) {
+    this.#config = config;
+    this.#exchange = exchange;
+  }
+
+  forward(...[request, path]: Parameters<Upstream["forward"]>): ReturnType<Upstream["forward"]> {
+    if (this.#config === undefined || this.#exchange === undefined) {
+      return Promise.reject(new Error("bynk: an `Upstream` reaches only the `@origin` its instance declares"));
+    }
+    return this.#exchange(this.#config, request, path) as ReturnType<Upstream["forward"]>;
   }
 }

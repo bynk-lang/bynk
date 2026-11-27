@@ -45,6 +45,16 @@ fn events_emit_loop() -> TsStmt {
     )
 }
 
+/// Whether a target's deps are built from its capabilities. #3959: a commons
+/// suite's are the doubles of the first-party capabilities its commons selects
+/// (track §9), built as a context's flattened ones are.
+fn builds_target_deps(kind: UnitKind) -> bool {
+    matches!(
+        kind,
+        UnitKind::Context | UnitKind::Adapter | UnitKind::Commons
+    )
+}
+
 /// #1479: returns the real [`TsStmt`] itself (was pre-printed `String`) — the
 /// one real declaration this function ever built; its caller now prints it
 /// directly via `bynk_ts::print_stmt`, the same shape it always used, just
@@ -104,7 +114,7 @@ pub(super) fn emit_test_deps(
     let mut service_doubles: Vec<(String, String, TsExpr)> = Vec::new();
     // #1975: an adapter target's deps are its own capabilities, built from
     // its binding: the binding is the unit under test.
-    if matches!(target_kind, UnitKind::Context | UnitKind::Adapter)
+    if builds_target_deps(target_kind)
         && let Some(table) = unit_tables.get(target_name)
     {
         // Sorted so `__makeTestDeps` field order is deterministic across the

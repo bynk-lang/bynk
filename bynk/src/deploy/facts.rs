@@ -59,6 +59,29 @@ pub(crate) struct Facts {
     /// members would take a context's code out from under it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) contexts: Vec<String>,
+    /// #3565: set on a version pushed by a phase of an agent move
+    /// (`design/tracks/agent-context-moves.md` §4.2), so a resume can tell its own pushes
+    /// from anything else's and a revert can refuse a mid-move version. Additive: a reader
+    /// that does not know it ignores it, and still refuses such a version by its `classes`,
+    /// which leave out a class that is not live.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) transfer: Option<Transfer>,
+}
+
+/// #3565: what a phase version of an agent move says about the move.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct Transfer {
+    /// The move set's id, as the ledger's record holds it.
+    #[serde(rename = "move")]
+    pub(crate) move_id: String,
+    /// The phase that pushed this version: 1 (receive), 2 (commit) or 3 (go live).
+    pub(crate) phase: u8,
+    /// Phase 1: each class this version expects (`expecting-transfer`) → its source script.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) expecting: BTreeMap<String, String>,
+    /// Phase 2: each class this version gave up (`transferred`) → its receiver script.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) transferred: BTreeMap<String, String>,
 }
 
 impl Facts {
@@ -126,6 +149,7 @@ pub(crate) fn build_facts(
         foreign: manifest.foreign.clone(),
         ids,
         contexts: declared.members.clone(),
+        transfer: None,
     }
 }
 
@@ -183,6 +207,48 @@ mod tests {
         assert_eq!(Facts::decode(&text).map(|f| f.layout()), Some(2));
         // A record written before layouts existed reads as layout 1.
         assert_eq!(Facts::decode(r#"{"v":1}"#).map(|f| f.layout()), Some(1));
+    }
+
+    /// #3565: the phase 1 record of `design/tracks/agent-context-moves.md` §4.2 round-trips,
+    /// and stays well inside the variable's size.
+    #[test]
+    fn a_phase_records_transfer_round_trips() {
+        let text = r#"{"v":1,"classes":["Other"],"contexts":["shop.pay"],"transfer":{"move":"3f9c2a71","phase":1,"expecting":{"Cart":"shop-orders"}}}"#;
+        let facts = Facts::decode(text).unwrap();
+        let transfer = facts.transfer.as_ref().unwrap();
+        assert_eq!((transfer.move_id.as_str(), transfer.phase), ("3f9c2a71", 1));
+        assert_eq!(transfer.expecting["Cart"], "shop-orders");
+        assert!(transfer.transferred.is_empty());
+        assert_eq!(facts.encode().as_deref(), Some(text));
+        assert!(text.len() < MAX_FACTS_BYTES / 10);
+        // An ordinary version writes no `transfer` at all.
+        assert!(!sample().encode().unwrap().contains("transfer"));
+    }
+
+    /// #3565: a reader that predates `transfer` (no such field, unknown fields ignored) still
+    /// reads a phase version, and sees the class that is not yet live absent from `classes`.
+    #[test]
+    fn a_reader_without_transfer_still_reads_a_phase_version() {
+        #[derive(Deserialize)]
+        struct Before {
+            v: u32,
+            #[serde(default)]
+            classes: Vec<String>,
+        }
+        let phase_2 = Facts {
+            v: FACTS_VERSION,
+            classes: vec!["Other".into()],
+            transfer: Some(Transfer {
+                move_id: "3f9c2a71".into(),
+                phase: 2,
+                transferred: BTreeMap::from([("Cart".into(), "core".into())]),
+                ..Transfer::default()
+            }),
+            ..Default::default()
+        };
+        let before: Before = serde_json::from_str(&phase_2.encode().unwrap()).unwrap();
+        assert_eq!(before.v, FACTS_VERSION);
+        assert_eq!(before.classes, ["Other"]);
     }
 
     #[test]

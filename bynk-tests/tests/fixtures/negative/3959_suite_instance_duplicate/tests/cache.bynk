@@ -1,0 +1,11 @@
+---
+#3959, track §9: a suite-local instance is a second double, named apart from the kind
+(`bynk.resolve.duplicate_capability`).
+---
+suite lib.cache
+
+capability Kv = Kv
+
+case "c" {
+	expect true
+}

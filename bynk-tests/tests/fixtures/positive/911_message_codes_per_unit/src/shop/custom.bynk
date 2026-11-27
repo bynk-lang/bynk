@@ -1,0 +1,20 @@
+commons shop.custom
+
+uses bynk.locale
+uses bynk.locale.types
+
+messages "en" @reference {
+  "known" => "Known"
+}
+
+type Tag = { label: String }
+
+// This unit's own `message` shadows `bynk.locale`'s, so a literal passed to it is not a message
+// code and is not checked against the bundle.
+fn message(code: String) -> Tag {
+  Tag { label: code }
+}
+
+fn label() -> String {
+  message("not.a.message.code").label
+}

@@ -1,0 +1,8 @@
+// #3807: the other layout of a split context: every exported type in one file, its services in
+// another. `imported_decl_paths` lists only the types, so it names `types.bynk` alone, while the
+// caller's `deps.surface.shop` is read for `api.bynk`'s services.
+context split.shop
+
+exports transparent { Item }
+
+type Item = { sku: String, qty: Int }

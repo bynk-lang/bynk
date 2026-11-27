@@ -1,0 +1,8 @@
+// #3752 (slice 3b): a pass-through route has no suite address until its test
+// double (a stub of `Upstream.exchange`, `Forwarded.of`) lands in slice 3c.
+suite demo {
+  case "a pass-through route addressed by the method sent" {
+    let r <- proxy.GET("/blog/*path", "/posts/x") by Visitor
+    expect true
+  }
+}

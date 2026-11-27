@@ -1,0 +1,14 @@
+---
+#3959, track §9: a commons itself still cannot declare an instance; only its suite may.
+---
+commons lib.cache
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+fn remember(key: String) -> Effect[()] given Store: Kv, Logger {
+	let _ <- Logger.info("remember")
+	Store.put(key, "v")
+}
+
+capability Archive = Kv

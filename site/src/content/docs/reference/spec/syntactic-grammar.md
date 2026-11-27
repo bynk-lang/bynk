@@ -102,7 +102,9 @@ well-formedness: §5.
 {{#grammar _test_body_item}}
 
 The declaration forms admitted in a `suite` body: `uses`, `stub` and `env` clauses, and
-`case` / `property` declarations.
+`case` / `property` declarations. A `capability_decl` in a suite body is a suite-local
+instance, admitted in the derived form (`capability Archive = Kv`) and only in a commons
+suite (§5).
 
 ### §4.1.12 event_decl (v0.238) {#4112-event_decl}
 
