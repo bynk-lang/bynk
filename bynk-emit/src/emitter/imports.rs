@@ -545,12 +545,12 @@ pub(super) fn emit_cross_context_namespace_imports(
         let target_paths = ctx.imported_decl_paths.get(q.as_str());
         // #3807: a context whose declarations span several files has no single file that
         // holds every name the namespace is read for (`ns.Dir` in one file, `ns.Entry` in
-        // another). On `bundle` its root module (`<ctx>.ts`) re-exports every file and merges
-        // their surfaces, so that is what the namespace names; `workers` imports the
-        // context's one handlers module, which has them all.
+        // another, or its services in a third than its exported types: `imported_decl_paths`
+        // lists only the types). On `bundle` its root module (`<ctx>.ts`) re-exports every
+        // file and merges their surfaces, so that is what the namespace names; `workers`
+        // imports the context's one handlers module, which has them all.
         let split_on_bundle = matches!(ctx.target, BuildTarget::Bundle)
-            && target_paths
-                .is_some_and(|m| m.values().collect::<std::collections::BTreeSet<_>>().len() > 1);
+            && ctx.split_consumed_contexts.contains(q.as_str());
         let target = target_paths
             // One declaring file: the smallest path, so the output does not depend on hash order.
             .filter(|_| !split_on_bundle)

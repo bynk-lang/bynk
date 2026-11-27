@@ -2,16 +2,24 @@
 // composition root
 
 import * as split_client from "./split/client.js";
+import * as split_front from "./split/front.js";
 import * as split_graph from "./split/graph.js";
+import * as split_shop from "./split/shop.js";
 
 export function composeApp() {
   const split_graphDeps = {};
   const split_graphSurface = split_graph.__makeSurface(split_graphDeps);
   const split_clientDeps = { surface: { graph: split_graphSurface } };
   const split_clientSurface = split_client.__makeSurface(split_clientDeps);
+  const split_shopDeps = {};
+  const split_shopSurface = split_shop.__makeSurface(split_shopDeps);
+  const split_frontDeps = { surface: { shop: split_shopSurface } };
+  const split_frontSurface = split_front.__makeSurface(split_frontDeps);
 
   return {
     client: split_clientSurface,
+    front: split_frontSurface,
     graph: split_graphSurface,
+    shop: split_shopSurface,
   };
 }

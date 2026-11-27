@@ -1,0 +1,7 @@
+context split.shop
+
+service restock {
+  on call(i: Item) -> Effect[Item] by Caller {
+    Effect.pure(i)
+  }
+}
