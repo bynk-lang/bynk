@@ -276,8 +276,9 @@ fn brand_type(brand_prefix: &str, name: &str) -> bynk_ts::TsType {
 
 /// #3752 (D8, D11): `bynk`'s `InboundRequest` and `Forwarded` are runtime views (the
 /// router's request, an upstream's answer), not strings, and only the router and
-/// `Upstream.forward` make one, so each is the branded view type, with an empty
-/// companion: no `of` or `unsafe` builds one from text.
+/// `Upstream.forward` make one. So each is its view's structural type under the brand,
+/// which keeps `bynk.ts` from importing the HTTP runtime, with an empty companion:
+/// no `of` or `unsafe` builds one from text.
 fn pass_through_carrier_type(
     t: &TypeDecl,
     is_opaque: bool,
@@ -285,8 +286,8 @@ fn pass_through_carrier_type(
 ) -> Option<Vec<bynk_ts::TsStmt>> {
     use bynk_check::http_pass_through::{PassThroughType, pass_through_type_of};
     let carrier = match pass_through_type_of(t).filter(|_| is_opaque)? {
-        PassThroughType::InboundRequest => "__InboundRequestView",
-        PassThroughType::Forwarded => "__ForwardedView",
+        PassThroughType::InboundRequest => crate::emitter::ts_types::inbound_request_ts_type(),
+        PassThroughType::Forwarded => crate::emitter::ts_types::forwarded_ts_type(),
         PassThroughType::PassThrough | PassThroughType::UpstreamError => return None,
     };
     let name = t.name.name.clone();
@@ -295,7 +296,7 @@ fn pass_through_carrier_type(
         bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::TypeAlias {
             name: name.clone(),
             type_params: Vec::new(),
-            ty: bynk_ts::TsType::intersection(vec![bynk_ts::TsType::named(carrier), brand_ty]),
+            ty: bynk_ts::TsType::intersection(vec![carrier, brand_ty]),
         })),
         None,
     );
