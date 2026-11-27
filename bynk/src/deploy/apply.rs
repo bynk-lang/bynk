@@ -342,6 +342,7 @@ pub(crate) fn apply_plan(
                 force: opts.force,
                 edge_keys: &keys.edge_keys,
                 expired: &keys.expired,
+                cleaned: &keys.cleaned,
                 foreign_keys: &keys.foreign_keys,
                 foreign_secrets: &keys.foreign_secrets,
                 listed: &keys.listed,
@@ -363,7 +364,7 @@ pub(crate) fn apply_plan(
                         lock,
                         &opts.environment,
                         worker,
-                        (&keys.edge_keys, &keys.expired),
+                        (&keys.edge_keys, &keys.cleaned.borrow()),
                     );
                 });
                 // I3 (#1971): the secrets just minted for this context's

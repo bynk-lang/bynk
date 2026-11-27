@@ -476,7 +476,7 @@ an edge must hold the same key, and Cloudflare won't give one back, so:
   key stops working on schedule even if no later deploy runs; the next deploy
   past it deletes the old slot and its marker, and the plan says so. Cloudflare
   never returns a key's value, so the old key is never copied: it stays where it
-  is. A second rotation inside the window replaces the key that was retiring.
+  is. A second rotation inside the window is not planned: the edge is left as it is, and a warning says so, because replacing either key could overwrite the one a producer still signs with. Rotate again after the window ends, or revoke.
 - **If the old key leaked, do not wait it out.** `bynk deploy --revoke-previous-edge-key
   <context>` (repeatable) re-keys every edge key on that context at once and
   deletes the old key, so it stops verifying immediately. A message still in a

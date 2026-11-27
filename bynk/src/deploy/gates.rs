@@ -376,6 +376,8 @@ pub(crate) struct Keys {
     pub(crate) edge_keys: BTreeMap<Edge, EdgeKey>,
     /// #4526: the retiring edge-key slots whose window has passed, by callee Worker, to clean up.
     pub(crate) expired: BTreeMap<String, Vec<Expired>>,
+    /// #4526: the retiring slots (worker, first-slot name) the run cleaned up, as it goes.
+    pub(crate) cleaned: std::cell::RefCell<BTreeSet<(String, String)>>,
     pub(crate) foreign_secrets: BTreeSet<String>,
     pub(crate) foreign_keys: BTreeMap<(String, String), ForeignKey>,
 }
@@ -439,6 +441,7 @@ pub(crate) fn decide_keys(cx: &KeysCx<'_>, secret_source: &SecretSource) -> Resu
         listed,
         edge_keys,
         expired,
+        cleaned: std::cell::RefCell::new(BTreeSet::new()),
         foreign_secrets,
         foreign_keys,
     })

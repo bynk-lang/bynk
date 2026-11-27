@@ -1,4 +1,6 @@
-use super::edge_slots::{CalleeWrite, Expired, Mode as SlotMode, SlotNames, SlotState, plan_write};
+use super::edge_slots::{
+    CalleeWrite, Expired, Mode as SlotMode, SlotNames, SlotRefusal, SlotState, plan_write,
+};
 use super::*;
 use bynk_driver::colour;
 
@@ -460,8 +462,11 @@ pub(crate) enum EdgeKey {
     Set {
         value: String,
         rotating: bool,
-        callee: CalleeWrite,
+        /// What the callee does for each of the edge's key names, by the name of its first slot.
+        callee: Vec<(String, CalleeWrite)>,
     },
+    /// A rotation was wanted and not planned: the edge is left as it is, with the reason.
+    Refused(SlotRefusal),
 }
 
 /// #4526: what [`decide_edge_key`] needs to decide what a rotation does to the callee's slots:
@@ -469,7 +474,8 @@ pub(crate) enum EdgeKey {
 /// window is counted from.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Rotation<'a> {
-    pub(crate) callee_slots: SlotState,
+    /// The state of the callee's slots for each of the edge's key names, by first-slot name.
+    pub(crate) callee_slots: &'a [(String, SlotState)],
     pub(crate) mode: SlotMode,
     pub(crate) now: u64,
     /// The environment, named in a refusal.
@@ -514,10 +520,26 @@ pub(crate) fn decide_edge_key(
             deploy_command(environment)
         ));
     }
+    let mut writes = Vec::new();
+    for (name, state) in rotation.callee_slots {
+        match plan_write(*state, rotation.mode, rotation.now) {
+            Ok(write) => writes.push((name.clone(), write)),
+            // A revoke that cannot be planned is an error, not a no-op: a leaked key must not be
+            // left working. Any other rotation leaves the edge as it is.
+            Err(refusal) if rotation.mode == SlotMode::Revoke => {
+                return Err(format!(
+                    "the edge {} cannot be revoked: {}.",
+                    edge.describe(environment),
+                    refusal.reason()
+                ));
+            }
+            Err(refusal) => return Ok(EdgeKey::Refused(refusal)),
+        }
+    }
     Ok(EdgeKey::Set {
         value: mint()?,
         rotating: caller != Presence::Absent || callee != Presence::Absent,
-        callee: plan_write(rotation.callee_slots, rotation.mode, rotation.now),
+        callee: writes,
     })
 }
 
@@ -736,6 +758,9 @@ pub(crate) struct Secrets<'a> {
     pub(crate) edge_keys: &'a BTreeMap<Edge, EdgeKey>,
     /// #4526: the retiring edge-key slots whose window has passed, by callee Worker.
     pub(crate) expired: &'a BTreeMap<String, Vec<Expired>>,
+    /// #4526: the retiring slots (worker, first-slot name) a run deleted, which the ledger then
+    /// forgets; one whose delete failed stays in it, so a later deploy tries it again.
+    pub(crate) cleaned: &'a std::cell::RefCell<BTreeSet<(String, String)>>,
     /// I3 (#1971): what [`decide_foreign_key`] decided, by (worker, secret).
     pub(crate) foreign_keys: &'a BTreeMap<(String, String), ForeignKey>,
     /// I3 (#1971): every foreign caller's secret in the project, which a
@@ -817,9 +842,12 @@ pub(crate) fn prepare_bindings(
             }
             // #4526: the callee's end is a slot pair, so its puts are the plan's (the key,
             // then the retirement marker); the caller's is one key, replaced.
-            match SlotNames::of(&key) {
-                Some(names) => prepared.extend(callee.puts(&names, value)),
-                None => prepared.push((key, value.clone())),
+            match (
+                SlotNames::of(&key),
+                callee.iter().find(|(name, _)| *name == key),
+            ) {
+                (Some(names), Some((_, write))) => prepared.extend(write.puts(&names, value)),
+                _ => prepared.push((key, value.clone())),
             }
         }
     }
@@ -1390,7 +1418,10 @@ WITH_EQUALS=a=b
             force,
             &mut mint,
             &Rotation {
-                callee_slots: SlotState::default(),
+                callee_slots: &[(
+                    "BYNK_CALL_FROM_SHOP__ORDERS".to_string(),
+                    SlotState::default(),
+                )],
                 mode: SlotMode::Grace,
                 now: 0,
                 environment: "default",
@@ -1402,7 +1433,10 @@ WITH_EQUALS=a=b
         Ok(EdgeKey::Set {
             value: "minted".to_string(),
             rotating,
-            callee: plan_write(SlotState::default(), SlotMode::Grace, 0),
+            callee: vec![(
+                "BYNK_CALL_FROM_SHOP__ORDERS".to_string(),
+                plan_write(SlotState::default(), SlotMode::Grace, 0).unwrap(),
+            )],
         })
     }
 

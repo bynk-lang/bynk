@@ -789,7 +789,7 @@ mod tests {
             EdgeKey::Set {
                 value: "minted-value".into(),
                 rotating: true,
-                callee: crate::deploy::edge_slots::CalleeWrite::default(),
+                callee: Vec::new(),
             },
         )]
         .into_iter()
@@ -822,7 +822,7 @@ mod tests {
                     false,
                     &mut || panic!("a refused edge mints nothing"),
                     &Rotation {
-                        callee_slots: crate::deploy::edge_slots::SlotState::default(),
+                        callee_slots: &[],
                         mode: crate::deploy::edge_slots::Mode::Grace,
                         now: 0,
                         environment,
