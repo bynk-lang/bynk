@@ -10,6 +10,29 @@ use bynk_ts::{TsBinaryOp, TsExpr, TsObjectEntry, TsParam, TsStmt, TsType, TsType
 /// A list of request-init (or header) object entries.
 pub(super) type Entries = Vec<TsObjectEntry>;
 
+/// #3936, #3825: the `Sec-Fetch-Site: same-origin` a driver sends by default, as a browser's own page would:
+/// where a sum has a cookie member, or the handler issues a session, whose route checks the request for
+/// login CSRF. Otherwise `csrf_default`, the lone cookie route's own.
+pub(super) fn default_csrf(
+    csrf_default: Entries,
+    sum: &Option<super::system_sum::SumAuth>,
+    (h, actors): (
+        &bynk_syntax::ast::Handler,
+        &std::collections::HashMap<String, bynk_syntax::ast::ActorDecl>,
+    ),
+) -> Entries {
+    let cookie_arm = sum.as_ref().is_some_and(|s| {
+        s.members
+            .iter()
+            .any(|(_, c)| matches!(c, super::system_sum::SumCredential::Cookie(_)))
+    });
+    if cookie_arm || !bynk_check::actors::issued_cookie_actors(h, actors).is_empty() {
+        vec![header("sec-fetch-site", str_lit("same-origin"))]
+    } else {
+        csrf_default
+    }
+}
+
 /// `"key": value`: a request header, whose key is quoted as the request writes it.
 pub(super) fn header(key: &str, value: TsExpr) -> TsObjectEntry {
     TsObjectEntry::prop(format!("{key:?}"), value)

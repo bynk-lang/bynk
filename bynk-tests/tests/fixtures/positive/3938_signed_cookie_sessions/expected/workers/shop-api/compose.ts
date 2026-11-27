@@ -78,7 +78,8 @@ export function compose(env: Env) {
       if (!__live) return HttpResult.Unauthorized;
       return handlers.api.http_POST_rename({ ...deps, ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value });
     },
-    async http_POST_login() {
+    async http_POST_login(request: globalThis.Request) {
+      if (!__csrfAllowed(request, ["https://app.example.com"])) return HttpResult.Forbidden;
       return handlers.api.http_POST_login(deps);
     },
     async http_POST_logout(request: globalThis.Request) {

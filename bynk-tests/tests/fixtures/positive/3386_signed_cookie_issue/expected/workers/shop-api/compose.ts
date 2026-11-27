@@ -14,7 +14,8 @@ export function compose(env: Env) {
   const Clock = new bynk__binding.ClockProvider();
   const deps = { Clock, __session: { User: { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined } } };
   return {
-    async http_POST_login(body: handlers.Login) {
+    async http_POST_login(request: globalThis.Request, body: handlers.Login) {
+      if (!__csrfAllowed(request, [])) return HttpResult.Forbidden;
       return handlers.api.http_POST_login(body, deps);
     },
     async http_POST_logout(request: globalThis.Request) {
