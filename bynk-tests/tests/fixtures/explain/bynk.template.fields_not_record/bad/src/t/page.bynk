@@ -1,0 +1,5 @@
+commons t.page
+
+uses bynk.html
+
+template greeting: String = "embeds/page.html"

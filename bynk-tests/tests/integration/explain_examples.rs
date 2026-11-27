@@ -28,8 +28,9 @@
 //!
 //! **File labels.** An example that spans files says which one each snippet is
 //! in with a comment-only line holding just a path, such as `// shop.bynk` or
-//! `// shop/till.bynk`: the file's path under the project's `src/`, or
-//! `// bynk.toml` for the manifest. The label applies until the next one, and
+//! `// shop/till.bynk`: the file's path under the project's `src/`,
+//! `// bynk.toml` for the manifest, or (#3927) a template's file under
+//! `embeds/`, such as `// embeds/page.html`. The label applies until the next one, and
 //! the gate holds each line under it to that file: a line marked `✗` must be in
 //! the labelled file of the bad project, a `✓` line in the labelled file of the
 //! good one, and an unmarked line in either. A line before the first label may
@@ -436,10 +437,16 @@ fn source_files(root: &Path) -> Vec<(String, String)> {
             let path = entry.path();
             if path.is_dir() {
                 walk(&path, root, out);
-            } else if path.extension().is_some_and(|x| x == "bynk") || path.ends_with("bynk.toml") {
+            } else if path.extension().is_some_and(|x| x == "bynk")
+                || path.ends_with("bynk.toml")
+                || is_template_file(&path, root)
+            {
                 let rel = path.strip_prefix(root).unwrap();
                 let rel = rel.to_string_lossy().replace('\\', "/");
-                out.push((rel, fs::read_to_string(&path).unwrap()));
+                // An embed's file may be meant not to be text (`bynk.embed.invalid_encoding`).
+                if let Ok(text) = fs::read_to_string(&path) {
+                    out.push((rel, text));
+                }
             }
         }
     }
@@ -447,6 +454,15 @@ fn source_files(root: &Path) -> Vec<(String, String)> {
     walk(root, root, &mut out);
     out.sort();
     out
+}
+
+/// #3927: an HTML file under the project's `embeds/`, which a `template`
+/// declaration reads and whose lines a template's diagnostics point at.
+fn is_template_file(path: &Path, root: &Path) -> bool {
+    path.extension().is_some_and(|x| x == "html")
+        && path
+            .strip_prefix(root)
+            .is_ok_and(|rel| rel.starts_with("embeds"))
 }
 
 /// Which form a fixture directory takes, or why it is malformed.
@@ -604,14 +620,16 @@ fn line_labels(example: &str) -> Vec<Option<&str>> {
 /// doc): the path of a `.bynk` file under `src/`, or `bynk.toml`.
 fn file_label(line: &str) -> Option<&str> {
     let label = line.trim().strip_prefix("//")?.trim();
-    let is_path =
-        !label.contains(char::is_whitespace) && (label.ends_with(".bynk") || label == "bynk.toml");
+    let is_path = !label.contains(char::is_whitespace)
+        && (label.ends_with(".bynk")
+            || label == "bynk.toml"
+            || (label.starts_with("embeds/") && label.ends_with(".html")));
     is_path.then_some(label)
 }
 
 /// Where a labelled file lives under a project side.
 fn labelled_path(label: &str) -> String {
-    if label == "bynk.toml" {
+    if label == "bynk.toml" || label.starts_with("embeds/") {
         label.to_string()
     } else {
         format!("src/{label}")
