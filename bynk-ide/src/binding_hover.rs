@@ -26,7 +26,7 @@ pub(crate) fn call_bindings_at(text: &str, offset: usize) -> Option<Vec<Binding>
     }
     let after = &text[end..];
     let open = end + (after.len() - after.trim_start().len());
-    if text[open..].chars().next() != Some('(') {
+    if !text[open..].starts_with('(') {
         return None;
     }
     let close = matching_paren(text, open)?;

@@ -184,6 +184,33 @@ fn with_kind_appendix(
 }
 
 /// #4451: a `{dataset}` placeholder in an Analytics SQL literal names its table.
+/// Rung 1a: a `given` entry's capability path (#2469), a dataset placeholder
+/// (#4451), or (#3959) a binding's parameter name, `given St|ore = Sessions`.
+fn fallback_section(a: &HoverAnalysis<'_>, input: &HoverInput<'_>) -> Option<String> {
+    capability_path_section(a)
+        .or_else(|| dataset_hover(input))
+        .or_else(|| binding_param_section(a))
+}
+
+/// The appendices of an indexed declaration's hover: its kind's (`with_kind_appendix`)
+/// and (#3959) a call's bindings.
+fn with_appendices(
+    content: String,
+    a: &HoverAnalysis<'_>,
+    key: &bynk_check::index::SymbolKey,
+    path: &std::path::Path,
+    text: &str,
+) -> String {
+    with_call_bindings(with_kind_appendix(content, a, key, path, text), a)
+}
+
+/// #3959: the hover for a binding's parameter name, `given St|ore = Sessions`.
+fn binding_param_section(a: &HoverAnalysis<'_>) -> Option<String> {
+    let text = a.snapshots.get(a.rel)?;
+    let (callee, b) = crate::binding_hover::binding_param_at(text, a.offset)?;
+    Some(crate::binding_hover::binding_param_hover(&callee, &b))
+}
+
 /// #3959: a call's bindings, appended to its function's description.
 fn with_call_bindings(content: String, a: &HoverAnalysis<'_>) -> String {
     let bindings = a
@@ -260,12 +287,6 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         //    match below. The `Some` guard remains — it is what a new kind added
         //    without an arm would fall through, silently, which is how
         //    `Method`/`CapabilityOp` came to render the wrong declaration.
-        // #3959: a binding's parameter name, `given St|ore = Sessions`.
-        if let Some(text) = a.snapshots.get(a.rel)
-            && let Some((callee, b)) = crate::binding_hover::binding_param_at(text, a.offset)
-        {
-            return Some(crate::binding_hover::binding_param_hover(&callee, &b));
-        }
         if let Some((key, def)) = crate::index_queries::definition_at(a.index, a.rel, a.offset)
             && let Some(def_text) = a.snapshots.get(&def.path)
             && let Some(content) = describe_indexed(a, key, &def.path, def_text)
@@ -288,8 +309,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 &key.unit,
                 Some(&ctx),
             );
-            let content = with_kind_appendix(content, a, key, &def.path, def_text);
-            let content = with_call_bindings(content, a);
+            let content = with_appendices(content, a, key, &def.path, def_text);
             return Some(with_capability_path(
                 with_used_name_note(content, a, key),
                 a,
@@ -297,7 +317,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         }
         // 1a. #2469: a `given` entry whose capability rung 1 could not describe
         //    still explains why the declaration needs it.
-        if let Some(section) = capability_path_section(a).or_else(|| dataset_hover(input)) {
+        if let Some(section) = fallback_section(a, input) {
             return Some(section);
         }
         // 2. #611 (gap C): a `store` field's operation (`items.put(…)`), and (#4036) the
