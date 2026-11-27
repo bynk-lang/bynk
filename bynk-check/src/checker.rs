@@ -869,6 +869,9 @@ pub enum Callee {
     /// #3939: `Actor.mint(identity, label)` on a local `ApiKey` actor: make, store and answer a key
     /// once. An `Effect[Result[ApiKeySecret, TooManyKeys]]`.
     ApiKeyMint { actor: String },
+    /// #3939 (slice 2): `list`, `revoke` or `revokeAll` on a local `ApiKey` actor, which call its
+    /// generated `<Actor>KeyOwner`. `member` is the member's name.
+    ApiKeyMember { actor: String, member: String },
     /// #3939: `ApiKey.equal(a, b)`, the generated key store's constant-time digest comparison,
     /// reachable only from the agents generated for an `ApiKey` actor. An `Effect[Bool]`.
     ApiKeyEqual,

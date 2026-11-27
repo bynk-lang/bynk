@@ -2495,13 +2495,17 @@ unchanged; adding or removing `@rateLimit` moves the route's hash.
 - `key: identity` counts by the verified caller (`sub`), scoped to the route's actor, so two actors' users never share a count even on one limiter. The router verifies the route's actor
   first, then asks the limiter about the caller, then reads the body, so an unverified caller never
   touches the limiter: a missing, forged or expired credential, a cross-site request to a
-  `SignedCookie` route and a revoked session each get the `401` or `403` they always got, and a
+  `SignedCookie` route, a revoked session and an API key its store does not hold each get the
+  `401` or `403` they always got, and a
   limit cannot be spent by someone else's forged requests. Only after that is the caller counted, and a
   caller over the limit gets `429` before any `415`, `413` or body read. It needs a single actor that
-  carries an identity: a `Bearer`, `Oidc` or `SignedCookie` actor. On a `Visitor`, a `Signature`
+  carries an identity: a `Bearer`, `Oidc`, `SignedCookie` or `ApiKey` actor. On a `Visitor`, a `Signature`
   sender or an actor sum it is `bynk.http.rate_limit_key_unavailable`; use `clientIp`, or call the
   limiter's `allow(key)` in the handler for a key only the handler knows. The verification runs once:
-  the handler receives the principal it produced.
+  the handler receives the principal it produced. On an `ApiKey` route it bounds a verified key
+  holder, not a guessing attacker, whose fabricated keys never verify, so such a route still warns
+  `bynk.actor.api_key_unlimited`; a route carries one `@rateLimit`, so a `clientIp` limit for it
+  belongs at the edge.
 - The limiter is a named instance the route's context declares; the route needs no `given`.
   A route carries at most one `@rateLimit` (`bynk.http.rate_limit_duplicate`), and a limiter named
   by several routes counts across all of them, by key. An unknown limiter is

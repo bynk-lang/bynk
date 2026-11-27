@@ -510,8 +510,9 @@ pub fn remote_unsupported_api_key(
     table: &UnitTable,
 ) -> Option<CompileError> {
     use crate::actors::{BadCredential, CallSitePrincipal};
-    // `by Forged` is refused only where it reaches an `ApiKey` seam: there its key is built from
-    // one minted in process, and its compare count is taken in process.
+    // `by Forged` and `by Revoked` are refused only where they reach an `ApiKey` seam: there the key
+    // is built from one minted (and, for `Revoked`, revoked) in process, and its compare count is
+    // taken in process.
     let calls_api_key_route = calls_an_api_key_route(callees, table);
     let mut named: Vec<String> = callees
         .values()
@@ -525,10 +526,11 @@ pub fn remote_unsupported_api_key(
                 b @ (BadCredential::Malformed | BadCredential::Unknown),
             )) => Some(format!("drives `by {}`", b.name())),
             crate::checker::Callee::Principal(CallSitePrincipal::BadCredential(
-                BadCredential::Forged,
-            )) if calls_api_key_route => {
-                Some("drives `by Forged` at a route an `ApiKey` actor guards".to_string())
-            }
+                b @ (BadCredential::Forged | BadCredential::Revoked),
+            )) if calls_api_key_route => Some(format!(
+                "drives `by {}` at a route an `ApiKey` actor guards",
+                b.name()
+            )),
             _ => None,
         })
         .collect();

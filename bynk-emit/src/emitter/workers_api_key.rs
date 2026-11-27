@@ -151,6 +151,25 @@ pub(super) fn api_key_seam_stmts(
     )
 }
 
+/// #3939 (slice 2, track §12): the verify/run pair of an identity-limited `ApiKey` route. The seam's
+/// own statements run in `verify`, the key store's lookup included, so a fabricated key is refused
+/// there and never reaches the limiter; a verified caller is counted as `identity:<Actor>:<sub>`.
+pub(super) fn api_key_identity_split(
+    sname: &str,
+    h: &Handler,
+    method: bynk_model::IrHttpMethod,
+    path: &str,
+    seam: &ApiKeySeam,
+) -> Vec<TsObjectEntry> {
+    crate::emitter::workers::identity_split_wrapper(
+        sname,
+        h,
+        method,
+        path,
+        api_key_seam_stmts(seam, &crate::emitter::workers::err_failure),
+    )
+}
+
 /// The compose wrapper for a single-actor `ApiKey` HTTP handler: the seam, then the handler.
 pub(super) fn emit_http_api_key_wrapper(
     sname: &str,

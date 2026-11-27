@@ -2939,6 +2939,21 @@ will get an event queue named `bynk-ev-<slug>-<hash>` and a dead-letter queue na
 (`bynk.queue.reserved_name`). Only these two prefixes are reserved, not `bynk-` as
 a whole ([Reserved names](/reference/queue/#reserved-names)).
 
+**Event queue names.** Two `from Events` services MUST NOT get the same
+event queue name in any environment (`bynk.event.queue_name_collision`). The
+name keeps an 8-digit hash of `<context>/<service>` and a slug cut to fit 63
+characters, so two services can share one, rarely; the error names both, and
+renaming one resolves it.
+
+**Payload size.** An event's queue message (the signed wrapper, the envelope and
+the payload, as UTF-8) has a budget of 127,000 bytes. `Events.emit` measures each
+emission on every target and logs `EventNearLimit` (the event type, the size and
+the budget) once per event type per isolate when the message is 96,000 bytes or
+more; it does not fault yet. An `event` whose payload reaches a `Bytes`, or a
+`List`, `Map` or `Set` of a non-scalar type that no refinement (such as
+`MaxLength(n)`) bounds, draws the warning `bynk.event.unbounded_payload`
+([Keeping an event small](/book/concepts/events/understand-events/#keeping-an-event-small)).
+
 ## §5.8 Boundaries & cross-context
 
 `consumes` MUST appear only in a context, an adapter or a `commons` (a `suite`

@@ -1,0 +1,17 @@
+context acme.api
+
+consumes bynk { ApiKeyId }
+
+type AccountId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER"), identity = AccountId }
+
+capability Keys {
+	fn forget(id: AccountId, key: ApiKeyId) -> Effect[Bool]
+}
+
+provides Keys = ClientKeys {
+	fn forget(id: AccountId, key: ApiKeyId) -> Effect[Bool] {
+		Client.revoke(id, key)
+	}
+}

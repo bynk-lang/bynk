@@ -1,14 +1,14 @@
 {
   "version": 1,
   "provides": {
-    "aliased": "301c83cb9be74502",
-    "hidden": "a44a02c97d71eda9",
-    "listing": "ba0da0f88da474ef"
+    "aliased": "35d5761fbfe5b00e",
+    "hidden": "ea4ea9c75441f441",
+    "listing": "1f3304524db50073"
   },
   "expects": {},
   "provides_shapes": {
-    "aliased": "Svc(\"aliased\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),N(\"SqlReadError\"))))",
-    "hidden": "Svc(\"hidden\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),N(\"SqlReadError\"))))",
-    "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),N(\"SqlReadError\"))))"
+    "aliased": "Svc(\"aliased\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),Sum(\"SqlReadError\",V(\"Decode\",F(\"error\",N(\"DecodeError\"))),V(\"Sql\",F(\"error\",Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\"))))))))))",
+    "hidden": "Svc(\"hidden\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),Sum(\"SqlReadError\",V(\"Decode\",F(\"error\",N(\"DecodeError\"))),V(\"Sql\",F(\"error\",Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\"))))))))))",
+    "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Item\",F(\"id\",B(\"String\")))),Sum(\"SqlReadError\",V(\"Decode\",F(\"error\",N(\"DecodeError\"))),V(\"Sql\",F(\"error\",Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\"))))))))))"
   }
 }

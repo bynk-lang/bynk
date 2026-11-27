@@ -38,6 +38,44 @@ suite acme.api as system {
 		let r <- api.GET("/me") by Forged
 		expect r is Rejected(Unauthorized)
 	}
+	// #3939 (slice 2, §10) / §13 revocation: a key minted and then revoked is refused on the next
+	// request, after the dummy compare, the same as a key never minted.
+	case "a revoked key is refused after the dummy compare" {
+		let r <- api.GET("/me") by Revoked
+		expect r is Rejected(Unauthorized)
+	}
+	// §6 / §13 revocation: `revokeAll` ends every key the identity held. `by Client("acct-30")`
+	// presents the same key for the whole case, so after `close` the seam refuses it.
+	case "revokeAll refuses the identity's old key on the next request" {
+		let before <- api.GET("/me") by Client("acct-30")
+		expect before is Ok("acct-30")
+		let closed <- api.POST("/accounts/:id/close", "acct-30") by Visitor
+		expect closed is Ok(1)
+		let after <- api.GET("/me") by Client("acct-30")
+		expect after is Unauthorized
+	}
+	// §12: `key: identity` counts each verified key holder on its own.
+	case "a verified key holder over the identity limit is refused with 429" {
+		let a <- api.GET("/usage") by Client("acct-40")
+		let b <- api.GET("/usage") by Client("acct-40")
+		let c <- api.GET("/usage") by Client("acct-40")
+		expect a is Ok("usage for acct-40")
+		expect b is Ok("usage for acct-40")
+		expect c is TooManyRequests(_)
+		let other <- api.GET("/usage") by Client("acct-41")
+		expect other is Ok("usage for acct-41")
+	}
+	// §12 / ADR 1023 D: a key that fails verification is refused at the seam and never consumes the
+	// identity limit.
+	case "a forged key never consumes the identity limit" {
+		let f1 <- api.GET("/usage") by Forged
+		let f2 <- api.GET("/usage") by Forged
+		let f3 <- api.GET("/usage") by Forged
+		expect f3 is Rejected(Unauthorized)
+		let a <- api.GET("/usage") by Client("bynk-test")
+		let b <- api.GET("/usage") by Client("bynk-test")
+		expect b is Ok("usage for bynk-test")
+	}
 	// §8 step 6 / D3 E: the key never reaches the handler.
 	case "the key's header is hidden from the handler" {
 		let r <- api.GET("/auth-header", RequestHeaders.of([])) by Client("acct-7")
@@ -48,5 +86,65 @@ suite acme.api as system {
 	case "a key is minted for an account" {
 		let r <- api.POST("/accounts/:id/keys", "acct-9", NewKey { label: "ci" }) by Visitor
 		expect r is Created(_)
+	}
+
+	// #3939 (slice 2, §9): `list`, `revoke` and `revokeAll`.
+	case "a minted key is listed by its id and label" {
+		let minted <- api.POST("/accounts/:id/keys", "acct-20", NewKey { label: "ci" }) by Visitor
+		match minted {
+			Created(s) => {
+				let listed <- api.GET("/accounts/:id/keys", "acct-20") by Visitor
+				match listed {
+					Ok([k]) => {
+						expect k.id == s.id
+						expect k.label == s.label
+						expect k.created == s.created
+					}
+					_ => expect false,
+				}
+			}
+			_ => expect false,
+		}
+	}
+	// §9 / §13 revocation: revoking another identity's key answers `false` and changes nothing.
+	case "revoking another identity's key is refused and leaves it" {
+		let minted <- api.POST("/accounts/:id/keys", "acct-21", NewKey { label: "ci" }) by Visitor
+		match minted {
+			Created(s) => {
+				let other <- api.DELETE("/accounts/:id/keys/:key", "acct-22", s.id) by Visitor
+				expect other is NotFound
+				let listed <- api.GET("/accounts/:id/keys", "acct-21") by Visitor
+				let n = match listed {
+					Ok(keys) => keys.length(),
+					_ => 0,
+				}
+				expect n == 1
+				let own <- api.DELETE("/accounts/:id/keys/:key", "acct-21", s.id) by Visitor
+				expect own is NoContent
+				let again <- api.DELETE("/accounts/:id/keys/:key", "acct-21", s.id) by Visitor
+				expect again is NotFound
+				let left <- api.GET("/accounts/:id/keys", "acct-21") by Visitor
+				expect left is Ok([])
+			}
+			_ => expect false,
+		}
+	}
+	// §6: `revokeAll` (here from an agent's handler) empties the store; a later mint lives under
+	// a fresh handle.
+	case "revokeAll empties the identity's keys, and a later key still works" {
+		let _ <- api.POST("/accounts/:id/keys", "acct-23", NewKey { label: "a" }) by Visitor
+		let _ <- api.POST("/accounts/:id/keys", "acct-23", NewKey { label: "b" }) by Visitor
+		let closed <- api.POST("/accounts/:id/close", "acct-23") by Visitor
+		expect closed is Ok(2)
+		let empty <- api.GET("/accounts/:id/keys", "acct-23") by Visitor
+		expect empty is Ok([])
+		let fresh <- api.POST("/accounts/:id/keys", "acct-23", NewKey { label: "c" }) by Visitor
+		expect fresh is Created(_)
+		let one <- api.GET("/accounts/:id/keys", "acct-23") by Visitor
+		let n = match one {
+			Ok(keys) => keys.length(),
+			_ => 0,
+		}
+		expect n == 1
 	}
 }

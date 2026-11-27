@@ -411,7 +411,7 @@
     },
     {
       "code": "bynk.test.revoked_needs_sessions_route",
-      "summary": "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it."
+      "summary": "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true` or a single `ApiKey` actor; it sends a revoked session's correctly signed cookie, or a revoked key, so only a seam that keeps sessions or keys can refuse it."
     },
     {
       "code": "bynk.test.service_bad_address",
