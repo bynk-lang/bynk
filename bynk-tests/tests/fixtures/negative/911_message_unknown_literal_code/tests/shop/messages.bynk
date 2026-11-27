@@ -1,0 +1,5 @@
+suite shop.messages {
+  case "a suite names the unit's own codes too" {
+    expect render("en", withText(message("cart.greetin"), "name", "Ada")) == "Hello, Ada!"
+  }
+}

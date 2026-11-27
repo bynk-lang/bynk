@@ -1427,10 +1427,13 @@ pub const EXPLANATIONS: &[Explain] = &[
                 a closed set (an enum's names) does not warn, and neither does one passed through a \
                 function, which is where a set is bounded and is not followed. Serve the route `by` \
                 an authenticated actor, or choose the name from a fixed set. A refined type limits \
-                the shape of a name, not how many there are, so pair a keyed instance with an \
-                authenticated actor or a `RateLimit`. An instance can also declare \
-                `@instances(by: K)`: `send` then takes a `K`, whose construction is where the \
-                names are bounded, and a name from it does not warn.",
+                the shape of a name, not how many there are. A `RateLimit` reduces the rate but \
+                does not bound the number of instances (it is usually keyed per client, so it \
+                slows each caller without limiting how many distinct names arrive across many \
+                callers), so it does not clear the warning. An instance can also declare \
+                `@instances(by: K)`: `send` then takes a `K`, but a key limits the shape of a name \
+                and not how many there are, so a keyed instance warns on an open route like any \
+                other and does not on a route served by an authenticated actor.",
         example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\n\
                   service api from http {\n    on GET(\"/render/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {\n        let res <- Renderer.send(\"tenant-\\(tenant)\", req)   // ⚠ any caller picks the instance\n        …\n    }\n}\n\n\
                   service api from http {\n    on GET(\"/render\") () -> Effect[HttpResult[String]] by m: Member given Renderer {\n        let res <- Renderer.send(m.identity, req)       // ✓ the authenticated identity chooses\n        …\n    }\n}",
@@ -2969,11 +2972,6 @@ agent Cart {
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: 1_000_000, maxSize: 10 }    // ✗ not a field of `limits`\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }                 // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
-        code: "bynk.http.pass_through_not_emitted",
-        blurb: "An `on ANY` pass-through route type-checks, but its router (the suspended `ETag`, `HEAD`, `OPTIONS` and CORS behaviour) and the `Upstream` exchange arrive in the next increment. Until then a build that would emit one is refused, rather than built without its routes, which would answer `404` where the program says it forwards. `bynk check` accepts the route meanwhile.",
-        example: "on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗ for `bynk build` and `bynk test`, until the router lands\n\non GET(\"/blog/*path\") (path: String) -> Effect[HttpResult[String]] by Visitor { … }   // ✓ until then, an ordinary route builds",
-    },
-    Explain {
         code: "bynk.http.pass_through_signature",
         blurb: "`on ANY(…)` declares a pass-through route: it receives every method the platform delivers, `HEAD` and `OPTIONS` included, and answers `Effect[PassThrough]`, either `Forward(response)` with an upstream's answer or `Respond(result)` with an `HttpResult[()]`. It takes its path parameters, a rest, `request: InboundRequest` and `cf`; the body belongs to the upstream, so `body`, `@raw`, `@form` and `@multipart` are refused, and the headers, query and cookies are read through `request`. Only an `ANY` route returns `Effect[PassThrough]`. `PassThrough` and `InboundRequest` are `bynk`'s (`consumes bynk { PassThrough, InboundRequest }`).",
         example: "on ANY(\"/blog/*path\") (path: String) -> Effect[HttpResult[String]] by Visitor { … }   // ✗\n\non ANY(\"/blog/*path\") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor { … }   // ✓",
@@ -3330,6 +3328,20 @@ agent Cart {
         example: "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
     },
     Explain {
+        code: "bynk.locale.render_shadows_bundle",
+        blurb: "A message bundle's `render` belongs to the unit that declares it, so a `uses` of that unit does not bring it in. A unit that also `uses bynk.locale` gets `bynk.locale`'s `render`, which reads no bundle and returns the code, so a bare `render` there is probably not the one meant. The warning names the unit or units that declare a bundle. To render a bundle's messages, call a function the unit that declares it exports: the bundle's own `render` is not importable, and `Messages.render` is `bynk.messages.cross_unit_render`. If the code-echo is what you want, the warning is the one thing to leave, or name it with `bynk.locale`'s alias (`Locale.render`).",
+        example: "// shop/cart.bynk\n\
+                commons shop.cart\n\
+                \n\
+                uses bynk.locale\n\
+                uses shop.messages\n\
+                \n\
+                fn banner(tag: LocaleTag, name: String) -> String {\n\
+                \x20 render(tag, message(\"cart.greeting\"))     // ✗ `bynk.locale`'s `render`: it returns the code\n\
+                \x20 greet(tag, name)                           // ✓ call what shop.messages exports\n\
+                }",
+    },
+    Explain {
         code: "bynk.match.as_on_wildcard",
         blurb: "`pattern as name` binds `name` to the whole value the pattern matched, so that a pattern can check a value's shape and keep the value too: `Some(Order { status: Paid, .. } as paid)`. On `_` it adds nothing, because `_` already matches every value and a bare name binds that same value: `_ as x` is `x`. The warning's quick fix writes the name, and `bynk check --fix` applies it. If the pattern was meant to check a shape first, write that shape in front of `as`.",
         example: "match o {\n    Some(_ as order) => ship(order)    // ✗ `_ as order` is just `order`\n    None => nothing()\n}\n\nmatch o {\n    Some(order) => ship(order)        // ✓\n    None => nothing()\n}",
@@ -3338,6 +3350,26 @@ agent Cart {
         code: "bynk.match.refined_pattern_is_range",
         blurb: "A refined pattern, `_ where InRange(200, 299)`, `_ where Positive` or `_ where NonNegative`, on an `Int` scrutinee matches the same values as a range pattern, `200..299`, `1..` or `0..`, and is strictly weaker. A refined pattern is a guard and never counts towards exhaustiveness, so a match that covers every case still needs a `_` arm; a range pattern does count, and a missing interval is reported as a pattern you can paste in. The quick fix replaces the refined pattern with the range it denotes; it is offered but never applied by `bynk check --fix`, because a range arm counts for reachability and a later arm it now covers becomes `bynk.types.unreachable_arm`, which you then delete. A combined predicate that is one interval (`_ where Positive && InRange(1, 10)`) becomes that interval (`1..10`), and one that is not (an empty intersection, or a predicate that is not a range) is left alone. A refined pattern stays the way to match a band of `Float` or `Decimal`, or a `String` by `Matches` or its length.",
         example: "fn class(status: Int) -> String {\n    match status {\n        _ where InRange(200, 299) => \"success\"   // ✗ the same test as `200..299`, and never exhaustive\n        _ => \"other\"\n    }\n}\n\nfn class(status: Int) -> String {\n    match status {\n        200..299 => \"success\"                  // ✓ counts towards exhaustiveness\n        _ => \"other\"\n    }\n}",
+    },
+    Explain {
+        code: "bynk.messages.cross_unit_render",
+        blurb: "A message code is scoped to the unit that declares it: `message(code)`, and `render` over it, resolve only against the `messages` blocks declared in the unit where they are called. So two units, in one package or in different ones, can each own the code `cart.greeting` without colliding, and a unit's `render` never reads another unit's bundle. A `uses` of a unit that declares a bundle does not bring its `render` in. To show a message another unit owns, call a function that unit exports, which renders it where the bundle is. That is how `greeter.web` calls `greet` from `greeter.messages`.",
+        example: "// shop/messages.bynk\n\
+                commons shop.messages\n\
+                \n\
+                fn greet(tag: LocaleTag, name: String) -> String {\n\
+                \x20 render(tag, withText(message(\"cart.greeting\"), \"name\", name))\n\
+                }\n\
+                \n\
+                // shop/cart.bynk\n\
+                commons shop.cart\n\
+                \n\
+                uses shop.messages\n\
+                \n\
+                fn banner(tag: LocaleTag, name: String) -> String {\n\
+                \x20 render(tag, m)                   // ✗ `m` is a Message passed in; `render` reads shop.messages' bundle\n\
+                \x20 greet(tag, name)                 // ✓ call what shop.messages exports\n\
+                }",
     },
     Explain {
         code: "bynk.messages.format_mismatch",
@@ -3473,6 +3505,18 @@ agent Cart {
                 }",
     },
     Explain {
+        code: "bynk.messages.unknown_code",
+        blurb: "A literal code passed to `message(…)` in a unit that declares a message bundle must be a code of that unit's `@reference` block: a code resolves only against the bundles declared in the unit where `message(code)` is called, and the reference locale holds every code (the other locales are held to it by `bynk.messages.incomplete`). The usual cause is a typo, and the diagnostic suggests the nearest declared code. A code the program computes, such as a parameter, is not checked here, and a unit that declares no bundle has nothing to check against: its `render` is `bynk.locale`'s, which returns the code itself. Fix the code, or declare it in the reference block. To show a message another unit owns, call a function that unit exports.",
+        example: "messages \"en\" @reference {\n\
+                \x20 \"cart.greeting\" => \"Hello, {name}!\"\n\
+                }\n\
+                \n\
+                fn heading() -> Message {\n\
+                \x20 message(\"cart.greting\")           // ✗ not a code of this unit's reference bundle\n\
+                \x20 message(\"cart.greeting\")          // ✓\n\
+                }",
+    },
+    Explain {
         code: "bynk.mysql.sql_invalid",
         blurb: "When the project has a `schema.sql` at its root, Bynk parses each literal SQL statement of a `MySql` capability, so a syntax error shows up when you check, not on the first request. It also flags a statement of several commands, which the driver does not accept: send each with its own call, or use `transaction`. The parser is a pure-Rust one with a MySQL dialect, not MySQL's own (and MariaDB has forms of its own), so it can refuse valid SQL; that is why this is a warning and never blocks a build. Nothing runs, and the statement is not checked against the schema, which Bynk does not own. Correct the statement, or delete `schema.sql` to turn the check off.",
         example: "let _ <- Legacy.all(\"SELEC id FROM orders\", [])        // ✗ expected a statement, found SELEC\n\nlet _ <- Legacy.all(\"SELECT id FROM orders\", [])      // ✓",
@@ -3494,7 +3538,7 @@ agent Cart {
     },
     Explain {
         code: "bynk.observe.not_a_seam",
-        blurb: "`expect Cap.op called` checks the calls the unit under test made through a capability it consumes, whether declared in its context, brought in with `consumes`, or listed in `given`. A name that is not one of those, such as a type or a function, has no recorded calls. Name a consumed capability. An operation it does not declare is `bynk.observe.unknown_op`.",
+        blurb: "`expect Cap.op called` checks the calls the unit under test made through a capability it consumes, whether declared in its context, brought in with `consumes`, or listed in `given`. A name that is not one of those, such as a type, a function or a capability parameter, has no recorded calls. Name a consumed capability; for a parameter, name what the call binds it to, the instance in a context's suite or the kind's double in a commons suite. An operation it does not declare is `bynk.observe.unknown_op`.",
         example: "// tests/t.test.bynk\nexpect AuthId.unsafe called   // ✗ `AuthId` is a type, not a capability\nexpect Logger.log called      // ✓",
     },
     Explain {
@@ -5204,9 +5248,12 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "A `stub` substitutes one of the capabilities the unit under test \
                 depends on: one the context declares, or reaches through a \
                 `consumes`. Any other name, including a misspelt one, leaves \
-                nothing to substitute. A commons has no capabilities, so it cannot \
-                be stubbed at all. Name a capability of the target, or add the \
-                `consumes` it needs. See `bynk.stub.unknown_op` for a wrong \
+                nothing to substitute. A commons suite's seams are the doubles of \
+                the capabilities its commons selects, and its suite-local \
+                instances. A capability parameter is never a seam: stub what a \
+                call binds it to, the instance in a context's suite or the kind's \
+                double in a commons suite. Name a capability of the target, or add \
+                the `consumes` it needs. See `bynk.stub.unknown_op` for a wrong \
                 operation.",
         example: "// demo/meter.bynk\n\
                   capability Meter { … }\n\
@@ -5624,6 +5671,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   // tests/api.test.bynk\n\
                   let r <- api.GET(\"/health\") by Nobody     // ✗ a public route has no seam\n\
                   let r <- api.GET(\"/health\") by Visitor    // ✓",
+    },
+    Explain {
+        code: "bynk.test.pass_through_address",
+        blurb: "A pass-through route forwards its request to an upstream through `Upstream.forward`, so a suite case drives it through the route's test double: a stub of `Upstream.exchange`, the network step beneath the forwarding policy, answering with `Forwarded.of(…)`, and suite addresses that name the method sent (`proxy.GET(\"/blog/*path\", \"/posts/x\")`, `HEAD`, `OPTIONS`). That double arrives in a later release. Until then a case that addresses an `ANY` route is refused rather than run with a request no client would send. Test the functions its handler calls in the meantime, and the route itself against a real upstream.",
+        example: "let r <- proxy.ANY(\"/blog/*path\", \"/posts/x\") by Visitor   // ✗ not yet\n\nlet r <- api.GET(\"/status\") by Visitor   // ✓ an ordinary route",
     },
     Explain {
         code: "bynk.test.peek_not_a_database",
@@ -9602,11 +9654,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning).",
     )),
     dg(
-        "bynk.http.pass_through_not_emitted",
-        "A build reaches an `on ANY` pass-through route, which this release checks but does not yet build.",
-        &["http_handler"],
-    ),
-    dg(
         "bynk.http.pass_through_signature",
         "An `on ANY` route does not return `Effect[PassThrough]` or takes a parameter it may not, or another route returns `Effect[PassThrough]`.",
         &["http_handler"],
@@ -9912,6 +9959,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against.",
     ),
     warn(d(
+        "bynk.locale.render_shadows_bundle",
+        "A unit that `uses bynk.locale` and also `uses` a unit that declares a message bundle calls a bare `render`, which is `bynk.locale`'s: it reads no bundle and returns the code (warning).",
+    )),
+    warn(d(
         "bynk.map.deprecated_function",
         "A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).",
     )),
@@ -9925,6 +9976,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A refined pattern on an `Int` (`_ where InRange(a, b)`, `Positive`, `NonNegative`) is a range pattern, which also counts towards exhaustiveness (warning; quick fix, not applied by `--fix`).",
         &["refined_pattern"],
     )),
+    d(
+        "bynk.messages.cross_unit_render",
+        "A unit reaches for the `render` of a unit that declares a message bundle: a message code resolves only against the bundles of the unit where `message(code)` is called, so another unit's messages are used through a function it exports.",
+    ),
     d(
         "bynk.messages.format_mismatch",
         "A code's placeholder is formatted as a different ICU kind (plain/plural/select/number/date) across declared locales.",
@@ -9960,6 +10015,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.messages.placeholder_mismatch",
         "A locale's template for a code uses a different set of `{name}` placeholders than the reference locale's.",
+    ),
+    d(
+        "bynk.messages.unknown_code",
+        "A literal `message(\"code\")` in a unit that declares a message bundle names a code its `@reference` block does not declare.",
     ),
     warn(d(
         "bynk.mysql.sql_invalid",
@@ -11298,6 +11357,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.nobody_needs_secured_route",
         "A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.pass_through_address",
+        "A suite case addresses an `on ANY` pass-through route, which a suite can't drive until its test double (a stub of `Upstream.exchange`, `Forwarded.of`) arrives in a later release.",
         &["case"],
     ),
     dg(

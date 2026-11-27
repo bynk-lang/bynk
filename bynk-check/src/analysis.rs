@@ -1151,20 +1151,16 @@ fn analyse_project_inner(
     // means threading a file through many internal push sites — out of scope
     // here, same as there).
     crate::phase_timing::mark(crate::phase_timing::Level::Definition);
-    let mut test_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
-    let _ready_tests = crate::test_suites::phase_test_bodies(
-        &test_groups,
-        &parsed,
-        &kinds,
-        &unit_tables,
-        &exports_visibility,
-        &unit_consumes,
-        &unit_consumes_aliases,
-        &unit_uses,
+    let test_errors = unit_suite_errors(
+        (&test_groups, &parsed, &kinds, &unit_tables, &policy),
+        (
+            &exports_visibility,
+            &unit_consumes,
+            &unit_consumes_aliases,
+            &unit_uses,
+        ),
         &broken,
-        &mut test_errors,
-        &mut refs,
-        &mut locals,
+        (&mut refs, &mut locals),
         tys,
         d1_sql.as_deref(),
     );
@@ -1273,6 +1269,60 @@ fn analyse_project_inner(
         doc_scope,
         contract_diff,
     }
+}
+
+/// The suites, their targets' kinds and tables, and the stability policy.
+type SuiteTargets<'a> = (
+    &'a BTreeMap<String, Vec<usize>>,
+    &'a [ParsedFile],
+    &'a BTreeMap<String, UnitKind>,
+    &'a HashMap<String, crate::symbols::UnitTable>,
+    &'a crate::stability::StabilityPolicy,
+);
+
+/// The project's exports, `consumes` (with aliases) and `uses`, per unit.
+type SuiteMaps<'a> = (
+    &'a HashMap<String, HashMap<String, bynk_syntax::ast::Visibility>>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, HashMap<String, String>>,
+    &'a HashMap<String, Vec<String>>,
+);
+
+/// The unit suites' diagnostics (category 7 of `analyse_project_inner`). #3959:
+/// a commons suite's suite-local instances join its target's table first, in a
+/// copy the suites alone are checked against.
+fn unit_suite_errors(
+    (test_groups, parsed, kinds, unit_tables, policy): SuiteTargets<'_>,
+    (exports_visibility, unit_consumes, unit_consumes_aliases, unit_uses): SuiteMaps<'_>,
+    broken: &crate::project_model::BrokenDeclNames,
+    (refs, locals): (&mut RefSink, &mut LocalsSink),
+    tys: &Arc<Types>,
+    d1_sql: Option<&crate::d1_sql::D1Sql>,
+) -> Vec<bynk_syntax::error::CompileError> {
+    let (suite_tables, mut test_errors) = crate::suite_instances::suite_instance_tables(
+        test_groups,
+        parsed,
+        kinds,
+        unit_tables,
+        policy,
+    );
+    crate::test_suites::phase_test_bodies(
+        test_groups,
+        parsed,
+        kinds,
+        suite_tables.as_ref().unwrap_or(unit_tables),
+        exports_visibility,
+        unit_consumes,
+        unit_consumes_aliases,
+        unit_uses,
+        broken,
+        &mut test_errors,
+        refs,
+        locals,
+        tys,
+        d1_sql,
+    );
+    test_errors
 }
 
 /// The whole-program checks that run after the per-unit checks, each only on an

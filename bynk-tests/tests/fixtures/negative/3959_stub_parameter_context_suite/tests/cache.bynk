@@ -1,0 +1,10 @@
+---
+#3959, §14.1 `bynk.stub.not_a_seam` (note added): a context suite stubs the instance a
+call binds, never the parameter (note pinned in `integration::diagnostic_hints`).
+---
+suite shop
+
+case "c" {
+	stub Store.put(_, _) returns ()
+	expect true
+}

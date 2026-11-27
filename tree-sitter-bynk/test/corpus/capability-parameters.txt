@@ -212,3 +212,32 @@ fn session(id: String) -> Effect[Session] given Sessions, PriceCache, Logger {
               (identifier)
               (qualified_name
                 (identifier)))))))))
+
+================================================================================
+A commons suite declares a suite-local capability instance
+================================================================================
+
+suite lib.cache
+
+capability Archive = Kv
+
+case "copies" {
+  expect Archive.put called once
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (suite_decl
+    target: (qualified_name
+      (identifier)
+      (identifier))
+    (capability_decl
+      name: (identifier)
+      base: (identifier))
+    (case
+      name: (string_literal)
+      (expect_expr
+        cond: (observation_expr
+          cap: (identifier)
+          op: (identifier))))))

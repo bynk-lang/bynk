@@ -957,6 +957,7 @@ impl<'a> Formatter<'a> {
                         &t.fixtures,
                         &t.types,
                         &t.consts,
+                        &t.capabilities,
                         &t.fns,
                         &t.cases,
                         &t.properties,
@@ -978,6 +979,7 @@ impl<'a> Formatter<'a> {
                     &t.fixtures,
                     &t.types,
                     &t.consts,
+                    &t.capabilities,
                     &t.fns,
                     &t.cases,
                     &t.properties,
@@ -997,6 +999,7 @@ impl<'a> Formatter<'a> {
         fixtures: &[FixtureDecl],
         types: &[TypeDecl],
         consts: &[ConstDecl],
+        capabilities: &[CapabilityDecl],
         fns: &[FnDecl],
         cases: &[Case],
         properties: &[PropertyDecl],
@@ -1040,6 +1043,7 @@ impl<'a> Formatter<'a> {
             Fixture(&'a FixtureDecl),
             Type(&'a TypeDecl),
             Const(&'a ConstDecl),
+            Capability(&'a CapabilityDecl),
             Fn(&'a FnDecl),
             Case(&'a Case),
             Property(&'a PropertyDecl),
@@ -1049,6 +1053,11 @@ impl<'a> Formatter<'a> {
             .map(|f| (f.span.start, Member::Fixture(f)))
             .chain(types.iter().map(|t| (t.span.start, Member::Type(t))))
             .chain(consts.iter().map(|c| (c.span.start, Member::Const(c))))
+            .chain(
+                capabilities
+                    .iter()
+                    .map(|c| (c.span.start, Member::Capability(c))),
+            )
             .chain(fns.iter().map(|f| (f.span.start, Member::Fn(f))))
             .chain(cases.iter().map(|c| (c.name_span.start, Member::Case(c))))
             .chain(
@@ -1066,6 +1075,7 @@ impl<'a> Formatter<'a> {
                 Member::Fixture(f) => self.format_fixture_decl(f),
                 Member::Type(t) => self.format_type_decl(t),
                 Member::Const(c) => self.format_const_decl(c),
+                Member::Capability(c) => self.format_capability(c),
                 Member::Fn(f) => self.format_fn_decl(f),
                 Member::Case(c) => self.format_case(c),
                 Member::Property(p) => self.format_property(p),

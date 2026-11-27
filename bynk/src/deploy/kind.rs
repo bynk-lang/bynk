@@ -414,6 +414,9 @@ pub(crate) struct Applied<K: ResourceKind> {
     pub(crate) bound: Vec<(String, K::Bound)>,
     /// What to record, each written in order before anything else is asked of the account.
     pub(crate) commits: Vec<Commit<K::Change>>,
+    /// The failure that stopped the step part-way, returned once `commits` are written: what it
+    /// did to the account before failing is recorded (#3999).
+    pub(crate) stopped: Option<DeployFailure>,
 }
 
 impl<K: ResourceKind> Applied<K> {
@@ -422,6 +425,7 @@ impl<K: ResourceKind> Applied<K> {
         Applied {
             bound: Vec::new(),
             commits: Vec::new(),
+            stopped: None,
         }
     }
 
@@ -430,12 +434,19 @@ impl<K: ResourceKind> Applied<K> {
         Applied {
             bound: vec![(binding.to_string(), bound)],
             commits: Vec::new(),
+            stopped: None,
         }
     }
 
     /// And `commit` to write.
     pub(crate) fn with(mut self, commit: Commit<K::Change>) -> Self {
         self.commits.push(commit);
+        self
+    }
+
+    /// Stopped by `failure`, after its commits are written.
+    pub(crate) fn stopping(mut self, failure: DeployFailure) -> Self {
+        self.stopped = Some(failure);
         self
     }
 
