@@ -598,7 +598,9 @@ fn answered(
         .map_err(|e| fail(RestFailure::Transport(e.to_string())))?;
     let body: serde_json::Value =
         serde_json::from_str(&text).map_err(|e| fail(RestFailure::Unreadable(e.to_string())))?;
-    if status != 200 || body.get("success") != Some(&serde_json::Value::Bool(true)) {
+    // Any 2xx: Vectorize's index create answers 201 Created (#4056, found on the sandbox).
+    if !(200..300).contains(&status) || body.get("success") != Some(&serde_json::Value::Bool(true))
+    {
         let errors = body
             .get("errors")
             .map(serde_json::Value::to_string)
@@ -746,6 +748,32 @@ pub(crate) mod tests {
             seen
         });
         (base, seen)
+    }
+
+    /// A create answered `201 Created` with `success: true` (Vectorize's index create, #4056)
+    /// succeeded; a 2xx whose body says it failed still did not.
+    #[test]
+    fn a_created_answer_is_a_success() {
+        let (base, _) = answering_in_turn(&[
+            (
+                201,
+                r#"{"success":true,"errors":[],"result":{"name":"docs"}}"#,
+            ),
+            (202, r#"{"success":false,"errors":[{"code":1}]}"#),
+        ]);
+        let client = rest(base);
+        let got = client.post(
+            "/vectorize/v2/indexes",
+            &serde_json::json!({}),
+            Idempotent::No,
+        );
+        assert!(got.unwrap().to_string().contains("docs"));
+        let got = client.post(
+            "/vectorize/v2/indexes",
+            &serde_json::json!({}),
+            Idempotent::No,
+        );
+        assert_eq!(got.unwrap_err().status(), Some(202));
     }
 
     fn no_wait(_: std::time::Duration) {}

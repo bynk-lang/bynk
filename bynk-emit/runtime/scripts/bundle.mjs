@@ -159,6 +159,8 @@ const TEST_MODULES = [
 const SPLICE_EXPORTS = { snapshot: ["__bynkSnapshotReport"] };
 const CLIENT_SOURCE = join(SRC, "client", "http_client.ts");
 const CLIENT_RUNTIME_TARGET = join(pkgRoot, "..", "src", "emitter", "http_client_runtime.ts");
+const CLIENT_WS_SOURCE = join(SRC, "client", "http_client_ws.ts");
+const CLIENT_WS_RUNTIME_TARGET = join(pkgRoot, "..", "src", "emitter", "http_client_ws_runtime.ts");
 
 const IMPORT_STATEMENT = /^import\s[^;]*?\sfrom\s+["']([^"']+)["'];\n/gms;
 const TOP_LEVEL_EXPORT = /^export (?=(?:declare |abstract |async )*(?:function\*?|class|const|let|interface|type|enum)\s+([A-Za-z_$][\w$]*))/gm;
@@ -246,6 +248,7 @@ async function buildTestRuntime() {
   ].join("\n");
   files.set(TEST_TABLE, table);
   files.set(CLIENT_RUNTIME_TARGET, spliceForm(await readFile(CLIENT_SOURCE, "utf8"), { stripExports: false }));
+  files.set(CLIENT_WS_RUNTIME_TARGET, spliceForm(await readFile(CLIENT_WS_SOURCE, "utf8"), { stripExports: false }));
   return files;
 }
 
@@ -451,7 +454,7 @@ let stale = false;
     }
     if (drift) {
       console.error(
-        "the test runtime artifacts (src/testgen/test_runtime/, test_runtime_modules.rs, src/emitter/http_client_runtime.ts) are out of date.\n" +
+        "the test runtime artifacts (src/testgen/test_runtime/, test_runtime_modules.rs, src/emitter/http_client_runtime.ts, http_client_ws_runtime.ts) are out of date.\n" +
           "Run `npm run bundle` in bynk-emit/runtime and commit them. Edit runtime/src/testing/ and runtime/src/client/, never the artifacts.",
       );
       stale = true;

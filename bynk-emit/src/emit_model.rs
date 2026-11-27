@@ -1053,6 +1053,11 @@ pub struct EmitProjectCtx {
     pub imported_from_kind: HashMap<String, UnitKind>,
     /// For each imported unit, the file path that declares each name.
     pub imported_decl_paths: HashMap<String, HashMap<String, PathBuf>>,
+    /// #3807: the consumed contexts whose declarations span several files. A caller's
+    /// namespace import of one cannot name a single file (`imported_decl_paths` lists only
+    /// the exported *types*, which can all sit in one file while its services sit in
+    /// another), so on `bundle` it names the context's root module.
+    pub split_consumed_contexts: HashSet<String>,
     /// #2887: the types this unit renames with `consumes U { T as Alias }`,
     /// alias → the name the consumed module declares it under.
     pub consumed_type_aliases: HashMap<String, String>,

@@ -543,9 +543,17 @@ pub(super) fn emit_cross_context_namespace_imports(
         // currently emit one file per .bynk source so a single import per
         // consumed name suffices for the surface contract.)
         let target_paths = ctx.imported_decl_paths.get(q.as_str());
+        // #3807: a context whose declarations span several files has no single file that
+        // holds every name the namespace is read for (`ns.Dir` in one file, `ns.Entry` in
+        // another, or its services in a third than its exported types: `imported_decl_paths`
+        // lists only the types). On `bundle` its root module (`<ctx>.ts`) re-exports every
+        // file and merges their surfaces, so that is what the namespace names; `workers`
+        // imports the context's one handlers module, which has them all.
+        let split_on_bundle = matches!(ctx.target, BuildTarget::Bundle)
+            && ctx.split_consumed_contexts.contains(q.as_str());
         let target = target_paths
-            // #3807: the smallest path, so the output does not depend on hash order. Any
-            // single file is still wrong for a context whose declarations span several.
+            // One declaring file: the smallest path, so the output does not depend on hash order.
+            .filter(|_| !split_on_bundle)
             .and_then(|m| m.values().min().cloned())
             .unwrap_or_else(|| {
                 // No imported declaration pins the path (e.g. a capability-only
