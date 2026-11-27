@@ -183,7 +183,6 @@ fn with_kind_appendix(
     }
 }
 
-/// #4451: a `{dataset}` placeholder in an Analytics SQL literal names its table.
 /// Rung 1a: a `given` entry's capability path (#2469), a dataset placeholder
 /// (#4451), or (#3959) a binding's parameter name, `given St|ore = Sessions`.
 fn fallback_section(a: &HoverAnalysis<'_>, input: &HoverInput<'_>) -> Option<String> {
@@ -226,6 +225,7 @@ fn with_call_bindings(content: String, a: &HoverAnalysis<'_>) -> String {
     }
 }
 
+/// #4451: a `{dataset}` placeholder in an Analytics SQL literal names its table.
 fn dataset_hover(input: &HoverInput<'_>) -> Option<String> {
     let (text, offset) = input.doc?;
     crate::analytics_tooling::dataset_hover_at(text, offset)
