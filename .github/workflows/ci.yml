@@ -934,13 +934,16 @@ jobs:
       # The spec must stay in step with the tests' own; a drift guard
       # (bynk-tests/tests/wrangler/mod.rs) fails if it doesn't.
       #
-      # Not fatal here: this step runs only off Linux (the Linux system tier is
-      # the `test-system` job, which pre-warms too and makes wrangler mandatory),
-      # and off Linux the smokes are allowed to skip anyway.
+      # This step runs only off Linux (the Linux system tier is the
+      # `test-system` job, which pre-warms too and makes wrangler mandatory).
+      # Fatal on Windows, where the smokes are required (#4579): a failed
+      # pre-warm there would otherwise surface later as required smokes racing
+      # on a cold cache, the symptom this step exists to prevent. Not fatal on
+      # macOS, where the smokes may still skip.
       - name: Pre-warm the npx cache for wrangler
         if: matrix.os != 'ubuntu-latest'
         run: npx -y wrangler@4 --version
-        continue-on-error: true
+        continue-on-error: ${{ matrix.os != 'windows-latest' }}
       # `cargo nextest run --workspace` runs every crate's suite. nextest cannot
       # run rustdoc doctests; the only ones in the tree are the crate READMEs'
       # examples, which `test-system`'s `README examples` step runs. The corpus's includes:
@@ -980,15 +983,22 @@ jobs:
         run: cargo nextest run --workspace --locked --profile ci-os
         env:
           BYNK_REQUIRE_TSC: "1"
+          # See the note on the next step.
+          BYNK_REQUIRE_WORKERD: ${{ matrix.os == 'windows-latest' && '1' || '' }}
       - name: Run tests
         if: matrix.os != 'ubuntu-latest' && github.event_name == 'schedule'
         run: cargo nextest run --workspace --locked --profile ci
         env:
           BYNK_REQUIRE_TSC: "1"
-          # No BYNK_REQUIRE_WORKERD here: this step runs only off Linux, where the
-          # workerd smokes may skip if wrangler cannot boot. Linux requires them
-          # in the `test-system` job (see there, and bynk-tests/tests/require/mod.rs
-          # for the one implementation of the "non-empty means required" contract).
+          # #4579: required on Windows, so a workerd smoke that cannot boot fails
+          # there instead of skipping. A boot gate that never opened (it matched
+          # only wrangler's `localhost` Ready line, and Windows prints `127.0.0.1`)
+          # made every Windows workerd test wait out its 180 s deadline and skip,
+          # unseen, from #4521 to #4579. Empty on macOS, where the smokes may
+          # still skip: empty reads as not required (the "non-empty means
+          # required" contract in bynk-tests/tests/require/mod.rs). Linux
+          # requires them in the `test-system` job.
+          BYNK_REQUIRE_WORKERD: ${{ matrix.os == 'windows-latest' && '1' || '' }}
       # The README examples and the tier partition used to run here, after the
       # suite. They moved to `test-system` (see there), off the merge queue's
       # critical path.
