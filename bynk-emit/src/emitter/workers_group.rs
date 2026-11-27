@@ -963,6 +963,13 @@ fn forward_names(j: usize) -> (String, String) {
 /// request to the old script's Service Binding; a forward that has others after it passes a
 /// clone (the body is read once) and misses on the old script's `404`, so the next one is
 /// tried, while the last forward's answer is the answer.
+///
+/// So the dispatcher's own fallback (`__withAllowed(held)`, `__unclaimed`) is unreachable in
+/// a receive entry. A member's held `405` (a route for the path, not the method) does not
+/// answer either: the request goes on to the old script, which may serve that method for the
+/// moving context, and the old script's answer, `404` included, is the answer. That differs
+/// from the ordinary entry's merged `405` with `Allow` only for the receive window, and only
+/// where a member and a moving context share no handler for the request.
 fn forward_entries(forwards: &[GroupForward]) -> Vec<TsStmt> {
     if forwards.is_empty() {
         return Vec::new();

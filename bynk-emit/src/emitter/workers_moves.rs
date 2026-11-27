@@ -177,15 +177,14 @@ pub(crate) fn standalone_receive_entry(incoming: &Incoming) -> TsProgram {
             incoming.context, incoming.from_script
         ),
     );
-    if !incoming.classes.is_empty() {
-        program.push(TsStmt::decl(
-            TsDecl::ReExport {
-                names: incoming.classes.clone(),
-                from: "./index.js".to_string(),
-            },
-            None,
-        ));
-    }
+    // Every class the ordinary entry exports: the incoming agents, and whatever else the
+    // receive config still binds (the events fan-out of a publishing context, its containers).
+    program.push(TsStmt::decl(
+        TsDecl::ReExportAll {
+            from: "./index.js".to_string(),
+        },
+        None,
+    ));
     let fetcher = TsType::Object(vec![TsTypeMember::method(
         "fetch",
         vec![TsParam::new(
@@ -448,10 +447,7 @@ mod tests {
     #[test]
     fn a_standalone_receiver_forwards_everything_and_exports_the_classes() {
         let entry = printed(&standalone_receive_entry(&incoming()));
-        assert!(
-            entry.contains("export { Cart } from \"./index.js\";"),
-            "{entry}"
-        );
+        assert!(entry.contains("export * from \"./index.js\";"), "{entry}");
         assert!(
             entry.contains("return env[\"BYNK_FORWARD_SHOP_ORDERS\"].fetch(request);"),
             "{entry}"

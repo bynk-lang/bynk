@@ -55,6 +55,12 @@ impl TomlDocument {
         self.blocks.push(block);
     }
 
+    /// #3565: keep only the blocks `keep` accepts, in order (an agent move's phase
+    /// variants drop a class's binding and its plain `exports` entry).
+    pub(crate) fn retain_blocks(&mut self, keep: impl FnMut(&TomlBlock) -> bool) {
+        self.blocks.retain(keep);
+    }
+
     /// Set the root `main` entry's value in place — the structural,
     /// tree-level equivalent of the old text-based `toml_edit` patch this
     /// replaces (P7.6, #1309, Decision E): a caller that already holds the
@@ -66,12 +72,6 @@ impl TomlDocument {
     /// #1305's own guardrail against a silently-unpatched JS artefact whose
     /// manifest still names the stripped `.ts` entry: this method reports
     /// the miss, it doesn't decide it's fine).
-    /// #3565: keep only the blocks `keep` accepts, in order (an agent move's phase
-    /// variants drop a class's binding and its plain `exports` entry).
-    pub(crate) fn retain_blocks(&mut self, keep: impl FnMut(&TomlBlock) -> bool) {
-        self.blocks.retain(keep);
-    }
-
     #[must_use]
     pub fn set_main(&mut self, value: impl Into<String>) -> bool {
         for entry in &mut self.root {

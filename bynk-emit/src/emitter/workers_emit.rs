@@ -522,8 +522,9 @@ impl WorkersEmit<'_> {
 
     /// A Worker's `wrangler.toml`, from its members' parts (their bindings, crons, queues and
     /// addresses merged, an identical capability one binding), with the Worker's Workers Logs,
-    /// tuning and extras. #3565: the crons, queues and addresses of the members in `without`
-    /// are left out, as an agent move's receive phase leaves them on the source.
+    /// tuning and extras. #3565: the crons, queues, addresses and class tombstones of the
+    /// members in `without` are left out, as an agent move's receive phase leaves them on the
+    /// source.
     fn worker_config(
         &self,
         members: &[(&MemberParts, &UnitTable)],
@@ -550,8 +551,10 @@ impl WorkersEmit<'_> {
             all.dedup();
             all
         };
+        // #3565: an incoming context's `replaces` and `removed agent` tombstones describe
+        // namespaces still on the source, so the receive phase leaves them out too.
         let mut tombstones = emitter::ClassTombstones::default();
-        for (_, table) in members {
+        for (_, table) in kept() {
             let one = emitter::ClassTombstones::of(table);
             tombstones.renamed.extend(one.renamed);
             tombstones.deleted.extend(one.deleted);
@@ -621,6 +624,11 @@ impl WorkersEmit<'_> {
                 let bindings = self.bindings.of_worker(&dir);
                 self.group_entry(first, members, bindings, incoming)
             } else {
+                // A Worker of its own receives only its own context.
+                debug_assert!(
+                    incoming.len() == 1 && incoming[0].context == first,
+                    "a standalone receiver takes only its own context: {incoming:?}"
+                );
                 workers_moves::standalone_receive_entry(&incoming[0])
             };
             compiled.push(staged(workers_moves::RECEIVE_ENTRY, Document::Ts(entry)));

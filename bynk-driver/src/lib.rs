@@ -2840,6 +2840,56 @@ mod tests {
         assert!(!commit.contains("0 * * * *"), "{commit}");
     }
 
+    /// #3565 (review of #4617): a publishing context moving to a Worker of its own. Its receive
+    /// config still binds the events fan-out, so the receive entry re-exports everything the
+    /// ordinary entry does; and its `replaces` tombstone, which names a namespace still on the
+    /// source, stays out of the receive config.
+    #[test]
+    fn a_publishing_context_received_on_its_own_worker_exports_what_its_config_binds() {
+        use bynk_project::worker_moves::{Incoming, MoveVariants};
+        let dir = scratch_dir("moves_publishing");
+        fs::write(dir.0.join("bynk.toml"), "[build]\ntarget = \"workers\"\n").unwrap();
+        fs::create_dir_all(dir.0.join("src/shop")).unwrap();
+        fs::write(
+            dir.0.join("src/shop/orders.bynk"),
+            "context shop.orders\n\nexports transparent { Paid }\nconsumes bynk { Events }\n\nevent Paid = {\n  id: String,\n}\n\nagent Cart replaces Trolley {\n  key id: String\n  store n: Cell[Int] = 0\n\n  on call bump() -> Effect[Int] { Effect.pure(1) }\n}\n\nservice pay {\n  on call(id: String) -> Effect[()] by Caller given Events {\n    Events.emit[Paid](Paid { id: id })\n  }\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.0.join("src/shop/mail.bynk"),
+            "context shop.mail\n\nconsumes shop.orders\nconsumes bynk { Logger }\n\nservice onPaid from Events(Paid) {\n  on event(e: Paid) -> Effect[()] given Logger {\n    Logger.info(e.id)\n  }\n}\n",
+        )
+        .unwrap();
+        let plain = built_with(&dir, MoveVariants::default());
+        let own = doc(&plain, "workers/shop-orders/wrangler.toml").unwrap();
+        assert!(own.contains("class_name = \"__EventsFanout\""), "{own}");
+        assert!(own.contains("renamed_to = \"Cart\""), "{own}");
+        let moves = MoveVariants {
+            receive: [(
+                "shop-orders".to_string(),
+                vec![Incoming {
+                    context: "shop.orders".into(),
+                    classes: vec!["Cart".into()],
+                    from_script: "core".into(),
+                }],
+            )]
+            .into(),
+            ..MoveVariants::default()
+        };
+        let moved = built_with(&dir, moves);
+        let config = doc(&moved, "workers/shop-orders/wrangler.receive.toml").unwrap();
+        assert!(
+            config.contains("class_name = \"__EventsFanout\""),
+            "{config}"
+        );
+        assert!(!config.contains("class_name = \"Cart\""), "{config}");
+        assert!(!config.contains("Trolley"), "{config}");
+        let entry = doc(&moved, "workers/shop-orders/index.receive.ts").unwrap();
+        assert!(entry.contains("export * from \"./index.js\";"), "{entry}");
+        let ordinary = doc(&moved, "workers/shop-orders/index.ts").unwrap();
+        assert!(ordinary.contains("__EventsFanout"), "{ordinary}");
+    }
+
     /// #3565: a context leaving a group for a Worker of its own (the receiver is that Worker),
     /// the group it left giving up the class, and a dissolved source's stub.
     #[test]
@@ -2865,10 +2915,7 @@ mod tests {
         };
         let moved = built_with(&dir, moves);
         let entry = doc(&moved, "workers/shop-orders/index.receive.ts").unwrap();
-        assert!(
-            entry.contains("export { Cart } from \"./index.js\";"),
-            "{entry}"
-        );
+        assert!(entry.contains("export * from \"./index.js\";"), "{entry}");
         assert!(
             entry.contains("env[\"BYNK_FORWARD_SHOP_ORDERS\"].fetch(request)"),
             "{entry}"
