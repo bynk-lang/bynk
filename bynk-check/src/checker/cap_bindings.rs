@@ -313,8 +313,19 @@ pub(crate) fn parameterised_fn_value(name: &Ident, callee: &FnDecl) -> CompileEr
     )
     .with_label(callee.name.ident().span, format!("`{}` is declared here", name.name))
     .with_note(format!(
-        "every call binds its parameters, and a value would leave them unchosen: write a lambda that binds them, as in `(x) => {}(x, given {})`",
-        name.name,
-        params.join(", ")
+        "every call binds its parameters, and a value would leave them unchosen: write a lambda that binds them, as in `{}`",
+        binding_lambda(&name.name, callee, &params)
     ))
+}
+
+/// The lambda `parameterised_fn_value`'s note suggests, over the callee's own
+/// parameters: `(key, value) => put(key, value, given Inner = …)`.
+fn binding_lambda(name: &str, callee: &FnDecl, bindings: &[String]) -> String {
+    let args: Vec<&str> = callee.params.iter().map(|p| p.name.name.as_str()).collect();
+    let args = args.join(", ");
+    let sep = if args.is_empty() { "" } else { ", " };
+    format!(
+        "({args}) => {name}({args}{sep}given {})",
+        bindings.join(", ")
+    )
 }
