@@ -79,7 +79,7 @@ async function test_an_event_delivered_twice_is_counted_once() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -97,9 +97,12 @@ async function test_an_event_delivered_twice_is_counted_once() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -110,6 +113,7 @@ async function test_an_event_delivered_twice_is_counted_once() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const e = { id: "o1", region: Region.Domestic };
     const env = { eventId: "evt-1", publisherId: "shop.order", emittedAt: 0, schemaVersion: 1, trace: { tag: "None" as const } };
@@ -137,7 +141,7 @@ async function test_dedup_holds_at_integration_too() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -155,9 +159,12 @@ async function test_dedup_holds_at_integration_too() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -168,6 +175,7 @@ async function test_dedup_holds_at_integration_too() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const e = { id: "o1", region: Region.Domestic };
     const env = { eventId: "evt-1", publisherId: "shop.order", emittedAt: 0, schemaVersion: 1, trace: { tag: "None" as const } };
@@ -194,7 +202,7 @@ async function test_a_default_envelope_is_fresh_on_each_delivery() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -212,9 +220,12 @@ async function test_a_default_envelope_is_fresh_on_each_delivery() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -225,6 +236,7 @@ async function test_a_default_envelope_is_fresh_on_each_delivery() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const e = { id: "o1", region: Region.Domestic };
     const __r0 = await __bynkEvent_OnPlaced(e, undefined, deps);
@@ -252,7 +264,7 @@ async function test_a_default_envelope_carries_the_current_schema_version() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -270,9 +282,12 @@ async function test_a_default_envelope_carries_the_current_schema_version() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -283,6 +298,7 @@ async function test_a_default_envelope_carries_the_current_schema_version() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const e = { id: "o1", region: Region.Domestic };
     const __r0 = await __bynkEvent_OnV1(e, undefined, deps);
@@ -310,7 +326,7 @@ async function test_the_pattern_filter_is_honoured() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -328,9 +344,12 @@ async function test_the_pattern_filter_is_honoured() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -341,6 +360,7 @@ async function test_the_pattern_filter_is_honoured() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const __r0 = await __bynkEvent_OnDomestic({ id: "o1", region: Region.International }, undefined, deps);
     const before = await __makeBooks("domestic").total(deps);
@@ -367,7 +387,7 @@ async function test_the_schema_guard_is_honoured() {
     type Placed = __ns_shop_order.Placed;
     type Region = __ns_shop_order.Region;
     const order = (deps as any).surface?.order;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -385,9 +405,12 @@ async function test_the_schema_guard_is_honoured() {
     type FetchError = __ns_bynk.FetchError;
     type FetchOptions = __ns_bynk.FetchOptions;
     type File = __ns_bynk.File;
+    type Forwarded = __ns_bynk.Forwarded;
+    type InboundRequest = __ns_bynk.InboundRequest;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type ParOptions = __ns_bynk.ParOptions;
+    type PassThrough = __ns_bynk.PassThrough;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -398,6 +421,7 @@ async function test_the_schema_guard_is_honoured() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
+    type UpstreamError = __ns_bynk.UpstreamError;
     type Uuid = __ns_bynk.Uuid;
     const e = { id: "o1", region: Region.Domestic };
     const env = { eventId: "evt-2", publisherId: "shop.order", emittedAt: 0, schemaVersion: 2, trace: { tag: "None" as const } };
