@@ -1,2 +1,3 @@
 bynk.container.unbounded_instances `Renderer.send` names a container instance from `tenant`
 bynk.container.unbounded_instances `Renderer.receiveBytes` names a container instance from `tenant`
+bynk.container.unbounded_instances `Renderer.send` names a container instance from `shard`

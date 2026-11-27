@@ -25,6 +25,8 @@ export default {
       const method = request.method;
       const surface = compose(env);
       const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
+      const __security_checked: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
+      const __security_shared: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
       let __route: string = "request";
       try {
         if (path.startsWith("/_bynk/call/")) {
@@ -41,6 +43,20 @@ export default {
         }
 
         {
+          const __m = __matchPath("/checked/:raw", path);
+          if ((method === "GET" || method === "HEAD") && __m) {
+            __route = "GET /checked/:raw";
+            if (__m.malformed) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_checked);
+            }
+            const __raw_raw = __m.params["raw"];
+            const raw = __raw_raw;
+            const result = await surface.http_GET_checked_Param_raw(raw);
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop.render\""]), __security_checked);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
           const __m = __matchPath("/render/:tenant", path);
           if ((method === "GET" || method === "HEAD") && __m) {
             __route = "GET /render/:tenant";
@@ -53,6 +69,22 @@ export default {
             const tenant = __r_tenant.value;
             const result = await surface.http_GET_render_Param_tenant(tenant);
             const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop.render\""]), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          const __m = __matchPath("/shared/:shard", path);
+          if ((method === "GET" || method === "HEAD") && __m) {
+            __route = "GET /shared/:shard";
+            if (__m.malformed) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_shared);
+            }
+            const __raw_shard = __m.params["shard"];
+            const __r_shard = handlers.TenantId.of(__raw_shard);
+            if (__r_shard.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "RefinementViolation", path: "path.shard", violation: __r_shard.error })), { status: 400, headers: { "content-type": "application/json" } }), __security_shared);
+            const shard = __r_shard.value;
+            const result = await surface.http_GET_shared_Param_shard(shard);
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop.render\""]), __security_shared);
             return method === "HEAD" ? __headResponse(__response) : __response;
           }
         }
@@ -87,10 +119,20 @@ export default {
             return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /upload/:tenant" }), request, ["Bearer realm=\"shop.render\""])), __security_api);
           }
         }
+        if (__matchPath("/checked/:raw", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_checked);
+        }
         if (__matchPath("/render/:tenant", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;
           const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
           return __applySecurityHeaders(__res, __security_api);
+        }
+        if (__matchPath("/shared/:shard", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_shared);
         }
         if (__matchPath("/thumb/:tenant", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;

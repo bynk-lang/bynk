@@ -89,7 +89,9 @@ path parameter), and a bare string is a type error. A key limits what a name loo
 like, not how many there are, so a keyed instance is checked like any other:
 `bynk check` still warns (`bynk.container.unbounded_instances`) when its name comes
 from the request on a route anyone can call. Serve the route `by` an authenticated
-actor, or limit it with a `RateLimit`.
+actor to clear it. A `RateLimit` limits how fast a caller can ask for new names and
+is worth having too, but `bynk check` does not take it into account, so the warning
+stays.
 
 A name that is empty, over 256 bytes or
 holds a control character faults the call. The first call to an instance waits for

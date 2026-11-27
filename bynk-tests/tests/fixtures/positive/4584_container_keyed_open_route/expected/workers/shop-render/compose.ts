@@ -51,5 +51,11 @@ export function compose(env: Env) {
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_POST_upload_Param_tenant(tenant, { ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
+    async http_GET_checked_Param_raw(raw: string) {
+      return handlers.checked.http_GET_checked_Param_raw(raw, deps);
+    },
+    async http_GET_shared_Param_shard(shard: handlers.TenantId) {
+      return handlers.shared.http_GET_shared_Param_shard(shard, deps);
+    },
   };
 }

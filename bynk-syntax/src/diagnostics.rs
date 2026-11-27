@@ -1427,8 +1427,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 a closed set (an enum's names) does not warn, and neither does one passed through a \
                 function, which is where a set is bounded and is not followed. Serve the route `by` \
                 an authenticated actor, or choose the name from a fixed set. A refined type limits \
-                the shape of a name, not how many there are, so pair a keyed instance with an \
-                authenticated actor or a `RateLimit`. An instance can also declare \
+                the shape of a name, not how many there are. A `RateLimit` limits how fast a \
+                caller can ask for new names, but the check does not take it into account, so \
+                it does not clear the warning. An instance can also declare \
                 `@instances(by: K)`: `send` then takes a `K`, but a key limits the shape of a name \
                 and not how many there are, so a keyed instance warns on an open route like any \
                 other and does not on a route served by an authenticated actor.",

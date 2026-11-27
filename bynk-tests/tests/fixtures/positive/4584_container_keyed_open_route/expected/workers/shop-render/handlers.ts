@@ -72,6 +72,50 @@ export const api = {
   },
 };
 
+export const shared = {
+  async http_GET_shared_Param_shard(shard: TenantId, deps: { Renderer: Renderer }): globalThis.Promise<HttpResult<string>> {
+    const req = { method: Method.Get, url: "http://renderer/shared", contentType: { tag: "None" as const }, authorization: { tag: "None" as const }, headers: new globalThis.Map(), body: { tag: "None" as const } };
+    const res = await deps.Renderer.send(shard, req);
+    switch (res.tag) {
+      case "Ok": {
+        const r = res.value;
+        return HttpResult.Ok(r.body);
+      }
+      case "Err": {
+        return HttpResult.ServerError("render failed");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+};
+
+export const checked = {
+  async http_GET_checked_Param_raw(raw: string, deps: { Renderer: Renderer }): globalThis.Promise<HttpResult<string>> {
+    const __r0 = TenantId.of(raw);
+    switch (__r0.tag) {
+      case "Ok": {
+        const key = __r0.value;
+        const req = { method: Method.Get, url: "http://renderer/checked", contentType: { tag: "None" as const }, authorization: { tag: "None" as const }, headers: new globalThis.Map(), body: { tag: "None" as const } };
+        const res = await deps.Renderer.send(key, req);
+        switch (res.tag) {
+          case "Ok": {
+            const r = res.value;
+            return HttpResult.Ok(r.body);
+          }
+          case "Err": {
+            return HttpResult.ServerError("render failed");
+          }
+        }
+        throw new globalThis.Error("non-exhaustive match");
+      }
+      case "Err": {
+        return HttpResult.ServerError("bad tenant");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+};
+
 export function __serialise_TenantId(value: TenantId): __JsonValue {
   return value as unknown as string;
 }
