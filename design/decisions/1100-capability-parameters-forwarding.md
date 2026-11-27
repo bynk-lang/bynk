@@ -1,12 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage, emit_diagnostics, explained_codes
-changelog: A commons function forwards a capability parameter to another by binding it to its own, `bottom(key, given Inner = Store)`, through chains, generic and `Ord`-bounded functions and recursion; a function with capability parameters named as a value is `bynk.given.parameterised_fn_value`, and a lambda that binds takes its place (experimental, behind `bynk.given.parameters`)
----
+# 1100 — A commons function forwards a capability parameter by binding it to its own, and a parameterised function is not a value
 
-## ADR: capability-parameters-forwarding
-title: A commons function forwards a capability parameter by binding it to its own, and a parameterised function is not a value
-summary: Forwarding is the ordinary binding rule applied in a commons body; a value of a parameterised function is refused in favour of a lambda that binds
+- **Status:** Accepted (v0.822)
 
 **Context.** #3959, slice 2 of the capability-parameters track (`design/tracks/capability-parameters.md`, §7 and Q5, Q8). Slice 1 checked and emitted a binding from a context or a provider body. A library is usually several commons functions, so a parameter has to pass from one to the next, and the track records forwarding in this slice.
 

@@ -5,6 +5,7 @@
 
 | Probe | From | To | Version | PR | Reason |
 |---|---|---|---|---|---|
+| ts_writes | 487 | 491 | v0.834.1 | #4617 | the agent-move variants name each forward's entry and miss test (`__fwdN`, `__fwdMissN`, as the member table already names `__mN`) and head the receive and stub entries with a comment naming the moving context and its scripts; `TsStmt::comment` takes text and identifiers are strings, so there is no typed node to build them from (#3565) |
 | ts_writes | 486 | 487 | v0.806.0 | #4519 | the test double of `Ai` carries one text write, the `generateJson` member that `Ai.generateValue[T]` is lowered over, which is not an operation of `Ai` and so cannot be a stub clause (#4099) |
 | ts_writes | 486 | 487 | v0.800.0 | #4508 | `object_key` quotes a wire name that is not an identifier as a TypeScript string literal, with one `format!` for a control character's escape; the name is data from the declaration, not authored TypeScript text |
 | ts_writes | 481 | 486 | v0.792.0 | #4503 | `checked_callees` in bynk-driver builds a refusal message with `format!`, an error-message line the text-level scanner counts as a TypeScript write (the same one-site over-count the probe documents for struct-field labels); it writes no TypeScript (#4105) |

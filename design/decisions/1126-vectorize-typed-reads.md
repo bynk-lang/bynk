@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Vectorize.queryValue[M] and getByIdsValue[M] read each vector's metadata as M on its own, so one stale vector is an Err for that match and the rest still read
----
+# 1126 — Typed Vectorize reads are compiler-lowered over the text operations, with a Result per match
 
-## ADR: vectorize-typed-reads
-title: Typed Vectorize reads are compiler-lowered over the text operations, with a Result per match
-summary: Why the failure is per match and not the whole-reply policy of a declared typed read, and what the call lowers to
+- **Status:** Accepted (v0.835)
 
 **Context.** `upsertValue[M]` writes typed metadata, but `query` and `getByIds` return it as text, so every caller decodes every match by hand. The text was kept for a sound reason: a vector written by an older version of the program should be skippable or repairable, not fault the whole query (#4101).
 

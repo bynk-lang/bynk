@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: An `on ANY(…)` pass-through route returning `Effect[PassThrough]`, with `bynk`'s `InboundRequest`, `Forwarded`, `PassThrough`, `UpstreamError` and an `Upstream` capability whose `@origin` is declared, now type-checks; its router and the upstream exchange arrive in the next increment, so a build with one is refused (`bynk.http.pass_through_not_emitted`); experimental, behind `bynk.http.ANY` and the `bynk` items in `[unstable] allow`. A bare variant that several sums share is now picked by a body's `Effect[T]` as by a plain `T`, so an email handler's `Forward` stays `EmailVerdict.Forward` beside `PassThrough.Forward`
----
+# 1106 — A pass-through route is `on ANY(…)` returning `bynk`'s `Effect[PassThrough]`, forwarding through a declared `Upstream`
 
-## ADR: pass-through-route-form
-title: A pass-through route is `on ANY(…)` returning `bynk`'s `Effect[PassThrough]`, forwarding through a declared `Upstream`
-summary: `ANY` routes, the `bynk` types `InboundRequest`, `Forwarded`, `PassThrough`, `UpstreamError` and the `Upstream` capability with `@origin`/`@timeout`; checked now, built next
+- **Status:** Accepted (v0.828)
 
 **Context.** The pass-through HTTP track (`design/tracks/pass-through-http.md`, spine
 #3752) puts reverse-proxy routes in the ordinary service tier (D1). Slices 1 and 2 gave a

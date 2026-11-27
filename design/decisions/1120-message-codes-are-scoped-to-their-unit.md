@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A message code is scoped to the unit that declares it: another unit's `render` is not reachable through `uses`, and a literal `message("code")` in a unit that declares a bundle must name a code of its reference block
-breaking: A `uses` of a unit that declares a `messages` bundle no longer brings that unit's `render` in (`bynk.messages.cross_unit_render`), and a literal `message("code")` in a unit that declares a bundle must name a code of its `@reference` block (`bynk.messages.unknown_code`). Declare the code in the unit's reference bundle, or export a function from the unit that owns the bundle that renders it and call that, as `greeter.web` calls `greet` from `greeter.messages`.
----
+# 1120 — A message code is scoped to the unit that declares it
 
-## ADR: message-codes-are-scoped-to-their-unit
-title: A message code is scoped to the unit that declares it
-summary: message(code) and render resolve only against the bundles of the unit where they are called; another unit's messages are used through a function it exports
+- **Status:** Accepted (v0.833)
 
 **Context.** A message `code` was a bare dotted `String` matched by string equality
 (#911, the M5 question the message-bundles track left open). Two units could declare the

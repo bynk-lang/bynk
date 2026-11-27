@@ -1,13 +1,6 @@
----
-level: minor
-changelog: A `from websocket` service's `out` frames are written by their type's serialisation codec, as `in` frames are read, so an `Option`, a `Decimal`, an `Instant` or a sum goes out in the wire form every other boundary uses
-breaking: An `out` frame that holds an `Option` now carries `{ "kind": "Some", "value": … }` or `{ "kind": "None" }`, where it carried the runtime's `{ "tag": "Some", "value": … }` or `{ "tag": "None" }`. A client that read the old shape must read the new one. A `Decimal` or `Instant` field, which the old encoding could not write (a `Decimal` threw) or wrote in its runtime form, is now its codec text or epoch milliseconds. A frame of strings, numbers, booleans, lists and plain records is unchanged. Connections open across the deploy keep the old `Option` shape until they reconnect: a socket accepted before this change records no service name and is sent as before.
-probes: emit_diagnostics, ts_writes
----
+# 1104 — A WebSocket service writes its `out` frames with its type's serialisation codec
 
-## ADR: websocket-out-frames-use-the-codec
-title: A WebSocket service writes its `out` frames with its type's serialisation codec
-summary: an `out` frame is encoded by the codec its `in` counterpart is decoded with, found at `send` by a service name the socket's attachment records, so the wire form of a frame is the codec's for every type that can be a frame
+- **Status:** Accepted (v0.826)
 
 **Context.** `Connection.send` wrote an `out` frame as `JSON.stringify` of the runtime value, while an `in` frame is decoded by the serialisation codec. The two directions used different wire forms: an `Option` went out as `{"tag":"None"}` where the codec writes `null` or `{"kind":"None"}`, a `Decimal` (which holds a bigint) made `JSON.stringify` throw, and an `Instant` or sum went out in its runtime representation. The cross-context wire format is frozen at 1.0, so the `out` form was an accident of the runtime about to become a contract (#4549, found while building the typed client of #3906).
 

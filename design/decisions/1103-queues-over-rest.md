@@ -1,13 +1,6 @@
----
-level: minor
-changelog: `bynk deploy` checks, creates and deletes queues through Cloudflare's API instead of wrangler, so every deploy of a project with a queue needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; a refused queue create is a success only when the account lists the queue, and a delete answered `10104` is one already done. Every account resource is now on REST
-breaking: Every deploy of a project that consumes, sends to or dead-letters into a queue now needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (the token with "Queues: Edit"), even when nothing is created, because each deploy checks its queues; `wrangler login` alone is no longer enough. So does a `--prune` that deletes an orphaned queue. Without them the deploy stops before its confirmation with `set CLOUDFLARE_… to check, create or delete the account's queues: …`, having changed nothing. Set both variables. A failed queue call now reads as a REST failure, such as `POST /queues: Cloudflare answered 403 […]`, instead of wrangler's text.
-probes: wrangler_resource_ops
----
+# 1103 — Queues run over REST, and every account resource is off wrangler
 
-## ADR: queues-over-rest
-title: Queues run over REST, and every account resource is off wrangler
-summary: queue create, lookup and delete move to `/queues`, a refused create is settled by reading the account's queue list, every queue deploy needs the API credentials, and the wrangler text matching left is two predicates and one parser, each for an operation wrangler keeps
+- **Status:** Accepted (v0.825)
 
 **Context.** Back-half paydown 1D.4d (#4056) moves queues, the last account resource on wrangler, to Cloudflare's REST API, under ADR "Account resources need API credentials". Under wrangler, a lost create race was recognised by the words "already exists" on either stream, and a queue already deleted by `Queue "n" does not exist`. The ADR "The wrangler/REST boundary and the Cloudflare client layer" kept that matching in `cloudflare/error.rs` "until 1D.4 empties it". The API reference (https://developers.cloudflare.com/api/resources/queues/) documents `POST /queues {queue_name}`, `DELETE /queues/{queue_id}` and a numbered listing (`page`, `per_page` up to 500), and the error-code table (https://developers.cloudflare.com/queues/reference/error-codes/) documents `10104 QueueNotFound`. It documents no lookup by name, and no code for a name already taken: the `11009` wrangler printed is not in the table.
 

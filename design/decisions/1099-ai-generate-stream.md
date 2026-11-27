@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Ai.generateStream(model, request) streams a chat model's reply as the text each event added, ready for Streaming; events that add no text are skipped and an unknown event faults the stream naming its keys, never its values
----
+# 1099 — Ai.generateStream normalises a chat model's events to text deltas in the binding
 
-## ADR: ai-generate-stream
-title: Ai.generateStream normalises a chat model's events to text deltas in the binding
-summary: What counts as text, what is skipped, what faults, and why the iterator is not a generator
+- **Status:** Accepted (v0.821)
 
 **Context.** `runStream` yields a model's events as raw JSON text, and the chat event shape is observed and not documented, so every chat UI decodes events by hand and `generate`'s typed `GenerateRequest` cannot be streamed at all (#4100).
 

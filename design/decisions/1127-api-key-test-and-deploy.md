@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ast_importers, diagnostic_coverage, explained_codes
-changelog: `bynk deploy` mints an `ApiKey` actor's pepper as a Worker secret and keeps a set one even under `--force`, and a `system` test acts as an `ApiKey` actor with `by Client("…")` or refuses one with `by Malformed`, `by Unknown` and `by Forged`, each checking the key store did the same work (experimental, under `bynk.actor.ApiKey`)
----
+# 1127 — The `system` tier presents real API keys and the failure principals check the store's work; `bynk deploy` mints the pepper
 
-## ADR: api-key-test-and-deploy
-title: The `system` tier presents real API keys and the failure principals check the store's work; `bynk deploy` mints the pepper
-summary: Slice 1's second part: the test principals for an `ApiKey` route, and pepper provisioning through the `SignedCookie` key path
+- **Status:** Accepted (v0.836)
 
 **Context.** Slice 1 of the API keys track (`design/tracks/api-keys.md`, spine #3939) ships in two parts. The first part (ADR block `api-key-mint`) carries the scheme, the seam, `mint` and the generated key store. A `system` case acting as an `ApiKey` actor then sends no key, and `bynk deploy` does not mint the pepper. This part closes both gaps, so the slice meets §14's "Done when" with live check K1.
 
