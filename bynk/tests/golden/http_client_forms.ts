@@ -656,11 +656,27 @@ export function __invalid(e: unknown): CallFailure {
  * share this one test and one error, so the rule cannot differ between them.
  */
 export class CleartextCredential extends globalThis.Error {
+  /** The URL without its userinfo, query or fragment: what the message prints. See [`__redactedUrl`]. */
   readonly url: string;
   constructor(url: string) {
-    super(`refusing to send a credential over cleartext to ${url}: use an \`https://\` (or \`wss://\`) base URL. Plain \`http://\` and \`ws://\` are allowed only to localhost, a *.localhost name, 127.0.0.0/8 or [::1]`);
+    const shown = __redactedUrl(url);
+    super(`refusing to send a credential over cleartext to ${shown}: use an \`https://\` (or \`wss://\`) base URL. Plain \`http://\` and \`ws://\` are allowed only to localhost, a *.localhost name, 127.0.0.0/8 or [::1]`);
     this.name = "CleartextCredential";
-    this.url = url;
+    this.url = shown;
+  }
+}
+
+/**
+ * `url` as an error may print it: scheme, host, port and path only. Userinfo (`user:pass@`) and a query or
+ * fragment can hold a secret (`?api_key=`, a WebSocket's route parameters), and an error is logged.
+ */
+function __redactedUrl(url: string): string {
+  const origin = (globalThis as { readonly location?: { readonly origin?: string } }).location?.origin;
+  try {
+    const parsed = origin === undefined || origin === "null" ? new globalThis.URL(url) : new globalThis.URL(url, origin);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+  } catch {
+    return "an unparseable URL";
   }
 }
 
