@@ -571,6 +571,8 @@ mod system {
     mod suite_filter;
     #[path = "system_suite_heading_behaviour.rs"]
     mod system_suite_heading_behaviour;
+    #[path = "template_workerd.rs"]
+    mod template_workerd;
     #[path = "test_json.rs"]
     mod test_json;
     #[path = "test_runner_resolution.rs"]

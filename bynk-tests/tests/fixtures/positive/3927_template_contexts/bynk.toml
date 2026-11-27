@@ -1,0 +1,6 @@
+[project]
+name = "template-contexts"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.html.typed"]
