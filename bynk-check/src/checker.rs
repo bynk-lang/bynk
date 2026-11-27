@@ -68,6 +68,7 @@ pub mod ordering;
 use equality::EqScope;
 mod api_key_calls;
 mod effect_more;
+pub mod enum_wire;
 mod erase;
 mod expressions;
 mod kernels;
@@ -841,6 +842,8 @@ pub enum Callee {
     Ctor { sum: Arc<TypeDecl>, tag: String },
     /// `T.of(value)` — the refined/opaque runtime constructor.
     Refine(Arc<TypeDecl>),
+    /// #4560: `E.fromWireName(text)` on an enum `E`: the variant whose wire name is `text`, or `None`.
+    EnumFromWireName(Arc<TypeDecl>),
     /// `T.unsafe(value)` — the opaque constructor, defining-unit only.
     Unsafe(Arc<TypeDecl>),
     /// A user-declared static method (`Type.method(...)`). The `Vec<TyId>` is

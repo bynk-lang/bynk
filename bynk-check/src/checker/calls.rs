@@ -2306,41 +2306,19 @@ pub(crate) fn check_static_call(
         return check_method_args(method_decl, args, ctx, type_name, method);
     }
 
+    // #4560: `E.fromWireName(s)` on an enum, after any static the type declares itself.
+    if method.name == super::enum_wire::FROM_WIRE_NAME
+        && let Some(r) =
+            super::enum_wire::check_from_wire_name(decl, type_name, args, span, expr_id, ctx)
+    {
+        return r;
+    }
+
     // 2) Built-in `of` constructor on refined or opaque types.
     if method.name == OF
         && let Some(base) = type_decl_base(decl)
     {
-        ctx.callees
-            .insert(expr_id, Callee::Refine(Arc::clone(decl)));
-        if args.len() != 1 {
-            ctx.errors.push(CompileError::new(
-                "bynk.types.constructor_arity",
-                span,
-                format!(
-                    "constructor `{}.of` expects 1 argument, but {} were given",
-                    type_name.name,
-                    args.len()
-                ),
-            ));
-            return None;
-        }
-        let arg = &args[0];
-        let expected = tys.intern(Ty::Base(base));
-        let arg_ty = type_of(arg, Some(expected), ctx)?;
-        if !compatible(arg_ty, expected, tys) {
-            ctx.errors.push(CompileError::new(
-                "bynk.types.constructor_base_mismatch",
-                arg.span,
-                format!(
-                    "constructor `{}.of` expects a `{}` argument, but got `{}`",
-                    type_name.name,
-                    base.name(),
-                    arg_ty.display(tys)
-                ),
-            ));
-            return None;
-        }
-        return Some(of_result_ty(decl, base, tys));
+        return check_of_constructor(decl, base, type_name, args, span, expr_id, ctx);
     }
 
     // 2b) Built-in `unsafe` constructor on opaque types — only available
@@ -2423,6 +2401,51 @@ pub(crate) fn check_static_call(
         .with_note("type declared here"),
     );
     None
+}
+
+/// `T.of(value)` on a refined or opaque type (the checker half of [`Callee::Refine`]): one argument
+/// of the base type, answering the type or a `Result` of it.
+fn check_of_constructor(
+    decl: &Arc<TypeDecl>,
+    base: BaseType,
+    type_name: &Ident,
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    ctx.callees
+        .insert(expr_id, Callee::Refine(Arc::clone(decl)));
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.constructor_arity",
+            span,
+            format!(
+                "constructor `{}.of` expects 1 argument, but {} were given",
+                type_name.name,
+                args.len()
+            ),
+        ));
+        return None;
+    }
+    let arg = &args[0];
+    let expected = tys.intern(Ty::Base(base));
+    let arg_ty = type_of(arg, Some(expected), ctx)?;
+    if !compatible(arg_ty, expected, tys) {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.constructor_base_mismatch",
+            arg.span,
+            format!(
+                "constructor `{}.of` expects a `{}` argument, but got `{}`",
+                type_name.name,
+                base.name(),
+                arg_ty.display(tys)
+            ),
+        ));
+        return None;
+    }
+    Some(of_result_ty(decl, base, tys))
 }
 
 fn check_method_args(
@@ -3578,18 +3601,11 @@ fn check_method_call_inner(
         reject_method_type_args(method, args, span, ctx);
         return None;
     }
-    // #3955: the universal `compare` on every `Ord` receiver.
-    if method.name == "compare"
-        && let Some(r) = super::ordering::check_compare_method(recv_ty, method, args, span, ctx)
+    // #3955, #4560: the methods every `Ord` receiver (`compare`) and every enum (`wireName`) has.
+    if let Some((op, r)) =
+        super::enum_wire::check_universal_method(recv_ty, method, args, span, ctx)
     {
-        return record_kernel(
-            ctx,
-            expr_id,
-            recv_ty,
-            Some(KernelOp::Ord(crate::kernel_op::OrdOp::Compare)),
-            method,
-            r,
-        );
+        return record_kernel(ctx, expr_id, recv_ty, Some(op), method, r);
     }
     // v0.20b: built-in kernel methods on the collection types. These are
     // compiler-known special forms typed directly here — generic in their

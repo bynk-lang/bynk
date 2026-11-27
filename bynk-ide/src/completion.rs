@@ -3046,6 +3046,8 @@ fn member_candidates_from(
     // S4a (#1966): a derived capability's (`capability Sessions = Kv`) base,
     // whose operations it has.
     let mut derived_base: Option<String> = None;
+    // #4560: whether the receiver is an enum, which has the built-in `fromWireName`.
+    let mut enum_receiver = false;
     for (label, detail) in builtin_sum_variants(receiver) {
         if seen.insert(label.clone()) {
             out.push(Completion::item(
@@ -3071,6 +3073,7 @@ fn member_candidates_from(
             match item {
                 CommonsItem::Type(t) if t.name.name == receiver => match &t.body {
                     bynk_syntax::ast::TypeBody::Sum(s) => {
+                        enum_receiver = bynk_check::checker::enum_wire::is_enum(t);
                         for v in &s.variants {
                             if seen.insert(v.name.name.clone()) {
                                 out.push(
@@ -3206,6 +3209,15 @@ fn member_candidates_from(
             }
         }
     });
+    // #4560: an enum's built-in inverse of `wireName`, after the type's own statics so a
+    // `fromWireName` it declares keeps its own signature.
+    if enum_receiver && seen.insert(bynk_check::checker::enum_wire::FROM_WIRE_NAME.to_string()) {
+        out.push(Completion::item(
+            bynk_check::checker::enum_wire::FROM_WIRE_NAME,
+            CompletionKind::Member,
+            Some(format!("fromWireName(text: String) -> Option[{receiver}]")),
+        ));
+    }
     // #2865: a derived `D1`'s typed reads, which the compiler lowers.
     // Hyperdrive H3 (#3320): and a derived `Postgres`'s.
     if let Some(base) = derived_base
@@ -4263,6 +4275,8 @@ pub fn value_member_candidates(
     // #3955: `compare` on every orderable receiver. A named type is orderable
     // when its declaration says `derives Ord`.
     let mut ord_names: BTreeSet<String> = BTreeSet::new();
+    // #4560: and `wireName` on every enum (a sum whose variants carry no payload).
+    let mut enum_names: BTreeSet<String> = BTreeSet::new();
     for_each_unit(doc_text, files, |unit| {
         let items = match unit {
             SourceUnit::Commons(c) => &c.items,
@@ -4276,8 +4290,20 @@ pub fn value_member_candidates(
             {
                 ord_names.insert(t.name.name.clone());
             }
+            if let CommonsItem::Type(t) = item
+                && bynk_check::checker::enum_wire::is_enum(t)
+            {
+                enum_names.insert(t.name.name.clone());
+            }
         }
     });
+    if kernel_methods::is_enum_receiver(ty, tys, &|n| enum_names.contains(n)) {
+        out.extend(
+            kernel_methods::ENUM_RECEIVER_TABLE
+                .iter()
+                .map(|km| Completion::item(km.name, CompletionKind::Member, Some(km.detail()))),
+        );
+    }
     if kernel_methods::is_ord_receiver(ty, tys, &|n| ord_names.contains(n)) {
         out.extend(
             kernel_methods::ORD_RECEIVER_TABLE
@@ -5745,6 +5771,82 @@ fn Box.size(self) -> Int { 1 }
         let flag = TYS.intern(Ty::Base(BaseType::Bool));
         let items = value_member_candidates(flag, &TYS, "context a.b\n", None);
         assert!(find(&items, "compare", CompletionKind::Member).is_none());
+    }
+
+    #[test]
+    fn wire_name_is_offered_on_an_enum_only() {
+        // #4560: `wireName` on a value of an enum (a sum with no payload variant), not on a sum
+        // with a payload or a record.
+        use bynk_check::checker::NamedKind;
+        let named = |name: &str, kind| {
+            TYS.intern(Ty::Named {
+                name: name.to_string(),
+                kind,
+                args: Vec::new(),
+            })
+        };
+        let doc = "commons m {\n  type Status = enum { Open, Shipped }\n  type Shape = | Dot | Circle(r: Int)\n  type Order = { id: Int }\n}\n";
+        let status = named("Status", NamedKind::Sum);
+        let items = value_member_candidates(status, &TYS, doc, None);
+        let wire = find(&items, "wireName", CompletionKind::Member).expect("wireName on an enum");
+        assert_eq!(wire.detail.as_deref(), Some("wireName() -> String"));
+        let shape = named("Shape", NamedKind::Sum);
+        assert!(
+            find(
+                &value_member_candidates(shape, &TYS, doc, None),
+                "wireName",
+                CompletionKind::Member
+            )
+            .is_none()
+        );
+        let order = named("Order", NamedKind::Record);
+        assert!(
+            find(
+                &value_member_candidates(order, &TYS, doc, None),
+                "wireName",
+                CompletionKind::Member
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn from_wire_name_is_offered_on_an_enum_type_only() {
+        // #4560: `Status.` offers the variants and the built-in `fromWireName`; a payload sum and a
+        // record do not get it, and a `fromWireName` the type declares keeps its own signature.
+        let doc = "commons a.b\n\ntype Status = enum { Open, Shipped }\n\ntype Shape = | Dot | Circle(r: Int)\n\ntype Order = { id: Int }\n";
+        let items = complete("  Status.", doc, None);
+        let from =
+            find(&items, "fromWireName", CompletionKind::Member).expect("fromWireName on an enum");
+        assert_eq!(
+            from.detail.as_deref(),
+            Some("fromWireName(text: String) -> Option[Status]")
+        );
+        assert!(find(&items, "Open", CompletionKind::Variant).is_some());
+        assert!(
+            find(
+                &complete("  Shape.", doc, None),
+                "fromWireName",
+                CompletionKind::Member
+            )
+            .is_none()
+        );
+        assert!(
+            find(
+                &complete("  Order.", doc, None),
+                "fromWireName",
+                CompletionKind::Member
+            )
+            .is_none()
+        );
+        let own = "commons a.b\n\ntype Status = enum { Open, Shipped }\n\nfn Status.fromWireName(s: String) -> Option[Status] { None }\n";
+        let items = complete("  Status.", own, None);
+        let from =
+            find(&items, "fromWireName", CompletionKind::Member).expect("the declared static");
+        assert_eq!(
+            from.detail.as_deref(),
+            Some("fromWireName(s: String) -> Option[Status]")
+        );
     }
 
     #[test]

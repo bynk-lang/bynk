@@ -100,9 +100,17 @@ pub fn kernel_method_signatures(
     } else {
         &[]
     };
+    // #4560: `wireName` applies to every enum; a named sum is taken as one here, as for `ord`
+    // (a receiver that is not an enum is reported by the checker at the call).
+    let enum_table = if bynk_check::kernel_methods::is_enum_receiver(ty, tys, &|_| true) {
+        bynk_check::kernel_methods::ENUM_RECEIVER_TABLE
+    } else {
+        &[]
+    };
     bynk_check::kernel_methods::methods_for(ty, tys)
         .iter()
         .chain(ord)
+        .chain(enum_table)
         .find(|m| m.name == method)
         .map(|m| m.signatures.iter().map(|s| s.to_string()).collect())
         .unwrap_or_default()
