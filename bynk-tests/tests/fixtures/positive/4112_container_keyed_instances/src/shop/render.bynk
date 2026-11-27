@@ -2,8 +2,9 @@ context shop.render
 
 // #4112: `@instances(by: TenantId)` makes `send`, `receiveBytes` and `sendBytes` take a `TenantId`
 // where they would take a `String`. The key's construction is where the set of names is decided,
-// so a keyed instance is not warned about. A key limits what a name looks like, not how many there
-// are, so these routes are served by an authenticated actor.
+// so a keyed instance on a route served by an authenticated actor does not warn. A key limits what
+// a name looks like, not how many there are, so on a route anyone can call it would (see
+// `4584_container_keyed_open_route`).
 
 consumes bynk
 consumes bynk.cloudflare { Container, ContainerError }
