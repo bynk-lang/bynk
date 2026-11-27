@@ -643,6 +643,22 @@ export const UpstreamError = {
 };
 
 /**
+ * What `Upstream.forward` sends, once its policy has built it (#3752, D20): the
+ * method, the full URL, the headers it forwards (lower-case names) and whether a
+ * body follows. A suite observes it on `exchange`, the network step beneath the
+ * policy: `expect Pages.exchange called once with sent.url == "https://…/x"`.
+ */
+export interface UpstreamRequest {
+  readonly method: string;
+  readonly url: string;
+  readonly headers: ReadonlyMap<string, string>;
+  readonly hasBody: boolean;
+}
+
+export const UpstreamRequest = {
+};
+
+/**
  * Runtime metadata carried alongside an event payload (Events track, slice
  * 2; ADR 0293, spine #936), available as an `on event`
  * handler's optional second parameter. `eventId` is minted once per
@@ -771,6 +787,14 @@ export const __FetchToken: symbol = globalThis.Symbol("Fetch");
  */
 export interface Upstream {
   forward(request: InboundRequest, path: string): globalThis.Promise<Result<Forwarded, UpstreamError>>;
+  /**
+   * The network step beneath `forward`'s policy (#3752, D20): it sends `sent`
+   * and answers the upstream's response head. Only a suite reaches it, to stub
+   * what the upstream answers (`stub Pages.exchange(_) returns Ok(Forwarded.of(…))`)
+   * while the real `forward` runs around it, and to observe what was sent.
+   * Calling it from a program is `bynk.test.upstream_exchange_outside_suite`.
+   */
+  exchange(sent: UpstreamRequest): globalThis.Promise<Result<Forwarded, UpstreamError>>;
 }
 
 export const __UpstreamToken: symbol = globalThis.Symbol("Upstream");
@@ -1900,6 +1924,38 @@ export function __deserialise_UpstreamError(json: __JsonValue, path: string = "$
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
+}
+
+export function __serialise_UpstreamRequest(value: UpstreamRequest): __JsonValue {
+  return {
+    method: value.method as __JsonValue,
+    url: value.url as __JsonValue,
+    headers: __serialise_Map_String_String(value.headers),
+    hasBody: value.hasBody as __JsonValue,
+  };
+}
+
+export function __deserialise_UpstreamRequest(json: __JsonValue, path: string = "$"): Result<UpstreamRequest, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["method"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.method`, expected: "string", actual: typeof obj["method"] });
+  }
+  const __method = obj["method"];
+  if (typeof obj["url"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.url`, expected: "string", actual: typeof obj["url"] });
+  }
+  const __url = obj["url"];
+  const __r_headers = __deserialise_Map_String_String(obj["headers"], `${path}.headers`);
+  if (__r_headers.tag === "Err") return __r_headers;
+  const __headers = __r_headers.value;
+  if (typeof obj["hasBody"] !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.hasBody`, expected: "boolean", actual: typeof obj["hasBody"] });
+  }
+  const __hasBody = obj["hasBody"];
+  return Ok({ method: __method, url: __url, headers: __headers, hasBody: __hasBody } as UpstreamRequest);
 }
 
 export function __serialise_Uuid(value: Uuid): __JsonValue {

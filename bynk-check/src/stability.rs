@@ -429,6 +429,7 @@ mod tests {
                 "bynk.Forwarded",
                 "bynk.PassThrough",
                 "bynk.UpstreamError",
+                "bynk.UpstreamRequest",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",

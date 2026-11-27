@@ -227,7 +227,8 @@ fn every_static_operation_round_trips_and_names_its_namespace() {
         RequestHeadersStatic => RequestHeaders, RequestHeaders;
         RequestQueryStatic => RequestQuery, RequestQuery;
         RequestCookiesStatic => RequestCookies, RequestCookies;
-        StreamStatic => Stream, Stream; JsonStatic => Json, Json; YamlStatic => Yaml, Yaml;
+        StreamStatic => Stream, Stream; ForwardedStatic => Forwarded, Forwarded;
+        JsonStatic => Json, Json; YamlStatic => Yaml, Yaml;
         FormStatic => Form, Form; TestConnectionStatic => TestConnection, TestConnection;
         TestRunStatic => TestRun, TestRun;
     }
@@ -653,6 +654,7 @@ fn each_test_service_address_records_its_typed_form() {
         HandlerAddress::Http {
             verb: HttpMethod::Get,
             path: Some("/count".to_string()),
+            request: None,
         },
     );
     has(
@@ -660,6 +662,7 @@ fn each_test_service_address_records_its_typed_form() {
         HandlerAddress::Http {
             verb: HttpMethod::Post,
             path: Some("/items".to_string()),
+            request: None,
         },
     );
 }

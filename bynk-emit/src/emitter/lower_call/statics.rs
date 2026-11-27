@@ -6,9 +6,9 @@
 
 use bynk_check::checker::{Callee, Ty};
 use bynk_check::kernel_op::{
-    BytesStatic, DecimalStatic, DurationStatic, FloatStatic, InstantStatic, IntStatic, IntrinsicNs,
-    ListStatic, MapStatic, RequestCookiesStatic, RequestHeadersStatic, RequestQueryStatic,
-    SetStatic, StaticOp, StreamStatic, TokenClaimsStatic,
+    BytesStatic, DecimalStatic, DurationStatic, FloatStatic, ForwardedStatic, InstantStatic,
+    IntStatic, IntrinsicNs, ListStatic, MapStatic, RequestCookiesStatic, RequestHeadersStatic,
+    RequestQueryStatic, SetStatic, StaticOp, StreamStatic, TokenClaimsStatic,
 };
 use bynk_ts::{
     TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType, TsUnaryOp,
@@ -564,6 +564,11 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         }
         (StaticOp::RequestCookies(RequestCookiesStatic::Empty), 0) => {
             Some(call(ident("__requestCookies"), vec![TsExpr::array(vec![])]))
+        }
+        // #3752 (D20): `Forwarded.of(status, headerLines, body)`, a suite's upstream answer.
+        (StaticOp::Forwarded(ForwardedStatic::Of), 3) => {
+            let lowered: Vec<TsExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+            Some(call(ident("__forwardedOf"), lowered))
         }
         // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
         // lowers to a host async iterable; `of` wraps a list as an async generator.

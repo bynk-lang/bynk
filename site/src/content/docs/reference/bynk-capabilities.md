@@ -598,17 +598,30 @@ The method passes, `GET` and `HEAD` without a body; any other method's body stre
 upstream unread. A redirect is returned, never followed. A response head that doesn't arrive
 within `@timeout` is `Err(Timeout)`, and an upstream that can't be reached is
 `Err(Unreachable)`. A request is forwarded at most once: a second `forward` of it faults.
+The `Forwarded` it returns already lacks the headers a pass-through answer never passes on:
+hop-by-hop ones and the names listed in `Connection`, `proxy-authenticate`, `set-cookie` and
+the upstream's own `strict-transport-security`.
 `UpstreamError` is `Timeout`, `Unreachable` or `InvalidPath`, and may gain variants, so a
 `match` on it needs a wildcard.
 
 `InboundRequest` and `Forwarded` live for the request they belong to. A record or sum may
 hold one, but no value holding one is stored, sent or returned across a boundary
-(`bynk.types.inbound_request_at_boundary`). `Forwarded` has no constructor: only `forward`
-makes one, and `status()` and `header(name)` read it.
+(`bynk.types.inbound_request_at_boundary`). A program gets a `Forwarded` only from `forward`,
+and `status()` and `header(name)` read it.
+
+`exchange(sent: UpstreamRequest) -> Effect[Result[Forwarded, UpstreamError]]` is the network
+step beneath `forward`: it sends what the policy built. It is a [test seam](/reference/testing/#pass-through),
+declared so a suite can stub what the upstream answers and observe what was sent, and it is
+refused anywhere but a suite (`bynk.test.upstream_exchange_outside_suite`), in a context, a
+commons or a dependency alike. The platform's `exchange` faults if it is reached all the same.
+`UpstreamRequest` is the record a suite reads: `method`, `url`, `headers` (a
+`Map[String, String]`, lower-case names) and `hasBody`. `Forwarded.of(status, headerLines,
+body)` builds an upstream's answer in a suite (`bynk.test.forwarded_outside_suite` anywhere
+else).
 
 All of it is experimental: it needs `bynk.Upstream`, `bynk.InboundRequest`,
-`bynk.Forwarded`, `bynk.PassThrough` and `bynk.UpstreamError` in `[unstable] allow`
-(`bynk.http.ANY` and `bynk.http.rest` for the route).
+`bynk.Forwarded`, `bynk.PassThrough`, `bynk.UpstreamError` and `bynk.UpstreamRequest` in
+`[unstable] allow` (`bynk.http.ANY` and `bynk.http.rest` for the route).
 
 ### Log levels and structured fields
 

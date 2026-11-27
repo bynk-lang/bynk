@@ -19,6 +19,10 @@ export function __bynkOverlay(base: unknown, stub: object, cap: string): unknown
       if (prop in t && (t.__applies === undefined || typeof prop !== "string" || t.__applies(prop))) return t[prop];
       if (base !== undefined) {
         const v = (base as Record<PropertyKey, unknown>)[prop];
+        // D20 (#3752): `Upstream.forward` in a test runs the shipped policy and then the
+        // instance's `exchange`, which must be the stubbed or recorded one: it is called with the
+        // overlay as `this`.
+        if (typeof v === "function" && (v as { __bynkThroughOverlay?: boolean }).__bynkThroughOverlay === true) return v.bind(proxy);
         return typeof v === "function" ? v.bind(base) : v;
       }
       return () => {

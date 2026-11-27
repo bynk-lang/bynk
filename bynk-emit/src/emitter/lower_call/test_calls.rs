@@ -127,6 +127,7 @@ fn sum_handler_key(address: Option<&HandlerAddress>, service: &str) -> Option<St
         Some(HandlerAddress::Http {
             verb,
             path: Some(path),
+            ..
         }) => Some(crate::emitter::http_handler_method_name_ir(
             IrHttpMethod::from(*verb),
             path,
@@ -609,6 +610,7 @@ pub(in crate::emitter) fn lower_system_http_call(
     let Some(HandlerAddress::Http {
         verb,
         path: Some(path),
+        ..
     }) = test_address(cx, e)
     else {
         return None;
@@ -903,10 +905,14 @@ pub(in crate::emitter) fn lower_test_service_call(
     if let Some(HandlerAddress::Http {
         verb,
         path: Some(path),
+        request,
     }) = &address
     {
         let key = crate::emitter::http_handler_method_name_ir(IrHttpMethod::from(*verb), path);
-        let rest = lower_args(&args[1..], cx, pre);
+        let rest = match request {
+            Some(at) => pass_through_args(e, method, &args[1..], *at, cx, pre),
+            None => lower_args(&args[1..], cx, pre),
+        };
         return settle(address_call(&svc.name, &key, rest, deps));
     }
     if let Some(facts) = handler_facts(cx, &svc.name) {
@@ -990,6 +996,38 @@ pub(in crate::emitter) fn lower_test_service_call(
     // `svc.call(args)` and other (non-http) forms: pass args through with deps.
     let lowered = lower_args(args, cx, pre);
     settle(address_call(&svc.name, &method.name, lowered, deps))
+}
+
+/// #3752 (D20): an `ANY` route's arguments: the handler's own, with its `request` (at `at`) built
+/// from the method sent and the inbound headers, which a trailing `RequestHeaders` gives
+/// (`__testInboundRequest(method, headers)`).
+fn pass_through_args(
+    e: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    at: usize,
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Vec<bynk_ts::TsExpr> {
+    let extra = matches!(
+        cx.commons().callee(e.id),
+        Some(Callee::TestService {
+            extra_headers: true,
+            ..
+        })
+    );
+    let (own, headers) = match args.split_last() {
+        Some((last, own)) if extra => (own, Some(last)),
+        _ => (args, None),
+    };
+    let mut lowered = lower_args(own, cx, pre);
+    let mut built = vec![str_lit(method.name.clone())];
+    built.extend(headers.map(|h| pre.lower_node(h, cx)));
+    lowered.insert(
+        at.min(lowered.len()),
+        call(ident("__testInboundRequest"), built),
+    );
+    lowered
 }
 
 /// #3328: whether `e` is a first-party `InboundEmail`, the message an email

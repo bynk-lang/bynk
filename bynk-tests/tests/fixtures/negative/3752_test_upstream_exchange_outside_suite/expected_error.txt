@@ -1,0 +1,2 @@
+bynk.test.upstream_exchange_outside_suite
+`Pages.exchange` is the test seam beneath `forward`, which only a suite reaches

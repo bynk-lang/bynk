@@ -258,4 +258,10 @@ export class UpstreamProvider implements Upstream {
     }
     return this.#exchange(this.#config, request, path) as ReturnType<Upstream["forward"]>;
   }
+
+  // D20: the network step beneath `forward` is a suite's seam. The checker refuses a
+  // call from a program, so a deployed Worker never reaches this.
+  exchange(): ReturnType<Upstream["exchange"]> {
+    return Promise.reject(new Error("bynk: `Upstream.exchange` is a test seam; a program forwards with `forward`"));
+  }
 }

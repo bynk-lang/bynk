@@ -2250,11 +2250,13 @@
 /reference/diagnostics/bynk.test.faults_needs_in_process/
 /reference/diagnostics/bynk.test.forged_needs_signature_route/
 /reference/diagnostics/bynk.test.forged_needs_system/
+/reference/diagnostics/bynk.test.forwarded_outside_suite/
 /reference/diagnostics/bynk.test.helper_given_at_system/
 /reference/diagnostics/bynk.test.key_principal_needs_api_key_route/
 /reference/diagnostics/bynk.test.no_subject_needs_oidc_route/
 /reference/diagnostics/bynk.test.nobody_needs_secured_route/
 /reference/diagnostics/bynk.test.pass_through_address/
+/reference/diagnostics/bynk.test.pass_through_system_address/
 /reference/diagnostics/bynk.test.peek_not_a_database/
 /reference/diagnostics/bynk.test.peek_not_bound/
 /reference/diagnostics/bynk.test.peek_outside_case/
@@ -2289,6 +2291,7 @@
 /reference/diagnostics/bynk.test.stale_needs_timestamp/
 /reference/diagnostics/bynk.test.system_claims_need_literal/
 /reference/diagnostics/bynk.test.unknown_actor/
+/reference/diagnostics/bynk.test.upstream_exchange_outside_suite/
 /reference/diagnostics/bynk.test.violates_needs_in_process/
 /reference/diagnostics/bynk.test.wire_http_only/
 /reference/diagnostics/bynk.test.wire_needs_system/

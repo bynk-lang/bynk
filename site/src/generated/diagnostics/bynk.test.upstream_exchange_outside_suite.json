@@ -1,0 +1,10 @@
+{
+  "blurb": "`exchange` is an `Upstream` instance's network step, beneath `forward`'s policy: the path checks, the textual URL and its origin, the method and body, and no inbound header. It is declared on the capability only so a suite can stub and observe what the policy sent. A program that called it would send a request it built itself, around every one of those checks, so it is refused everywhere but a suite, in a context, a commons or a dependency alike, and the platform's `exchange` faults if it is reached all the same. Forward with `forward`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.upstream_exchange_outside_suite",
+  "constructs": [],
+  "example": "let got <- Pages.exchange(sent)   // ✗ around the forwarding policy\nlet got <- Pages.forward(request, path)   // ✓",
+  "severity": "error",
+  "summary": "An `Upstream` instance's `exchange`, the network step beneath `forward`'s policy, is called outside a suite; a program forwards with `forward`."
+}

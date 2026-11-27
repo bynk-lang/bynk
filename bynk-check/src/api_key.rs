@@ -568,6 +568,7 @@ fn calls_an_api_key_route(
                 crate::checker::HandlerAddress::Http {
                     verb,
                     path: Some(path),
+                    ..
                 },
             ..
         } = c

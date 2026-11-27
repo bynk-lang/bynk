@@ -25,7 +25,7 @@ the declared handler and checked for arity and argument types:
 | service | address |
 |---|---|
 | `on call` | `svc.call(args)` |
-| `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, a [rest](/reference/http/#rest-segments) as the raw rest of the path, `files.GET("/files/*key", "/a/b.png")`, which is `""` or starts with `/` and holds no `?`, `#` or dot segment (`bynk.test.rest_argument`), then body); a `system` case may add a trailing [`RequestHeaders`](#request-headers) when the route declares no `headers:`. A [pass-through route](/reference/http/#pass-through-routes) (`on ANY`) can't be addressed yet (`bynk.test.pass_through_address`): its test double arrives in a later release |
+| `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, a [rest](/reference/http/#rest-segments) as the raw rest of the path, `files.GET("/files/*key", "/a/b.png")`, which is `""` or starts with `/` and holds no `?`, `#` or dot segment (`bynk.test.rest_argument`), then body); a `system` case may add a trailing [`RequestHeaders`](#request-headers) when the route declares no `headers:`. A [pass-through route](/reference/http/#pass-through-routes) (`on ANY`) is addressed by the method sent, below `system`: [Testing a pass-through route](#pass-through) |
 | `from cron` | `svc.schedule("<expr>", at)` — matched to the handler with that schedule; `at` is an `Instant` when the handler declares it |
 | `from queue` | `svc.message(msg)` |
 | `from Events(E)` | `svc.event(e)`, `svc.event(e, env)` — [one delivered event](#event-address) |
@@ -902,6 +902,47 @@ the compiler's own tests). Against a [remote target](/reference/testing/)
 the deployed Worker fetches its own JWKS, which the driver cannot answer, so a
 call that mints an `Oidc` token fails with a message saying so; `by Nobody` still
 works there.
+
+### Testing a pass-through route — a stub of `exchange` {#pass-through}
+
+A [pass-through route](/reference/http/#pass-through-routes) (`on ANY`) is addressed by the
+method the client sends, then the pattern and its parameters, as any route is:
+`proxy.GET("/blog/*path", "/posts/x")`. Any of the seven methods it forwards works, `HEAD` and
+`OPTIONS` among them, which address only an `ANY` route (`bynk.test.service_bad_address` on
+an ordinary one, where the router answers them itself). The handler's `request` is built from
+the method and, if the case gives one, a trailing [`RequestHeaders`](#request-headers), which
+may hold a `cookie` or `authorization` so a case can show they are never sent on. The result is
+the handler's `PassThrough`.
+
+An `Upstream` instance in a suite runs the real `forward`, its path and origin checks
+included, and only the network step beneath them is the suite's: the instance's `exchange`.
+Stub it for what the upstream answers, with `Forwarded.of(status, headerLines, body)`, and
+observe it for what the policy sent, an `UpstreamRequest` named `sent`:
+
+```bynk,ignore
+suite demo {
+  consumes bynk { Forwarded, PassThrough, UpstreamRequest }
+
+  case "no inbound cookie is sent" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(200, ["content-type: text/html"], Stream.of([Bytes.fromUtf8("<h1>hi</h1>")])))
+    let r <- proxy.GET("/blog/*path", "/posts/x", RequestHeaders.of(["cookie: session=s1"])) by Visitor
+    expect r is Forward(_)
+    expect Pages.exchange called once with sent.url == "https://upstream.example/posts/x" && sent.headers.get("cookie") == None
+  }
+
+  case "a dot segment is never sent" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(200, [], Stream.of([Bytes.fromUtf8("x")])))
+    let r <- proxy.GET("/blog/*path", "/a/%252e%252e%252fadmin") by Visitor
+    expect Pages.exchange called 0 times
+  }
+}
+```
+
+An unstubbed `exchange` faults: a test never reaches an upstream. Stub `forward` instead
+(`stub Pages.forward(_, _) returns Err(Timeout)`) to test only the handler's own branches; that
+replaces the policy too, so such a case says nothing about it. A `system` case can't address a
+pass-through route (`bynk.test.pass_through_system_address`): the deployed Worker has no
+upstream to reach.
 
 ### Testing the wrong method — the `405` fall-through {#wrong-method}
 

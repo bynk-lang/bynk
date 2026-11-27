@@ -157,6 +157,7 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                 | StaticOp::RequestQuery(_)
                 | StaticOp::RequestCookies(_)
                 | StaticOp::Stream(_)
+                | StaticOp::Forwarded(_)
                 | StaticOp::HttpResult(_)
                 | StaticOp::QueueResult(_)
                 | StaticOp::TestConnection(_)

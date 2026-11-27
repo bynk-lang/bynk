@@ -12,7 +12,7 @@ import * as __ns_bynk from "./../bynk.js";
 
 class __Stub_Audit {
   async note(n: number): globalThis.Promise<number> {
-    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
@@ -48,6 +48,7 @@ class __Stub_Audit {
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
     type UpstreamError = __ns_bynk.UpstreamError;
+    type UpstreamRequest = __ns_bynk.UpstreamRequest;
     type Uuid = __ns_bynk.Uuid;
     if (true) {
       throw globalThis.Object.assign(new globalThis.Error("bynk: stubbed agent call"), { bynkCallStub: { tag: "Unreachable", agent: "Audit" } });
@@ -67,7 +68,7 @@ async function __prop_test_the_audit_is_never_reached_while_it_is_stubbed() {
   __ns_shop_gate.__resetAgents();
   const deps = __makeTestDeps();
   const { Audit, Door, __makeAudit, __makeDoor } = __ns_shop_gate;
-  const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+  const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
   type ApiKeyId = __ns_bynk.ApiKeyId;
   type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
   type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
@@ -103,6 +104,7 @@ async function __prop_test_the_audit_is_never_reached_while_it_is_stubbed() {
   type TimedOut = __ns_bynk.TimedOut;
   type TooManyKeys = __ns_bynk.TooManyKeys;
   type UpstreamError = __ns_bynk.UpstreamError;
+  type UpstreamRequest = __ns_bynk.UpstreamRequest;
   type Uuid = __ns_bynk.Uuid;
   type __History_Door_Step = any;
   type __History_Door_Call = any;

@@ -2769,7 +2769,10 @@ fn value_errors(
     let mut errs: Vec<CompileError> = Vec::new();
     checker::check_handler_body(
         resolved,
-        checker::HandlerBodyCheck::new(&block, return_type, params, &[]),
+        checker::HandlerBodyCheck {
+            test_values: true,
+            ..checker::HandlerBodyCheck::new(&block, return_type, params, &[])
+        },
         checker::CheckSinks {
             tys,
             expr_types: &mut expr_types,
@@ -3243,7 +3246,7 @@ fn receiver_chain(e: &Expr) -> Option<String> {
 /// Every expression in `block` at any depth, in source order: each statement's
 /// expressions, then the tail, each visited before its children (via
 /// [`bynk_syntax::ast::expr_children`]).
-fn exprs_in_order(block: &Block) -> Vec<&Expr> {
+pub(crate) fn exprs_in_order(block: &Block) -> Vec<&Expr> {
     let mut roots: Vec<&Expr> = Vec::new();
     for s in &block.statements {
         bynk_syntax::ast::statement_exprs(s, &mut roots);
@@ -3423,7 +3426,8 @@ fn check_ws_refusal_tier(
 /// #2910: a trailing `RequestHeaders` sent to a route that declares no
 /// `headers:` parameter reaches the route only over a real request, so it is a
 /// `system`-tier form. Below `system` it stays the arity error it always was,
-/// with a note saying why.
+/// with a note saying why. #3752 (D20): an `ANY` route's address takes them at
+/// every tier below `system`, and is refused at `system`.
 fn check_extra_headers_tier(
     case: &Case,
     tier: bynk_syntax::ast::TestTier,
@@ -3431,6 +3435,7 @@ fn check_extra_headers_tier(
     errors: &mut Vec<CompileError>,
 ) {
     if tier == bynk_syntax::ast::TestTier::System {
+        crate::http_pass_through::refuse_system_addresses(case, callees, errors);
         return;
     }
     for e in exprs_in_order(&case.body) {
@@ -3442,6 +3447,10 @@ fn check_extra_headers_tier(
         else {
             continue;
         };
+        // #3752 (D20): an `ANY` route's inbound headers are its `request`'s, at every tier.
+        if address.is_pass_through() {
+            continue;
+        }
         let address = address.describe();
         errors.push(
             CompileError::new(
@@ -3471,12 +3480,15 @@ fn check_extra_headers_let(
 ) {
     use bynk_syntax::ast::ExprKind;
     for e in exprs_in_order(&case.body) {
+        // #3752 (D20): an `ANY` route's inbound headers may hold an `Authorization`: the
+        // case shows `forward` never sends it on.
         if !matches!(
             callees.get(&e.id),
             Some(checker::Callee::TestService {
                 extra_headers: true,
+                address,
                 ..
-            })
+            }) if !address.is_pass_through()
         ) {
             continue;
         }
