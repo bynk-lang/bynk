@@ -1,0 +1,10 @@
+{
+  "blurb": "Every `\\(name)` in a template must name a field of the record the template declares; the nearest field is suggested. An asset's name fills only a code-loading attribute, such as `<script src>`, so elsewhere it is an unknown placeholder too. Correct the name, or add the field.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.unknown_placeholder",
+  "constructs": [],
+  "example": "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<h1>\\(titel)</h1>   // ✗ no field `titel`\n<h1>\\(title)</h1>   // ✓",
+  "severity": "error",
+  "summary": "A template placeholder names no field of its fields record (#3927)."
+}

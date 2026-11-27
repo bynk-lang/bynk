@@ -338,8 +338,8 @@
       "summary": "A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential."
     },
     {
-      "code": "bynk.test.pass_through_address",
-      "summary": "A suite case addresses an `on ANY` pass-through route, which a suite can't drive until its test double (a stub of `Upstream.exchange`, `Forwarded.of`) arrives in a later release."
+      "code": "bynk.test.pass_through_system_address",
+      "summary": "A `system`-tier case addresses an `on ANY` pass-through route; the deployed Worker has no upstream to forward to, so the route is driven below `system` with a stub of its instance's `exchange`."
     },
     {
       "code": "bynk.test.peek_not_a_database",
@@ -474,8 +474,8 @@
       "summary": "A case's `svc.message(tc, frame)` or `svc.close(tc)` on a `from websocket` service carries a `by` clause; the connection's principal is given once, at `open`, and carried from there."
     },
     {
-      "code": "bynk.test.ws_needs_in_process",
-      "summary": "A `system`-tier case drives a `from websocket` service by address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`); a deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive, so the case runs at `unit` or `integration`."
+      "code": "bynk.test.ws_refusal_needs_system",
+      "summary": "A case below `system` reads `tc.refusedWith()` of a `TestConnection`; only a `system` case performs a real upgrade through the Worker, which can be refused, so there is nothing to read below it."
     },
     {
       "code": "bynk.tier.cross_context_needs_system",

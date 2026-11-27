@@ -1,0 +1,2 @@
+bynk.template.placeholder_in_style a placeholder cannot be inside `<style>`
+# exact

@@ -268,6 +268,11 @@ pub(crate) struct AgentMoveRecord {
     /// a receiver that did not exist before the move.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) deployments: BTreeMap<String, String>,
+    /// Each moved class → the id of its namespace, as the account's listing gave it just before
+    /// phase 1 (§4.1). Only the baseline the commit confirmation compares the listing against
+    /// (§3.4): the listing, never this, says where the data is.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) namespaces: BTreeMap<String, String>,
 }
 
 /// #3565: where a move set had got to (`design/tracks/agent-context-moves.md` §3.3).
@@ -566,6 +571,42 @@ impl DeployLock {
         self.environments
             .values()
             .any(|env| !env.agent_moves.is_empty())
+    }
+
+    /// #3565: the agent moves under way in `environment`.
+    pub(crate) fn open_moves(&self, environment: &str) -> &[AgentMoveRecord] {
+        self.environments
+            .get(environment)
+            .map_or(&[], |env| env.agent_moves.as_slice())
+    }
+
+    /// #3565: the move `move_id` under way in `environment`, to change.
+    pub(crate) fn open_move_mut(
+        &mut self,
+        environment: &str,
+        move_id: &str,
+    ) -> Option<&mut AgentMoveRecord> {
+        self.environments
+            .get_mut(environment)?
+            .agent_moves
+            .iter_mut()
+            .find(|r| r.move_id == move_id)
+    }
+
+    /// #3565: open a move's record in `environment` (before its first push).
+    pub(crate) fn open_move(&mut self, environment: &str, record: AgentMoveRecord) {
+        self.environments
+            .entry(environment.to_string())
+            .or_default()
+            .agent_moves
+            .push(record);
+    }
+
+    /// #3565: close the move `move_id` in `environment` (its last push has landed).
+    pub(crate) fn close_move(&mut self, environment: &str, move_id: &str) {
+        if let Some(env) = self.environments.get_mut(environment) {
+            env.agent_moves.retain(|r| r.move_id != move_id);
+        }
     }
 
     /// #3565 (D5): the version this ledger is written as.
@@ -3399,6 +3440,10 @@ pub(crate) mod tests {
                 ("shop-billing".into(), "d-2".into()),
                 ("shop-orders".into(), "d-1".into()),
             ]),
+            namespaces: BTreeMap::from([
+                ("Cart".into(), "ns-cart".into()),
+                ("Ledger".into(), "ns-ledger".into()),
+            ]),
         }
     }
 
@@ -3421,7 +3466,9 @@ pub(crate) mod tests {
             text.contains("[[environments.default.agent_moves]]")
                 && text.contains("move = \"3f9c2a71\"")
                 && text.contains("step = \"committing\"")
-                && text.contains("core = \"none\""),
+                && text.contains("core = \"none\"")
+                && text.contains("[environments.default.agent_moves.namespaces]")
+                && text.contains("Cart = \"ns-cart\""),
             "{text}"
         );
         // A bynk from before moves accepts only version 1 (`read_lock`'s check before #3565),

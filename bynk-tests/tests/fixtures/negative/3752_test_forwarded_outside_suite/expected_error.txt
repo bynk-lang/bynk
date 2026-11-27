@@ -1,0 +1,2 @@
+bynk.test.forwarded_outside_suite
+`Forwarded.of` builds an upstream's answer for a suite

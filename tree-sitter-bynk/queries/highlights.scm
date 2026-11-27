@@ -70,6 +70,7 @@
   "rejected"
   "asset"
   "embed"
+  "template"
   "const"
 ] @keyword.declaration
 

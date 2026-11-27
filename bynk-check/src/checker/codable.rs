@@ -53,6 +53,9 @@ pub(crate) fn json_codable(
         Ty::Named { name, .. } if crate::context_checks::is_crypto_key_type(name, types) => false,
         // #4111: a `Secret` is never encoded, stored, sent or returned across a boundary.
         Ty::Named { name, .. } if crate::context_checks::type_carries_secret(name, types) => false,
+        // #3927: nor `Html`, or a type that holds one: markup from outside would skip the
+        // compiler's escaping.
+        Ty::Named { name, .. } if crate::templates::type_carries_html(name, types) => false,
         // #3752: nor one holding a pass-through route's `InboundRequest` or `Forwarded`.
         Ty::Named { name, .. } if crate::http_pass_through::held_in(name, types).is_some() => false,
         // K-streams (#2623): a record or sum carrying a `Stream` has no codec.

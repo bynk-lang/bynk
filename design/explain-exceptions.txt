@@ -60,6 +60,10 @@ bynk.deploy.workers_unreadable: needs the network, git, a registry, lockfile sta
 bynk.deploy.accept_fresh_agent_unused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.agent_move_refused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.move_agent_unused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.move_commit_unconfirmed: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.move_interleaved: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.move_open: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.move_transfer_lost: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.foreign_contract_skew: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.account_name_conflict: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.hyperdrive_settings_unreadable: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
@@ -101,3 +105,4 @@ bynk.fmt.mixed_comment_syntax: a tool failure or compiler bug, not a program err
 bynk.fmt.roundtrip: a tool failure or compiler bug, not a program error
 bynk.env.unknown_variable: reported on `bynk.toml` with no source position (a variable has no line the check can point at), so the example gate cannot tell which line it is on
 bynk.env.in_dependency: needs a second package (a path dependency) beside the project, and the example gate compiles one project tree, so no compiled pair can show it; pinned by a bynk-driver test
+bynk.template.secret_placeholder: always arrives with a second diagnostic (a record field cannot hold a secret, `bynk.types.secret_at_boundary`), so the example gate cannot isolate it

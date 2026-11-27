@@ -11,10 +11,26 @@ use bynk_ts::{TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsSt
 
 /// The arguments a derived capability's test double is built with: P3 (#2342) a
 /// rate limiter's limit and window, #3479 a `Vectorize` index's dimensions,
-/// metric and `@indexed` entries, so the double enforces its declaration. None
+/// metric and `@indexed` entries, so the double enforces its declaration, #3752 an
+/// `Upstream` instance's origin and timeout. None
 /// for any other kind (and for the bare capability, whose double takes
 /// defaults).
 fn double_args(derived: Option<&bynk_check::symbols::DerivedInstance>) -> Vec<TsExpr> {
+    // #3752 (D20): an `Upstream` instance's origin and head timeout, as its provider takes them.
+    if let Some(d) = derived
+        .filter(|d| d.base_unit == bynk_check::firstparty::BYNK_UNIT && d.base_cap == "Upstream")
+    {
+        return vec![TsExpr::object(vec![
+            (
+                "origin".to_string(),
+                str_lit(d.option("origin").unwrap_or_default()),
+            ),
+            (
+                "timeoutSecs".to_string(),
+                num_lit(d.number("timeout").unwrap_or(30).to_string()),
+            ),
+        ])];
+    }
     if let Some((limit, period)) = derived.and_then(|d| d.rate_limit()) {
         return vec![num_lit(limit.to_string()), num_lit(period.to_string())];
     }

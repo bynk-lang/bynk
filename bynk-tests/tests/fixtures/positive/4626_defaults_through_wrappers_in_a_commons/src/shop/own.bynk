@@ -1,0 +1,13 @@
+commons shop.own
+
+uses shop.model
+
+type Mode = enum { Mine, Yours }
+
+fn build() -> Setting {
+  Setting { name: "s" }
+}
+
+fn mine() -> Mode {
+  Mine
+}

@@ -1,0 +1,6 @@
+{
+  "code": "bynk.test.ws_needs_in_process",
+  "lastRelease": "0.661.1",
+  "replacement": "`svc.open(tc, …)`, `svc.message(tc, frame)` and `svc.close(tc)` in a `suite … as system`",
+  "why": "A `system` case now drives a `from websocket` service by address (#3901): `open` performs a real upgrade through the deployed Worker, so a case keeps its meaning at every tier."
+}

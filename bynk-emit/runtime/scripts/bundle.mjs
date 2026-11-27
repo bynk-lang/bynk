@@ -153,6 +153,7 @@ const TEST_MODULES = [
   "stub_wire",
   "test_filter",
   "virtual_time",
+  "ws_client",
 ];
 // Module -> the names it keeps `export`ed in its splice form (the generated module's runner calls
 // `__bynkSnapshotReport` through the test module's own exports).

@@ -127,6 +127,7 @@ fn sum_handler_key(address: Option<&HandlerAddress>, service: &str) -> Option<St
         Some(HandlerAddress::Http {
             verb,
             path: Some(path),
+            ..
         }) => Some(crate::emitter::http_handler_method_name_ir(
             IrHttpMethod::from(*verb),
             path,
@@ -357,6 +358,79 @@ pub(in crate::emitter) fn lower_system_schedule_call(
     None
 }
 
+// ---- The `system`-tier WebSocket call ----
+
+/// #3901: whether `service` is a WebSocket service the `system` case in `cx` drives through a real upgrade.
+fn system_ws_service<'a>(
+    cx: &'a LowerCtx,
+    service: &str,
+) -> Option<&'a crate::emitter::ctx::SystemWsService> {
+    if let crate::emitter::ctx::BodyMode::IntegrationCase { system_jobs, .. } = &cx.mode {
+        system_jobs.ws.get(service)
+    } else {
+        None
+    }
+}
+
+/// Lower a `system`-tier WebSocket address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`),
+/// driven through a real upgrade against the participant Worker, or `None` when the call is not one (#3901).
+/// `open` names the driver of the credential the case's `by` presents (`by Nobody` offers none, `by Forged`
+/// signs with the wrong key, and so on), and passes the identity the case acts as; `message` and `close`
+/// write on the connection `open` made.
+pub(in crate::emitter) fn lower_system_ws_call(
+    e: &Expr,
+    receiver: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    let ExprKind::Ident(svc) = &receiver.kind else {
+        return None;
+    };
+    if cx.is_local(&svc.name) {
+        return None;
+    }
+    let variants = system_ws_service(cx, &svc.name)?.variants.clone();
+    let Some(HandlerAddress::Ws(shape)) = test_address(cx, e) else {
+        return None;
+    };
+    let tc = match args.first() {
+        Some(a) => pre.lower_node(a, cx),
+        None => cx.missing_fact(e.span, "`TestConnection` argument of a websocket call"),
+    };
+    let driver = |what: &str| ident(["__sysdrive_ws_", what, "_", svc.name.as_str()].concat());
+    Some(match shape {
+        WsAddress::Open => {
+            let kind = system_driver(cx, false).kind;
+            // A principal with no driver of its own (a bad credential on an actor this driver cannot present,
+            // or on a public service) takes the `open` driver, which fails the case saying so or ignores it.
+            let what = if variants.contains(&kind) {
+                kind
+            } else {
+                "open"
+            };
+            let mut all = vec![tc];
+            all.extend(args[1..].iter().map(|a| pre.lower_node(a, cx)));
+            all.push(cx.call_site_identity.clone().unwrap_or_else(|| str_lit("")));
+            call(driver(what), all)
+        }
+        WsAddress::Message { .. } => {
+            let frame = match args.get(1) {
+                Some(a) => pre.lower_node(a, cx),
+                None => cx.missing_fact(e.span, "frame argument of a websocket `message` call"),
+            };
+            call(driver("message"), vec![tc, frame])
+        }
+        WsAddress::Close { .. } => {
+            let info = match args.get(1) {
+                Some(a) => pre.lower_node(a, cx),
+                None => default_close_info(),
+            };
+            call(driver("close"), vec![tc, info])
+        }
+    })
+}
+
 // ---- The `system`-tier HTTP call ----
 
 /// #707: a `(method, path)` whose path is a declared route but whose method has no handler is a
@@ -536,6 +610,7 @@ pub(in crate::emitter) fn lower_system_http_call(
     let Some(HandlerAddress::Http {
         verb,
         path: Some(path),
+        ..
     }) = test_address(cx, e)
     else {
         return None;
@@ -830,10 +905,14 @@ pub(in crate::emitter) fn lower_test_service_call(
     if let Some(HandlerAddress::Http {
         verb,
         path: Some(path),
+        request,
     }) = &address
     {
         let key = crate::emitter::http_handler_method_name_ir(IrHttpMethod::from(*verb), path);
-        let rest = lower_args(&args[1..], cx, pre);
+        let rest = match request {
+            Some(at) => pass_through_args(e, method, &args[1..], *at, cx, pre),
+            None => lower_args(&args[1..], cx, pre),
+        };
         return settle(address_call(&svc.name, &key, rest, deps));
     }
     if let Some(facts) = handler_facts(cx, &svc.name) {
@@ -917,6 +996,38 @@ pub(in crate::emitter) fn lower_test_service_call(
     // `svc.call(args)` and other (non-http) forms: pass args through with deps.
     let lowered = lower_args(args, cx, pre);
     settle(address_call(&svc.name, &method.name, lowered, deps))
+}
+
+/// #3752 (D20): an `ANY` route's arguments: the handler's own, with its `request` (at `at`) built
+/// from the method sent and the inbound headers, which a trailing `RequestHeaders` gives
+/// (`__testInboundRequest(method, headers)`).
+fn pass_through_args(
+    e: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    at: usize,
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Vec<bynk_ts::TsExpr> {
+    let extra = matches!(
+        cx.commons().callee(e.id),
+        Some(Callee::TestService {
+            extra_headers: true,
+            ..
+        })
+    );
+    let (own, headers) = match args.split_last() {
+        Some((last, own)) if extra => (own, Some(last)),
+        _ => (args, None),
+    };
+    let mut lowered = lower_args(own, cx, pre);
+    let mut built = vec![str_lit(method.name.clone())];
+    built.extend(headers.map(|h| pre.lower_node(h, cx)));
+    lowered.insert(
+        at.min(lowered.len()),
+        call(ident("__testInboundRequest"), built),
+    );
+    lowered
 }
 
 /// #3328: whether `e` is a first-party `InboundEmail`, the message an email

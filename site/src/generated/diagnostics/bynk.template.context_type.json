@@ -1,0 +1,10 @@
+{
+  "blurb": "Each context takes particular types. Element text takes a scalar (`String`, `Int`, `Float`, `Bool`, `Decimal`, `Duration`, `Instant` or a refinement of one), escaped as text, or `Html`, inserted as is; a quoted attribute value and the text of `<title>` take a scalar. Anything else, such as an `Option` or a record, has no text of its own. Give the field a type the context takes, deciding in Bynk what an absent value shows.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.context_type",
+  "constructs": [],
+  "example": "// t/page.bynk\ntype Card = {\n    note: Option[String],   // ✗ an `Option` has no text\n    note: String,   // ✓\n}\n\n// embeds/page.html\n<p>\\(note)</p>   // ✗ element text takes a scalar or `Html`",
+  "severity": "error",
+  "summary": "A template field's type is not one its placeholder's context accepts (#3927)."
+}

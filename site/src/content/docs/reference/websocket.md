@@ -328,7 +328,7 @@ does not run it again.
 | `bynk.held.leak` | a connection is left undisposed when its scope exits |
 | `bynk.held.use_after_consume` | a connection is used after `close`/transfer |
 | `bynk.held.branch_divergence` | `if`/`match` branches dispose inconsistently |
-| `bynk.test.ws_needs_in_process` | a `system` case drives a WebSocket service by address |
+| `bynk.test.ws_refusal_needs_system` | a case below `system` reads `tc.refusedWith()`; only a real upgrade through the Worker can be refused |
 | `bynk.test.ws_lifecycle_by` | a case's `message`/`close` address carries a `by` (the principal is given at `open`) |
 | `bynk.held.consume_on_borrow` | a consuming op on a borrowed connection (e.g. in a broadcast closure) |
 | `bynk.types.held_not_comparable` | a `Connection` compared with `==` |

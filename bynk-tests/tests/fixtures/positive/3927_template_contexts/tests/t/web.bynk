@@ -1,0 +1,45 @@
+// #3927 (typed HTML, slice 1): the unit suite, on the Bundle target. Each context's fixture of
+// §5.2: C1 escapes element text and inserts `Html` as is, C2 escapes RCDATA, C3 escapes both
+// quote styles; and `\(` that is not a placeholder is text.
+suite t.web {
+  case "C1: a scalar in element text is escaped" {
+    let page = render("<script>alert(1)</script>", "a", "n").toString()
+    expect page.contains("<h1>&lt;script&gt;alert(1)&lt;/script&gt;</h1>")
+  }
+  case "C1: an Html field is inserted as is" {
+    expect render("t", "a", "n").toString().contains("<footer><p>Made with <b>care</b></p></footer>")
+  }
+  case "C1: an Int and a Decimal render as their text" {
+    expect render("t", "a", "n").toString().contains("<p class=\"count\">3 items, 2.50 each</p>")
+  }
+  case "C2: a title cannot be closed by its text" {
+    let page = render("</title><script>x</script>", "a", "n").toString()
+    expect page.contains("<title>&lt;/title&gt;&lt;script&gt;x&lt;/script&gt;</title>")
+  }
+  case "C2: a textarea cannot be closed by its text" {
+    let page = render("t", "a", "</textarea><script>x</script>").toString()
+    expect page.contains("<textarea name=\"note\">&lt;/textarea&gt;&lt;script&gt;x&lt;/script&gt;</textarea>")
+  }
+  case "C3: a value stays inside both quote styles" {
+    let page = render("t", "\"' onmouseover=x '\"", "n").toString()
+    expect page.contains("alt=\"&quot;&#39; onmouseover=x &#39;&quot;\"")
+    expect page.contains("title='&quot;&#39; onmouseover=x &#39;&quot;'")
+  }
+  case "a backslash and a parenthesis that are not a placeholder are text" {
+    expect render("t", "a", "n").toString().contains("MathJax writes \\(x^2\\), a backslash pair \\\\(raw), and a reference &#92;(name).")
+  }
+  case "the service serves the filled page" {
+    let r <- site.GET("/:title", "<b>hi</b>")
+    match r {
+      Raw(body, contentType) => {
+        expect contentType == "text/html; charset=utf-8"
+        expect body.decodeUtf8() is Some(_)
+        match body.decodeUtf8() {
+          Some(text) => expect text.contains("<h1>&lt;b&gt;hi&lt;/b&gt;</h1>")
+          None => expect false
+        }
+      }
+      _ => expect false
+    }
+  }
+}

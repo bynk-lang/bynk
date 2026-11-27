@@ -790,6 +790,14 @@ pub fn check_file_core(
     .with_consts(crate::consts::compose_unit_consts(name, unit_info))
     // #1925: imports hidden behind a local declaration of another kind.
     .with_shadowed_imports(crate::project_model::shadowed_imports(name, unit_info))
+    // #4626: where an imported record's defaults are read, when this unit shadows a type they name.
+    .with_default_scopes(crate::project_model::default_scopes(
+        name,
+        unit_info,
+        combined_types,
+        consumed_types,
+        imported_from,
+    ))
     // S3 (#1963): which names in scope are a first-party extensible enum,
     // decided here, where the unit's full provenance is known.
     .with_extensible_enums(extensible_names(imported_from))
@@ -819,8 +827,7 @@ pub fn check_file_core(
     let mut resolve_errors = resolver::resolve_file_record(&resolved, refs).err();
     // #1807: a hidden type written in this file is an unknown type, and is a
     // resolve error like any other (Decision A drops the checker's echoes).
-    let hidden_named =
-        resolver::check_hidden_type_names(&resolved.commons.items, &ctx.hidden_types);
+    let hidden_named = crate::templates::hidden_or_gated_types(&resolved, &ctx.hidden_types);
     if !hidden_named.is_empty() {
         resolve_errors
             .get_or_insert_with(Vec::new)

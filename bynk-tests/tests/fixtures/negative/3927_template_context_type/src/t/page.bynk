@@ -1,0 +1,10 @@
+// #3927 (typed HTML, slice 1): a field whose type its context does not take is refused
+commons t.page
+
+uses bynk.html
+
+type F = {
+	v: Option[String],
+}
+
+template shell: F = "embeds/page.html"

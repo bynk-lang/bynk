@@ -1,0 +1,9 @@
+suite demo {
+  consumes bynk { Forwarded }
+
+  case "the blog is forwarded" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(200, [], Stream.of([Bytes.fromUtf8("hello")])))
+    let r <- proxy.GET("/blog/*path", "/posts/x") by Visitor
+    expect Pages.exchange called once with sent.url == "https://upstream.example/posts/x"
+  }
+}

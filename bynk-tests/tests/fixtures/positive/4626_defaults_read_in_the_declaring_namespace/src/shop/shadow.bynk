@@ -1,0 +1,63 @@
+context shop.shadow
+
+// #4626: a prelude record's field default names its type in the declaring unit's scope. This unit
+// declares its own type of each of those names, so the one it sees is not the one the default
+// means: `Cookie.sameSite = Lax` is `bynk`'s `SameSite`, not this one, which has no `Lax`. Every
+// prelude record whose default is a named type is built here with the field left out, by a
+// service that returns it and by an HTTP route, which serialises it.
+
+consumes bynk { Cookie, FetchOptions }
+consumes bynk.cloudflare { KvPut, R2Put, QueryOptions }
+
+type SameSite = enum { Mine, Yours }
+type Redirect = enum { Theirs, Ours }
+type KvExpiration = enum { Soon, Later }
+type R2Condition = enum { Maybe, Sure }
+type MetadataScope = enum { Own, Shared }
+
+type Built = {
+  cookie: Cookie,
+  fetch: FetchOptions,
+  kv: KvPut,
+  r2: R2Put,
+  query: QueryOptions,
+  sameSite: SameSite,
+  redirect: Redirect,
+  expiration: KvExpiration,
+  condition: R2Condition,
+  scope: MetadataScope,
+}
+
+service build {
+  on call() -> Effect[Built] by Caller {
+    Effect.pure(Built {
+      cookie: Cookie { name: "sid", value: "a" },
+      fetch: FetchOptions {},
+      kv: KvPut {},
+      r2: R2Put {},
+      query: QueryOptions {},
+      sameSite: Mine,
+      redirect: Theirs,
+      expiration: Soon,
+      condition: Maybe,
+      scope: Own,
+    })
+  }
+}
+
+service api from http {
+  on GET("/built") () -> Effect[HttpResult[Built]] by v: Visitor {
+    Ok(Built {
+      cookie: Cookie { name: "sid", value: "a" },
+      fetch: FetchOptions {},
+      kv: KvPut {},
+      r2: R2Put {},
+      query: QueryOptions {},
+      sameSite: Mine,
+      redirect: Theirs,
+      expiration: Soon,
+      condition: Maybe,
+      scope: Own,
+    })
+  }
+}

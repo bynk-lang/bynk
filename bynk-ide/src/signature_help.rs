@@ -450,7 +450,10 @@ fn resolve_qualified_from(
                 }
                 // `Cap.op` — a capability operation.
                 CommonsItem::Capability(c) if c.name.name == recv => {
-                    if let Some(op) = c.ops.iter().find(|o| o.name.name == member) {
+                    // #3752 (D20): `Upstream.exchange` is offered only in a suite.
+                    if let Some(op) = c.ops.iter().find(|o| {
+                        o.name.name == member && !crate::upstream_seam::hidden(c, member, doc_text)
+                    }) {
                         let params: Vec<String> = op
                             .params
                             .iter()
@@ -754,6 +757,24 @@ mod tests {
         // The whole path: a call context whose prefix opens a string literal.
         let t = "  \"€greet(";
         let _ = call_context(t, t.len());
+    }
+
+    /// #3752 (D20): `Upstream.exchange` has signature help only in a suite file.
+    #[test]
+    fn upstream_exchange_has_signature_help_only_in_a_suite() {
+        assert_eq!(
+            resolve_label(
+                "Pages.exchange",
+                "context a\n\nconsumes bynk { Upstream }\n\ncapability Pages = Upstream @origin(\"https://upstream.example\")\n",
+                None
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_label("Pages.exchange", concat!("context a\n\nconsumes bynk { Upstream }\n\ncapability Pages = Upstream @origin(\"https://upstream.example\")\n", "\nsuite a {\n}\n"), None).as_deref(),
+            Some("exchange(sent: UpstreamRequest) -> Effect[Result[Forwarded, UpstreamError]]")
+        );
+        assert!(resolve_label("Pages.forward", "context a\n\nconsumes bynk { Upstream }\n\ncapability Pages = Upstream @origin(\"https://upstream.example\")\n", None).is_some());
     }
 
     /// S4a (#1966): a derived capability's operation has its base's signature.

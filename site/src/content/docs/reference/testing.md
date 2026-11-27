@@ -25,7 +25,7 @@ the declared handler and checked for arity and argument types:
 | service | address |
 |---|---|
 | `on call` | `svc.call(args)` |
-| `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, a [rest](/reference/http/#rest-segments) as the raw rest of the path, `files.GET("/files/*key", "/a/b.png")`, which is `""` or starts with `/` and holds no `?`, `#` or dot segment (`bynk.test.rest_argument`), then body); a `system` case may add a trailing [`RequestHeaders`](#request-headers) when the route declares no `headers:`. A [pass-through route](/reference/http/#pass-through-routes) (`on ANY`) can't be addressed yet (`bynk.test.pass_through_address`): its test double arrives in a later release |
+| `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, a [rest](/reference/http/#rest-segments) as the raw rest of the path, `files.GET("/files/*key", "/a/b.png")`, which is `""` or starts with `/` and holds no `?`, `#` or dot segment (`bynk.test.rest_argument`), then body); a `system` case may add a trailing [`RequestHeaders`](#request-headers) when the route declares no `headers:`. A [pass-through route](/reference/http/#pass-through-routes) (`on ANY`) is addressed by the method sent, below `system`: [Testing a pass-through route](#pass-through) |
 | `from cron` | `svc.schedule("<expr>", at)` — matched to the handler with that schedule; `at` is an `Instant` when the handler declares it |
 | `from queue` | `svc.message(msg)` |
 | `from Events(E)` | `svc.event(e)`, `svc.event(e, env)` — [one delivered event](#event-address) |
@@ -152,6 +152,47 @@ suite chat {
 | `svc.close(tc)` | runs `on close`: the client went away, closing normally (`CloseInfo { code: 1000, reason: "", clean: true }`) |
 | `svc.close(tc, info)` | the same, with the `CloseInfo` the handler's `close: CloseInfo` parameter receives |
 
+#### WebSocket at `system` {#websocket-system}
+
+In a `suite … as system` the same case runs unchanged, but `open` performs a **real upgrade** through the
+participant's deployable Worker and its Durable Object, as a browser would: the route values in the upgrade
+URL's query string and the credential the actor reads as `Sec-WebSocket-Protocol: bynk.bearer, <token>`. So the handshake, the Worker-side authentication, the routing to the
+object, the socket's attachment and the decoding of every frame are exercised, and `tc.sent()` holds the frames
+the server actually wrote, in the order they arrived, read after the exchange has gone quiet.
+
+```bynk,fragment
+suite chat as system {
+	case "a joiner is welcomed and then hears the broadcast" {
+		let alice = TestConnection[ServerFrame]()
+		let _ <- ChatGateway.open(alice, "r1") by Participant("alice")
+		expect alice.sent() == [ServerFrame { text: "welcome" }]
+	}
+}
+```
+
+- **`by A(…)` mints the credential** as an HTTP `system` call does (a `Bearer` token signed with the actor's
+  secret, with its declared `iss` and `aud`), and the [failure principals](#failure-principals) apply:
+  `by Nobody` offers no credential, `by Forged` signs with the wrong key, `by Expired` presents an expired token,
+  and `by WrongIssuer` and `by WrongAudience` present a token for another party. The Worker refuses each at the
+  upgrade; no connection exists.
+- **A refused upgrade** makes `open` complete with no connection, and the case reads what happened with
+  `tc.refusedWith()`: an `Option[Int]`, the status the Worker answered with (`Some(401)`, `Some(403)`,
+  `Some(400)`), and `None` when the upgrade was accepted. `message` or `close` on a refused connection fails the
+  case, naming the status, rather than writing on a socket that does not exist.
+- **`refusedWith()` below `system`** is `bynk.test.ws_refusal_needs_system`: a `unit` or `integration`
+  connection is never refused, so the read would be `None` whatever the case did, and an assertion on it would
+  fail misleadingly or pass vacuously. Assert a refusal in a `suite … as system`.
+- **`svc.close(tc)` is a client close frame**, and the case waits for the object's `on close` to finish, so a
+  following address sees its effects. The client going away does not set `closed()`; the server closing does,
+  with `closeCode()` and `closeReason()`, as at `unit`.
+- **Frames cross the wire form**: the case's frame is written by the `in` type's codec and the server's frames are
+  read by the `out` type's, so a frame the server's own type would refuse fails the case. A service with
+  `in: Bytes` or `out: Bytes` sends and reads binary messages.
+- **An actor a `system` case cannot present yet** (`Oidc`, `SignedCookie`, an actor sum) fails the case at `open`
+  with a message saying so; drive that service at `unit` or `integration`.
+- A target whose only service is `from websocket` has a serialisation edge, so `suite … as system` needs
+  nothing else (`bynk.tier.system_needs_wire`).
+
 - **The connection remembers `open`.** `message` and `close` take neither route
   values nor `by`. The connection carries both from `open`, as the platform
   recovers them from the socket, so a case cannot present values production
@@ -172,10 +213,10 @@ suite chat {
 - **Frame limits.** `svc.open(tc, …)` hands the `TestConnection` the service's `limits { maxFrame }`, so a
   `connection.send` of a frame over it faults the send, as in production; a `TestConnection` given to an agent
   directly is not bounded. A service with `in: Bytes` takes a `Bytes` frame in `message`.
-- **Tiers.** The address works at `unit` and `integration`. A `system` case
-  can't use it (`bynk.test.ws_needs_in_process`): a deployed WebSocket is a real
-  upgrade through the Worker and a Durable Object, which a `system` case does
-  not drive.
+- **Tiers.** The address works at every tier, and the same case keeps its
+  meaning when it is promoted: see [WebSocket at `system`](#websocket-system).
+  `tc.refusedWith()` is the one read that only a `system` case has an answer
+  for.
 - `svc.message` is the WebSocket address on a `from websocket` service and the
   queue address on a `from queue` service. `TestConnection` can be named only
   in a `suite`.
@@ -867,6 +908,47 @@ the compiler's own tests). Against a [remote target](/reference/testing/)
 the deployed Worker fetches its own JWKS, which the driver cannot answer, so a
 call that mints an `Oidc` token fails with a message saying so; `by Nobody` still
 works there.
+
+### Testing a pass-through route — a stub of `exchange` {#pass-through}
+
+A [pass-through route](/reference/http/#pass-through-routes) (`on ANY`) is addressed by the
+method the client sends, then the pattern and its parameters, as any route is:
+`proxy.GET("/blog/*path", "/posts/x")`. Any of the seven methods it forwards works, `HEAD` and
+`OPTIONS` among them, which address only an `ANY` route (`bynk.test.service_bad_address` on
+an ordinary one, where the router answers them itself). The handler's `request` is built from
+the method and, if the case gives one, a trailing [`RequestHeaders`](#request-headers), which
+may hold a `cookie` or `authorization` so a case can show they are never sent on. The result is
+the handler's `PassThrough`.
+
+An `Upstream` instance in a suite runs the real `forward`, its path and origin checks
+included, and only the network step beneath them is the suite's: the instance's `exchange`.
+Stub it for what the upstream answers, with `Forwarded.of(status, headerLines, body)`, and
+observe it for what the policy sent, an `UpstreamRequest` named `sent`:
+
+```bynk,ignore
+suite demo {
+  consumes bynk { Forwarded, PassThrough, UpstreamRequest }
+
+  case "no inbound cookie is sent" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(200, ["content-type: text/html"], Stream.of([Bytes.fromUtf8("<h1>hi</h1>")])))
+    let r <- proxy.GET("/blog/*path", "/posts/x", RequestHeaders.of(["cookie: session=s1"])) by Visitor
+    expect r is Forward(_)
+    expect Pages.exchange called once with sent.url == "https://upstream.example/posts/x" && sent.headers.get("cookie") == None
+  }
+
+  case "a dot segment is never sent" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(200, [], Stream.of([Bytes.fromUtf8("x")])))
+    let r <- proxy.GET("/blog/*path", "/a/%252e%252e%252fadmin") by Visitor
+    expect Pages.exchange called 0 times
+  }
+}
+```
+
+An unstubbed `exchange` faults: a test never reaches an upstream. Stub `forward` instead
+(`stub Pages.forward(_, _) returns Err(Timeout)`) to test only the handler's own branches; that
+replaces the policy too, so such a case says nothing about it. A `system` case can't address a
+pass-through route (`bynk.test.pass_through_system_address`): the deployed Worker has no
+upstream to reach.
 
 ### Testing the wrong method — the `405` fall-through {#wrong-method}
 

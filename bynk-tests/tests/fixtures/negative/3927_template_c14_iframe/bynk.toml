@@ -1,0 +1,6 @@
+[project]
+name = "c14-iframe"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.html.typed"]

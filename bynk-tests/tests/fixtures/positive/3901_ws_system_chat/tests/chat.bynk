@@ -1,0 +1,29 @@
+// #3901: the chat-room scenario of `reference/websocket.md`, driven at `system`: `open` performs a real upgrade
+// through the participant Worker and its Durable Object, with the `bynk.bearer` handshake a browser offers, so
+// the handshake, the Worker-side authentication, the routing, the attachment and the frame decoding are all
+// exercised, and `tc.sent()` holds the frames the server actually wrote.
+suite chat as system {
+  case "a joiner is welcomed and then hears the broadcast" {
+    let alice = TestConnection[ServerFrame]()
+    let bob = TestConnection[ServerFrame]()
+
+    let _ <- ChatGateway.open(alice, "r1") by Participant("alice")
+    let _ <- ChatGateway.open(bob, "r1") by Participant("bob")
+    expect alice.sent() == [ServerFrame { text: "welcome" }]
+
+    let _ <- ChatGateway.message(alice, ClientFrame { text: "hi" })
+    expect bob.sent() == [ServerFrame { text: "welcome" }, ServerFrame { text: "hi" }]
+    expect alice.closed() == false
+  }
+
+  case "a closed member hears nothing further" {
+    let alice = TestConnection[ServerFrame]()
+    let bob = TestConnection[ServerFrame]()
+    let _ <- ChatGateway.open(alice, "r2") by Participant("alice")
+    let _ <- ChatGateway.open(bob, "r2") by Participant("bob")
+    let _ <- ChatGateway.close(bob)
+    let _ <- ChatGateway.message(alice, ClientFrame { text: "again" })
+    expect bob.sent().length() == 1
+    expect alice.sent().length() == 2
+  }
+}

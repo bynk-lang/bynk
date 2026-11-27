@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Forwarded` is what an `Upstream` instance's declared origin answered, so a program gets one only from `forward`, after its checks on the path and the origin. `Forwarded.of(status, headerLines, body)` builds one by hand, as a suite's stand-in for an upstream (`stub Pages.exchange(_) returns Ok(Forwarded.of(…))`); anywhere else it would let a handler serve a fabricated upstream response on the proxy's origin, so it is refused outside a suite.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.forwarded_outside_suite",
+  "constructs": [],
+  "example": "let page = Forwarded.of(200, [\"content-type: text/html\"], Stream.of([Bytes.fromUtf8(\"<h1>forged</h1>\")]))   // ✗ only a suite builds one\nlet got <- Pages.forward(request, path)   // ✓",
+  "severity": "error",
+  "summary": "`Forwarded.of` builds an upstream's answer outside a suite; a program gets a `Forwarded` only from `Upstream.forward`."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A pass-through route forwards its request to an upstream, and a `system` case runs the deployed Worker, which has no upstream to reach. So a case addresses an `ANY` route below `system`, where the instance's test double runs the real forwarding policy and hands what it built to `exchange`, which the case stubs and observes. The router's own answers on a pass-through path are tested against a local upstream on workerd.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.pass_through_system_address",
+  "constructs": [
+    "case"
+  ],
+  "example": "case \"the blog is forwarded\" as system {\n    let r <- proxy.GET(\"/blog/*path\", \"/posts/x\") by Visitor   // ✗ no upstream to forward to\n}\n\ncase \"the blog is forwarded\" {\n    stub Pages.exchange(_) returns Ok(Forwarded.of(200, [], Stream.of([Bytes.fromUtf8(\"hello\")])))   // ✓\n    let r <- proxy.GET(\"/blog/*path\", \"/posts/x\") by Visitor\n    expect Pages.exchange called once with sent.url == \"https://upstream.example/posts/x\"\n}",
+  "severity": "error",
+  "summary": "A `system`-tier case addresses an `on ANY` pass-through route; the deployed Worker has no upstream to forward to, so the route is driven below `system` with a stub of its instance's `exchange`."
+}

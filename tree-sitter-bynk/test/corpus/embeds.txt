@@ -67,3 +67,47 @@ context app.board {
       return_type: (base_type)
       body: (block
         tail: (identifier)))))
+
+==========================
+template declarations, with and without fields (#3927, slice 1)
+==========================
+
+commons app.page
+
+uses bynk.html
+
+template shell: PageFields = "embeds/page.html"
+
+private template footer = "embeds/footer.html"
+
+fn template(template: Int) -> Int {
+  template
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier)
+      (identifier))
+    (uses_decl
+      target: (qualified_name
+        (identifier)
+        (identifier)))
+    (template_decl
+      name: (identifier)
+      fields: (identifier)
+      path: (string_literal))
+    (template_decl
+      visibility: (visibility_modifier)
+      name: (identifier)
+      path: (string_literal))
+    (fn_decl
+      name: (identifier)
+      (param
+        name: (identifier)
+        type: (base_type))
+      return_type: (base_type)
+      body: (block
+        tail: (identifier)))))

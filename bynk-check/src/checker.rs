@@ -81,6 +81,7 @@ pub(crate) mod nested_effect;
 pub(crate) mod nested_wrapper;
 mod par;
 mod partial_content;
+mod pass_through_address;
 mod pass_through_calls;
 mod pattern_as;
 mod pattern_literals;
@@ -92,6 +93,7 @@ mod result_more;
 mod session_calls;
 mod sql_decimal_param;
 mod sum_bad_principal;
+mod template_calls;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::refinement_example;
 pub use refinements::split_regex_flags;
@@ -878,6 +880,9 @@ pub enum Callee {
     /// #3939: `ApiKey.equal(a, b)`, the generated key store's constant-time digest comparison,
     /// reachable only from the agents generated for an `ApiKey` actor. An `Effect[Bool]`.
     ApiKeyEqual,
+    /// Typed HTML (#3927, slice 1): `shell.fill(fields)` on the template
+    /// `template`: its emitted function, applied to the fields record.
+    TemplateFill { template: String },
     /// #3446: `Record.field.cookie(value)` / `Record.field.expire()` on a cookie record: the
     /// `Cookie` the field's decoder reads back (named by its wire name, valued by the decoder's
     /// leaf rules), or its matching deletion.
@@ -1119,9 +1124,13 @@ pub enum HandlerAddress {
     /// `svc.call(…)`: the `on call` handler.
     Call,
     /// `svc.<VERB>(path, …)`: an `on http` handler, matched by its route once `path` is known.
+    /// #3752 (D20): `request` is, for an `ANY` route, the position among the handler's
+    /// parameters of its `InboundRequest`, which the address builds from the method sent
+    /// and the inbound headers (not from an argument).
     Http {
         verb: bynk_syntax::ast::HttpMethod,
         path: Option<String>,
+        request: Option<usize>,
     },
     /// `svc.schedule(expr, …)`: a cron handler, matched by its schedule once `expr` is known.
     /// #3874: `param` is the position among the handler's parameters of its
@@ -1185,13 +1194,27 @@ impl HandlerAddress {
     }
 
     /// The address as the diagnostics write it (`POST /orders`, `call`, `ws open`).
+    /// #3752 (D20): whether this addresses a pass-through (`ANY`) route.
+    pub fn is_pass_through(&self) -> bool {
+        matches!(
+            self,
+            HandlerAddress::Http {
+                verb: bynk_syntax::ast::HttpMethod::Any,
+                ..
+            }
+        )
+    }
+
     pub fn describe(&self) -> String {
         match self {
             HandlerAddress::Call => "call".to_string(),
-            HandlerAddress::Http { verb, path: None } => verb.as_str().to_string(),
+            HandlerAddress::Http {
+                verb, path: None, ..
+            } => verb.as_str().to_string(),
             HandlerAddress::Http {
                 verb,
                 path: Some(path),
+                ..
             } => format!("{} {path}", verb.as_str()),
             HandlerAddress::Schedule { expr: None, .. } => "schedule".to_string(),
             HandlerAddress::Schedule {
@@ -1374,9 +1397,20 @@ pub struct TypedCommons {
     /// carry it. Empty until the unit's files are all checked and
     /// [`ExecPlan::extend`](crate::exec_plan::ExecPlan::extend) has run.
     pub exec_plan: Arc<crate::exec_plan::ExecPlan>,
+    /// #4626: where an imported record's defaults are read, when this unit shadows a type they
+    /// name ([`ResolvedCommons::default_scope`]).
+    pub default_scopes: HashMap<String, Arc<HashMap<String, Arc<TypeDecl>>>>,
 }
 
 impl TypedCommons {
+    /// #4626: the types the defaults of record `type_name` are read in: the declaring unit's where
+    /// this unit shadows a type they name, else this unit's own.
+    pub fn default_scope(&self, type_name: &str) -> &HashMap<String, Arc<TypeDecl>> {
+        self.default_scopes
+            .get(type_name)
+            .map_or(&self.types, |scope| &**scope)
+    }
+
     /// A `TypedCommons` with no declarations — a pure-data test fixture, so a
     /// consuming crate's own test exercising only the `TypedCommons`-shaped
     /// part of some function doesn't need to hand-construct a
@@ -1416,6 +1450,7 @@ impl TypedCommons {
             unselected_types: HashSet::new(),
             stability: Default::default(),
             exec_plan: Default::default(),
+            default_scopes: HashMap::new(),
         }
     }
 
@@ -1869,6 +1904,7 @@ pub fn check_record_in(
                 unselected_types: input.unselected_types,
                 stability: input.stability,
                 exec_plan: Default::default(),
+                default_scopes: input.default_scopes,
             }),
             ty_intern,
             typed_despite_errors: None,
@@ -1898,6 +1934,7 @@ pub fn check_record_in(
                 unselected_types: input.unselected_types,
                 stability: input.stability,
                 exec_plan: Default::default(),
+                default_scopes: input.default_scopes,
             }),
             ty_intern,
         }
@@ -2150,6 +2187,9 @@ pub struct HandlerBodyCheck<'a> {
     /// #4389: the body is an `on http` handler of a method other than `GET`, where
     /// `PartialContent` and `NotModified` are refused.
     pub http_non_get: bool,
+    /// #3752 (D20): the body is a suite's stub value (`stub … returns <value>`), where a
+    /// suite-only form (`Forwarded.of`, `Val[T]`) is in place.
+    pub test_values: bool,
 }
 
 impl<'a> HandlerBodyCheck<'a> {
@@ -2179,6 +2219,7 @@ impl<'a> HandlerBodyCheck<'a> {
             claims_sum_arms: Vec::new(),
             service_handler: false,
             http_non_get: false,
+            test_values: false,
         }
     }
 }
@@ -2207,6 +2248,7 @@ pub fn check_handler_body(
         claims_sum_arms,
         service_handler: in_service_handler,
         http_non_get,
+        test_values,
     } = check;
     let CheckSinks {
         tys,
@@ -2313,7 +2355,7 @@ pub fn check_handler_body(
         in_service_handler,
         http_non_get,
         in_fn_body: false,
-        test_values: false,
+        test_values,
     };
     // Check the body and validate it matches the return type.
     let Some(body_ty) = type_of_block(body, Some(return_ty), &mut ctx) else {

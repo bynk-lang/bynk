@@ -455,6 +455,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "template_decl"
+        },
+        {
+          "type": "SYMBOL",
           "name": "const_decl"
         }
       ]
@@ -517,6 +521,10 @@
         {
           "type": "SYMBOL",
           "name": "embed_decl"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "template_decl"
         },
         {
           "type": "SYMBOL",
@@ -590,6 +598,10 @@
         {
           "type": "SYMBOL",
           "name": "embed_decl"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "template_decl"
         },
         {
           "type": "SYMBOL",
@@ -1930,6 +1942,76 @@
             "type": "SYMBOL",
             "name": "identifier"
           }
+        },
+        {
+          "type": "STRING",
+          "value": "="
+        },
+        {
+          "type": "FIELD",
+          "name": "path",
+          "content": {
+            "type": "SYMBOL",
+            "name": "string_literal"
+          }
+        }
+      ]
+    },
+    "template_decl": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "visibility",
+              "content": {
+                "type": "SYMBOL",
+                "name": "visibility_modifier"
+              }
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": "template"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": ":"
+                },
+                {
+                  "type": "FIELD",
+                  "name": "fields",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_type_ref"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         },
         {
           "type": "STRING",

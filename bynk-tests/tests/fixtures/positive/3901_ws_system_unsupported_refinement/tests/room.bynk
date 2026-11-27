@@ -1,0 +1,9 @@
+// #3901: the case fails at `open`, saying the actor is not one a `system` case presents yet; it is not
+// answered by a `403` for a claim the token never carried: the failure is the driver's own.
+suite room as system {
+  case "a refinement actor is not presented yet" {
+    let tc = TestConnection[Frame]()
+    let _ <- staff.open(tc, "abc") by Admin("root")
+    expect tc.refusedWith() == None
+  }
+}

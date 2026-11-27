@@ -1,0 +1,2 @@
+bynk.test.service_bad_address
+which only a pass-through route (`on ANY("/status")`) is addressed with

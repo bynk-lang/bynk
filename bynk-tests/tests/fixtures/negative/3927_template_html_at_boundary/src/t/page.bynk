@@ -1,0 +1,20 @@
+// #3927 (typed HTML, slice 1): `Html` is not data at a boundary: a request body, a store field, `Json.decode`
+context t.page
+
+uses bynk.html
+
+type Box = {
+	content: Html,
+}
+
+agent Holder {
+	key id: String
+	store box: Cell[Option[Box]]
+	on call get() -> Effect[Int] { 1 }
+}
+
+service api from http {
+	on POST("/x") (body: Box) -> Effect[HttpResult[String]] by Visitor {
+		Ok(body.content.toString())
+	}
+}

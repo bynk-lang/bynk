@@ -1,0 +1,36 @@
+context room
+
+type UserId = String where NonEmpty
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+actor Member { auth = Bearer(secret = "ROOM_SECRET"), identity = UserId }
+actor Admin = Member where hasClaim("admin")
+
+// #3901: a refinement actor needs the claims its predicate checks, which a `system` case does not present yet: it
+// fails the case at `open` with a message saying so, never a token the Worker answers `403` for the missing claim.
+service staff from websocket(in: Frame, out: Frame) {
+  on open(room: RoomKey) -> Effect[()] by who: Admin {
+    let _ <- connection.send(Frame { text: "hello" })
+    let _ <- Rooms(room).keep(connection)
+  }
+
+  on close(room: RoomKey) -> Effect[()] by who: Admin {
+    let _ <- Rooms(room).drop()
+  }
+}
+
+agent Rooms {
+  key id: RoomKey
+  store held: Map[String, Connection[Frame]]
+
+  on call keep(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- held.put("c", conn)
+    ()
+  }
+
+  on call drop() -> Effect[()] {
+    let _ <- held.remove("c")
+    ()
+  }
+}

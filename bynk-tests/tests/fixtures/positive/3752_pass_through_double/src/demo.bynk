@@ -1,0 +1,24 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, PassThrough, UpstreamError }
+
+capability Pages = Upstream @origin("https://upstream.example")
+
+service proxy from http {
+  --- The blog, served from its upstream under `/blog`.
+  on ANY("/blog/*path") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor given Pages {
+    let got <- Pages.forward(request, path)
+    match got {
+      Ok(response) => Forward(response)
+      Err(Timeout) => Respond(GatewayTimeout("the upstream timed out"))
+      Err(InvalidPath) => Respond(BadRequest("not a path the upstream serves"))
+      Err(_) => Respond(BadGateway("the upstream is unreachable"))
+    }
+  }
+}
+
+service api from http {
+  on GET("/status") () -> Effect[HttpResult[String]] by Visitor {
+    Ok("up")
+  }
+}

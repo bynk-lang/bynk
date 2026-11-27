@@ -598,17 +598,30 @@ The method passes, `GET` and `HEAD` without a body; any other method's body stre
 upstream unread. A redirect is returned, never followed. A response head that doesn't arrive
 within `@timeout` is `Err(Timeout)`, and an upstream that can't be reached is
 `Err(Unreachable)`. A request is forwarded at most once: a second `forward` of it faults.
+The `Forwarded` it returns already lacks the headers a pass-through answer never passes on:
+hop-by-hop ones and the names listed in `Connection`, `proxy-authenticate`, `set-cookie` and
+the upstream's own `strict-transport-security`.
 `UpstreamError` is `Timeout`, `Unreachable` or `InvalidPath`, and may gain variants, so a
 `match` on it needs a wildcard.
 
 `InboundRequest` and `Forwarded` live for the request they belong to. A record or sum may
 hold one, but no value holding one is stored, sent or returned across a boundary
-(`bynk.types.inbound_request_at_boundary`). `Forwarded` has no constructor: only `forward`
-makes one, and `status()` and `header(name)` read it.
+(`bynk.types.inbound_request_at_boundary`). A program gets a `Forwarded` only from `forward`,
+and `status()` and `header(name)` read it.
+
+`exchange(sent: UpstreamRequest) -> Effect[Result[Forwarded, UpstreamError]]` is the network
+step beneath `forward`: it sends what the policy built. It is a [test seam](/reference/testing/#pass-through),
+declared so a suite can stub what the upstream answers and observe what was sent, and it is
+refused anywhere but a suite (`bynk.test.upstream_exchange_outside_suite`), in a context, a
+commons or a dependency alike. The platform's `exchange` faults if it is reached all the same.
+`UpstreamRequest` is the record a suite reads: `method`, `url`, `headers` (a
+`Map[String, String]`, lower-case names) and `hasBody`. `Forwarded.of(status, headerLines,
+body)` builds an upstream's answer in a suite (`bynk.test.forwarded_outside_suite` anywhere
+else).
 
 All of it is experimental: it needs `bynk.Upstream`, `bynk.InboundRequest`,
-`bynk.Forwarded`, `bynk.PassThrough` and `bynk.UpstreamError` in `[unstable] allow`
-(`bynk.http.ANY` and `bynk.http.rest` for the route).
+`bynk.Forwarded`, `bynk.PassThrough`, `bynk.UpstreamError` and `bynk.UpstreamRequest` in
+`[unstable] allow` (`bynk.http.ANY` and `bynk.http.rest` for the route).
 
 ### Log levels and structured fields
 
@@ -3277,7 +3290,26 @@ shell.replace("{{title}}", escapeText(title))
 
 Neither is safe in an unquoted attribute, in a URL attribute such as `href` or `src` (where
 `javascript:` passes), or inside `<script>` or `<style>`; escaping cannot make an untrusted
-value a safe URL or script. Typed HTML is the track that builds on these two.
+value a safe URL or script. A [`template`](/reference/embeds/#templates) calls them for you, in
+each placeholder's context, and refuses a placeholder where neither is enough.
+
+#### `Html` and templates (experimental)
+
+Behind `bynk.html.typed` in `[unstable] allow`, `bynk.html` also declares `Html` (#3927):
+markup a page includes as is. It is an opaque type, not a `String`, so text reaches markup only
+through the escape its context needs.
+
+| Operation | Type | |
+| --- | --- | --- |
+| `shell.fill(fields)` | `Html` | a [`template`](/reference/embeds/#templates) with fields, given the whole record |
+| `footer` | `Html` | a template with no fields |
+| `h.toString()` | `String` | the markup, for a test or another kind of body |
+
+`Html` has no constructor: `Html.of` is `bynk.html.no_constructor`, because no string becomes markup
+unchecked. `Html` is not data: a type that holds one has no codec, and is refused as a request parameter
+and in an agent's `store` (`bynk.html.at_boundary`). Naming `Html`, or declaring a `template`,
+without the gate is `bynk.stability.experimental`. `escapeText` and `escapeAttr` keep their
+names and behaviour, and need no gate.
 
 ### `If-Range`: `bynk.range`
 

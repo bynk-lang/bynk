@@ -13,8 +13,8 @@ use bynk_driver::emsg;
 use std::collections::BTreeMap;
 
 use super::config::Resources;
-use super::ledger::DeployLock;
-use super::move_sets::{PlannedSet, move_sets, place};
+use super::ledger::{AgentMoveEntry, AgentMoveRecord, DeployLock};
+use super::move_sets::{MoveSet, PlannedSet, Resumes, move_sets, place};
 use super::plan::{DeployOptions, Entry, GroupNames};
 
 /// The refusal of an agent move (#3562) and the codes the JSON plan gives its siblings (#3797).
@@ -25,6 +25,8 @@ const ACCEPT_FRESH_AGENT_UNUSED: &str = "bynk.deploy.accept_fresh_agent_unused";
 /// planned move set.
 const MOVE_AGENT_UNUSED: &str = "bynk.deploy.move_agent_unused";
 const AGENT_MOVE_WINDOW: &str = "bynk.deploy.agent_move_window";
+/// #3565 (D8): a move is under way, and this run's manifest does not finish it.
+pub(crate) const MOVE_OPEN: &str = "bynk.deploy.move_open";
 
 /// One context with agent state that the plan would put on another script.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -290,6 +292,9 @@ pub(crate) struct MoveCx<'a> {
     pub(crate) dry_run: bool,
     /// Each Worker's script, for the plan's names.
     pub(crate) script: &'a dyn Fn(&str) -> String,
+    /// The moves under way in this environment (D8): each resumes, unless the manifest no longer
+    /// asks for it.
+    pub(crate) open: &'a [AgentMoveRecord],
 }
 
 /// The moves of this run, and what they need said: [`gate`] over [`agent_moves`].
@@ -310,6 +315,7 @@ pub(crate) fn checked_agent_moves(
         partial: opts.context.is_some(),
         dry_run: opts.dry_run,
         script: &script,
+        open: lock.open_moves(&opts.environment),
     };
     gate(moves, &opts.accept_fresh_agent, &opts.move_agent, &cx)
 }
@@ -324,7 +330,19 @@ pub(crate) fn gate(
     moving: &[String],
     cx: &MoveCx<'_>,
 ) -> AgentGate {
-    let mut refusals = move_refusals(&moves, accepted, moving);
+    // D8: a context an open record moves is that move's, and resumes without a flag; the record
+    // is the consent already given.
+    let resuming = |context: &str| {
+        cx.open
+            .iter()
+            .any(|r| r.moves.iter().any(|m| m.context == context))
+    };
+    let moves: Vec<AgentMove> = moves
+        .into_iter()
+        .filter(|m| !resuming(&m.context))
+        .collect();
+    let (resumed, mut refusals) = resumed_sets(cx);
+    refusals.extend(move_refusals(&moves, accepted, moving));
     for name in unused_accepts(&moves, accepted) {
         refusals.push(
             Entry::new(
@@ -336,7 +354,10 @@ pub(crate) fn gate(
             .with("name", name),
         );
     }
-    for name in unused_accepts(&moves, moving) {
+    for name in unused_accepts(&moves, moving)
+        .into_iter()
+        .filter(|name| !resuming(name) && !resuming(&name.replace('-', ".")))
+    {
         refusals.push(
             Entry::new(
                 MOVE_AGENT_UNUSED,
@@ -352,7 +373,8 @@ pub(crate) fn gate(
         .filter(|m| is_named(&m.context, moving) && !is_named(&m.context, accepted))
         .cloned()
         .collect();
-    let (set_refused, planned) = plan_sets(&moved, cx);
+    refusals.extend(overlapping_open(&moved, cx.open));
+    let (set_refused, planned) = plan_sets(&moved, resumed, cx);
     refusals.extend(set_refused);
     // Warnings say what a run goes ahead with, so a refused run has none: its refusals are the
     // whole story, as on stderr. (A move that is refused is said by its refusal, not as though it
@@ -383,11 +405,21 @@ pub(crate) fn gate(
 /// when it has none, the sets as the plan lists them, placed in the order (§3.2). Outside
 /// `--dry-run` a supported set is still refused (`apply_not_yet`): this release plans moves, it
 /// does not apply them.
-fn plan_sets(moved: &[AgentMove], cx: &MoveCx<'_>) -> (Vec<Entry>, Vec<PlannedSet>) {
-    if moved.is_empty() {
+fn plan_sets(
+    moved: &[AgentMove],
+    resumed: Vec<(MoveSet, Resumes)>,
+    cx: &MoveCx<'_>,
+) -> (Vec<Entry>, Vec<PlannedSet>) {
+    if moved.is_empty() && resumed.is_empty() {
         return (Vec::new(), Vec::new());
     }
-    let sets = move_sets(moved);
+    let mut sets = move_sets(moved);
+    let fresh = sets.len();
+    let mut resumes: Vec<Option<Resumes>> = vec![None; fresh];
+    for (set, resume) in resumed {
+        sets.push(set);
+        resumes.push(Some(resume));
+    }
     let mut refused = Vec::new();
     for set in &sets {
         refused.extend(set_refusals(set, cx));
@@ -413,7 +445,11 @@ fn plan_sets(moved: &[AgentMove], cx: &MoveCx<'_>) -> (Vec<Entry>, Vec<PlannedSe
     let planned: Vec<PlannedSet> = sets
         .iter()
         .zip(&placement.callers)
-        .map(|(set, callers)| PlannedSet::of(set, callers, cx.script))
+        .zip(resumes)
+        .map(|((set, callers), resumes)| PlannedSet {
+            resumes,
+            ..PlannedSet::of(set, callers, cx.script)
+        })
         .collect();
     if !cx.dry_run {
         let refused = planned
@@ -435,6 +471,113 @@ fn plan_sets(moved: &[AgentMove], cx: &MoveCx<'_>) -> (Vec<Entry>, Vec<PlannedSe
         return (refused, Vec::new());
     }
     (Vec::new(), planned)
+}
+
+/// D8: each move under way in this environment, as a set to resume; or, when this run's manifest
+/// no longer puts one of its contexts on its receiver, the refusal that says so
+/// ([`MOVE_OPEN`]). A record is resumed whole or not at all: it was recorded and pushed as one.
+fn resumed_sets(cx: &MoveCx<'_>) -> (Vec<(MoveSet, Resumes)>, Vec<Entry>) {
+    let (mut sets, mut refused) = (Vec::new(), Vec::new());
+    for record in cx.open {
+        let gone: Vec<&AgentMoveEntry> = record
+            .moves
+            .iter()
+            .filter(|m| {
+                !cx.resources
+                    .get(&m.to_worker)
+                    .is_some_and(|r| r.agent_contexts.contains_key(&m.context))
+                    || (cx.script)(&m.to_worker) != m.to_script
+            })
+            .collect();
+        if gone.is_empty() {
+            sets.push((
+                MoveSet {
+                    moves: record.moves.iter().map(|m| resumed_move(m, cx)).collect(),
+                },
+                Resumes {
+                    move_id: record.move_id.clone(),
+                    step: super::move_apply::step_name(record.step).to_string(),
+                },
+            ));
+            continue;
+        }
+        for m in gone {
+            refused.push(
+                Entry::new(
+                    MOVE_OPEN,
+                    format!(
+                        "an agent move is under way in this environment (move `{}`, at step `{}`): it moves context `{}` from `{}` to `{}`, and this manifest no longer puts `{}` on `{}`, so the move cannot be finished. Put it back on `{}` and deploy again to finish the move.",
+                        record.move_id,
+                        super::move_apply::step_name(record.step),
+                        m.context,
+                        m.from_script,
+                        m.to_script,
+                        m.context,
+                        m.to_script,
+                        m.to_script
+                    ),
+                )
+                .with("move", record.move_id.as_str())
+                .with("step", super::move_apply::step_name(record.step))
+                .with("context", m.context.as_str())
+                .with("from", m.from_script.as_str())
+                .with("to", m.to_script.as_str()),
+            );
+        }
+    }
+    (sets, refused)
+}
+
+/// A move under way as the run plans it: from its record, with nothing the record already
+/// settled checked again (its tombstones, a rename in place).
+fn resumed_move(m: &AgentMoveEntry, cx: &MoveCx<'_>) -> AgentMove {
+    AgentMove {
+        context: m.context.clone(),
+        classes: m.classes.clone(),
+        from_worker: m.from_worker.clone(),
+        from_script: m.from_script.clone(),
+        to_worker: m.to_worker.clone(),
+        to_script: m.to_script.clone(),
+        old_script_built: cx.resources.contains_key(&m.from_worker)
+            && (cx.script)(&m.from_worker) == m.from_script,
+        renamed_in_place: false,
+        tombstones: Vec::new(),
+    }
+}
+
+/// D8: a new move that shares a Worker script with a move under way waits for it to finish.
+fn overlapping_open(moved: &[AgentMove], open: &[AgentMoveRecord]) -> Vec<Entry> {
+    moved
+        .iter()
+        .filter_map(|m| {
+            let record = open.iter().find(|r| {
+                r.moves.iter().any(|o| {
+                    [&o.from_script, &o.to_script]
+                        .iter()
+                        .any(|s| **s == m.from_script || **s == m.to_script)
+                })
+            })?;
+            Some(
+                Entry::new(
+                    MOVE_OPEN,
+                    format!(
+                        "context `{}` would move from `{}` to `{}`, but the agent move `{}` under way in this environment (at step `{}`) involves one of those scripts; finish that move with a `bynk deploy` first, then move `{}`.",
+                        m.context,
+                        m.from_script,
+                        m.to_script,
+                        record.move_id,
+                        super::move_apply::step_name(record.step),
+                        m.context
+                    ),
+                )
+                .with("move", record.move_id.as_str())
+                .with("step", super::move_apply::step_name(record.step))
+                .with("context", m.context.as_str())
+                .with("from", m.from_script.as_str())
+                .with("to", m.to_script.as_str()),
+            )
+        })
+        .collect()
 }
 
 /// Why one move set `--move-agent` names cannot be moved (D9, D12, the tombstones ruling).

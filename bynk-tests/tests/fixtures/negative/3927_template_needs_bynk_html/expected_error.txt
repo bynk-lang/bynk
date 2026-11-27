@@ -1,0 +1,2 @@
+bynk.template.needs_bynk_html template `shell` needs `uses bynk.html`
+# exact

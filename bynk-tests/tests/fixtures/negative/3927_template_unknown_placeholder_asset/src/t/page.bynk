@@ -1,0 +1,12 @@
+// #3927 (typed HTML, slice 1): an asset's name outside a code-loading attribute is an unknown placeholder
+commons t.page
+
+uses bynk.html
+
+asset logo = "assets/logo.svg"
+
+type F = {
+	v: String,
+}
+
+template shell: F = "embeds/page.html"

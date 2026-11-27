@@ -272,6 +272,7 @@ fn self_call_args<'e>(
         | Callee::ApiKeyMint { .. }
         | Callee::ApiKeyMember { .. }
         | Callee::ApiKeyEqual
+        | Callee::TemplateFill { .. }
         | Callee::CookieField { .. }
         | Callee::Intrinsic { .. }
         | Callee::Fault { .. }

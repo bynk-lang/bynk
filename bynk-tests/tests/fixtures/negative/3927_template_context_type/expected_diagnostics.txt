@@ -1,0 +1,2 @@
+# exact
+bynk.template.context_type	embeds/page.html:1:4

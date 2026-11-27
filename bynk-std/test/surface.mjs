@@ -1066,6 +1066,9 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     assert.deepEqual(got, { tag: "Ok", value: "answer" });
     assert.deepEqual(seen, [{ config, request: "the request", path: "/posts/x" }]);
   });
+  t("UpstreamProvider.exchange: a program never reaches the test seam", async () => {
+    await assert.rejects(() => new b.UpstreamProvider().exchange({}), /is a test seam/);
+  });
   t("UpstreamProvider.forward: built without an instance's origin, it reaches nothing", async () => {
     await assert.rejects(() => new b.UpstreamProvider().forward("r", "/"), /reaches only the `@origin`/);
   });

@@ -1,0 +1,6 @@
+suite demo {
+  case "the blog is forwarded" as system {
+    let r <- proxy.GET("/blog/*path", "/posts/x") by Visitor
+    expect true
+  }
+}

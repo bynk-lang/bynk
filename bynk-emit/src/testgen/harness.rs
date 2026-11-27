@@ -484,6 +484,7 @@ pub(super) fn integration_typed_commons(
         unselected_types: Default::default(),
         stability: Default::default(),
         exec_plan: Default::default(),
+        default_scopes: HashMap::new(),
     }
 }
 

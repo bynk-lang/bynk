@@ -1,0 +1,3 @@
+# exact
+bynk.template.placeholder_position	embeds/page.html:1:11
+bynk.template.unsupported_markup	embeds/page.html:1:1

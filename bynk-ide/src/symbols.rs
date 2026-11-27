@@ -1301,9 +1301,43 @@ pub fn describe_fixture_at(source: &str, offset: usize) -> Option<String> {
     Some(format!("```bynk\nfixture\n```\n\n{doc}"))
 }
 
+/// #3927: a hover for the contextual `template` keyword under the cursor: an identifier spelled
+/// `template` followed by a name, at the head of a `template` declaration, which is where the
+/// parser reads it as the keyword (`describe_template_or_fixture_at` tries this and
+/// [`describe_fixture_at`], which share the shape). `None` anywhere else, where `template` is an
+/// ordinary name.
+pub fn describe_template_at(source: &str, offset: usize) -> Option<String> {
+    use bynk_syntax::lexer::TokenKind;
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let t = tokens.get(idx)?;
+    let next = tokens.get(idx + 1)?.kind;
+    let after = tokens.get(idx + 2).map(|t| t.kind);
+    if t.kind != TokenKind::Ident
+        || &source[t.span.start..t.span.end] != "template"
+        || next != TokenKind::Ident
+        || !matches!(after, Some(TokenKind::Eq | TokenKind::Colon))
+    {
+        return None;
+    }
+    let doc = bynk_syntax::keywords::CONTEXTUAL_KEYWORDS
+        .iter()
+        .find(|k| k.word == "template")
+        .map(|k| k.meaning)
+        .unwrap_or_default();
+    Some(format!("```bynk\ntemplate\n```\n\n{doc}"))
+}
+
+/// The hover of a suite `fixture` or a `template` keyword, whichever the cursor is on.
+pub fn describe_template_or_fixture_at(source: &str, offset: usize) -> Option<String> {
+    describe_fixture_at(source, offset).or_else(|| describe_template_at(source, offset))
+}
+
 /// #2618: a hover for the contextual `private` modifier under the cursor:
 /// an identifier spelled `private` immediately before a `fn`, `type`,
-/// `messages`, `asset`, `embed` or `const` keyword, the one position the parser reads
+/// `messages`, `asset`, `embed`, `template` or `const` keyword, the one position the parser reads
 /// it as the modifier. `None` anywhere else, where `private` is an ordinary
 /// name.
 pub fn describe_private_at(source: &str, offset: usize) -> Option<String> {
@@ -1316,16 +1350,20 @@ pub fn describe_private_at(source: &str, offset: usize) -> Option<String> {
     if t.kind != TokenKind::Ident || &source[t.span.start..t.span.end] != "private" {
         return None;
     }
-    let next = tokens.get(idx + 1)?.kind;
-    if !matches!(
-        next,
-        TokenKind::Fn
-            | TokenKind::Type
-            | TokenKind::Messages
-            | TokenKind::Asset
-            | TokenKind::Embed
-            | TokenKind::Const
-    ) {
+    let next = tokens.get(idx + 1)?;
+    let template =
+        next.kind == TokenKind::Ident && &source[next.span.start..next.span.end] == "template";
+    if !template
+        && !matches!(
+            next.kind,
+            TokenKind::Fn
+                | TokenKind::Type
+                | TokenKind::Messages
+                | TokenKind::Asset
+                | TokenKind::Embed
+                | TokenKind::Const
+        )
+    {
         return None;
     }
     let doc = bynk_syntax::keywords::CONTEXTUAL_KEYWORDS
@@ -1771,6 +1809,11 @@ pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
         SourceUnit::Suite(_) => &[],
     };
     let mut spans: Vec<Span> = items.iter().filter_map(CommonsItem::private_span).collect();
+    // #3927: and each `template` keyword, contextual at item position.
+    spans.extend(items.iter().filter_map(|item| match item {
+        CommonsItem::Embed(e) => e.template.as_ref().map(|t| t.keyword),
+        _ => None,
+    }));
     // #3984: and a test-only commons' `for tests` marker.
     if let SourceUnit::Commons(c) = &unit
         && c.test_only
@@ -3291,6 +3334,9 @@ pub(crate) fn describe_capability_op(c: &CapabilityDecl, op: &CapabilityOp) -> S
                 "\nA typed read: the type argument is explicit, and a reply that does not decode faults.\n"
             }
         });
+    }
+    if crate::upstream_seam::is_seam(c, &op.name.name) {
+        out.push_str(crate::upstream_seam::SUITE_ONLY);
     }
     if let Some(doc) = &op.documentation {
         out.push('\n');
@@ -4835,6 +4881,15 @@ mod tests {
         let current = root.join("a.bynk");
         assert!(find_declaration_cross_file(&files, &current, "DoesNotExist").is_none());
         assert!(describe_symbol_cross_file(&files, &current, "DoesNotExist").is_none());
+    }
+
+    #[test]
+    fn upstream_exchange_hover_says_suite_only() {
+        // #3752 (D20): hover shows `exchange` everywhere, and says it is suite-only.
+        let exchange = describe_firstparty_symbol("Upstream.exchange").expect("described");
+        assert!(exchange.contains("**Suite-only.**"), "{exchange}");
+        let forward = describe_firstparty_symbol("Upstream.forward").expect("described");
+        assert!(!forward.contains("Suite-only"), "{forward}");
     }
 
     #[test]

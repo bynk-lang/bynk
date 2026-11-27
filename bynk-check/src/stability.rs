@@ -429,6 +429,7 @@ mod tests {
                 "bynk.Forwarded",
                 "bynk.PassThrough",
                 "bynk.UpstreamError",
+                "bynk.UpstreamRequest",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
@@ -459,6 +460,7 @@ mod tests {
                 "bynk.RequestHeaders.entries",
                 "bynk.actor.ApiKey",
                 "bynk.given.parameters",
+                "bynk.html.typed",
                 "bynk.http.ANY",
                 "bynk.http.rest"
             ]
@@ -466,6 +468,11 @@ mod tests {
         // #3959: capability parameters are one built-in experimental entry.
         assert!(p.blocks("bynk.given.parameters"));
         assert!(firstparty::names_first_party_item("bynk.given.parameters"));
+        // #3927: typed HTML's gate, which also admits `Html` and the `template` declaration.
+        assert!(p.blocks("bynk.html.typed.template"));
+        assert!(p.blocks("bynk.html.Html"));
+        assert!(!p.blocks("bynk.html.escapeText"));
+        assert!(firstparty::names_first_party_item("bynk.html.typed"));
         assert!(!p.blocks("bynk.cloudflare.Kv.list"));
         // #3939 (track §17): the `ApiKey` scheme, its types and its members, behind one name.
         assert!(p.blocks("bynk.actor.ApiKey"));
