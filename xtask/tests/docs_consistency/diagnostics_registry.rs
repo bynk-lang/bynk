@@ -53,6 +53,8 @@ const NON_DIAGNOSTIC_LOOKALIKES: &[&str] = &[
     "bynk.list.reverse",
     "bynk.string.join",
     "bynk.text.shout",
+    // #3752: the rest segment's `[unstable] allow` entry, a route form's item path.
+    "bynk.http.rest",
     // #3959: the `[unstable] allow` entry for capability parameters, a
     // built-in experimental item (`BUILTIN_EXPERIMENTAL`), not a code.
     "bynk.given.parameters",

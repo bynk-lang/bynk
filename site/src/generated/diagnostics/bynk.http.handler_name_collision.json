@@ -1,0 +1,12 @@
+{
+  "blurb": "Each HTTP handler becomes a method on its service, named from its method and route: `http_GET`, then one part per segment, `Param_id` for `:id` and `Rest_key` for `*key`, with every character outside `A-Z`, `a-z` and `0-9` written `_`. That spelling is not one-to-one, so two routes can share a name (`/a-b`, `/a_b` and `/a/b` all give `http_GET_a_b`), and one handler would then answer both paths. Every service of a context is composed into one object, so the names are the context's, and the second such route in a context is refused, whichever services the two are in. Spell one route differently.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.handler_name_collision",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a_b\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ both are `http_GET_a_b`\n\non GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/ab\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "Two HTTP handlers of a context would be emitted under one method name (`/a-b` and `/a_b` are both `http_GET_a_b`)."
+}

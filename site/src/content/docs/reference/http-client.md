@@ -503,7 +503,9 @@ after the spread). The server ignores the header on a `from http` route.
 
 A route the client cannot yet represent faithfully is named on stderr and left out,
 never generated wrong: a raw `query: RequestQuery`, `cookies: RequestCookies` or `headers: RequestHeaders` view,
-a route guarded by a request signature (the client holds no secret), and a route whose types hold an `Option`
+a route guarded by a request signature (the client holds no secret), a route with a
+[rest segment](/reference/http/#rest-segments) (`/files/*key`, whose value holds `/`, which one encoded
+segment can't carry; `bynk openapi` leaves it out for the same reason), and a route whose types hold an `Option`
 inside a `Map`, a `Set` or a `Result`. If every selected route is left out the
 command fails.
 

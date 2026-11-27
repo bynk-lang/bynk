@@ -1,0 +1,45 @@
+suite web {
+	case "a rest route is addressed by its pattern, then the rest" {
+		let r <- files.GET("/raw/*path", "/a/b.png") by Visitor
+		expect r == Ok("[/a/b.png]")
+	}
+
+	case "an R2 key with a slash round-trips through the rest" {
+		let _ <- files.PUT("/files/*key", "/docs/a%20b.txt", "hello") by Visitor
+		let r <- files.GET("/files/*key", "/docs/a%20b.txt") by Visitor
+		expect r == Ok("hello")
+	}
+
+	case "a missing key is not found" {
+		let r <- files.GET("/files/*key", "/nope") by Visitor
+		expect r is NotFound
+	}
+
+	case "parameters before the rest arrive in their order" {
+		let r <- files.GET("/t/:tenant/*key", "acme", "/x/y") by Visitor
+		expect r == Ok("acme [/x/y]")
+	}
+}
+
+suite web as system {
+	case "the router binds the rest of the path as received" {
+		let r <- files.GET("/raw/*path", "/a//b/") by Visitor
+		expect r is Ok("[/a//b/]")
+	}
+
+	case "an empty rest matches the route's own prefix" {
+		let r <- files.GET("/raw/*path", "") by Visitor
+		expect r is Ok("[]")
+	}
+
+	case "an R2 key with a slash round-trips at the system tier" {
+		let _ <- files.PUT("/files/*key", "/docs/caf%C3%A9.txt", "bonjour") by Visitor
+		let r <- files.GET("/files/*key", "/docs/caf%C3%A9.txt") by Visitor
+		expect r is Ok("bonjour")
+	}
+
+	case "a literal route beats the rest beside it" {
+		let r <- files.GET("/files/index.json") by Visitor
+		expect r is Ok("index")
+	}
+}

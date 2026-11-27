@@ -1,0 +1,8 @@
+context demo
+
+// #3752: the rest segment ships experimental.
+service api from http {
+  on GET("/files/*key") (key: String) -> Effect[HttpResult[String]] by Visitor {
+    Ok(key)
+  }
+}

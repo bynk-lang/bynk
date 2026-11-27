@@ -2116,8 +2116,13 @@ An HTTP handler MUST return `Effect[HttpResult[T]]`
 (`bynk.http.return_not_effect_http_result`); its route MUST be well-formed and
 unique, MUST NOT use the reserved `/_bynk/` prefix
 (`bynk.http.invalid_path`, `bynk.http.duplicate_route`, `bynk.http.reserved_prefix`),
-MUST NOT contain `*`, `{` or `}` in any segment, which are reserved for a future
-route form (`bynk.http.reserved_route_syntax`),
+MUST NOT contain `{` or `}` in any segment, or `*` other than as a final `*name`
+rest segment, which are reserved for a future route form
+(`bynk.http.reserved_route_syntax`, `bynk.http.rest_unnamed`); a rest segment (#3752,
+experimental) MUST bind a `String` parameter of its name (`bynk.http.rest_param_type`),
+to which the router MUST bind the rest of the path as received, still percent-encoded;
+no two HTTP handlers of a context may share an emitted name
+(`bynk.http.handler_name_collision`);
 and each `:name` segment MUST bind to a parameter of a type a typed `query` field takes, less
 `Option` and `List` (#3910): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or
 opaque type over one of those

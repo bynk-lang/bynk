@@ -94,6 +94,7 @@
 /book/guides/entry-points/queue/
 /book/guides/entry-points/receive-email/
 /book/guides/entry-points/serve-a-page/
+/book/guides/entry-points/serve-files-by-path/
 /book/guides/entry-points/stream-a-large-upload/
 /book/guides/entry-points/websocket/
 /book/guides/events/
@@ -298,6 +299,7 @@
 /book/reference/diagnostics/bynk.capability.unknown_option/
 /book/reference/diagnostics/bynk.cell.invalid_target/
 /book/reference/diagnostics/bynk.cell.self_reference/
+/book/reference/diagnostics/bynk.cloudflare.credentials_missing/
 /book/reference/diagnostics/bynk.cloudflare.edge_cache_duplicate/
 /book/reference/diagnostics/bynk.cloudflare.edge_cache_exported/
 /book/reference/diagnostics/bynk.cloudflare.edge_cache_in_agent/
@@ -1496,6 +1498,7 @@
 /reference/diagnostics/bynk.capability.unknown_option/
 /reference/diagnostics/bynk.cell.invalid_target/
 /reference/diagnostics/bynk.cell.self_reference/
+/reference/diagnostics/bynk.cloudflare.credentials_missing/
 /reference/diagnostics/bynk.cloudflare.edge_cache_duplicate/
 /reference/diagnostics/bynk.cloudflare.edge_cache_exported/
 /reference/diagnostics/bynk.cloudflare.edge_cache_in_agent/
@@ -1789,6 +1792,7 @@
 /reference/diagnostics/bynk.http.form_on_bodyless/
 /reference/diagnostics/bynk.http.form_on_sum_route/
 /reference/diagnostics/bynk.http.form_unknown_arg/
+/reference/diagnostics/bynk.http.handler_name_collision/
 /reference/diagnostics/bynk.http.header_question_not_found/
 /reference/diagnostics/bynk.http.headers_field_consumed/
 /reference/diagnostics/bynk.http.headers_field_consumed_optional/
@@ -1834,6 +1838,8 @@
 /reference/diagnostics/bynk.http.reserved_prefix/
 /reference/diagnostics/bynk.http.reserved_response_header/
 /reference/diagnostics/bynk.http.reserved_route_syntax/
+/reference/diagnostics/bynk.http.rest_param_type/
+/reference/diagnostics/bynk.http.rest_unnamed/
 /reference/diagnostics/bynk.http.return_not_effect_http_result/
 /reference/diagnostics/bynk.http.security_invalid_field/
 /reference/diagnostics/bynk.http.security_not_http/
@@ -2210,6 +2216,7 @@
 /reference/diagnostics/bynk.test.remote_unsupported_peek/
 /reference/diagnostics/bynk.test.remote_unsupported_queue/
 /reference/diagnostics/bynk.test.remote_unsupported_schedule/
+/reference/diagnostics/bynk.test.rest_argument/
 /reference/diagnostics/bynk.test.revoked_needs_sessions_route/
 /reference/diagnostics/bynk.test.service_bad_address/
 /reference/diagnostics/bynk.test.service_call_arity/
