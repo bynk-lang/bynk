@@ -28,7 +28,7 @@ async function test_a_binder_less_Bearer_route_that_takes_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -63,6 +63,7 @@ async function test_a_binder_less_Bearer_route_that_takes_a_capability() {
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
     type UpstreamError = __ns_bynk.UpstreamError;
+    type UpstreamRequest = __ns_bynk.UpstreamRequest;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.http_GET_ping(deps);
     if (!(__bynkEq(r, HttpResult.Ok("pong")))) { throw __bynkExpectFailure("tests/app.bynk:5:9", 121, 136, "expect r == Ok(\"pong\")\n  expected: r == Ok(\"pong\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("pong")))); }
@@ -81,7 +82,7 @@ async function test_a_binding_Bearer_route_that_takes_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -116,6 +117,7 @@ async function test_a_binding_Bearer_route_that_takes_a_capability() {
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
     type UpstreamError = __ns_bynk.UpstreamError;
+    type UpstreamRequest = __ns_bynk.UpstreamRequest;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.http_GET_me({ ...deps, identity: (("ada" as any) as any), claims: __tokenClaims([]) });
     if (!(__bynkEq(r, HttpResult.Ok("ada")))) { throw __bynkExpectFailure("tests/app.bynk:10:9", 244, 258, "expect r == Ok(\"ada\")\n  expected: r == Ok(\"ada\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ada")))); }
@@ -134,7 +136,7 @@ async function test_a_binder_less_Bearer_route_without_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, UpstreamRequest, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
@@ -169,6 +171,7 @@ async function test_a_binder_less_Bearer_route_without_a_capability() {
     type TimedOut = __ns_bynk.TimedOut;
     type TooManyKeys = __ns_bynk.TooManyKeys;
     type UpstreamError = __ns_bynk.UpstreamError;
+    type UpstreamRequest = __ns_bynk.UpstreamRequest;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.http_GET_bare(deps);
     if (!(__bynkEq(r, HttpResult.Ok("bare")))) { throw __bynkExpectFailure("tests/app.bynk:15:9", 369, 384, "expect r == Ok(\"bare\")\n  expected: r == Ok(\"bare\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("bare")))); }

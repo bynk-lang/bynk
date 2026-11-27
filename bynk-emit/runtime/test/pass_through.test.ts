@@ -6,16 +6,19 @@ import assert from "node:assert/strict";
 import {
   applyPassThroughSecurity,
   forwarded,
+  forwardedOf,
   inboundRequest,
   passThroughOwns,
   passThroughRefuses,
   passThroughResponse,
   passThroughYields,
   requestHeaders,
+  upstreamDouble,
   upstreamForward,
   upstreamPathProblem,
   upstreamUrl,
 } from "../src/http.ts";
+import { __bynkOverlay } from "../src/testing/stub_overlay.ts";
 
 const ORIGIN = "https://upstream.example";
 const config = { origin: ORIGIN, timeoutSecs: 30 };
@@ -255,4 +258,78 @@ test("D8: a Respond answers locally, as an ordinary HttpResult", async () => {
   );
   assert.equal(r.status, 308);
   assert.equal(r.headers.get("location"), "/blog/");
+});
+
+// D20: the unit tier's `Upstream` double runs the shipped policy, and only the exchange is the
+// suite's.
+
+/** An `Upstream` double overlaid by a stub of `exchange` that records what it was handed. */
+function stubbedDouble(answer = forwardedOf(200, ["content-type: text/plain"], (async function* () {})())) {
+  const sent: { method: string; url: string; headers: Map<string, string>; hasBody: boolean }[] = [];
+  const stub = {
+    __applies: (op: string) => op === "exchange",
+    async exchange(s: (typeof sent)[number]) {
+      sent.push(s);
+      return { tag: "Ok" as const, value: answer };
+    },
+  };
+  const upstream = __bynkOverlay(upstreamDouble(config, "Origin"), stub, "Origin") as ReturnType<typeof upstreamDouble>;
+  return { sent, upstream };
+}
+
+test("D20 (§8 SSRF into the upstream's own private paths via ..): an InvalidPath case records exchange called 0 times", async () => {
+  for (const path of ["/../admin", "/%2e%2e/admin", "/a/%252e%252e%252fadmin", "//other.example/x"]) {
+    const { sent, upstream } = stubbedDouble();
+    const got = await upstream.forward(view("https://proxy.example/"), path);
+    if (got.tag === "Err") assert.deepEqual(got.error, { tag: "InvalidPath" }, path);
+    else assert.equal(new URL(sent[0]!.url).origin, ORIGIN, path);
+    if (got.tag === "Err") assert.equal(sent.length, 0, path);
+  }
+});
+
+test("D20 (§8 credential leakage to the upstream): the sent request carries no inbound cookie or authorization", async () => {
+  const { sent, upstream } = stubbedDouble();
+  const v = view("https://proxy.example/blog/x?q=1", {
+    method: "POST",
+    body: "payload",
+    headers: { cookie: "s=1", authorization: "Bearer t" },
+  });
+  const got = await upstream.forward(v, "/x");
+  assert.equal(got.tag, "Ok");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]!.method, "POST");
+  assert.equal(sent[0]!.url, "https://upstream.example/x?q=1");
+  assert.equal(sent[0]!.hasBody, true);
+  assert.equal(sent[0]!.headers.has("cookie"), false);
+  assert.equal(sent[0]!.headers.has("authorization"), false);
+});
+
+test("D20: an unstubbed exchange faults, and never reaches the network", async () => {
+  await assert.rejects(() => upstreamDouble(config, "Origin").forward(view("https://proxy.example/"), "/x"), /`Origin.exchange` is not stubbed/);
+});
+
+test("D20: Forwarded.of builds the upstream's status, headers and streamed body", async () => {
+  const body = (async function* () {
+    yield new TextEncoder().encode("he");
+    yield new TextEncoder().encode("llo");
+  })();
+  const f = forwardedOf(404, ["content-type: text/html", "x-a: 1", "no colon"], body);
+  const response = passThroughResponse({ tag: "Forward", response: f }, new Request("https://proxy.example/"), {});
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("x-a"), "1");
+  assert.equal(await response.text(), "hello");
+  const empty = forwardedOf(204, [], (async function* () { yield new Uint8Array([1]); })());
+  assert.equal(passThroughResponse({ tag: "Forward", response: empty }, new Request("https://proxy.example/"), {}).status, 204);
+});
+
+test("D20 (§8 credential leakage from the upstream): forward's answer has no Set-Cookie, proxy-authenticate, hop-by-hop or upstream HSTS", async () => {
+  const lines = ["set-cookie: s=1", "proxy-authenticate: Basic", "connection: x-hop", "x-hop: 1", "strict-transport-security: max-age=1", "x-kept: yes"];
+  const { upstream } = stubbedDouble(forwardedOf(200, lines, (async function* () {})()));
+  const got = await upstream.forward(view("https://proxy.example/"), "/x");
+  assert.equal(got.tag, "Ok");
+  if (got.tag !== "Ok") return;
+  for (const name of ["set-cookie", "proxy-authenticate", "connection", "x-hop", "strict-transport-security"]) {
+    assert.deepEqual(got.value.header(name), { tag: "None" }, name);
+  }
+  assert.deepEqual(got.value.header("x-kept"), { tag: "Some", value: "yes" });
 });

@@ -1523,6 +1523,7 @@ pub(super) fn platform_double(
             );
             return Some(double_fn(name, ns, cap, params, body, &double_uses(owner, cap, harness_clock, false)));
         }
+        ("bynk", "Upstream") => return Some(upstream_double(name, ns, cap)),
         // L7 (#2414): there is no edge cache in a test, so each instance
         // accepts every purge, checking its prefixes as the binding does;
         // `stub Edge.purge(_) returns false` refuses one, and observation
@@ -1742,6 +1743,25 @@ pub(super) fn platform_double(
         body,
         &double_uses(owner, cap, harness_clock, pglite),
     ))
+}
+
+/// #3752 (D20): an `Upstream` instance runs the shipped `forward` policy with the
+/// exchange its own `exchange`, which faults until a case stubs it, so a test never
+/// reaches an upstream. The bare capability's double takes a stand-in origin.
+fn upstream_double(name: &str, ns: &str, cap: &str) -> TsStmt {
+    let params = vec![TsParam {
+        default: Some(TsExpr::object(vec![
+            ("origin".to_string(), str_lit("https://upstream.invalid")),
+            ("timeoutSecs".to_string(), num_lit("30")),
+        ])),
+        ..TsParam::new(
+            "config",
+            Some(TsType::named("{ origin: string; timeoutSecs: number }")),
+        )
+    }];
+    let body = "  return __upstreamDouble(config, __NAME__) as never;\n"
+        .replace("__NAME__", &bynk_project::json_string(name));
+    double_fn(name, ns, cap, params, body, &["__upstreamDouble"])
 }
 
 /// A platform double as a function declaration: `function __bynkTest_<name>(params): <ns>.<cap> {

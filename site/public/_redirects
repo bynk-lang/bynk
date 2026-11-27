@@ -18,6 +18,12 @@
 /reference/diagnostics/bynk.http.pass_through_not_emitted/ /reference/http/ 301
 /reference/diagnostics/bynk.http.pass_through_not_emitted /reference/http/ 301
 
+# #3752: `bynk.test.pass_through_address` refused a suite case that addressed a
+# pass-through route until its test double landed (slice 3c); it never shipped in a
+# release, and the section it pointed to now describes those addresses.
+/reference/diagnostics/bynk.test.pass_through_address/ /reference/testing/ 301
+/reference/diagnostics/bynk.test.pass_through_address /reference/testing/ 301
+
 # Every tool links a diagnostic code as /d/<code> (slice 4, #3876); the page it
 # names may move, so the link stays a 302.
 /d /reference/diagnostics/ 302

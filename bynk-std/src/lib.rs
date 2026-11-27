@@ -1017,6 +1017,7 @@ pub const UNITS: &[Unit] = &[
             "Forwarded",
             "PassThrough",
             "UpstreamError",
+            "UpstreamRequest",
         ],
         extensible: &["FetchError", "Method", "Redirect", "UpstreamError"],
         // #3752 (D13): an upstream origin a pass-through route forwards to. Its
@@ -2294,6 +2295,7 @@ mod tests {
                 "bynk.Forwarded",
                 "bynk.PassThrough",
                 "bynk.UpstreamError",
+                "bynk.UpstreamRequest",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",

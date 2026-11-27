@@ -3187,6 +3187,10 @@ fn member_candidates_from(
                 }
                 CommonsItem::Capability(c) if c.name.name == receiver => {
                     for op in &c.ops {
+                        // #3752 (D20): `Upstream.exchange` is offered only in a suite.
+                        if crate::upstream_seam::hidden(c, &op.name.name, doc_text) {
+                            continue;
+                        }
                         if seen.insert(op.name.name.clone()) {
                             // Typed signature (params + return), the same
                             // `type_ref_str` rendering hover/signature help use —
@@ -6523,6 +6527,28 @@ fn Box.size(self) -> Int { 1 }
     fn a_derivation_cycle_completes_nothing() {
         let doc = "context a\n\ncapability A = B\ncapability B = C\ncapability C = A\n";
         assert!(member_candidates("A", doc, None).is_empty());
+    }
+
+    /// #3752 (D20): `Upstream.exchange` is completed only in a suite file, where the
+    /// checker allows it; `forward` everywhere.
+    #[test]
+    fn upstream_exchange_is_completed_only_in_a_suite() {
+        let labels = |doc: &str| -> Vec<String> {
+            member_candidates("Pages", doc, None)
+                .into_iter()
+                .map(|c| c.label)
+                .collect()
+        };
+        let program = labels(
+            "context a\n\nconsumes bynk { Upstream }\n\ncapability Pages = Upstream @origin(\"https://upstream.example\")\n",
+        );
+        assert!(program.iter().any(|l| l == "forward"), "{program:?}");
+        assert!(!program.iter().any(|l| l == "exchange"), "{program:?}");
+        let suite = labels(concat!(
+            "context a\n\nconsumes bynk { Upstream }\n\ncapability Pages = Upstream @origin(\"https://upstream.example\")\n",
+            "\nsuite a {\n}\n"
+        ));
+        assert!(suite.iter().any(|l| l == "exchange"), "{suite:?}");
     }
 
     /// S4a (#1966): a derived capability completes its base's operations.

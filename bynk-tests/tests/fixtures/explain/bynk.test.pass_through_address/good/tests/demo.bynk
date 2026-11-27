@@ -1,6 +1,0 @@
-suite demo {
-  case "an ordinary route" {
-    let r <- api.GET("/status") by Visitor
-    expect r == Ok("up")
-  }
-}

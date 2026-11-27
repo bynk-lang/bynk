@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk { InboundRequest, PassThrough, Forwarded }
+
+service proxy from http {
+  on ANY("/blog/*path") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor {
+    let page = Forwarded.of(200, ["content-type: text/html"], Stream.of([Bytes.fromUtf8("<h1>forged</h1>")]))
+    Forward(page)
+  }
+}

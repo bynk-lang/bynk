@@ -3292,6 +3292,9 @@ pub(crate) fn describe_capability_op(c: &CapabilityDecl, op: &CapabilityOp) -> S
             }
         });
     }
+    if crate::upstream_seam::is_seam(c, &op.name.name) {
+        out.push_str(crate::upstream_seam::SUITE_ONLY);
+    }
     if let Some(doc) = &op.documentation {
         out.push('\n');
         out.push_str(doc);
@@ -4826,6 +4829,15 @@ mod tests {
         let current = root.join("a.bynk");
         assert!(find_declaration_cross_file(&files, &current, "DoesNotExist").is_none());
         assert!(describe_symbol_cross_file(&files, &current, "DoesNotExist").is_none());
+    }
+
+    #[test]
+    fn upstream_exchange_hover_says_suite_only() {
+        // #3752 (D20): hover shows `exchange` everywhere, and says it is suite-only.
+        let exchange = describe_firstparty_symbol("Upstream.exchange").expect("described");
+        assert!(exchange.contains("**Suite-only.**"), "{exchange}");
+        let forward = describe_firstparty_symbol("Upstream.forward").expect("described");
+        assert!(!forward.contains("Suite-only"), "{forward}");
     }
 
     #[test]

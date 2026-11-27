@@ -389,30 +389,35 @@ pub(crate) fn held_at_boundary(
     .with_note(instead)
 }
 
-/// #3752 (slice 3b): `bynk.test.pass_through_address` when a suite case addresses
-/// `service.<verb>("<path>")` and the service's route at `path` is an `ANY` route.
-/// A suite drives a pass-through route through its unit-tier double, which a later
-/// slice (3c) adds, so until then the case is refused rather than run wrong.
-pub(crate) fn suite_address_refusal<'a>(
-    mut kinds: impl Iterator<Item = &'a HandlerKind>,
-    service: &str,
-    verb: &bynk_syntax::ast::Ident,
-    path: &str,
-) -> Option<CompileError> {
-    kinds.find(
-        |k| matches!(k, HandlerKind::Http { method: HttpMethod::Any, path: p } if p == path),
-    )?;
-    Some(
-        CompileError::new(
-            "bynk.test.pass_through_address",
-            verb.span,
-            format!(
-                "`{service}.{}(\"{path}\")` addresses the pass-through route `ANY {path}`, which a suite case can't drive yet",
-                verb.name
-            ),
-        )
-        .with_note("a pass-through route's test double (a stub of `Upstream.exchange`, `Forwarded.of`) and its suite addresses arrive in a later release; until then, test the functions its handler calls"),
-    )
+/// #3752 (D20): `bynk.test.pass_through_system_address` for each address of an
+/// `ANY` route in a `system` case. A deployed pass-through route reaches a real
+/// upstream, which a suite has none of; its unit-tier double stands in for one, and
+/// the router's own answers are tested on workerd against a local upstream.
+pub(crate) fn refuse_system_addresses(
+    case: &bynk_syntax::ast::Case,
+    callees: &std::collections::HashMap<crate::checker::ExprId, crate::checker::Callee>,
+    errors: &mut Vec<CompileError>,
+) {
+    for e in crate::test_suites::exprs_in_order(&case.body) {
+        let Some(crate::checker::Callee::TestService { address, .. }) = callees.get(&e.id) else {
+            continue;
+        };
+        if !address.is_pass_through() {
+            continue;
+        }
+        errors.push(
+            CompileError::new(
+                "bynk.test.pass_through_system_address",
+                e.span,
+                format!(
+                    "case `\"{}\"` addresses the pass-through route `{}`, but is a `system`-tier case",
+                    case.name,
+                    address.describe()
+                ),
+            )
+            .with_note("a `system` case has no upstream to forward to; drive the route at `unit`, with a stub of the instance's `exchange` (`stub Pages.exchange(_) returns Ok(Forwarded.of(…))`)"),
+        );
+    }
 }
 
 #[cfg(test)]

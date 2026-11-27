@@ -4,7 +4,7 @@
 //! re-exports these via `use calls::*`.
 
 use super::codable::{check_op_codable_args, check_reply_codable, op_encoding};
-use super::pass_through_calls::check_pass_through_call;
+use super::pass_through_calls::{check_pass_through_call, static_or_seam};
 use super::*;
 
 /// v0.39 (ADR 0072): record a parameter-name inlay hint for one call argument,
@@ -1908,7 +1908,7 @@ fn cross_first_party(consumed: &str, cap: &str) -> Option<crate::firstparty::Fir
 /// names (`consumes U { Cap }`) to their providing unit (v0.25). A bare
 /// non-flattened name is the consuming unit's own declaration — qualified
 /// at assembly.
-fn record_capability_ref(span: Span, name: &str, ctx: &mut Ctx) {
+pub(super) fn record_capability_ref(span: Span, name: &str, ctx: &mut Ctx) {
     if let Some(unit) = ctx.input.cross_context.flattened_caps.get(name) {
         ctx.refs
             .record_in_unit(span, SymbolKind::Capability, name, unit);
@@ -2021,7 +2021,7 @@ pub(crate) fn check_static_call(
         return None;
     }
     if let Some(cap) = ctx.caps.capabilities.get(&type_name.name).cloned() {
-        record_capability_ref(type_name.span, &type_name.name, ctx);
+        super::pass_through_calls::record_capability_call(&cap, type_name, method, ctx);
         // S3 (#1963): a flattened capability's operation, by its owning unit.
         if let Some(unit) = ctx
             .input
@@ -3464,7 +3464,8 @@ fn check_method_call_inner(
         && ctx.lookup(id.name.as_str()).is_none()
         && ctx.input.types.contains_key(&id.name)
     {
-        return check_static_call(id, method, type_args, args, span, expected, expr_id, ctx);
+        // #3752 (D20): `Forwarded.of(…)` is a suite's static, not the opaque constructor.
+        return static_or_seam(id, method, type_args, args, span, expected, expr_id, ctx);
     }
     // v0.20b: qualified statics on the built-in collection types —
     // `List.empty()` / `Map.empty()`. Like an empty `[]`, they need an
@@ -4573,6 +4574,12 @@ fn check_test_service_address(
         return check_ws_address(sig, id, method, args, expr_id, ctx);
     }
 
+    // #3752 (D20): `svc.<METHOD>("/pattern", …)` on a pass-through route.
+    if let Some(outcome) =
+        super::pass_through_address::check_any_address(sig, id, method, args, expr_id, ctx)
+    {
+        return outcome;
+    }
     // `svc.<VERB>("/path", …)` — an http route. The first argument is the route
     // *pattern* (a compile-time-resolved name), the rest are positional path
     // params then the body, matched against the handler's declared params.
@@ -4682,17 +4689,6 @@ fn check_test_service_address(
                 extra_headers: false,
             },
         );
-        // #3752: a pass-through route has no suite address until its double lands.
-        let kinds = sig.handlers.iter().map(|h| &h.kind);
-        if let Some(err) =
-            crate::http_pass_through::suite_address_refusal(kinds, &id.name, method, path)
-        {
-            ctx.errors.push(err);
-            for a in args {
-                let _ = type_of(a, None, ctx);
-            }
-            return None;
-        }
         let matched = sig.handlers.iter().find(|h| {
             matches!(&h.kind, HandlerKind::Http { method: m, path: p } if m.as_str() == method.name && p == path)
         });
@@ -5143,7 +5139,7 @@ fn check_ws_close_call(
 /// #1934: what a case's call to `handler` yields — its declared return type,
 /// an `Effect[_]` (`bynk.service.return_not_effect`). `None` if the type does
 /// not resolve in the case, which a checked target's handler always does.
-fn handler_outcome(handler: &TestHandler, ctx: &mut Ctx) -> Option<TyId> {
+pub(super) fn handler_outcome(handler: &TestHandler, ctx: &mut Ctx) -> Option<TyId> {
     resolve_type_ref(&handler.return_type, &ctx.input.types, ctx.tys)
 }
 
@@ -5192,6 +5188,7 @@ fn http_address(method: &Ident, path: Option<&str>) -> HandlerAddress {
     HandlerAddress::Http {
         verb: bynk_syntax::ast::HttpMethod::from_ident(&method.name).expect("the branch's guard"),
         path: path.map(str::to_string),
+        request: None,
     }
 }
 
@@ -6293,7 +6290,7 @@ fn reject_wire_args(svc: &str, addr: &str, args: &[Expr], ctx: &mut Ctx) {
 /// Shared arity + argument-type check for a resolved test-body service address.
 /// `positional` are the arguments that map to the handler's declared params (for
 /// http/cron the leading pattern string has already been split off).
-fn check_address_args(
+pub(super) fn check_address_args(
     svc: &str,
     addr: &str,
     params: &[bynk_syntax::ast::Param],

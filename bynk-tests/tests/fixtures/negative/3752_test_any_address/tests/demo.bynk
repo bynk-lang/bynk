@@ -1,0 +1,6 @@
+suite demo {
+  case "ANY names no method" {
+    let r <- proxy.ANY("/blog/*path", "/posts/x") by Visitor
+    expect true
+  }
+}

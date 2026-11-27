@@ -5648,6 +5648,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   }",
     },
     Explain {
+        code: "bynk.test.forwarded_outside_suite",
+        blurb: "A `Forwarded` is what an `Upstream` instance's declared origin answered, so a program gets one only from `forward`, after its checks on the path and the origin. `Forwarded.of(status, headerLines, body)` builds one by hand, as a suite's stand-in for an upstream (`stub Pages.exchange(_) returns Ok(Forwarded.of(…))`); anywhere else it would let a handler serve a fabricated upstream response on the proxy's origin, so it is refused outside a suite.",
+        example: "let page = Forwarded.of(200, [\"content-type: text/html\"], Stream.of([Bytes.fromUtf8(\"<h1>forged</h1>\")]))   // ✗ only a suite builds one\nlet got <- Pages.forward(request, path)   // ✓",
+    },
+    Explain {
         code: "bynk.test.helper_given_at_system",
         blurb: "A suite helper that declares `given` runs with the capabilities of its target, which a case gets at the `unit` and `integration` tiers. A `system` case cannot name a capability: each context runs as the Worker it deploys as, and the case reaches it only through its addresses. Move the helper to a suite below `system`.",
         example: "suite demo.desk as system {\n    fn seed() -> Effect[()] given Meter { … }   // ✗ a `system` case names no capability\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    fn seed() -> Effect[()] given Meter { … }   // ✓ below `system` the case has the target's capabilities\n\n    case \"the desk checks\" { … }\n}",
@@ -5673,9 +5678,9 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   let r <- api.GET(\"/health\") by Visitor    // ✓",
     },
     Explain {
-        code: "bynk.test.pass_through_address",
-        blurb: "A pass-through route forwards its request to an upstream through `Upstream.forward`, so a suite case drives it through the route's test double: a stub of `Upstream.exchange`, the network step beneath the forwarding policy, answering with `Forwarded.of(…)`, and suite addresses that name the method sent (`proxy.GET(\"/blog/*path\", \"/posts/x\")`, `HEAD`, `OPTIONS`). That double arrives in a later release. Until then a case that addresses an `ANY` route is refused rather than run with a request no client would send. Test the functions its handler calls in the meantime, and the route itself against a real upstream.",
-        example: "let r <- proxy.ANY(\"/blog/*path\", \"/posts/x\") by Visitor   // ✗ not yet\n\nlet r <- api.GET(\"/status\") by Visitor   // ✓ an ordinary route",
+        code: "bynk.test.pass_through_system_address",
+        blurb: "A pass-through route forwards its request to an upstream, and a `system` case runs the deployed Worker, which has no upstream to reach. So a case addresses an `ANY` route below `system`, where the instance's test double runs the real forwarding policy and hands what it built to `exchange`, which the case stubs and observes. The router's own answers on a pass-through path are tested against a local upstream on workerd.",
+        example: "case \"the blog is forwarded\" as system {\n    let r <- proxy.GET(\"/blog/*path\", \"/posts/x\") by Visitor   // ✗ no upstream to forward to\n}\n\ncase \"the blog is forwarded\" {\n    stub Pages.exchange(_) returns Ok(Forwarded.of(200, [], Stream.of([Bytes.fromUtf8(\"hello\")])))   // ✓\n    let r <- proxy.GET(\"/blog/*path\", \"/posts/x\") by Visitor\n    expect Pages.exchange called once with sent.url == \"https://upstream.example/posts/x\"\n}",
     },
     Explain {
         code: "bynk.test.peek_not_a_database",
@@ -5983,6 +5988,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   // tests/api.test.bynk\n\
                   let r <- api.GET(\"/items\") by Ghost(\"x\")   // ✗ no actor `Ghost`\n\
                   let r <- api.GET(\"/items\") by User(\"x\")    // ✓",
+    },
+    Explain {
+        code: "bynk.test.upstream_exchange_outside_suite",
+        blurb: "`exchange` is an `Upstream` instance's network step, beneath `forward`'s policy: the path checks, the textual URL and its origin, the method and body, and no inbound header. It is declared on the capability only so a suite can stub and observe what the policy sent. A program that called it would send a request it built itself, around every one of those checks, so it is refused everywhere but a suite, in a context, a commons or a dependency alike, and the platform's `exchange` faults if it is reached all the same. Forward with `forward`.",
+        example: "let got <- Pages.exchange(sent)   // ✗ around the forwarding policy\nlet got <- Pages.forward(request, path)   // ✓",
     },
     Explain {
         code: "bynk.test.violates_needs_in_process",
@@ -11346,6 +11356,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     d(
+        "bynk.test.forwarded_outside_suite",
+        "`Forwarded.of` builds an upstream's answer outside a suite; a program gets a `Forwarded` only from `Upstream.forward`.",
+    ),
+    d(
         "bynk.test.helper_given_at_system",
         "A suite helper declares `given` in a `system`-tier suite; a `system` case names no capability for it to be given.",
     ),
@@ -11360,8 +11374,8 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
-        "bynk.test.pass_through_address",
-        "A suite case addresses an `on ANY` pass-through route, which a suite can't drive until its test double (a stub of `Upstream.exchange`, `Forwarded.of`) arrives in a later release.",
+        "bynk.test.pass_through_system_address",
+        "A `system`-tier case addresses an `on ANY` pass-through route; the deployed Worker has no upstream to forward to, so the route is driven below `system` with a stub of its instance's `exchange`.",
         &["case"],
     ),
     dg(
@@ -11526,6 +11540,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.test.unknown_actor",
         "A call-site `by <Actor>` names an actor the target context does not declare and that is not a prelude actor.",
         &["case"],
+    ),
+    d(
+        "bynk.test.upstream_exchange_outside_suite",
+        "An `Upstream` instance's `exchange`, the network step beneath `forward`'s policy, is called outside a suite; a program forwards with `forward`.",
     ),
     dg(
         "bynk.test.violates_needs_in_process",

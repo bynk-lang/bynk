@@ -21,7 +21,7 @@ import { checkUnique, commitStored, committedSize, eraseStored, markErased, newE
 import { attachLazy } from "./lazy.ts";
 import { scanAll, scanAny, scanFilter, scanFirst, scanFirstOrElse, scanFlatMap, scanMap, scanSkip, scanTake } from "./scan.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { allowUnion, applyCache, applyChallenge, applyCors, applyEdgeCache, applyPassThroughSecurity, applySecurityHeaders, cfObject, cookieObject, cookieString, contentDisposition, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, forwarded, headResponse, headerPairs, headersObject, httpResultToResponse, inboundRequest, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, passThroughOwns, passThroughRefuses, passThroughResponse, passThroughYields, pathLeaf, privateByDefault, problemRejection, queryObject, queryString, rateLimitAllows, rateLimitAllowsKey, rateLimitedResponse, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, resultHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, upstreamForward, varyAcceptLanguage, withDownload, withETag, withHeartbeat, withLastModified, withLocation, withPlainJson, withResponseHeader, withRetryAfter, type CorsPolicy, type ForwardedView, type InboundRequestView, type SecurityPolicy } from "./http.ts";
+import { allowUnion, applyCache, applyChallenge, applyCors, applyEdgeCache, applyPassThroughSecurity, applySecurityHeaders, cfObject, cookieObject, cookieString, contentDisposition, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, forwarded, forwardedOf, headResponse, headerPairs, headersObject, httpResultToResponse, inboundRequest, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, passThroughOwns, passThroughRefuses, passThroughResponse, passThroughYields, pathLeaf, privateByDefault, problemRejection, queryObject, queryString, rateLimitAllows, rateLimitAllowsKey, rateLimitedResponse, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, resultHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, testInboundRequest, upstreamForward, upstreamDouble, varyAcceptLanguage, withDownload, withETag, withHeartbeat, withLastModified, withLocation, withPlainJson, withResponseHeader, withRetryAfter, type CorsPolicy, type ForwardedView, type InboundRequestView, type SecurityPolicy } from "./http.ts";
 import { currentTraceId, enterTrace, withTrace } from "./traceparent.ts";
 import { traceBinding, traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
 import { historyBefore, historyRecord, inspectAgent, inspectRoute, noteAgentInstance } from "./inspect.ts";
@@ -107,12 +107,15 @@ export {
   headResponse as __headResponse,
   inboundRequest as __inboundRequest,
   forwarded as __forwarded,
+  forwardedOf as __forwardedOf,
   applyPassThroughSecurity as __applyPassThroughSecurity,
   passThroughOwns as __passThroughOwns,
   passThroughRefuses as __passThroughRefuses,
   passThroughResponse as __passThroughResponse,
   passThroughYields as __passThroughYields,
   upstreamForward as __upstreamForward,
+  upstreamDouble as __upstreamDouble,
+  testInboundRequest as __testInboundRequest,
   headerPairs as __headerPairs,
   headersObject as __headersObject,
   withPlainJson as __withPlainJson,

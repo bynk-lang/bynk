@@ -88,6 +88,7 @@ pub mod sequence;
 pub mod signature_help;
 pub mod symbols;
 pub mod token_claims;
+mod upstream_seam;
 pub mod violates;
 pub mod wire_contract;
 pub mod wire_names;

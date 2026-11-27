@@ -1,0 +1,78 @@
+// #3752 (D20): a pass-through route at the unit tier. `forward` runs the shipped
+// policy, and only its network step, the instance's `exchange`, is the suite's:
+// stubbed for what the upstream answers, observed for what the policy sent. Each
+// case names the row of the track's §8 threat model, or the decision, it holds.
+suite demo {
+  consumes bynk { Forwarded, PassThrough, UpstreamError, UpstreamRequest }
+
+  case "D20: the method, the URL and no body reach the exchange" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(200, ["content-type: text/plain"], Stream.of([Bytes.fromUtf8("hello")])))
+    let r <- proxy.GET("/blog/*path", "/posts/x") by Visitor
+    expect r is Forward(_)
+    expect Pages.exchange called once with sent.method == "GET" && sent.url == "https://upstream.example/posts/x" && !sent.hasBody
+  }
+
+  case "§8 credential leakage to the upstream: no inbound cookie or authorization is sent" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(200, [], Stream.of([Bytes.fromUtf8("ok")])))
+    let r <- proxy.POST("/blog/*path", "/comments", RequestHeaders.of(["cookie: session=s1", "authorization: Bearer t"])) by Visitor
+    expect r is Forward(_)
+    expect Pages.exchange called once with sent.method == "POST" && sent.headers.get("cookie") == None && sent.headers.get("authorization") == None
+  }
+
+  case "§8 credential leakage from the upstream: Set-Cookie, proxy-authenticate, hop-by-hop and its HSTS never pass" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(404, ["set-cookie: track=1", "proxy-authenticate: Basic", "connection: x-hop", "x-hop: 1", "strict-transport-security: max-age=1", "content-type: text/html"], Stream.of([Bytes.fromUtf8("<h1>gone</h1>")])))
+    let r <- proxy.GET("/blog/*path", "/old") by Visitor
+    let passed = match r {
+      Forward(f) => f.status() == 404 && f.header("content-type") == Some("text/html") && f.header("set-cookie") == None && f.header("proxy-authenticate") == None && f.header("x-hop") == None && f.header("strict-transport-security") == None
+      Respond(_) => false
+    }
+    expect passed
+  }
+
+  case "§8 SSRF into the upstream's own private paths via ..: a double-encoded dot segment is InvalidPath, exchange called 0 times" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(200, [], Stream.of([Bytes.fromUtf8("admin")])))
+    let r <- proxy.GET("/blog/*path", "/a/%252e%252e%252fadmin") by Visitor
+    expect r is Respond(BadRequest(_))
+    expect Pages.exchange called 0 times
+  }
+
+  case "§8 SSRF into the upstream's own private paths: a decoded CR LF (header injection) is InvalidPath, exchange called 0 times" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(200, [], Stream.of([Bytes.fromUtf8("x")])))
+    let r <- proxy.GET("/blog/*path", "/a%0d%0aX-Injected:%201") by Visitor
+    expect r is Respond(BadRequest(_))
+    expect Pages.exchange called 0 times
+  }
+
+  case "§8 SSRF (protocol-relative): a path never changes the host" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(200, [], Stream.of([Bytes.fromUtf8("x")])))
+    let r <- proxy.GET("/blog/*path", "//other.example/x") by Visitor
+    expect r is Forward(_)
+    expect Pages.exchange called once with sent.url == "https://upstream.example//other.example/x"
+  }
+
+  case "D20: HEAD and OPTIONS are addressed on an ANY route and forwarded as sent" {
+    stub Pages.exchange(_) returns Ok(Forwarded.of(200, [], Stream.of([Bytes.fromUtf8("x")])))
+    let h <- proxy.HEAD("/blog/*path", "/x") by Visitor
+    let o <- proxy.OPTIONS("/blog/*path", "/x") by Visitor
+    expect Pages.exchange called once with sent.method == "HEAD"
+    expect Pages.exchange called once with sent.method == "OPTIONS"
+  }
+
+  case "D19: a stubbed timeout is the handler's 504" {
+    stub Pages.exchange(_) returns Err(Timeout)
+    let r <- proxy.GET("/blog/*path", "/slow") by Visitor
+    expect r is Respond(GatewayTimeout(_))
+  }
+
+  case "D20: stubbing forward replaces the policy, and nothing is exchanged" {
+    stub Pages.forward(_, _) returns Err(Unreachable)
+    let r <- proxy.GET("/blog/*path", "/x") by Visitor
+    expect r is Respond(BadGateway(_))
+    expect Pages.exchange called 0 times
+  }
+
+  case "D5: an ordinary route keeps its own address" {
+    let r <- api.GET("/status") by Visitor
+    expect r == Ok("up")
+  }
+}

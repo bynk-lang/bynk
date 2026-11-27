@@ -80,6 +80,7 @@ pub(crate) mod nested_effect;
 pub(crate) mod nested_wrapper;
 mod par;
 mod partial_content;
+mod pass_through_address;
 mod pass_through_calls;
 mod pattern_as;
 mod pattern_literals;
@@ -1103,9 +1104,13 @@ pub enum HandlerAddress {
     /// `svc.call(…)`: the `on call` handler.
     Call,
     /// `svc.<VERB>(path, …)`: an `on http` handler, matched by its route once `path` is known.
+    /// #3752 (D20): `request` is, for an `ANY` route, the position among the handler's
+    /// parameters of its `InboundRequest`, which the address builds from the method sent
+    /// and the inbound headers (not from an argument).
     Http {
         verb: bynk_syntax::ast::HttpMethod,
         path: Option<String>,
+        request: Option<usize>,
     },
     /// `svc.schedule(expr, …)`: a cron handler, matched by its schedule once `expr` is known.
     /// #3874: `param` is the position among the handler's parameters of its
@@ -1169,13 +1174,27 @@ impl HandlerAddress {
     }
 
     /// The address as the diagnostics write it (`POST /orders`, `call`, `ws open`).
+    /// #3752 (D20): whether this addresses a pass-through (`ANY`) route.
+    pub fn is_pass_through(&self) -> bool {
+        matches!(
+            self,
+            HandlerAddress::Http {
+                verb: bynk_syntax::ast::HttpMethod::Any,
+                ..
+            }
+        )
+    }
+
     pub fn describe(&self) -> String {
         match self {
             HandlerAddress::Call => "call".to_string(),
-            HandlerAddress::Http { verb, path: None } => verb.as_str().to_string(),
+            HandlerAddress::Http {
+                verb, path: None, ..
+            } => verb.as_str().to_string(),
             HandlerAddress::Http {
                 verb,
                 path: Some(path),
+                ..
             } => format!("{} {path}", verb.as_str()),
             HandlerAddress::Schedule { expr: None, .. } => "schedule".to_string(),
             HandlerAddress::Schedule {
@@ -2134,6 +2153,9 @@ pub struct HandlerBodyCheck<'a> {
     /// #4389: the body is an `on http` handler of a method other than `GET`, where
     /// `PartialContent` and `NotModified` are refused.
     pub http_non_get: bool,
+    /// #3752 (D20): the body is a suite's stub value (`stub … returns <value>`), where a
+    /// suite-only form (`Forwarded.of`, `Val[T]`) is in place.
+    pub test_values: bool,
 }
 
 impl<'a> HandlerBodyCheck<'a> {
@@ -2163,6 +2185,7 @@ impl<'a> HandlerBodyCheck<'a> {
             claims_sum_arms: Vec::new(),
             service_handler: false,
             http_non_get: false,
+            test_values: false,
         }
     }
 }
@@ -2191,6 +2214,7 @@ pub fn check_handler_body(
         claims_sum_arms,
         service_handler: in_service_handler,
         http_non_get,
+        test_values,
     } = check;
     let CheckSinks {
         tys,
@@ -2297,7 +2321,7 @@ pub fn check_handler_body(
         in_service_handler,
         http_non_get,
         in_fn_body: false,
-        test_values: false,
+        test_values,
     };
     // Check the body and validate it matches the return type.
     let Some(body_ty) = type_of_block(body, Some(return_ty), &mut ctx) else {

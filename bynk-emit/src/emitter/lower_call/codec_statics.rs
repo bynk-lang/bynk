@@ -125,6 +125,7 @@ pub(in super::super) fn lower_json_codec_call(
         | StaticOp::RequestQuery(_)
         | StaticOp::RequestCookies(_)
         | StaticOp::Stream(_)
+        | StaticOp::Forwarded(_)
         | StaticOp::HttpResult(_)
         | StaticOp::QueueResult(_)
         | StaticOp::TestConnection(_)

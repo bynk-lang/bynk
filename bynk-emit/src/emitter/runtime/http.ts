@@ -2719,6 +2719,28 @@ export function forwarded(response: Response): ForwardedView {
   return view;
 }
 
+/** D20: `Forwarded.of(status, headerLines, body)`, a suite's upstream answer: the
+ *  status, `"name: value"` header lines (a line without a colon is ignored) and a
+ *  streamed body, which a null-body status (`101`, `204`, `205`, `304`) drops. */
+export function forwardedOf<T extends ForwardedView = ForwardedView>(
+  status: number,
+  headerLines: readonly string[],
+  body: AsyncIterable<Uint8Array>,
+): T {
+  const headers = new Headers();
+  for (const line of headerLines) {
+    const i = line.indexOf(":");
+    if (i > 0) headers.append(line.slice(0, i).trim(), line.slice(i + 1).trim());
+  }
+  const nullBody = status === 101 || status === 204 || status === 205 || status === 304;
+  const init = { status: status === 101 ? 200 : status, headers };
+  const response = new Response(nullBody ? null : byteStreamBody(body), init);
+  // A `101` can't be constructed; it stands for an upstream that answered one.
+  if (status === 101) Object.defineProperty(response, "status", { value: 101 });
+  // The program's `Forwarded` is this view under its brand.
+  return forwarded(response) as T;
+}
+
 function forwardedResponse(view: ForwardedView): Response {
   const response = (view as unknown as { [FORWARDED_RESPONSE]?: Response })[FORWARDED_RESPONSE];
   if (response === undefined) throw new Error("bynk: not a forwarded response");
@@ -2778,6 +2800,14 @@ export function passThroughResponse(
     upstream.body?.cancel().catch(() => {});
     return new Response(null, { status: 502 });
   }
+  return withoutUpstreamOnlyHeaders(upstream);
+}
+
+/** D9: `response` without the headers an upstream's answer never passes on: hop-by-hop ones and
+ *  the names listed in `Connection`, `proxy-authenticate`, `set-cookie` and the upstream's own
+ *  `strict-transport-security`. `forward` applies it to what the exchange answered, so a suite's
+ *  `Forwarded` is already the answer the router passes through, and the router applies it again. */
+function withoutUpstreamOnlyHeaders(upstream: Response): Response {
   const headers = new Headers(upstream.headers);
   const listed = (headers.get("connection") ?? "").split(",").map((n) => n.trim().toLowerCase()).filter((n) => n !== "");
   for (const name of [...HOP_BY_HOP, ...listed, "proxy-authenticate", "set-cookie", "strict-transport-security"]) {
@@ -2873,6 +2903,28 @@ export async function upstreamForward(
   path: string,
   fetcher: (input: string, init: RequestInit) => Promise<Response> = (input, init) => globalThis.fetch(input, init),
 ): Promise<Result<ForwardedView, UpstreamFailure>> {
+  return upstreamExchange(config, view, path, async (url, init) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.timeoutSecs * 1000);
+    try {
+      return { tag: "Ok", value: forwarded(await fetcher(url, { ...init, signal: controller.signal })) };
+    } catch {
+      return { tag: "Err", error: controller.signal.aborted ? { tag: "Timeout" } : { tag: "Unreachable" } };
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+}
+
+/** The policy `upstreamForward` applies before anything is sent (D13, D15): the path checks, the
+ *  textual URL and its origin, the method, raw query and streamed body, manual redirects and no
+ *  inbound header. Only `send`, the exchange itself, differs between the platform and D20's double. */
+async function upstreamExchange(
+  config: UpstreamConfig,
+  view: InboundRequestView,
+  path: string,
+  send: (url: string, init: RequestInit & { duplex?: "half" }) => Promise<Result<ForwardedView, UpstreamFailure>>,
+): Promise<Result<ForwardedView, UpstreamFailure>> {
   if (upstreamPathProblem(path) !== null) return { tag: "Err", error: { tag: "InvalidPath" } };
   const url = upstreamUrl(config.origin, path, view.query());
   let target: URL;
@@ -2884,23 +2936,68 @@ export async function upstreamForward(
   if (target.origin !== new URL(config.origin).origin) return { tag: "Err", error: { tag: "InvalidPath" } };
   const request = inboundRequestTake(view);
   const method = request.method.toUpperCase();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.timeoutSecs * 1000);
-  const init: RequestInit & { duplex?: "half" } = { method, redirect: "manual", signal: controller.signal };
+  const init: RequestInit & { duplex?: "half" } = { method, redirect: "manual" };
   if (method !== "GET" && method !== "HEAD" && request.body !== null) {
     init.body = request.body;
     init.duplex = "half";
   }
-  try {
-    const response = await fetcher(url, init);
-    return { tag: "Ok", value: forwarded(response) };
-  } catch {
-    return { tag: "Err", error: controller.signal.aborted ? { tag: "Timeout" } : { tag: "Unreachable" } };
-  } finally {
-    clearTimeout(timer);
-  }
+  const answer = await send(url, init);
+  if (answer.tag === "Err") return answer;
+  // An upstream `101` is kept as it is: the router answers it `502`.
+  const response = forwardedResponse(answer.value);
+  return response.status === 101 ? answer : { tag: "Ok", value: forwarded(withoutUpstreamOnlyHeaders(response)) };
+}
+
+/** D20: what a suite sees of an exchange, `bynk.UpstreamRequest`: the method, the URL, the headers
+ *  sent (lower-case names) and whether a body went with it. */
+export interface UpstreamSent {
+  readonly method: string;
+  readonly url: string;
+  readonly headers: Map<string, string>;
+  readonly hasBody: boolean;
+}
+
+function upstreamSent(url: string, init: RequestInit): UpstreamSent {
+  const headers = new Map<string, string>();
+  new Headers(init.headers).forEach((value, name) => headers.set(name, value));
+  return { method: init.method ?? "GET", url, headers, hasBody: init.body !== undefined && init.body !== null };
+}
+
+/** D20: the `request` a suite case's address of an `ANY` route hands its handler: the method
+ *  sent, the inbound headers the case gives (`RequestHeaders.of([…])`, an `Authorization` among
+ *  them) and no query or body. */
+export function testInboundRequest<T extends InboundRequestView = InboundRequestView>(method: string, headers?: RequestHeaders): T {
+  const request = new Request("https://test.invalid/", {
+    method,
+    headers: headers === undefined ? undefined : requestHeaderPairs(headers),
+  });
+  return inboundRequest<T>(request, requestHeaders(request));
+}
+
+/** D20: the unit tier's `Upstream` instance. `forward` is the shipped policy (`upstreamExchange`),
+ *  and only the exchange is the suite's: `exchange` faults until a case stubs it. A stub overlay
+ *  calls `forward` with itself as `this` (`__bynkThroughOverlay`), so the stubbed or recorded
+ *  `exchange` is the one reached. */
+export function upstreamDouble(config: UpstreamConfig, name: string): {
+  forward(view: InboundRequestView, path: string): Promise<Result<ForwardedView, UpstreamFailure>>;
+  exchange(sent: UpstreamSent): Promise<Result<ForwardedView, UpstreamFailure>>;
+} {
+  const forward = function (
+    this: { exchange(sent: UpstreamSent): Promise<Result<ForwardedView, UpstreamFailure>> },
+    view: InboundRequestView,
+    path: string,
+  ): Promise<Result<ForwardedView, UpstreamFailure>> {
+    return upstreamExchange(config, view, path, (url, init) => this.exchange(upstreamSent(url, init)));
+  };
+  Object.defineProperty(forward, "__bynkThroughOverlay", { value: true });
+  return {
+    forward,
+    async exchange(): Promise<Result<ForwardedView, UpstreamFailure>> {
+      throw new Error(`bynk: \`${name}.exchange\` is not stubbed, and a test never reaches an upstream — add \`stub ${name}.exchange(_) returns …\``);
+    },
+  };
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, inboundRequest as __inboundRequest, forwarded as __forwarded, applyPassThroughSecurity as __applyPassThroughSecurity, passThroughOwns as __passThroughOwns, passThroughRefuses as __passThroughRefuses, passThroughResponse as __passThroughResponse, passThroughYields as __passThroughYields, upstreamForward as __upstreamForward, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withHeartbeat as __withHeartbeat, withLocation as __withLocation, withDownload as __withDownload, withETag as __withETag, withLastModified as __withLastModified, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, rateLimitAllows as __rateLimitAllows, rateLimitAllowsKey as __rateLimitAllowsKey, rateLimitedResponse as __rateLimitedResponse, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, inboundRequest as __inboundRequest, forwarded as __forwarded, forwardedOf as __forwardedOf, applyPassThroughSecurity as __applyPassThroughSecurity, passThroughOwns as __passThroughOwns, passThroughRefuses as __passThroughRefuses, passThroughResponse as __passThroughResponse, passThroughYields as __passThroughYields, upstreamForward as __upstreamForward, upstreamDouble as __upstreamDouble, testInboundRequest as __testInboundRequest, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withHeartbeat as __withHeartbeat, withLocation as __withLocation, withDownload as __withDownload, withETag as __withETag, withLastModified as __withLastModified, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, rateLimitAllows as __rateLimitAllows, rateLimitAllowsKey as __rateLimitAllowsKey, rateLimitedResponse as __rateLimitedResponse, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy, ForwardedView as __ForwardedView, InboundRequestView as __InboundRequestView };

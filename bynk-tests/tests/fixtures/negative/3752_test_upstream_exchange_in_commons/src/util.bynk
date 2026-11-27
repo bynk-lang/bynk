@@ -1,0 +1,7 @@
+commons util
+
+consumes bynk { Upstream, UpstreamError, UpstreamRequest, Forwarded }
+
+fn send(sent: UpstreamRequest) -> Effect[Result[Forwarded, UpstreamError]] given Store: Upstream {
+  Store.exchange(sent)
+}

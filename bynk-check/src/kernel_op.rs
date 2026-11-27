@@ -683,6 +683,10 @@ kernel_ops! {
     StreamStatic {
         Of = "of", "Stream.of(items: List[T]) -> Stream[T]";
     }
+/// `Forwarded.of(status, headerLines, body)` (#3752, D20): a suite's upstream answer.
+    ForwardedStatic {
+        Of = "of", "Forwarded.of(status: Int, headerLines: List[String], body: Stream[Bytes]) -> Forwarded";
+    }
 /// The typed `Json` codec statics (v0.22b, ADR 0045).
     JsonStatic {
         Encode = "encode", "Json.encode(value: T) -> String";
@@ -732,6 +736,8 @@ pub enum IntrinsicNs {
     RequestQuery,
     RequestCookies,
     Stream,
+    /// `bynk`'s `Forwarded` (#3752, D20), whose `of` only a suite calls.
+    Forwarded,
     /// An `HttpResult` variant reference or construction (`NotFound`, `HttpResult.Ok(x)`).
     HttpResult,
     /// A `QueueResult` variant (`Ack`, `Retry(reason)`).
@@ -763,6 +769,7 @@ impl IntrinsicNs {
             IntrinsicNs::RequestQuery => t::REQUEST_QUERY,
             IntrinsicNs::RequestCookies => t::REQUEST_COOKIES,
             IntrinsicNs::Stream => t::STREAM,
+            IntrinsicNs::Forwarded => "Forwarded",
             IntrinsicNs::HttpResult => t::HTTP_RESULT,
             IntrinsicNs::QueueResult => t::QUEUE_RESULT,
             IntrinsicNs::TestConnection => "TestConnection",
@@ -795,6 +802,7 @@ pub enum StaticOp {
     RequestQuery(RequestQueryStatic),
     RequestCookies(RequestCookiesStatic),
     Stream(StreamStatic),
+    Forwarded(ForwardedStatic),
     Json(JsonStatic),
     Yaml(YamlStatic),
     Form(FormStatic),
@@ -822,6 +830,7 @@ impl StaticOp {
             StaticOp::RequestQuery(_) => IntrinsicNs::RequestQuery,
             StaticOp::RequestCookies(_) => IntrinsicNs::RequestCookies,
             StaticOp::Stream(_) => IntrinsicNs::Stream,
+            StaticOp::Forwarded(_) => IntrinsicNs::Forwarded,
             StaticOp::Json(_) => IntrinsicNs::Json,
             StaticOp::Yaml(_) => IntrinsicNs::Yaml,
             StaticOp::Form(_) => IntrinsicNs::Form,
@@ -849,6 +858,7 @@ impl StaticOp {
             StaticOp::RequestQuery(o) => o.name(),
             StaticOp::RequestCookies(o) => o.name(),
             StaticOp::Stream(o) => o.name(),
+            StaticOp::Forwarded(o) => o.name(),
             StaticOp::Json(o) => o.name(),
             StaticOp::Yaml(o) => o.name(),
             StaticOp::Form(o) => o.name(),
@@ -882,6 +892,7 @@ impl StaticOp {
                 StaticOp::RequestCookies(RequestCookiesStatic::from_name(name)?)
             }
             IntrinsicNs::Stream => StaticOp::Stream(StreamStatic::from_name(name)?),
+            IntrinsicNs::Forwarded => StaticOp::Forwarded(ForwardedStatic::from_name(name)?),
             IntrinsicNs::Json => StaticOp::Json(JsonStatic::from_name(name)?),
             IntrinsicNs::Yaml => StaticOp::Yaml(YamlStatic::from_name(name)?),
             IntrinsicNs::Form => StaticOp::Form(FormStatic::from_name(name)?),
@@ -1058,6 +1069,7 @@ mod tests {
             RequestQueryStatic,
             RequestCookiesStatic,
             StreamStatic,
+            ForwardedStatic,
             JsonStatic,
             YamlStatic,
             FormStatic,
