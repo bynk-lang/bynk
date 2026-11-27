@@ -18,28 +18,22 @@ use super::lower::escape_ts_template;
 use super::runtime_use::RuntimeUse;
 use super::ts_ident;
 use super::ts_types::ts_type_of;
+use crate::ts_build::{call, ident};
 
 /// The parameter a template's function takes its fields record as.
 const FIELDS: &str = "__fields";
-
-fn call(callee: &str, arg: TsExpr) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(TsExpr::Ident(callee.to_string())),
-        args: vec![arg],
-    }
-}
 
 /// A scalar field's text, as an interpolation hole writes it.
 fn text_of(value: TsExpr, base: BaseType, runtime_use: &RuntimeUse) -> TsExpr {
     match base {
         BaseType::Decimal => {
             runtime_use.note_decimal("__bynkDecimalToString");
-            call("__bynkDecimalToString", value)
+            call(ident("__bynkDecimalToString"), vec![value])
         }
-        BaseType::Instant => call("__bynkInstantToIso", value),
-        BaseType::Duration => call("__bynkDurationToString", value),
+        BaseType::Instant => call(ident("__bynkInstantToIso"), vec![value]),
+        BaseType::Duration => call(ident("__bynkDurationToString"), vec![value]),
         BaseType::String => value,
-        _ => call("String", value),
+        _ => call(ident("String"), vec![value]),
     }
 }
 
@@ -74,8 +68,12 @@ pub(super) fn emit_template(
             };
             match &h.treatment {
                 Treatment::Html => value,
-                Treatment::Text(b) => call("escapeText", text_of(value, *b, runtime_use)),
-                Treatment::Attr(b) => call("escapeAttr", text_of(value, *b, runtime_use)),
+                Treatment::Text(b) => {
+                    call(ident("escapeText"), vec![text_of(value, *b, runtime_use)])
+                }
+                Treatment::Attr(b) => {
+                    call(ident("escapeAttr"), vec![text_of(value, *b, runtime_use)])
+                }
             }
         })
         .collect();

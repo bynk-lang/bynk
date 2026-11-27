@@ -1,2 +1,2 @@
-# exact
 bynk.template.placeholder_in_code_attribute a placeholder cannot be in the event handler `onclick`
+# exact
