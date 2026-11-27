@@ -54,19 +54,36 @@ pub(crate) struct MissingCredentials {
 }
 
 impl MissingCredentials {
-    /// `set X [and Y] to {doing}: {needs} and the account it belongs to`: what each purpose has
-    /// always said.
-    pub(crate) fn message(self, doing: &str, needs: &str) -> String {
-        let missing: Vec<&str> = [
+    /// The unset variables, in the order the message names them.
+    pub(crate) fn names(self) -> Vec<&'static str> {
+        [
             self.token.then_some("CLOUDFLARE_API_TOKEN"),
             self.account.then_some("CLOUDFLARE_ACCOUNT_ID"),
         ]
         .into_iter()
         .flatten()
-        .collect();
+        .collect()
+    }
+
+    /// #3797: the structured error a `--format json` run writes to stdout when it stops for these:
+    /// `{"error": {"code", "missing", "message"}}`, `missing` the unset variables.
+    pub(crate) fn error_document(self, message: &str) -> String {
+        serde_json::to_string_pretty(&serde_json::json!({
+            "error": {
+                "code": "bynk.cloudflare.credentials_missing",
+                "missing": self.names(),
+                "message": message,
+            }
+        }))
+        .expect("a JSON value serialises")
+    }
+
+    /// `set X [and Y] to {doing}: {needs} and the account it belongs to`: what each purpose has
+    /// always said.
+    pub(crate) fn message(self, doing: &str, needs: &str) -> String {
         format!(
             "set {} to {doing}: {needs} and the account it belongs to",
-            missing.join(" and ")
+            self.names().join(" and ")
         )
     }
 }
@@ -138,6 +155,11 @@ fn walk(
         }
         _ => {}
     }
+}
+
+/// The credentials the run is missing, if it is missing any.
+pub(crate) fn missing_credentials() -> Option<MissingCredentials> {
+    shared().credentials.clone().err()
 }
 
 /// The run's REST client, for a purpose that says what it is `doing` and what token it `needs`

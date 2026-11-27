@@ -299,6 +299,7 @@
 /book/reference/diagnostics/bynk.capability.unknown_option/
 /book/reference/diagnostics/bynk.cell.invalid_target/
 /book/reference/diagnostics/bynk.cell.self_reference/
+/book/reference/diagnostics/bynk.cloudflare.credentials_missing/
 /book/reference/diagnostics/bynk.cloudflare.edge_cache_duplicate/
 /book/reference/diagnostics/bynk.cloudflare.edge_cache_exported/
 /book/reference/diagnostics/bynk.cloudflare.edge_cache_in_agent/
@@ -1497,6 +1498,7 @@
 /reference/diagnostics/bynk.capability.unknown_option/
 /reference/diagnostics/bynk.cell.invalid_target/
 /reference/diagnostics/bynk.cell.self_reference/
+/reference/diagnostics/bynk.cloudflare.credentials_missing/
 /reference/diagnostics/bynk.cloudflare.edge_cache_duplicate/
 /reference/diagnostics/bynk.cloudflare.edge_cache_exported/
 /reference/diagnostics/bynk.cloudflare.edge_cache_in_agent/
