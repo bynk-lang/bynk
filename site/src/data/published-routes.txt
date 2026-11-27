@@ -1364,6 +1364,16 @@
 /reference/constants/
 /reference/cron/
 /reference/diagnostics/
+/reference/diagnostics/bynk.actor.api_key_agent_name_reserved/
+/reference/diagnostics/bynk.actor.api_key_bad_arg/
+/reference/diagnostics/bynk.actor.api_key_identity_not_string_constructible/
+/reference/diagnostics/bynk.actor.api_key_internal/
+/reference/diagnostics/bynk.actor.api_key_mint_outside_handler/
+/reference/diagnostics/bynk.actor.api_key_missing_secret/
+/reference/diagnostics/bynk.actor.api_key_prefix_shared/
+/reference/diagnostics/bynk.actor.api_key_secret_shared/
+/reference/diagnostics/bynk.actor.api_key_unknown_key/
+/reference/diagnostics/bynk.actor.api_key_unlimited/
 /reference/diagnostics/bynk.actor.bearer_bad_arg/
 /reference/diagnostics/bynk.actor.bearer_identity_not_string_constructible/
 /reference/diagnostics/bynk.actor.bearer_missing_secret/
@@ -1725,6 +1735,7 @@
 /reference/diagnostics/bynk.given.missing_for_call/
 /reference/diagnostics/bynk.given.parameter_name_conflict/
 /reference/diagnostics/bynk.given.parameter_outside_commons/
+/reference/diagnostics/bynk.given.parameterised_fn_value/
 /reference/diagnostics/bynk.given.shared_as_parameter/
 /reference/diagnostics/bynk.given.undeclared_capability/
 /reference/diagnostics/bynk.given.unknown_capability/

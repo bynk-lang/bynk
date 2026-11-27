@@ -1,0 +1,40 @@
+---
+#3959, capability parameters slice 2: forwarding. Each commons function binds its callee's
+parameter to its own (track §7, Q5), beside type parameters and an `Ord` bound, three deep;
+a recursive function rebinds its parameters; and a lambda that binds stands in for the
+function as a value (Q8).
+---
+commons lib.chain
+
+consumes bynk.cloudflare { Kv }
+
+fn bottom[T: Ord](key: String, xs: List[T]) -> Effect[Int] given Inner: Kv {
+	let _ <- Inner.put(key, "seen")
+	Effect.pure(xs.sort().length())
+}
+
+fn middle[T: Ord](key: String, xs: List[T]) -> Effect[Int] given Mid: Kv {
+	bottom[T](key, xs, given Inner = Mid)
+}
+
+fn top[T: Ord](key: String, xs: List[T]) -> Effect[Int] given Store: Kv {
+	middle[T](key, xs, given Mid = Store)
+}
+
+// Recursion that swaps its bindings on each step: never a loop that keeps the old `deps`.
+fn swap(n: Int) -> Effect[Bool] given A: Kv, B: Kv {
+	if n <= 0 {
+		let v <- A.get("k")
+		Effect.pure(v.isSome())
+	} else {
+		swap(n - 1, given A = B, B = A)
+	}
+}
+
+fn evict(key: String) -> Effect[()] given Inner: Kv {
+	Inner.delete(key)
+}
+
+fn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {
+	keys.forEach((k) => evict(k, given Inner = Store))
+}

@@ -1,0 +1,23 @@
+context shop.chat
+
+// #4100: `generateStream` is `generate` streamed: the typed request in, the text each event added
+// out, served as it is produced. A refusal before the first event is an `Err`, so the handler can
+// answer with an ordinary response.
+
+consumes bynk
+consumes bynk.cloudflare { Ai, AiError, ChatMessage, ChatRole, GenerateRequest }
+
+service chat from http {
+	@limit(maxBody: 4096)
+	on POST("/chat") (body: String) -> Effect[HttpResult[String]] by Visitor given Ai {
+		let request = GenerateRequest {
+			messages: [ChatMessage { role: ChatRole.User, content: body }],
+		}
+		let started <- Ai.generateStream("@cf/meta/llama-3.2-1b-instruct", request)
+		match started {
+			Ok(deltas) => Streaming(deltas),
+			Err(Overloaded) => ServiceUnavailable("try again shortly"),
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+}

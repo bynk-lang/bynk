@@ -1093,6 +1093,9 @@ pub fn lower_actor_seam_ir(handler: &Handler, actors: &HashMap<String, ActorDecl
     if let Some(seam) = bynk_check::actors::signed_cookie_seam_for(handler, actors) {
         return ActorSeamIr::SignedCookie(seam);
     }
+    if let Some(seam) = bynk_check::api_key::api_key_seam_for(handler, actors) {
+        return ActorSeamIr::ApiKey(seam);
+    }
     if let Some(binder) = bynk_check::actors::caller_binder_for(handler, actors) {
         return ActorSeamIr::Caller(binder);
     }

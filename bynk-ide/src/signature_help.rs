@@ -430,6 +430,16 @@ fn resolve_qualified_from(
                         .map(|(_, sig)| sig);
                     return;
                 }
+                // #3939: `Client.mint(identity, label)` on an `ApiKey` actor.
+                CommonsItem::Actor(a)
+                    if a.name.name == recv && crate::api_key_completion::is_api_key_actor(a) =>
+                {
+                    out = crate::api_key_completion::members(a)
+                        .into_iter()
+                        .find(|(label, _)| *label == member)
+                        .map(|(_, sig)| sig);
+                    return;
+                }
                 // `Cap.op` — a capability operation.
                 CommonsItem::Capability(c) if c.name.name == recv => {
                     if let Some(op) = c.ops.iter().find(|o| o.name.name == member) {
@@ -754,6 +764,18 @@ mod tests {
             "{select}"
         );
         assert!(select.contains("AnalyticsReadError"), "{select}");
+    }
+
+    /// #4100: `Ai.generateStream` is a declared operation, so signature help reads it as any other.
+    #[test]
+    fn ai_generate_stream_has_a_signature() {
+        const DOC: &str = "context a\n\nconsumes bynk.cloudflare { Ai }\n";
+        assert_eq!(
+            resolve_label("Ai.generateStream", DOC, None).as_deref(),
+            Some(
+                "generateStream(model: String, request: GenerateRequest) -> Effect[Result[Stream[String], AiError]]"
+            )
+        );
     }
 
     /// #4099: `Ai.generateValue[T]` has a signature for its type argument and its two parameters.

@@ -1,0 +1,21 @@
+suite shop {
+	case "a three-deep chain forwards the parameter to the bound instance" {
+		let n <- api.call("k")
+		expect n == 3
+		expect Sessions.put called once
+	}
+
+	case "recursion that swaps its bindings reads the instance each step binds" {
+		let zero <- swapper.call(0)
+		let one <- swapper.call(1)
+		let two <- swapper.call(2)
+		expect zero == true
+		expect one == false
+		expect two == true
+	}
+
+	case "a lambda that binds stands in for the function as a value" {
+		let _ <- cleaner.call(["a", "b"])
+		expect Sessions.delete called 2 times
+	}
+}

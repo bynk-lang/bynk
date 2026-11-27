@@ -33,6 +33,7 @@ export * from "./testing/bindings.ts";
 export * from "./agent.ts";
 export * from "./auth.ts";
 export * from "./session.ts";
+export * from "./apikey.ts";
 export * from "./connection.ts";
 export * from "./messages.ts";
 export * from "./locale.ts";

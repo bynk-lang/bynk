@@ -284,7 +284,9 @@ fn complete_base(
     if let Some(keys) = signed_cookie_key_candidates(line_prefix) {
         return keys;
     }
-    if let Some(keys) = bearer_key_candidates(line_prefix) {
+    if let Some(keys) = bearer_key_candidates(line_prefix)
+        .or_else(|| crate::api_key_completion::key_candidates(line_prefix))
+    {
         return keys;
     }
     if auth_scheme_position(line_prefix) {
@@ -2844,6 +2846,10 @@ fn auth_scheme_candidates() -> Vec<Completion> {
             "a signed, expiring session cookie that Bynk issues and verifies",
         ),
         ("Oidc", "an OIDC/JWKS provider token"),
+        (
+            "ApiKey",
+            "an opaque API key the service mints and stores as a peppered hash (experimental)",
+        ),
         ("Signature", "a webhook HMAC signature"),
         ("Internal", "an in-system caller"),
         ("Foreign", "a caller that is not Bynk, signing the call"),
@@ -3161,6 +3167,21 @@ fn member_candidates_from(
                             } else {
                                 item
                             });
+                        }
+                    }
+                }
+                // #3939: an `ApiKey` actor mints its keys.
+                CommonsItem::Actor(a)
+                    if a.name.name == receiver
+                        && crate::api_key_completion::is_api_key_actor(a) =>
+                {
+                    for (label, sig) in crate::api_key_completion::members(a) {
+                        if seen.insert(label.to_string()) {
+                            out.push(Completion::item(
+                                label,
+                                CompletionKind::Member,
+                                Some(format!("{sig} — API keys of `{receiver}`")),
+                            ));
                         }
                     }
                 }
@@ -5395,6 +5416,21 @@ mod tests {
                 .is_some_and(|d| d.contains("PgReadError")),
             "{:?}",
             select.detail
+        );
+    }
+
+    /// #4100: `Ai.` offers `generateStream` beside the other operations, with its signature.
+    #[test]
+    fn the_ai_name_offers_generate_stream() {
+        let doc = "context a.b\n\nconsumes bynk.cloudflare { Ai }\n";
+        let items = complete("    Ai.", doc, None);
+        let gs = find(&items, "generateStream", CompletionKind::Member).expect("`generateStream`");
+        assert!(
+            gs.detail
+                .as_deref()
+                .is_some_and(|d| d.contains("GenerateRequest") && d.contains("Stream[String]")),
+            "{:?}",
+            gs.detail
         );
     }
 

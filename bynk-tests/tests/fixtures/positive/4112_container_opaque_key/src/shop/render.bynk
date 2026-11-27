@@ -1,0 +1,33 @@
+context shop.render
+
+// #4112: an opaque type over `String` is a key too. Its constructor is where the names are
+// decided, here a function that builds one from a closed set, and `sendBytes` takes it like `send`.
+
+consumes bynk
+consumes bynk.cloudflare { Container, ContainerError }
+
+type TenantId = String where NonEmpty
+
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = TenantId }
+
+type Region = opaque String where Matches("[a-z]{2}-[0-9]{1,2}")
+
+capability Archiver = Container @build("containers/renderer") @port(8080) @instances(by: Region)
+
+fn primary() -> Region {
+	Region.unsafe("eu-1")
+}
+
+service api from http {
+	on POST("/archive") () -> Effect[HttpResult[String]] by m: Member given Archiver {
+		let req = Request {
+			method: Post,
+			url: "http://renderer/archive",
+		}
+		let res <- Archiver.sendBytes(primary(), req, Bytes.fromUtf8("data"))
+		match res {
+			Ok(r) => Ok(r.body.decodeUtf8().getOrElse("")),
+			Err(_) => ServerError("archive failed"),
+		}
+	}
+}

@@ -680,6 +680,8 @@ pub enum OptionKind {
     /// A list literal of string literals: `@allowedSenders(["a@b.example"])`
     /// (#3302).
     StrList,
+    /// A type's name, written `by: Name`: `@instances(by: TenantId)` (#4112).
+    Type,
 }
 
 /// The Worker binding prefix of a `Service` instance (interop I5, #1972):
@@ -893,6 +895,11 @@ pub const CONTAINER_INSTANCE_TYPE_OPTION: &str = "instanceType";
 /// The names of the Worker secrets passed to the container's process at start
 /// (#3477 J).
 pub const CONTAINER_FORWARD_OPTION: &str = "forward";
+
+/// The type that names a container's instances (#4112): `@instances(by: TenantId)` makes `send`,
+/// `receiveBytes` and `sendBytes` take a `TenantId` where they take a `String`, so the key's
+/// constructor is where an author bounds the set of names.
+pub const CONTAINER_INSTANCES_OPTION: &str = "instances";
 
 /// The instance types a `Container` can start with under the `durable_object`
 /// scheduling policy. There is no `basic` under it.
@@ -1271,6 +1278,7 @@ pub const UNITS: &[Unit] = &[
                     (CONTAINER_SLEEP_AFTER_OPTION, OptionKind::Duration),
                     (CONTAINER_INSTANCE_TYPE_OPTION, OptionKind::Str),
                     (CONTAINER_FORWARD_OPTION, OptionKind::StrList),
+                    (CONTAINER_INSTANCES_OPTION, OptionKind::Type),
                 ],
                 required: &[CONTAINER_BUILD_OPTION, CONTAINER_PORT_OPTION],
                 bare: false,
@@ -1618,10 +1626,32 @@ pub fn stability_of(path: &str) -> Option<Stability> {
 /// ([`experimental_items`]).
 pub const BUILTIN_EXPERIMENTAL: &[&str] = &[
     "bynk.RequestHeaders.entries",
+    "bynk.actor.ApiKey",
     "bynk.given.parameters",
     "bynk.http.ANY",
     "bynk.http.rest",
 ];
+
+/// #3939 (the API keys track, §17): first-party items admitted by another item's gate, as
+/// `(item, gate)`. The `ApiKey` scheme's types are reachable only through an `ApiKey` actor, so
+/// the scheme, its types and its members are one feature behind `bynk.actor.ApiKey`, promoted as
+/// a unit.
+pub const BUILTIN_GATED: &[(&str, &str)] = &[
+    ("bynk.ApiKeyId", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeyLabel", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeySecret", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeyValue", "bynk.actor.ApiKey"),
+    ("bynk.TooManyKeys", "bynk.actor.ApiKey"),
+];
+
+/// The `[unstable] allow` name that admits `path`: its gate, when [`BUILTIN_GATED`] gives one, else
+/// the path itself.
+pub fn gate_of(path: &str) -> &str {
+    BUILTIN_GATED
+        .iter()
+        .find(|(item, _)| covers(item, path))
+        .map_or(path, |(_, gate)| gate)
+}
 
 /// [`stability_of`] over a given table.
 pub fn stability_of_in(units: &[Unit], path: &str) -> Option<Stability> {
@@ -1774,6 +1804,26 @@ pub fn names_first_party_item_in(units: &[Unit], path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// #3939 (D3 B): every `bynk.crypto` binding compares through the runtime's one constant-time
+    /// function, the one the `ApiKey` key store calls (`apiKeyEqual`), rather than a copy.
+    #[test]
+    fn every_crypto_binding_shares_the_runtime_constant_time_comparison() {
+        for (name, src) in [
+            ("cloudflare", CRYPTO_CLOUDFLARE_BINDING),
+            ("node", CRYPTO_NODE_BINDING),
+            ("browser", CRYPTO_BROWSER_BINDING),
+        ] {
+            assert!(
+                src.contains("return constantTimeEqualBytes(a, b, platformTimingSafeEqual());"),
+                "the {name} binding must call the runtime's `constantTimeEqualBytes`"
+            );
+            assert!(
+                !src.contains("s.verify(\"HMAC\", key, mac"),
+                "the {name} binding must not carry its own double-HMAC copy"
+            );
+        }
+    }
+
     #[test]
     fn first_party_pins_are_exact() {
         for d in super::FIRST_PARTY_NPM {
@@ -2178,7 +2228,14 @@ mod tests {
             instantiable("bynk.cloudflare", "Container").expect("Container is instantiable");
         assert_eq!(
             container.option_names().collect::<Vec<_>>(),
-            ["build", "port", "sleepAfter", "instanceType", "forward"]
+            [
+                "build",
+                "port",
+                "sleepAfter",
+                "instanceType",
+                "forward",
+                "instances"
+            ]
         );
         assert_eq!(
             container.option_kind("sleepAfter"),
@@ -2266,6 +2323,8 @@ mod tests {
                 "bynk.crypto",
                 // #3752 (D12): a method of a built-in type.
                 "bynk.RequestHeaders.entries",
+                // #3939: the `ApiKey` scheme, with its types and members behind it.
+                "bynk.actor.ApiKey",
                 // #3959: capability parameters, a language form with no unit.
                 "bynk.given.parameters",
                 // #3752 (D7): the pass-through route form.

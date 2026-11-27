@@ -325,6 +325,8 @@ mod system {
     mod analyse_mode_corpus;
     #[path = "analytics_mapping_lock.rs"]
     mod analytics_mapping_lock;
+    #[path = "api_key_seam.rs"]
+    mod api_key_seam;
     #[path = "asset_check_behaviour.rs"]
     mod asset_check_behaviour;
     #[path = "bearer_auth.rs"]

@@ -1,0 +1,21 @@
+context demo
+
+// #4112: with `@instances(by: TenantId)` the instance is a `TenantId`, so a bare `String` is refused.
+
+consumes bynk
+consumes bynk.cloudflare { Container, ContainerError }
+
+type TenantId = String where Matches(r"[a-z0-9-]{3,32}")
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @instances(by: TenantId)
+
+service api from http {
+	on GET("/render/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request { method: Get, url: "http://renderer/render" }
+		let res <- Renderer.send(name, req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+}
