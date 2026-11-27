@@ -647,6 +647,21 @@ mod tests {
         assert_eq!(param_ranges(&label).len(), 1);
     }
 
+    /// #3959 (capability-parameters track §13, slice 4): a commons function's
+    /// label shows each capability parameter with its bound, beside the shared
+    /// capabilities, so a caller sees what each binding takes. The bindings are
+    /// not ordinary parameters, so the parameter ranges count the arguments only.
+    #[test]
+    fn free_fn_label_shows_capability_parameters() {
+        let doc = "commons lib.cache\n\nconsumes bynk { Logger }\nconsumes bynk.cloudflare { Kv }\n\nfn remember(key: String) -> Effect[()] given Store: Kv, Logger {\n  Store.put(key, \"v\")\n}\n";
+        let label = resolve_label("remember", doc, None).expect("remember resolves");
+        assert_eq!(
+            label,
+            "remember(key: String) -> Effect[()] given Store: Kv, Logger"
+        );
+        assert_eq!(param_ranges(&label).len(), 1);
+    }
+
     /// Constrained generics slice 1: the label shows `Ord` bounds. The hidden
     /// comparator-witness parameters the emitter adds are not in the AST, so
     /// they are never offered as a parameter or in the label.

@@ -110,6 +110,7 @@
     - [Store a password](guides/effects-and-capabilities/store-a-password.md)
   - Storing data
     - [Use more than one KV namespace](guides/effects-and-capabilities/use-several-kv-namespaces.md)
+    - [Write a library that uses a capability](guides/effects-and-capabilities/write-a-library-that-uses-a-capability.md)
     - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)
     - [Query rows into a record without repeating the columns](guides/effects-and-capabilities/query-rows-into-a-record.md)
     - [Connect an existing Postgres database](guides/effects-and-capabilities/connect-an-existing-postgres-database.md)
