@@ -1,0 +1,9 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+service api from http {
+  on GET("/x") (request: InboundRequest) -> Effect[HttpResult[String]] by Visitor {
+    Ok(request.method())
+  }
+}

@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+service proxy from http {
+  @cache(maxAge: 5.minutes)
+  on ANY("/blog/*path") (path: String) -> Effect[PassThrough] by Visitor {
+    Respond(NotFound)
+  }
+}
