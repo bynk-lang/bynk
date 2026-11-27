@@ -197,6 +197,37 @@ pub(crate) fn request_headers_ts_type() -> TsType {
     ])
 }
 
+/// #3752 (D11): `InboundRequest` as TypeScript, structural like `RequestHeaders`, so a
+/// module that names it imports nothing from the HTTP runtime: `method()`, `headers()`
+/// and `query()`. The runtime's `inboundRequest(request, headers)` builds one.
+pub(crate) fn inbound_request_ts_type() -> TsType {
+    TsType::Object(vec![
+        bynk_ts::TsTypeMember::method("method", vec![], TsType::named("string")),
+        bynk_ts::TsTypeMember::method("headers", vec![], request_headers_ts_type()),
+        bynk_ts::TsTypeMember::method("query", vec![], TsType::named("string")),
+    ])
+}
+
+/// #3752 (D8): `Forwarded` as TypeScript, structural: `status()` and
+/// `header(name)`. `Upstream.forward` builds one over the upstream's answer.
+pub(crate) fn forwarded_ts_type() -> TsType {
+    let name = bynk_ts::TsParam::new("name".to_string(), Some(TsType::named("string")));
+    let opt = TsType::union(vec![
+        TsType::Object(vec![
+            bynk_ts::TsTypeMember::readonly_prop("tag", TsType::named("\"Some\"")),
+            bynk_ts::TsTypeMember::readonly_prop("value", TsType::named("string")),
+        ]),
+        TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
+            "tag",
+            TsType::named("\"None\""),
+        )]),
+    ]);
+    TsType::Object(vec![
+        bynk_ts::TsTypeMember::method("status", vec![], TsType::named("number")),
+        bynk_ts::TsTypeMember::method("header", vec![name], opt),
+    ])
+}
+
 /// #2380 (L5): `TokenClaims` as TypeScript — structural, like
 /// `RequestHeaders`: `get(name)` for a string claim, `has(name)` for any.
 /// #2854 (decision B): `RequestQuery` as TypeScript — structural, like

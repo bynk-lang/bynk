@@ -1,0 +1,13 @@
+context shop
+
+consumes bynk.cloudflare { Kv }
+
+uses lib.cache
+
+capability Sessions = Kv
+
+service api {
+	on call(key: String) -> Effect[String] by Caller given Sessions {
+		cached(key, given Store = Sessions)
+	}
+}

@@ -1,5 +1,5 @@
 {
-  "blurb": "`expect Cap.op called` checks the calls the unit under test made through a capability it consumes, whether declared in its context, brought in with `consumes`, or listed in `given`. A name that is not one of those, such as a type or a function, has no recorded calls. Name a consumed capability. An operation it does not declare is `bynk.observe.unknown_op`.",
+  "blurb": "`expect Cap.op called` checks the calls the unit under test made through a capability it consumes, whether declared in its context, brought in with `consumes`, or listed in `given`. A name that is not one of those, such as a type, a function or a capability parameter, has no recorded calls. Name a consumed capability; for a parameter, name what the call binds it to, the instance in a context's suite or the kind's double in a commons suite. An operation it does not declare is `bynk.observe.unknown_op`.",
   "category": "Observation",
   "categoryAnchor": "observation",
   "code": "bynk.observe.not_a_seam",

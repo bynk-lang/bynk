@@ -114,8 +114,9 @@ impl<'a> Site<'a> {
 }
 
 /// Apply each of `steps` of `K` at `site`, in order, writing each step's commits before the next
-/// step is applied (ADR 0180: an interrupted run never makes a second). A failed step returns no
-/// commit, so nothing of it is written. What the push binds, by binding.
+/// step is applied (ADR 0180: an interrupted run never makes a second). A step that failed
+/// before changing the account returns no commit; one stopped part-way returns what it did, which
+/// is written before its failure is returned (#3999). What the push binds, by binding.
 pub(crate) fn apply_kind<K: ResourceKind>(
     site: Site<'_>,
     steps: &[K::Step<'_>],
@@ -128,6 +129,9 @@ pub(crate) fn apply_kind<K: ResourceKind>(
         let applied = K::apply(&site.cx::<K>(writer.lock(), live), step)?;
         for commit in applied.commits {
             writer.commit(site.environment, commit)?;
+        }
+        if let Some(failure) = applied.stopped {
+            return Err(failure);
         }
         bound.extend(applied.bound);
     }

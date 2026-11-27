@@ -50,6 +50,8 @@ pub(super) struct EmitUnitCtx {
     /// the pre-rewrite table is an intermediate of computing it, not exposed
     /// separately.
     imported_decl_paths_emit: HashMap<String, HashMap<String, PathBuf>>,
+    /// #3807: the consumed contexts whose declarations span several files.
+    split_consumed_contexts: HashSet<String>,
     exports_for_consumed: HashMap<String, HashMap<String, Visibility>>,
     file_decl_index: FileDeclIndex,
     /// #1820: a context split across files, built for Workers. Each file is
@@ -223,9 +225,21 @@ fn build_emit_unit_ctx(
             .for_each(module);
     }
 
+    let split_consumed_contexts = info
+        .consumes
+        .iter()
+        .filter(|t| {
+            unit_info
+                .get(*t)
+                .is_some_and(|i| i.kind == UnitKind::Context && i.files.len() > 1)
+        })
+        .cloned()
+        .collect();
+
     EmitUnitCtx {
         imported_methods,
         imported_decl_paths_emit,
+        split_consumed_contexts,
         exports_for_consumed,
         file_decl_index,
         split_worker,
@@ -444,6 +458,7 @@ pub(super) fn emit_unit(
         imported_from: imported_from.clone(),
         imported_from_kind: imported_from_kind.clone(),
         imported_decl_paths: unit_ctx.imported_decl_paths_emit.clone(),
+        split_consumed_contexts: unit_ctx.split_consumed_contexts.clone(),
         consumed_type_aliases: emitted_type_aliases(&info.table),
         unit_kind: kind,
         owning_context: owning_context_for_emit.clone(),

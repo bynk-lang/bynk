@@ -1,0 +1,11 @@
+---
+#3959, track §9: a kind with no instances has one double, so a suite cannot declare a
+second (`bynk.capability.base_not_instantiable`).
+---
+suite lib.cache
+
+capability Second = Logger
+
+case "c" {
+	expect true
+}

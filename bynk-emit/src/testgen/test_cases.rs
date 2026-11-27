@@ -102,7 +102,9 @@ pub(super) fn emit_test_scope_setup(
     // v0.117: the per-case recorded-call trace, and — for a context target with
     // capabilities — a `deps` wrapped so each capability operation records its
     // calls into `__obs`. Observations and `trace(Cap.op)` in the body read it.
-    let obs_spec: Option<TsExpr> = if record_calls && target_kind == UnitKind::Context {
+    let obs_spec: Option<TsExpr> = if record_calls
+        && matches!(target_kind, UnitKind::Context | UnitKind::Commons)
+    {
         unit_tables.get(target_name).and_then(|table| {
             // #291: the seams are the target's own capabilities and the platform
             // capabilities it flattens in (`consumes bynk { Logger }`); its own
@@ -141,7 +143,9 @@ pub(super) fn emit_test_scope_setup(
     } else {
         None
     };
-    if matches!(target_kind, UnitKind::Context | UnitKind::Adapter) {
+    if matches!(target_kind, UnitKind::Context | UnitKind::Adapter)
+        || commons_has_doubles(target_name, target_kind, unit_tables)
+    {
         if let Some(spec) = obs_spec {
             // P7.2: matches `emitter/lower.rs`'s own `{ args: unknown[] }` reads
             // of this exact shape (`Trace`/`Called`-with-predicate lowering).
@@ -342,6 +346,20 @@ pub(super) fn emit_test_scope_setup(
 /// The `async function {name}() { … }` wrapper of a runner built as statements (1B.5b): no return
 /// type, generics or parameters, never exported. The statements' own spans give the case's source
 /// map; the module sets the function's `nested_map_source_id` to the case's source.
+/// #3959: a commons suite's cases take `deps` from the deps factory once its
+/// commons selects a capability (or the suite declares an instance), whose
+/// doubles the factory builds; any other commons suite keeps the empty `deps`.
+fn commons_has_doubles(
+    target_name: &str,
+    target_kind: UnitKind,
+    unit_tables: &HashMap<String, UnitTable>,
+) -> bool {
+    target_kind == UnitKind::Commons
+        && unit_tables
+            .get(target_name)
+            .is_some_and(|t| !t.flattened_caps.is_empty() || !t.capabilities.is_empty())
+}
+
 pub(super) fn async_runner_fn(name: &str, body: Vec<TsStmt>) -> TsStmt {
     TsStmt::decl(
         TsDecl::Function {

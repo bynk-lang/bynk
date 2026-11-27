@@ -1,0 +1,12 @@
+---
+#3959, track §9: a suite-local instance is shared by every suite of its commons, so a name
+is declared once per target: a second suite file declaring it again is
+`bynk.resolve.duplicate_capability`.
+---
+suite lib.cache
+
+capability Archive = Kv
+
+case "b" {
+	expect true
+}

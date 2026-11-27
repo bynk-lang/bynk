@@ -1,0 +1,21 @@
+---
+#3959, track §9: in a context's suite, a call through a parameter reaches the bound instance,
+so the case stubs and observes that instance (`stub Sessions.get`), never the parameter.
+---
+suite shop
+
+uses shop.kit
+
+case "a stub on the bound instance reaches the commons call" {
+	stub Sessions.get(_) returns Some("stubbed")
+	let v <- api.call("k")
+	expect v == "stubbed"
+	expect Sessions.put called 0 times
+}
+
+case "a test-only commons function binds the case's instance" {
+	let _ <- prime("k", given Store = Sessions)
+	let v <- api.call("k")
+	expect v == "primed"
+	expect Sessions.put called once
+}

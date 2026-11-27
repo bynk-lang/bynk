@@ -369,8 +369,19 @@ fn apply_queues(
     // Bound first, so the borrow of the run's attempts ends before any queue is made.
     let todo = unattempted_queues(declared, &mut attempted.borrow_mut());
     for queue in todo {
-        if attempt_create(cx, &queue)? {
-            created.insert(queue);
+        match attempt_create(cx, &queue) {
+            Ok(true) => {
+                created.insert(queue);
+            }
+            Ok(false) => {}
+            // #3999: the queues this step made before the failure are on the account, so they
+            // are recorded as Bynk's before the failure is returned, and `--prune` can delete them.
+            Err(failure) => {
+                let made = created.iter().map(|queue| record(cx, queue, true));
+                return Ok(made
+                    .fold(Applied::nothing(), Applied::with)
+                    .stopping(failure));
+            }
         }
     }
     // Recorded before the push, as KV is: what the ledger claims is only ever what it
@@ -788,5 +799,67 @@ mod tests {
               Cloudflare answered 500"
             ]
         );
+    }
+
+    /// #3999: a queue create that fails after an earlier one succeeded leaves that earlier queue
+    /// recorded as Bynk's, so `--prune` can delete it, and the failure still stops the deploy.
+    #[test]
+    fn the_queues_made_before_a_failed_create_are_recorded_as_created() {
+        use crate::cloudflare::{CloudflareError, Op, fake::Recording};
+        let declared = Resources::default().consumes(&["a-jobs", "b-jobs", "c-jobs"]);
+        let api = Recording::new(|op: &Op<'_>| match op {
+            Op::QueueInfo { .. } => Ok("absent".to_string()),
+            Op::QueueCreate { name: "b-jobs" } => Err(CloudflareError::from(
+                crate::cloudflare::rest::RestError::answered("POST", "/queues", 500, "[]"),
+            )),
+            _ => Ok(String::new()),
+        });
+        let project = BTreeMap::new();
+        let dir = std::env::temp_dir().join(format!("bynk-queue-3999-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(LOCK_FILE);
+        let site = Site {
+            tools: Tools {
+                api: &api,
+                project_root: Path::new("/nonexistent"),
+            },
+            environment: "default",
+            worker: "shop",
+            project: &project,
+        };
+        let mut lock = DeployLock::default();
+        let failed = provision_kind::<Queue>(
+            site,
+            &declared,
+            &mut LedgerWriter::new(&mut lock, &path),
+            Lives::default(),
+        )
+        .unwrap_err();
+        assert!(
+            failed
+                .message
+                .contains("could not create the queue `b-jobs`"),
+            "{}",
+            failed.message
+        );
+        assert_eq!(
+            api.calls(),
+            [
+                "queues info a-jobs",
+                "queues create a-jobs",
+                "queues info b-jobs",
+                "queues create b-jobs"
+            ],
+            "nothing is asked after the failure"
+        );
+        let env = &lock.environments["default"];
+        assert!(env.queues.contains("a-jobs"), "{:?}", env.queues);
+        assert!(!env.queues.contains("b-jobs") && !env.queues.contains("c-jobs"));
+        assert!(env.reused_queues.is_empty());
+        // Written to disk too, not only held in memory.
+        let on_disk = std::fs::read_to_string(&path).unwrap();
+        assert!(on_disk.contains("a-jobs"), "{on_disk}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

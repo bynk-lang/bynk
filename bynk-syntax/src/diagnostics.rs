@@ -2969,11 +2969,6 @@ agent Cart {
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: 1_000_000, maxSize: 10 }    // ✗ not a field of `limits`\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }                 // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
-        code: "bynk.http.pass_through_not_emitted",
-        blurb: "An `on ANY` pass-through route type-checks, but its router (the suspended `ETag`, `HEAD`, `OPTIONS` and CORS behaviour) and the `Upstream` exchange arrive in the next increment. Until then a build that would emit one is refused, rather than built without its routes, which would answer `404` where the program says it forwards. `bynk check` accepts the route meanwhile.",
-        example: "on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗ for `bynk build` and `bynk test`, until the router lands\n\non GET(\"/blog/*path\") (path: String) -> Effect[HttpResult[String]] by Visitor { … }   // ✓ until then, an ordinary route builds",
-    },
-    Explain {
         code: "bynk.http.pass_through_signature",
         blurb: "`on ANY(…)` declares a pass-through route: it receives every method the platform delivers, `HEAD` and `OPTIONS` included, and answers `Effect[PassThrough]`, either `Forward(response)` with an upstream's answer or `Respond(result)` with an `HttpResult[()]`. It takes its path parameters, a rest, `request: InboundRequest` and `cf`; the body belongs to the upstream, so `body`, `@raw`, `@form` and `@multipart` are refused, and the headers, query and cookies are read through `request`. Only an `ANY` route returns `Effect[PassThrough]`. `PassThrough` and `InboundRequest` are `bynk`'s (`consumes bynk { PassThrough, InboundRequest }`).",
         example: "on ANY(\"/blog/*path\") (path: String) -> Effect[HttpResult[String]] by Visitor { … }   // ✗\n\non ANY(\"/blog/*path\") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor { … }   // ✓",
@@ -3494,7 +3489,7 @@ agent Cart {
     },
     Explain {
         code: "bynk.observe.not_a_seam",
-        blurb: "`expect Cap.op called` checks the calls the unit under test made through a capability it consumes, whether declared in its context, brought in with `consumes`, or listed in `given`. A name that is not one of those, such as a type or a function, has no recorded calls. Name a consumed capability. An operation it does not declare is `bynk.observe.unknown_op`.",
+        blurb: "`expect Cap.op called` checks the calls the unit under test made through a capability it consumes, whether declared in its context, brought in with `consumes`, or listed in `given`. A name that is not one of those, such as a type, a function or a capability parameter, has no recorded calls. Name a consumed capability; for a parameter, name what the call binds it to, the instance in a context's suite or the kind's double in a commons suite. An operation it does not declare is `bynk.observe.unknown_op`.",
         example: "// tests/t.test.bynk\nexpect AuthId.unsafe called   // ✗ `AuthId` is a type, not a capability\nexpect Logger.log called      // ✓",
     },
     Explain {
@@ -5204,9 +5199,12 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "A `stub` substitutes one of the capabilities the unit under test \
                 depends on: one the context declares, or reaches through a \
                 `consumes`. Any other name, including a misspelt one, leaves \
-                nothing to substitute. A commons has no capabilities, so it cannot \
-                be stubbed at all. Name a capability of the target, or add the \
-                `consumes` it needs. See `bynk.stub.unknown_op` for a wrong \
+                nothing to substitute. A commons suite's seams are the doubles of \
+                the capabilities its commons selects, and its suite-local \
+                instances. A capability parameter is never a seam: stub what a \
+                call binds it to, the instance in a context's suite or the kind's \
+                double in a commons suite. Name a capability of the target, or add \
+                the `consumes` it needs. See `bynk.stub.unknown_op` for a wrong \
                 operation.",
         example: "// demo/meter.bynk\n\
                   capability Meter { … }\n\
@@ -5624,6 +5622,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   // tests/api.test.bynk\n\
                   let r <- api.GET(\"/health\") by Nobody     // ✗ a public route has no seam\n\
                   let r <- api.GET(\"/health\") by Visitor    // ✓",
+    },
+    Explain {
+        code: "bynk.test.pass_through_address",
+        blurb: "A pass-through route forwards its request to an upstream through `Upstream.forward`, so a suite case drives it through the route's test double: a stub of `Upstream.exchange`, the network step beneath the forwarding policy, answering with `Forwarded.of(…)`, and suite addresses that name the method sent (`proxy.GET(\"/blog/*path\", \"/posts/x\")`, `HEAD`, `OPTIONS`). That double arrives in a later release. Until then a case that addresses an `ANY` route is refused rather than run with a request no client would send. Test the functions its handler calls in the meantime, and the route itself against a real upstream.",
+        example: "let r <- proxy.ANY(\"/blog/*path\", \"/posts/x\") by Visitor   // ✗ not yet\n\nlet r <- api.GET(\"/status\") by Visitor   // ✓ an ordinary route",
     },
     Explain {
         code: "bynk.test.peek_not_a_database",
@@ -9602,11 +9605,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning).",
     )),
     dg(
-        "bynk.http.pass_through_not_emitted",
-        "A build reaches an `on ANY` pass-through route, which this release checks but does not yet build.",
-        &["http_handler"],
-    ),
-    dg(
         "bynk.http.pass_through_signature",
         "An `on ANY` route does not return `Effect[PassThrough]` or takes a parameter it may not, or another route returns `Effect[PassThrough]`.",
         &["http_handler"],
@@ -11298,6 +11296,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.nobody_needs_secured_route",
         "A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.pass_through_address",
+        "A suite case addresses an `on ANY` pass-through route, which a suite can't drive until its test double (a stub of `Upstream.exchange`, `Forwarded.of`) arrives in a later release.",
         &["case"],
     ),
     dg(
