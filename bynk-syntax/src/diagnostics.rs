@@ -2585,7 +2585,7 @@ agent Cart {
     Explain {
         code: "bynk.http.cache_on_pass_through",
         blurb: "`@cache` sets a response's freshness, `Cache-Control`, for a route whose answer the service makes. A pass-through route's forwarded answer is the upstream's, and the upstream's own `Cache-Control` is its freshness, so `@cache` is refused on an `on ANY` route. Set the header at the upstream. A `Respond(…)` answer is shaped by the router as on any route.",
-        example: "@cache(maxAge: 5.minutes)\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗\n\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✓ the upstream sets `Cache-Control`",
+        example: "@cache(maxAge: 5.minutes)   // ✗\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }\n\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✓ the upstream sets `Cache-Control`",
     },
     Explain {
         code: "bynk.http.cache_public_authenticated",
@@ -2916,7 +2916,7 @@ agent Cart {
     Explain {
         code: "bynk.http.pass_through_not_emitted",
         blurb: "An `on ANY` pass-through route type-checks, but its router (the suspended `ETag`, `HEAD`, `OPTIONS` and CORS behaviour) and the `Upstream` exchange arrive in the next increment. Until then a build that would emit one is refused, rather than built without its routes, which would answer `404` where the program says it forwards. `bynk check` accepts the route meanwhile.",
-        example: "on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗ for `bynk build` and `bynk test`, until the router lands",
+        example: "on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗ for `bynk build` and `bynk test`, until the router lands\n\non GET(\"/blog/*path\") (path: String) -> Effect[HttpResult[String]] by Visitor { … }   // ✓ until then, an ordinary route builds",
     },
     Explain {
         code: "bynk.http.pass_through_signature",

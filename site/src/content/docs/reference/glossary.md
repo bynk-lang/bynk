@@ -179,6 +179,12 @@ adapters, never a context. Another project depends on it under
 [`[package]`](/reference/tooling/manifest/#package) and
 [Share code between projects](/book/guides/projects-build-and-deployment/share-code-between-projects/).
 
+### pass-through route {#term-pass-through-route}
+
+An `on ANY(…)` route returning `Effect[PassThrough]`, which forwards its request to an
+[upstream](#term-upstream) and passes the answer through. Experimental. See
+[Pass-through routes](/reference/http/#pass-through-routes).
+
 ### prelude type {#term-prelude-type}
 
 A compiler-known type a unit can name with no import, as `Option` can. A prelude
@@ -198,12 +204,6 @@ A generative test, the sibling of `case` in a `suite`: `for all x: T` binds `x` 
 a *generated* inhabitant of `T` and the body's `expect`s must hold across many. On
 failure it reports a shrunk counterexample and a seed to reproduce. See
 [Testing](/reference/testing/).
-
-### pass-through route {#term-pass-through-route}
-
-An `on ANY(…)` route returning `Effect[PassThrough]`, which forwards its request to an
-[upstream](#term-upstream) and passes the answer through. Experimental. See
-[Pass-through routes](/reference/http/#pass-through-routes).
 
 ### provider {#term-provider}
 

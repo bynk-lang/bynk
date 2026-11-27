@@ -6,7 +6,7 @@
   "constructs": [
     "http_handler"
   ],
-  "example": "on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗ for `bynk build` and `bynk test`, until the router lands",
+  "example": "on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗ for `bynk build` and `bynk test`, until the router lands\n\non GET(\"/blog/*path\") (path: String) -> Effect[HttpResult[String]] by Visitor { … }   // ✓ until then, an ordinary route builds",
   "severity": "error",
   "summary": "A build reaches an `on ANY` pass-through route, which this release checks but does not yet build."
 }

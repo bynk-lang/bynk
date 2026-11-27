@@ -645,7 +645,11 @@ fn compile_failures(code: &str, bad: &Side, good: &Side) -> Vec<String> {
             code, bad.name
         ));
     }
-    if !good.errors.is_empty() {
+    // #3752 (slice 3a): a build refuses every `on ANY` route until its router
+    // lands (slice 3b retires this), and only once the program checks clean; so
+    // a good side refused for that alone is one the checker accepted.
+    let built_later = |e: &Reported| e.code == "bynk.http.pass_through_not_emitted";
+    if !good.errors.is_empty() && !good.errors.iter().all(built_later) {
         let got: Vec<(&str, usize)> = good.errors.iter().map(|e| (&*e.code, e.line)).collect();
         out.push(format!(
             "{}: {} must compile, but its errors are {got:?}",

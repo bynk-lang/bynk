@@ -6,7 +6,7 @@
   "constructs": [
     "http_handler"
   ],
-  "example": "@cache(maxAge: 5.minutes)\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗\n\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✓ the upstream sets `Cache-Control`",
+  "example": "@cache(maxAge: 5.minutes)   // ✗\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }\n\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✓ the upstream sets `Cache-Control`",
   "severity": "error",
   "summary": "An `on ANY` pass-through route carries `@cache`; the upstream's `Cache-Control` is its answer's freshness."
 }
