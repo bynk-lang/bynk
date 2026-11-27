@@ -1575,6 +1575,7 @@
 /reference/diagnostics/bynk.deploy.adoption_unmatched/
 /reference/diagnostics/bynk.deploy.adoption_unreadable/
 /reference/diagnostics/bynk.deploy.agent_move_refused/
+/reference/diagnostics/bynk.deploy.agent_move_window/
 /reference/diagnostics/bynk.deploy.agent_starts_fresh/
 /reference/diagnostics/bynk.deploy.asset_path_conflict/
 /reference/diagnostics/bynk.deploy.binding_collision/
@@ -1594,6 +1595,7 @@
 /reference/diagnostics/bynk.deploy.hyperdrive_settings_unreadable/
 /reference/diagnostics/bynk.deploy.hyperdrive_unresolved/
 /reference/diagnostics/bynk.deploy.ledger_unreadable/
+/reference/diagnostics/bynk.deploy.move_agent_unused/
 /reference/diagnostics/bynk.deploy.multiple_websocket_members/
 /reference/diagnostics/bynk.deploy.no_workers_built/
 /reference/diagnostics/bynk.deploy.not_a_context/
