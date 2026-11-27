@@ -729,7 +729,7 @@ Eleven reserved principals drive the failures. Each yields the same
 | `by Nobody` | no credential: no `Authorization` header, no session cookie, no API key, or no signature headers | a route with a Bearer, `Oidc`, `SignedCookie`, `ApiKey` or `Signature` actor |
 | `by Forged` | on a `Signature` route, a signature made with a secret the seam does not hold; on a Bearer route, a well-formed token (a valid `sub`, a future `exp`) signed with a secret the seam does not hold; on a `SignedCookie` route, a well-formed cookie signed with a key the seam does not hold; on an `Oidc` route, the same, signed by a key the test JWKS does not publish; on an `ApiKey` route, a real key's id with a secret its store does not hold | a route with a `Signature`, Bearer, `SignedCookie`, `Oidc` or single `ApiKey` actor |
 | `by Stale` | a correct signature, timestamped `tolerance + 60` seconds in the past | a route with a `Signature` actor that declares `timestamp` and `tolerance` |
-| `by Expired` | a Bearer or `Oidc` token, or a `SignedCookie` cookie, with a valid `sub`, correctly signed, whose lifetime ended an hour before the test clock | a route with a Bearer, `SignedCookie` or `Oidc` actor |
+| `by Expired` | a Bearer or `Oidc` token, or a `SignedCookie` cookie, with a valid `sub`, correctly signed, whose lifetime ended an hour before the test clock; on an `ApiKey` route, a real key minted the actor's `ttl` and an hour before the harness clock | a route with a Bearer, `SignedCookie` or `Oidc` actor, or a single `ApiKey` actor with a `ttl` |
 | `by WrongIssuer` | an `Oidc` or `Bearer` token correctly signed and unexpired, whose `iss` is not the actor's issuer | a route with an `Oidc` actor, or a single `Bearer` actor that declares an `issuer` |
 | `by WrongAudience` | an `Oidc` or `Bearer` token correctly signed and unexpired, whose `aud` is not the actor's audience | a route with an `Oidc` actor, or a single `Bearer` actor that declares an `audience` |
 | `by WrongAlgorithm` | two otherwise valid `Oidc` tokens under an algorithm the seam must refuse: one with `alg: none` (no signature), and one `HS256`-signed with the JWKS public key as the HMAC secret (algorithm confusion) | a route with an `Oidc` actor |
@@ -741,8 +741,14 @@ Eleven reserved principals drive the failures. Each yields the same
 On an `ApiKey` route the driver also counts the key store's comparisons, and fails the case unless
 the seam did the work its contract says: none for `by Malformed`, one against a fixed dummy hash for
 each `by Unknown` key and for `by Revoked` (revoking deletes the record), and one against the record
-for `by Forged`. So "an unknown key costs the same as a wrong one" is pinned by every run, not by
-timing. `Malformed`, `Unknown`, `Forged` and `Revoked` get byte-identical responses.
+for `by Forged` and `by Expired` (expiry is checked after the compare). So "an unknown key costs the
+same as a wrong one" is pinned by every run, not by timing. `Malformed`, `Unknown`, `Forged`,
+`Revoked` and `Expired` get byte-identical responses.
+
+An `ApiKey` key's expiry and last use are stamped by `mint` with the program's `Clock`, so at
+`system` they follow the harness clock: `advance Clock by 91.days` expires a key whose actor has
+`ttl = 90.days`, and `advance Clock by 1.hours` lets the next admission record its use again. (A JWT
+`exp` or a `Signature` tolerance stays on wall-clock time, as below.)
 
 On an [actor sum](/book/guides/actors/multiple-callers/) a bad credential is presented to
 one member's seam, so the principal names the member in parentheses:
@@ -774,8 +780,8 @@ route with no `Oidc` actor is `bynk.test.wrong_issuer_needs_oidc_route`,
 `bynk.test.no_subject_needs_oidc_route`. `by Revoked` on a route without a `sessions = true`
 `SignedCookie` actor or an `ApiKey` actor is `bynk.test.revoked_needs_sessions_route`. `by Malformed` or `by Unknown`
 on a route without an `ApiKey` actor is `bynk.test.key_principal_needs_api_key_route`, and
-`by Expired` on an `ApiKey` route is `bynk.test.expired_needs_bearer_route`, since keys do not
-expire yet.
+`by Expired` on an `ApiKey` route whose actor has no `ttl` is `bynk.test.expired_needs_bearer_route`,
+since its keys do not expire.
 
 ```bynk,fragment
 case "unsigned, forged and stale notices are refused" as system {
@@ -1904,7 +1910,9 @@ case "a hold older than fifteen minutes has expired" {
 - **It governs the first-party `Clock` only.** A context's own `provides Clock`
   is untouched. So are the runtime's own clocks: JWT `exp`, the `Signature`
   tolerance and Durable Object alarms keep reading wall-clock time, so a test
-  token never expires because a case advanced the clock.
+  token never expires because a case advanced the clock. An `ApiKey` key's
+  expiry and last use are the exception: `mint` stamps them with the `Clock`,
+  so the seam reads the same clock.
 - **The scheduled time isn't defaulted.** A cron address still takes its
   scheduled time explicitly when the handler declares it
   ([Cron and queue at `system`](#cron-queue-system)).
