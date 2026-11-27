@@ -3231,7 +3231,26 @@ shell.replace("{{title}}", escapeText(title))
 
 Neither is safe in an unquoted attribute, in a URL attribute such as `href` or `src` (where
 `javascript:` passes), or inside `<script>` or `<style>`; escaping cannot make an untrusted
-value a safe URL or script. Typed HTML is the track that builds on these two.
+value a safe URL or script. A [`template`](/reference/embeds/#templates) calls them for you, in
+each placeholder's context, and refuses a placeholder where neither is enough.
+
+#### `Html` and templates (experimental)
+
+Behind `bynk.html.typed` in `[unstable] allow`, `bynk.html` also declares `Html` (#3927):
+markup a page includes as is. It is an opaque type, not a `String`, so text reaches markup only
+through the escape its context needs.
+
+| Operation | Type | |
+| --- | --- | --- |
+| `shell.fill(fields)` | `Html` | a [`template`](/reference/embeds/#templates) with fields, given the whole record |
+| `footer` | `Html` | a template with no fields |
+| `h.toString()` | `String` | the markup, for a test or another kind of body |
+
+`Html` has no constructor: `Html.of` is `bynk.html.no_constructor`, because no string becomes markup
+unchecked. `Html` is not data: a type that holds one has no codec, and is refused as a request parameter
+and in an agent's `store` (`bynk.html.at_boundary`). Naming `Html`, or declaring a `template`,
+without the gate is `bynk.stability.experimental`. `escapeText` and `escapeAttr` keep their
+names and behaviour, and need no gate.
 
 ### `If-Range`: `bynk.range`
 

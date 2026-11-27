@@ -1,0 +1,3 @@
+bynk.types.secret_at_boundary a `Secret` cannot appear in a record field
+bynk.template.secret_placeholder a secret can never reach a page
+# exact

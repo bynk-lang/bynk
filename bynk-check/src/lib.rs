@@ -125,6 +125,7 @@ pub mod stub_agent;
 pub mod stub_outcome;
 pub mod suite_instances;
 pub mod symbols;
+pub mod templates;
 pub mod test_env;
 pub mod test_suites;
 #[cfg(test)]

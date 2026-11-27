@@ -1,0 +1,10 @@
+{
+  "blurb": "A template with a fields type is a function of its fields: `card.fill(fields)` takes the whole record and gives the page as `Html`. Only a template with no fields is `Html` as it stands. Call `fill`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.fill_required",
+  "constructs": [],
+  "example": "// t/page.bynk\nfn show(title: String) -> Html {\n    card   // ✗ not filled\n    card.fill(Card { title: title })   // ✓\n}",
+  "severity": "error",
+  "summary": "A template with fields is named as a value instead of being filled (#3927)."
+}

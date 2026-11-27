@@ -14,7 +14,8 @@ async function test_escapeText_escapes_ampersand__less_than_and_greater_than() {
   try {
     const deps = __makeTestDeps();
     const { image, imageSingle, title } = __ns_page;
-    const { escapeAttr, escapeText } = __ns_bynk_html;
+    const { Html, escapeAttr, escapeText } = __ns_bynk_html;
+    type Html = __ns_bynk_html.Html;
     if (!(escapeText("a & b < c > d") === "a &amp; b &lt; c &gt; d")) { throw __bynkExpectFailure("tests/page.bynk:4:9", 86, 142, "expect escapeText(\"a & b < c > d\") == \"a &amp; b &lt; c &gt; d\"\n  expected: escapeText(\"a & b < c > d\") == \"a &amp; b &lt; c &gt; d\"\n  actual:   " + __bynkShow((escapeText("a & b < c > d"))) + " == " + __bynkShow(("a &amp; b &lt; c &gt; d"))); }
     if (!(escapeText("<script>alert(1)</script>") === "&lt;script&gt;alert(1)&lt;/script&gt;")) { throw __bynkExpectFailure("tests/page.bynk:5:9", 151, 233, "expect escapeText(\"<script>alert(1)</script>\") == \"&lt;script&gt;alert(1)&lt;/script&gt;\"\n  expected: escapeText(\"<script>alert(1)</script>\") == \"&lt;script&gt;alert(1)&lt;/script&gt;\"\n  actual:   " + __bynkShow((escapeText("<script>alert(1)</script>"))) + " == " + __bynkShow(("&lt;script&gt;alert(1)&lt;/script&gt;"))); }
     return { pass: true };
@@ -31,7 +32,8 @@ async function test_escapeText_escapes_the_ampersand_first__so_an_escape_is_not_
   try {
     const deps = __makeTestDeps();
     const { image, imageSingle, title } = __ns_page;
-    const { escapeAttr, escapeText } = __ns_bynk_html;
+    const { Html, escapeAttr, escapeText } = __ns_bynk_html;
+    type Html = __ns_bynk_html.Html;
     if (!(escapeText("&lt;") === "&amp;lt;")) { throw __bynkExpectFailure("tests/page.bynk:9:9", 328, 360, "expect escapeText(\"&lt;\") == \"&amp;lt;\"\n  expected: escapeText(\"&lt;\") == \"&amp;lt;\"\n  actual:   " + __bynkShow((escapeText("&lt;"))) + " == " + __bynkShow(("&amp;lt;"))); }
     if (!(escapeText("&amp;") === "&amp;amp;")) { throw __bynkExpectFailure("tests/page.bynk:10:9", 369, 403, "expect escapeText(\"&amp;\") == \"&amp;amp;\"\n  expected: escapeText(\"&amp;\") == \"&amp;amp;\"\n  actual:   " + __bynkShow((escapeText("&amp;"))) + " == " + __bynkShow(("&amp;amp;"))); }
     return { pass: true };
@@ -48,7 +50,8 @@ async function test_escapeText_leaves_quotes_alone__which_text_does_not_need_esc
   try {
     const deps = __makeTestDeps();
     const { image, imageSingle, title } = __ns_page;
-    const { escapeAttr, escapeText } = __ns_bynk_html;
+    const { Html, escapeAttr, escapeText } = __ns_bynk_html;
+    type Html = __ns_bynk_html.Html;
     if (!(escapeText("say \"hi\" it's") === "say \"hi\" it's")) { throw __bynkExpectFailure("tests/page.bynk:14:9", 489, 539, "expect escapeText(\"say \\\"hi\\\" it's\") == \"say \\\"hi\\\" it's\"\n  expected: escapeText(\"say \\\"hi\\\" it's\") == \"say \\\"hi\\\" it's\"\n  actual:   " + __bynkShow((escapeText("say \"hi\" it's"))) + " == " + __bynkShow(("say \"hi\" it's"))); }
     return { pass: true };
   } catch (e) {
@@ -64,7 +67,8 @@ async function test_escapeAttr_also_escapes_both_quotes_and_the_backtick() {
   try {
     const deps = __makeTestDeps();
     const { image, imageSingle, title } = __ns_page;
-    const { escapeAttr, escapeText } = __ns_bynk_html;
+    const { Html, escapeAttr, escapeText } = __ns_bynk_html;
+    type Html = __ns_bynk_html.Html;
     if (!(escapeAttr("\"") === "&quot;")) { throw __bynkExpectFailure("tests/page.bynk:18:9", 613, 641, "expect escapeAttr(\"\\\"\") == \"&quot;\"\n  expected: escapeAttr(\"\\\"\") == \"&quot;\"\n  actual:   " + __bynkShow((escapeAttr("\""))) + " == " + __bynkShow(("&quot;"))); }
     if (!(escapeAttr("'") === "&#39;")) { throw __bynkExpectFailure("tests/page.bynk:19:9", 650, 676, "expect escapeAttr(\"'\") == \"&#39;\"\n  expected: escapeAttr(\"'\") == \"&#39;\"\n  actual:   " + __bynkShow((escapeAttr("'"))) + " == " + __bynkShow(("&#39;"))); }
     if (!(escapeAttr("`") === "&#96;")) { throw __bynkExpectFailure("tests/page.bynk:20:9", 685, 711, "expect escapeAttr(\"`\") == \"&#96;\"\n  expected: escapeAttr(\"`\") == \"&#96;\"\n  actual:   " + __bynkShow((escapeAttr("`"))) + " == " + __bynkShow(("&#96;"))); }
@@ -83,7 +87,8 @@ async function test_escaped_output_holds_none_of_the_special_characters() {
   try {
     const deps = __makeTestDeps();
     const { image, imageSingle, title } = __ns_page;
-    const { escapeAttr, escapeText } = __ns_bynk_html;
+    const { Html, escapeAttr, escapeText } = __ns_bynk_html;
+    type Html = __ns_bynk_html.Html;
     const nasty = "<a href=\"x\" onclick='y'>&`</a>";
     const text = escapeText(nasty);
     const attr = escapeAttr(nasty);
@@ -108,7 +113,8 @@ async function test_an_empty_string_and_a_plain_one_are_unchanged() {
   try {
     const deps = __makeTestDeps();
     const { image, imageSingle, title } = __ns_page;
-    const { escapeAttr, escapeText } = __ns_bynk_html;
+    const { Html, escapeAttr, escapeText } = __ns_bynk_html;
+    type Html = __ns_bynk_html.Html;
     if (!(escapeText("") === "")) { throw __bynkExpectFailure("tests/page.bynk:38:9", 1226, 1246, "expect escapeText(\"\") == \"\"\n  expected: escapeText(\"\") == \"\"\n  actual:   " + __bynkShow((escapeText(""))) + " == " + __bynkShow((""))); }
     if (!(escapeAttr("") === "")) { throw __bynkExpectFailure("tests/page.bynk:39:9", 1255, 1275, "expect escapeAttr(\"\") == \"\"\n  expected: escapeAttr(\"\") == \"\"\n  actual:   " + __bynkShow((escapeAttr(""))) + " == " + __bynkShow((""))); }
     if (!(escapeText("plain words") === "plain words")) { throw __bynkExpectFailure("tests/page.bynk:40:9", 1284, 1326, "expect escapeText(\"plain words\") == \"plain words\"\n  expected: escapeText(\"plain words\") == \"plain words\"\n  actual:   " + __bynkShow((escapeText("plain words"))) + " == " + __bynkShow(("plain words"))); }
@@ -127,7 +133,8 @@ async function test_a_page_built_from_the_escapes_is_safe_in_either_quote_style(
   try {
     const deps = __makeTestDeps();
     const { image, imageSingle, title } = __ns_page;
-    const { escapeAttr, escapeText } = __ns_bynk_html;
+    const { Html, escapeAttr, escapeText } = __ns_bynk_html;
+    type Html = __ns_bynk_html.Html;
     if (!(title("A & B") === "<h1>A &amp; B</h1>")) { throw __bynkExpectFailure("tests/page.bynk:45:9", 1458, 1496, "expect title(\"A & B\") == \"<h1>A &amp; B</h1>\"\n  expected: title(\"A & B\") == \"<h1>A &amp; B</h1>\"\n  actual:   " + __bynkShow((title("A & B"))) + " == " + __bynkShow(("<h1>A &amp; B</h1>"))); }
     if (!(image("a.png", "x\" onerror=\"y") === "<img src=\"a.png\" alt=\"x&quot; onerror=&quot;y\">")) { throw __bynkExpectFailure("tests/page.bynk:46:9", 1505, 1595, "expect image(\"a.png\", \"x\\\" onerror=\\\"y\") == \"<img src=\\\"a.png\\\" alt=\\\"x&quot; onerror=&quot;y\\\">\"\n  expected: image(\"a.png\", \"x\\\" onerror=\\\"y\") == \"<img src=\\\"a.png\\\" alt=\\\"x&quot; onerror=&quot;y\\\">\"\n  actual:   " + __bynkShow((image("a.png", "x\" onerror=\"y"))) + " == " + __bynkShow(("<img src=\"a.png\" alt=\"x&quot; onerror=&quot;y\">"))); }
     if (!(imageSingle("a.png", "x' onerror='y") === "<img src='a.png' alt='x&#39; onerror=&#39;y'>")) { throw __bynkExpectFailure("tests/page.bynk:47:9", 1604, 1692, "expect imageSingle(\"a.png\", \"x' onerror='y\") == \"<img src='a.png' alt='x&#39; onerror=&#39;y'>\"\n  expected: imageSingle(\"a.png\", \"x' onerror='y\") == \"<img src='a.png' alt='x&#39; onerror=&#39;y'>\"\n  actual:   " + __bynkShow((imageSingle("a.png", "x' onerror='y"))) + " == " + __bynkShow(("<img src='a.png' alt='x&#39; onerror=&#39;y'>"))); }

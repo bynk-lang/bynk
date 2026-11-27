@@ -138,6 +138,16 @@ project root (an interpolated string is a parse error here). The grammar admits
 an `embed` in any body. Placement (contexts and commons only), the path rules,
 and the declared name's type are well-formedness: §5.12a.
 
+### §4.1.12b′ template_decl {#4112b-template_decl}
+
+{{#grammar template_decl}}
+
+`template` (a contextual keyword, recognised only at item position and only before a name), a
+name, an optional `:` and fields type, `=`, and a plain string literal naming a file relative
+to the project root. The grammar admits a `template` wherever it admits an `embed`. The fields
+type's shape, the file's markup and placeholders, and placement are well-formedness: §5.12a
+(Templates).
+
 ### §4.1.12c const_decl {#4112c-const_decl}
 
 {{#grammar const_decl}}

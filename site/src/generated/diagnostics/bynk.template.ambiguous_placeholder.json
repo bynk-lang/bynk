@@ -1,0 +1,10 @@
+{
+  "blurb": "A placeholder in a code-loading attribute names an asset and anywhere else names a field, so a name that is both could change what it binds to when an asset or a field is renamed. A template refuses the name wherever it appears. Rename the field or the asset.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.ambiguous_placeholder",
+  "constructs": [],
+  "example": "// t/page.bynk\nasset logo = \"assets/logo.svg\"\n\ntype Card = {\n    logo: String,   // ✗ also the asset `logo`\n    logoText: String,   // ✓\n}\n\n// embeds/page.html\n<p>\\(logo)</p>   // ✗ the field, or the asset?\n<p>\\(logoText)</p>   // ✓",
+  "severity": "error",
+  "summary": "A template placeholder's name is both a field and an asset in scope (#3927)."
+}

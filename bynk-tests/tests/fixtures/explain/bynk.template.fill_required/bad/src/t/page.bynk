@@ -1,0 +1,13 @@
+commons t.page
+
+uses bynk.html
+
+type Card = {
+	title: String,
+}
+
+template card: Card = "embeds/page.html"
+
+fn show(title: String) -> Html {
+	card
+}

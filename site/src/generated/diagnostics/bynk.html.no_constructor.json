@@ -1,0 +1,10 @@
+{
+  "blurb": "`Html` is markup the compiler built: a template's `fill`, or a template with no fields. An opaque type's `of` would turn any `String` into one with no check, a door to unescaped markup that nothing audits, so `Html` has none. Pass the text as a `String` field of a template, which escapes it for where it sits.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.html.no_constructor",
+  "constructs": [],
+  "example": "// t/page.bynk\nfn quote(text: String) -> Option[Html] {   // ✗\n    match Html.of(text) {   // ✗ any string, unchecked\n        Ok(h) => Some(h),\n        Err(_) => None,\n    }\n}\n\nfn quote(text: String) -> Html {   // ✓\n    card.fill(Card { title: text })   // ✓ escaped for its place\n}",
+  "severity": "error",
+  "summary": "`Html.of(s)` is called outside `bynk.html` (#3927)."
+}

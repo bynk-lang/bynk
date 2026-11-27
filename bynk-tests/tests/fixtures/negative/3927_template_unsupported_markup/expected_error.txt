@@ -1,0 +1,2 @@
+bynk.template.unsupported_markup the attribute `class` is repeated, and a browser keeps only the first
+# exact

@@ -1,0 +1,2 @@
+bynk.template.fields_not_record template `shell`'s fields type `Name` is not a non-generic record
+# exact

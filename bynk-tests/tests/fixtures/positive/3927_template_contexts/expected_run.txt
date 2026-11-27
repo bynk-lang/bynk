@@ -1,0 +1,3 @@
+# #3927 (typed HTML, slice 1): a template's C1, C2 and C3 placeholders fill with the escapes of
+# §5.2, an `Html` field is inserted as is, and text that is not a placeholder stays as written.
+passed=8 failed=0

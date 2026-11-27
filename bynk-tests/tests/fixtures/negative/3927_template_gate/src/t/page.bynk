@@ -1,0 +1,10 @@
+// #3927 (typed HTML, slice 1): every typed-HTML form needs `bynk.html.typed` in `[unstable] allow`
+commons t.page
+
+uses bynk.html
+
+type F = {
+	v: Html,
+}
+
+template shell: F = "embeds/page.html"

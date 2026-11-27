@@ -1,0 +1,11 @@
+commons t.page
+
+uses bynk.html
+
+type Card = {
+	body: Html,
+}
+
+fn parse(s: String) -> Result[Card, DecodeError] {
+	Json.decode[Card](s)
+}

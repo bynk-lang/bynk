@@ -1,0 +1,12 @@
+// #3927 (typed HTML, slice 1): a `Secret` field is refused: a secret can never reach a page
+commons t.page
+
+uses bynk.html
+
+consumes bynk { Secret }
+
+type F = {
+	token: Secret,
+}
+
+template shell: F = "embeds/page.html"

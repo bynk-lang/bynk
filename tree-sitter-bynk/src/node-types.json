@@ -293,6 +293,10 @@
           "named": true
         },
         {
+          "type": "template_decl",
+          "named": true
+        },
+        {
           "type": "type_decl",
           "named": true
         },
@@ -2481,6 +2485,10 @@
           "named": true
         },
         {
+          "type": "template_decl",
+          "named": true
+        },
+        {
           "type": "type_decl",
           "named": true
         },
@@ -2839,6 +2847,10 @@
         },
         {
           "type": "service_decl",
+          "named": true
+        },
+        {
+          "type": "template_decl",
           "named": true
         },
         {
@@ -12152,6 +12164,10 @@
           "named": true
         },
         {
+          "type": "template_decl",
+          "named": true
+        },
+        {
           "type": "type_decl",
           "named": true
         },
@@ -13428,6 +13444,80 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "template_decl",
+    "named": true,
+    "fields": {
+      "fields": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "applied_type_ref",
+            "named": true
+          },
+          {
+            "type": "base_type",
+            "named": true
+          },
+          {
+            "type": "function_type_ref",
+            "named": true
+          },
+          {
+            "type": "generic_type_ref",
+            "named": true
+          },
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
+            "type": "unit_type",
+            "named": true
+          },
+          {
+            "type": "validation_error_type",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "path": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "string_literal",
+            "named": true
+          }
+        ]
+      },
+      "visibility": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "visibility_modifier",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -15325,6 +15415,10 @@
   },
   {
     "type": "system",
+    "named": false
+  },
+  {
+    "type": "template",
     "named": false
   },
   {

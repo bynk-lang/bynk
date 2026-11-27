@@ -1,0 +1,12 @@
+// #3927 (typed HTML, slice 1): `Html` has no codec: `Json.decode` of a record that holds one is refused
+commons t.page
+
+uses bynk.html
+
+type Box = {
+	content: Html,
+}
+
+fn parse(s: String) -> Result[Box, DecodeError] {
+	Json.decode[Box](s)
+}

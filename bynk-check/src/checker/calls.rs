@@ -3293,6 +3293,13 @@ pub(crate) fn check_method_call(
     expr_id: ExprId,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
+    // #3927: `shell.fill(fields)` on a template.
+    if let Some(r) =
+        super::template_calls::check_fill_call(receiver, method, args, span, expr_id, ctx)
+            .or_else(|| super::template_calls::refuse_html_of(receiver, method, args, ctx))
+    {
+        return r;
+    }
     let r = check_method_call_inner(
         receiver, method, type_args, args, span, expected, expr_id, ctx,
     );

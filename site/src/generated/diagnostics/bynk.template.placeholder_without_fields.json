@@ -1,0 +1,10 @@
+{
+  "blurb": "A template with no fields type is `Html` as it stands, so a `\\(name)` in it has nothing to fill it. Declare the fields record, or write the text itself as `&#92;(name)`. Any other backslash and parenthesis, such as MathJax's `\\(x^2\\)`, is already text.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.placeholder_without_fields",
+  "constructs": [],
+  "example": "// t/page.bynk\ntemplate footer = \"embeds/page.html\"   // ✗\ntemplate footer: Footer = \"embeds/page.html\"   // ✓\n\n// embeds/page.html\n<p>\\(year)</p>   // ✗ nothing fills it",
+  "severity": "error",
+  "summary": "A template declared without a fields type has a placeholder (#3927)."
+}

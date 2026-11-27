@@ -1,0 +1,2 @@
+bynk.template.placeholder_without_fields template `shell` has no fields, so `\(name)` fills nothing
+# exact

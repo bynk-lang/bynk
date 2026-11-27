@@ -1,0 +1,6 @@
+[project]
+name = "unknown-placeholder-asset"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.html.typed"]
