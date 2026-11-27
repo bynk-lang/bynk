@@ -2660,7 +2660,7 @@ const FORWARDED_RESPONSE = Symbol("bynk.forwardedResponse");
 
 /** D11: the request an `ANY` route forwards. Its body is read only by
  *  `Upstream.forward`, once. */
-export interface InboundRequest {
+export interface InboundRequestView {
   method(): string;
   headers(): RequestHeaders;
   query(): string;
@@ -2668,7 +2668,7 @@ export interface InboundRequest {
 
 /** D8: an upstream's answer, produced only by `Upstream.forward` (or, in a suite,
  *  `Forwarded.of`). */
-export interface Forwarded {
+export interface ForwardedView {
   status(): number;
   header(name: string): Option<string>;
 }
@@ -2680,21 +2680,25 @@ interface InboundState {
 
 /** The `InboundRequest` view of `request`; `headers` is the route's own
  *  `RequestHeaders` view, its consumed credential hidden. */
-export function inboundRequest(request: Request, headers: RequestHeaders): InboundRequest {
+export function inboundRequest<T extends InboundRequestView = InboundRequestView>(
+  request: Request,
+  headers: RequestHeaders,
+): T {
   const url = new URL(request.url);
-  const view: InboundRequest = {
+  const view: InboundRequestView = {
     method: () => request.method.toUpperCase(),
     headers: () => headers,
     query: () => url.search.startsWith("?") ? url.search.slice(1) : url.search,
   };
   const state: InboundState = { request, consumed: false };
   Object.defineProperty(view, INBOUND_REQUEST, { value: state, enumerable: false });
-  return view;
+  // The program's `InboundRequest` is this view under its brand.
+  return view as T;
 }
 
 /** The platform request behind `view`, for `Upstream.forward`. A second forward of
  *  one request faults, as a second read of a `Stream` does (D11). */
-export function inboundRequestTake(view: InboundRequest): Request {
+export function inboundRequestTake(view: InboundRequestView): Request {
   const state = (view as unknown as { [INBOUND_REQUEST]?: InboundState })[INBOUND_REQUEST];
   if (state === undefined) throw new Error("bynk: not an inbound request");
   if (state.consumed) throw new Error("bynk: an inbound request is forwarded at most once");
@@ -2703,8 +2707,8 @@ export function inboundRequestTake(view: InboundRequest): Request {
 }
 
 /** A `Forwarded` over an upstream's `response`. */
-export function forwarded(response: Response): Forwarded {
-  const view: Forwarded = {
+export function forwarded(response: Response): ForwardedView {
+  const view: ForwardedView = {
     status: () => response.status,
     header: (name: string) => {
       const v = response.headers.get(name);
@@ -2715,7 +2719,7 @@ export function forwarded(response: Response): Forwarded {
   return view;
 }
 
-function forwardedResponse(view: Forwarded): Response {
+function forwardedResponse(view: ForwardedView): Response {
   const response = (view as unknown as { [FORWARDED_RESPONSE]?: Response })[FORWARDED_RESPONSE];
   if (response === undefined) throw new Error("bynk: not a forwarded response");
   return response;
@@ -2759,10 +2763,10 @@ const HOP_BY_HOP = ["connection", "keep-alive", "proxy-connection", "te", "trail
  *  pass. A `Respond` is an ordinary `HttpResult[()]` answer. */
 export function passThroughResponse(
   result:
-    | { readonly tag: "Forward"; readonly response: Forwarded }
-    | { readonly tag: "Respond"; readonly result: HttpResult<null> },
+    | { readonly tag: "Forward"; readonly response: ForwardedView }
+    | { readonly tag: "Respond"; readonly result: HttpResult<unknown> },
   request: Request,
-  opts?: { readonly problem?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean },
 ): Response {
   if (result.tag === "Respond") {
     const answer = httpResultToResponse(result.result, () => null, { problem: opts?.problem });
@@ -2805,7 +2809,7 @@ export interface UpstreamConfig {
   readonly timeoutSecs: number;
 }
 
-export type UpstreamError = { readonly tag: "Timeout" } | { readonly tag: "Unreachable" } | { readonly tag: "InvalidPath" };
+type UpstreamFailure = { readonly tag: "Timeout" } | { readonly tag: "Unreachable" } | { readonly tag: "InvalidPath" };
 
 /** Each `%XX` escape of `segment` decoded alone, so a malformed one stays as
  *  written rather than failing the whole segment. */
@@ -2845,10 +2849,10 @@ export function upstreamUrl(origin: string, path: string, query: string): string
  *  the head; the body streams after it. */
 export async function upstreamForward(
   config: UpstreamConfig,
-  view: InboundRequest,
+  view: InboundRequestView,
   path: string,
   fetcher: (input: string, init: RequestInit) => Promise<Response> = (input, init) => globalThis.fetch(input, init),
-): Promise<Result<Forwarded, UpstreamError>> {
+): Promise<Result<ForwardedView, UpstreamFailure>> {
   if (upstreamPathProblem(path) !== null) return { tag: "Err", error: { tag: "InvalidPath" } };
   const url = upstreamUrl(config.origin, path, view.query());
   let target: URL;

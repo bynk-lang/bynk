@@ -23,6 +23,9 @@ use bynk_ts::{TsExpr, TsStmt, TsType, TsTypeMember};
 
 #[derive(Debug, Clone)]
 pub(super) struct HttpRoute {
+    /// #3752 (D5): for an `ANY` route, the ordinary routes that own the paths it
+    /// shares with them (`pass_through::set_yields`); empty for any other route.
+    pub(super) pass_through_yields: Vec<String>,
     pub(super) service: String,
     pub(super) method: bynk_model::IrHttpMethod,
     pub(super) path: String,
@@ -509,10 +512,12 @@ fn sort_routes(mut routes: Vec<HttpRoute>) -> Vec<HttpRoute> {
         .collect();
     let order = bynk_check::route_order::order(&keys);
     let mut slots: Vec<Option<HttpRoute>> = routes.into_iter().map(Some).collect();
-    order
+    let mut sorted: Vec<HttpRoute> = order
         .into_iter()
         .map(|i| slots[i].take().expect("each route is placed once"))
-        .collect()
+        .collect();
+    super::pass_through::set_yields(&mut sorted);
+    sorted
 }
 
 /// The `415` a `@raw` route answers to a `Content-Type` outside the declared
@@ -597,6 +602,8 @@ pub(super) fn emit_http_route_dispatch(
             strict_eq(ident("method"), str_lit("GET")),
             strict_eq(ident("method"), str_lit("HEAD")),
         )
+    } else if super::pass_through::is_any(route) {
+        super::pass_through::guard(route)
     } else {
         strict_eq(ident("method"), str_lit(route.method.as_str()))
     };
@@ -630,6 +637,10 @@ pub(super) fn emit_http_route_dispatch(
 
     // #1825: names the route, by its pattern, for the fault log.
     let mut guarded = route_prelude(route, (cors_const, security_const, rejected));
+    if super::pass_through::is_any(route) {
+        let refused = stamp_rejection(null_response(501), cors_const, security_const, rejected);
+        guarded.push(super::pass_through::refusal(refused));
+    }
 
     // #3926: a route's `@rateLimit`, asked before anything else is read or checked: by address
     // (`clientIp`) first of all, or (`identity`) after the route's actor is verified; see
@@ -768,6 +779,11 @@ pub(super) fn emit_http_route_dispatch(
             ));
             guarded.push(const_("query", member(ident("__r_query"), "value")));
             call_args.push(ident("query"));
+            continue;
+        }
+        // #3752 (D11): a pass-through route's `request`.
+        if super::pass_through::is_any(route) && pname == "request" {
+            call_args.push(super::pass_through::inbound_request_arg(request_headers_arg(route)));
             continue;
         }
         if bind_request_record_param(
@@ -1241,6 +1257,8 @@ pub(super) fn emit_http_route_dispatch(
             ident("__notModifiedIfMatch"),
             vec![cached, ident("request")],
         )
+    } else if super::pass_through::is_any(route) {
+        super::pass_through::response(response_opts(route))
     } else {
         no_stored(route, plain_response(route, ser_fn))
     };
@@ -1271,6 +1289,7 @@ pub(super) fn emit_http_route_dispatch(
     // this is `Some` on every route; it also flows onto the `304` (inside
     // `response_expr`) and the `HEAD` answer (`headResponse` copies the headers).
     let build_expr = match security_const {
+        Some(s) if super::pass_through::is_any(route) => super::pass_through::secured(cors_expr, s),
         Some(s) => call(
             ident("__applySecurityHeaders"),
             vec![cors_expr, ident(s.to_string())],
@@ -1823,6 +1842,7 @@ pub(super) fn collect_http_routes(
                 let headers_fields = headers_field_specs(h, &path, visible_types);
                 let path_kinds = path_param_kinds(h, &path, visible_types);
                 http_routes.push(HttpRoute {
+                    pass_through_yields: Vec::new(),
                     service: (*sname).clone(),
                     method,
                     path,

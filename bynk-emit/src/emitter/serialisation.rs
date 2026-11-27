@@ -285,6 +285,11 @@ pub fn emit_helpers_for_owner_qualified(
         if bynk_syntax::ast::type_carries_stream(name, types) {
             continue;
         }
+        // #3752 (D11): nor does one holding an `InboundRequest` or a `Forwarded`
+        // (`bynk`'s `PassThrough` among them), which never cross a boundary.
+        if bynk_check::http_pass_through::held_in(name, types).is_some() {
+            continue;
+        }
         decls.extend(emit_one(name, decl, types, qual, &codecs, ru));
     }
     decls

@@ -2651,6 +2651,236 @@ function stripWeakPrefix(tag: string): string {
   return tag.startsWith("W/") ? tag.slice(2) : tag;
 }
 
+// ---------------------------------------------------------------------------
+// #3752 (pass-through HTTP, slice 3): an `on ANY(…)` route, its request and the
+// upstream answer it passes through (`design/tracks/pass-through-http.md` §6, §7).
+
+const INBOUND_REQUEST = Symbol("bynk.inboundRequest");
+const FORWARDED_RESPONSE = Symbol("bynk.forwardedResponse");
+
+/** D11: the request an `ANY` route forwards. Its body is read only by
+ *  `Upstream.forward`, once. */
+export interface InboundRequestView {
+  method(): string;
+  headers(): RequestHeaders;
+  query(): string;
+}
+
+/** D8: an upstream's answer, produced only by `Upstream.forward` (or, in a suite,
+ *  `Forwarded.of`). */
+export interface ForwardedView {
+  status(): number;
+  header(name: string): Option<string>;
+}
+
+interface InboundState {
+  readonly request: Request;
+  consumed: boolean;
+}
+
+/** The `InboundRequest` view of `request`; `headers` is the route's own
+ *  `RequestHeaders` view, its consumed credential hidden. */
+export function inboundRequest<T extends InboundRequestView = InboundRequestView>(
+  request: Request,
+  headers: RequestHeaders,
+): T {
+  const url = new URL(request.url);
+  const view: InboundRequestView = {
+    method: () => request.method.toUpperCase(),
+    headers: () => headers,
+    query: () => url.search.startsWith("?") ? url.search.slice(1) : url.search,
+  };
+  const state: InboundState = { request, consumed: false };
+  Object.defineProperty(view, INBOUND_REQUEST, { value: state, enumerable: false });
+  // The program's `InboundRequest` is this view under its brand.
+  return view as T;
+}
+
+/** The platform request behind `view`, for `Upstream.forward`. A second forward of
+ *  one request faults, as a second read of a `Stream` does (D11). */
+export function inboundRequestTake(view: InboundRequestView): Request {
+  const state = (view as unknown as { [INBOUND_REQUEST]?: InboundState })[INBOUND_REQUEST];
+  if (state === undefined) throw new Error("bynk: not an inbound request");
+  if (state.consumed) throw new Error("bynk: an inbound request is forwarded at most once");
+  state.consumed = true;
+  return state.request;
+}
+
+/** A `Forwarded` over an upstream's `response`. */
+export function forwarded(response: Response): ForwardedView {
+  const view: ForwardedView = {
+    status: () => response.status,
+    header: (name: string) => {
+      const v = response.headers.get(name);
+      return v === null ? { tag: "None" } : { tag: "Some", value: v };
+    },
+  };
+  Object.defineProperty(view, FORWARDED_RESPONSE, { value: response, enumerable: false });
+  return view;
+}
+
+function forwardedResponse(view: ForwardedView): Response {
+  const response = (view as unknown as { [FORWARDED_RESPONSE]?: Response })[FORWARDED_RESPONSE];
+  if (response === undefined) throw new Error("bynk: not a forwarded response");
+  return response;
+}
+
+/** The methods an `ANY` route forwards (D7); any other is answered `501`. */
+const PASS_THROUGH_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
+
+/** D7, D15: whether an `ANY` route refuses `request` with `501` before its handler
+ *  runs: a method outside the seven (`TRACE`, `CONNECT`, `PROPFIND`), or an
+ *  `Upgrade` (a WebSocket would tunnel through the proxy). */
+export function passThroughRefuses(request: Request): boolean {
+  return !PASS_THROUGH_METHODS.has(request.method.toUpperCase()) || request.headers.has("upgrade");
+}
+
+/** D5: whether an `ANY` route matching `path` yields it to an ordinary route,
+ *  one of `ordinary`, that is as specific: that route owns the path, for every
+ *  method, so a wrong method there is its `405`, never the upstream's. */
+export function passThroughYields(path: string, ordinary: readonly string[]): boolean {
+  return ordinary.some((p) => matchPath(p, path) !== null);
+}
+
+/** D5, D10: whether an `ANY` route owns `path`; each entry is an `ANY` route's
+ *  pattern and the ordinary patterns it yields to. A CORS preflight never answers
+ *  for a path a pass-through route owns. */
+export function passThroughOwns(
+  path: string,
+  routes: readonly (readonly [string, readonly string[]])[],
+): boolean {
+  return routes.some(([p, ordinary]) => matchPath(p, path) !== null && !passThroughYields(path, ordinary));
+}
+
+/** RFC 9110 §7.6.1: hop-by-hop response headers, never passed on. */
+const HOP_BY_HOP = ["connection", "keep-alive", "proxy-connection", "te", "trailer", "transfer-encoding", "upgrade"];
+
+/** D9: the response an `ANY` route's `PassThrough` becomes. A `Forward` passes the
+ *  upstream's status, headers and body through, streamed, never buffered: no
+ *  `ETag`, `304`, `HEAD` body, `Allow` or CORS is synthesised. Hop-by-hop headers,
+ *  `proxy-authenticate`, `set-cookie` (slice 4 adds the opt-in) and the upstream's
+ *  own `strict-transport-security` (the proxy's policy is stamped after) never
+ *  pass. A `Respond` is an ordinary `HttpResult[()]` answer. */
+export function passThroughResponse(
+  result:
+    | { readonly tag: "Forward"; readonly response: ForwardedView }
+    | { readonly tag: "Respond"; readonly result: HttpResult<unknown> },
+  request: Request,
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean },
+): Response {
+  if (result.tag === "Respond") {
+    const answer = httpResultToResponse(result.result, () => null, { problem: opts?.problem });
+    return request.method.toUpperCase() === "HEAD" ? headResponse(answer) : answer;
+  }
+  const upstream = forwardedResponse(result.response);
+  if (upstream.status === 101) {
+    // §7.4: no `Upgrade` is forwarded, so a `101` is an upstream fault.
+    upstream.body?.cancel().catch(() => {});
+    return new Response(null, { status: 502 });
+  }
+  const headers = new Headers(upstream.headers);
+  const listed = (headers.get("connection") ?? "").split(",").map((n) => n.trim().toLowerCase()).filter((n) => n !== "");
+  for (const name of [...HOP_BY_HOP, ...listed, "proxy-authenticate", "set-cookie", "strict-transport-security"]) {
+    headers.delete(name);
+  }
+  return new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers });
+}
+
+/** D9: the service's security headers on a pass-through answer. `nosniff` and the
+ *  policy's HSTS are stamped (the upstream's own HSTS never reached here); an HTML
+ *  answer's `Content-Security-Policy` and `Referrer-Policy` are filled only where
+ *  the upstream sent none, since the proxied site knows its own. */
+export function applyPassThroughSecurity(response: Response, policy: SecurityPolicy): Response {
+  if (policy.nosniff) response.headers.set("x-content-type-options", "nosniff");
+  if (policy.hstsMaxAgeSecs !== null) {
+    response.headers.set("strict-transport-security", `max-age=${policy.hstsMaxAgeSecs}`);
+  }
+  const mediaType = (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+  if (mediaType === "text/html") {
+    if (!response.headers.has("content-security-policy")) response.headers.set("content-security-policy", policy.htmlCsp);
+    if (!response.headers.has("referrer-policy")) response.headers.set("referrer-policy", policy.htmlReferrerPolicy);
+  }
+  return response;
+}
+
+/** D13: an `Upstream` instance's declared origin and head timeout. */
+export interface UpstreamConfig {
+  readonly origin: string;
+  readonly timeoutSecs: number;
+}
+
+type UpstreamFailure = { readonly tag: "Timeout" } | { readonly tag: "Unreachable" } | { readonly tag: "InvalidPath" };
+
+/** Each `%XX` escape of `segment` decoded alone, so a malformed one stays as
+ *  written rather than failing the whole segment. */
+function decodeEscapes(segment: string): string {
+  return segment.replace(/%([0-9a-fA-F]{2})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+const isDot = (part: string): boolean => part === "." || part === "..";
+
+/** D13, §8 (SSRF into the upstream's private paths): why `path` can't be sent, or
+ *  `null`. It must start with `/` and hold no `?`, `#` or control character; no
+ *  segment may be `.` or `..`, encoded or not, with `\` read as `/` as a URL
+ *  parser does; and no segment whose decoding holds `/` or `\` may have a `.` or
+ *  `..` component (`..%2F..%2Fadmin`, `..%5Cadmin`), which an upstream that
+ *  decodes and then normalises would climb out of the mount by. An encoded slash
+ *  with no dot component (`a%2Fb`) is sent as received. */
+export function upstreamPathProblem(path: string): string | null {
+  if (!path.startsWith("/")) return "does not start with `/`";
+  if (/[?#\u0000-\u001f\u007f]/.test(path)) return "holds `?`, `#` or a control character";
+  for (const segment of path.split(/[/\\]/)) {
+    const decoded = decodeEscapes(segment);
+    if (decoded.split(/[/\\]/).some(isDot)) return "has a `.` or `..` segment";
+  }
+  return null;
+}
+
+/** D13: the URL `forward` sends, built textually (origin, then path, then `?` and
+ *  the raw query), never by resolving a reference against a base. */
+export function upstreamUrl(origin: string, path: string, query: string): string {
+  return query === "" ? `${origin}${path}` : `${origin}${path}?${query}`;
+}
+
+/** D13: `Upstream.forward`. The path is checked, the URL built textually and its
+ *  origin compared with the declared one before anything is sent; the method and
+ *  raw query pass, the body streams, no inbound header is forwarded (slice 4 adds
+ *  the header policy) and a redirect is returned, never followed. `@timeout` bounds
+ *  the head; the body streams after it. */
+export async function upstreamForward(
+  config: UpstreamConfig,
+  view: InboundRequestView,
+  path: string,
+  fetcher: (input: string, init: RequestInit) => Promise<Response> = (input, init) => globalThis.fetch(input, init),
+): Promise<Result<ForwardedView, UpstreamFailure>> {
+  if (upstreamPathProblem(path) !== null) return { tag: "Err", error: { tag: "InvalidPath" } };
+  const url = upstreamUrl(config.origin, path, view.query());
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    return { tag: "Err", error: { tag: "InvalidPath" } };
+  }
+  if (target.origin !== new URL(config.origin).origin) return { tag: "Err", error: { tag: "InvalidPath" } };
+  const request = inboundRequestTake(view);
+  const method = request.method.toUpperCase();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.timeoutSecs * 1000);
+  const init: RequestInit & { duplex?: "half" } = { method, redirect: "manual", signal: controller.signal };
+  if (method !== "GET" && method !== "HEAD" && request.body !== null) {
+    init.body = request.body;
+    init.duplex = "half";
+  }
+  try {
+    const response = await fetcher(url, init);
+    return { tag: "Ok", value: forwarded(response) };
+  } catch {
+    return { tag: "Err", error: controller.signal.aborted ? { tag: "Timeout" } : { tag: "Unreachable" } };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withHeartbeat as __withHeartbeat, withLocation as __withLocation, withDownload as __withDownload, withETag as __withETag, withLastModified as __withLastModified, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, rateLimitAllows as __rateLimitAllows, rateLimitAllowsKey as __rateLimitAllowsKey, rateLimitedResponse as __rateLimitedResponse, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
-export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };
+export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, inboundRequest as __inboundRequest, forwarded as __forwarded, applyPassThroughSecurity as __applyPassThroughSecurity, passThroughOwns as __passThroughOwns, passThroughRefuses as __passThroughRefuses, passThroughResponse as __passThroughResponse, passThroughYields as __passThroughYields, upstreamForward as __upstreamForward, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withHeartbeat as __withHeartbeat, withLocation as __withLocation, withDownload as __withDownload, withETag as __withETag, withLastModified as __withLastModified, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, rateLimitAllows as __rateLimitAllows, rateLimitAllowsKey as __rateLimitAllowsKey, rateLimitedResponse as __rateLimitedResponse, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy, ForwardedView as __ForwardedView, InboundRequestView as __InboundRequestView };

@@ -91,6 +91,14 @@ pub(super) fn build_path_method_table(
     cors_services: &[CorsService],
     security_services: &[SecurityService],
 ) -> Vec<PathMethods> {
+    // #3752 (D9): an `ANY` route answers every method on the paths it owns, so it
+    // adds no `Allow`, `405` or `OPTIONS` of its own.
+    let ordinary: Vec<HttpRoute> = http_routes
+        .iter()
+        .filter(|r| !super::pass_through::is_any(r))
+        .cloned()
+        .collect();
+    let http_routes = ordinary.as_slice();
     let mut paths: Vec<String> = Vec::new();
     for r in http_routes {
         if !paths.contains(&r.path) {

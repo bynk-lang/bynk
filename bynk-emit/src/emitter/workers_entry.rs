@@ -29,6 +29,7 @@ mod events;
 mod field_specs;
 mod http;
 mod http_policy;
+mod pass_through;
 mod queue;
 mod respond;
 mod scheduled;
@@ -561,7 +562,11 @@ pub fn emit_worker_entry(
 
     // v0.131 (ADR 0159): CORS preflight, one branch per CORS-enabled service.
     for cs in &cors_services {
-        try_body.push(cors_preflight(cs, &security_services));
+        // #3752 (D10): never for a path a pass-through route owns.
+        try_body.push(pass_through::guard_preflight(
+            cors_preflight(cs, &security_services),
+            &http_routes,
+        ));
     }
 
     // 2. External HTTP routes.

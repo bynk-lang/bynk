@@ -169,6 +169,9 @@ fn emit_refined_type(
         is_opaque,
     } = shape;
     let name = t.name.name.clone();
+    if let Some(stmts) = pass_through_carrier_type(t, is_opaque, brand_prefix) {
+        return stmts;
+    }
     let base_ty = bynk_ts::TsType::named(ts_base(base));
     // #4111: a `Secret` is a runtime `BynkSecret`, not a string, so its text never reaches
     // `String(...)`, `JSON.stringify` or a log line; the brand sits on the wrapper.
@@ -263,6 +266,36 @@ fn emit_refined_type(
     );
     stmts.push(const_decl);
     stmts
+}
+
+/// #3752 (D8, D11): `bynk`'s `InboundRequest` and `Forwarded` are runtime views (the
+/// router's request, an upstream's answer), not strings, and only the router and
+/// `Upstream.forward` make one, so each is the branded view type with no companion
+/// (`of`, `unsafe`) to build one from text.
+fn pass_through_carrier_type(
+    t: &TypeDecl,
+    is_opaque: bool,
+    brand_prefix: &str,
+) -> Option<Vec<bynk_ts::TsStmt>> {
+    use bynk_check::http_pass_through::{PassThroughType, pass_through_type_of};
+    let carrier = match pass_through_type_of(t).filter(|_| is_opaque)? {
+        PassThroughType::InboundRequest => "__InboundRequestView",
+        PassThroughType::Forwarded => "__ForwardedView",
+        _ => return None,
+    };
+    let name = t.name.name.clone();
+    let brand_ty = bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
+        "__brand",
+        bynk_ts::TsType::named(format!("\"{brand_prefix}{name}\"")),
+    )]);
+    Some(vec![bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::TypeAlias {
+            name,
+            type_params: Vec::new(),
+            ty: bynk_ts::TsType::intersection(vec![bynk_ts::TsType::named(carrier), brand_ty]),
+        })),
+        None,
+    )])
 }
 
 /// The statements of a refined or opaque type's `of(value)`: its guards, then the

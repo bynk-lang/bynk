@@ -59,7 +59,6 @@ mod env_report;
 mod in_memory;
 mod options;
 mod output;
-mod pass_through;
 mod pipeline;
 mod remote_tests;
 mod schema_registry;
