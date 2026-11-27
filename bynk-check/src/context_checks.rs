@@ -9626,7 +9626,13 @@ mod secret_kind_tests {
         names.sort_unstable();
         assert_eq!(
             names,
-            ["ApiKeyValue", "Authorization", "Forwarded", "InboundRequest", "Secret"],
+            [
+                "ApiKeyValue",
+                "Authorization",
+                "Forwarded",
+                "InboundRequest",
+                "Secret"
+            ],
             "`bynk` declares an opaque type that `secret_kind` does not know: decide whether it is \
              secret-carrying, and extend `secret_kind` and this test"
         );

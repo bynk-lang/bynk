@@ -1703,28 +1703,8 @@ fn instance_option_value(
     if base == "Container" && !container_str_ok(text, option, ann, path, errors) {
         return None;
     }
-    // Hyperdrive H5 (#3322, DECISION B): `@tls` is one of a closed set.
-    if option == crate::firstparty::MYSQL_TLS_OPTION
-        && !crate::firstparty::MYSQL_TLS_MODES
-            .iter()
-            .any(|(mode, _)| mode == text)
+    if option == crate::firstparty::MYSQL_TLS_OPTION && !mysql_tls_ok(text, base, ann, path, errors)
     {
-        errors.push_for(
-            Some(path),
-            CompileError::new(
-                "bynk.capability.invalid_option",
-                ann.span,
-                format!("`{text}` is not a TLS mode a `{base}` can use"),
-            )
-            .with_note(format!(
-                "the modes are {}; `\"required\"` is the default",
-                crate::firstparty::MYSQL_TLS_MODES
-                    .iter()
-                    .map(|(m, _)| format!("`\"{m}\"`"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )),
-        );
         return None;
     }
     if option == crate::firstparty::SERVICE_WORKER_OPTION && !is_worker_name(text) {
@@ -1788,6 +1768,40 @@ fn instance_option_value(
         return None;
     }
     Some(value)
+}
+
+/// Hyperdrive H5 (#3322, DECISION B): whether a `@tls` is one of the closed set of
+/// modes. Pushes the error and returns `false` otherwise.
+fn mysql_tls_ok(
+    text: &str,
+    base: &str,
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    if crate::firstparty::MYSQL_TLS_MODES
+        .iter()
+        .any(|(mode, _)| *mode == text)
+    {
+        return true;
+    }
+    errors.push_for(
+        Some(path),
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            ann.span,
+            format!("`{text}` is not a TLS mode a `{base}` can use"),
+        )
+        .with_note(format!(
+            "the modes are {}; `\"required\"` is the default",
+            crate::firstparty::MYSQL_TLS_MODES
+                .iter()
+                .map(|(m, _)| format!("`\"{m}\"`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    );
+    false
 }
 
 /// #3302: whether every entry of an `Email` instance's address list is an
