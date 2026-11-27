@@ -389,7 +389,16 @@ pub(super) fn build_security_services(
 /// preflight (has it) is answered here with the `Access-Control-*` grant; a bare
 /// `OPTIONS` (lacks it) falls through to the generic `204 + Allow`, so the two
 /// `OPTIONS` answers compose instead of colliding.
-pub(super) fn cors_preflight(cs: &CorsService, security_services: &[SecurityService]) -> TsStmt {
+/// #3752 (D10): the preflight never answers for a path a pass-through route owns.
+pub(super) fn cors_preflight(
+    cs: &CorsService,
+    security_services: &[SecurityService],
+    routes: &[HttpRoute],
+) -> TsStmt {
+    super::pass_through::guard_preflight(cors_preflight_branch(cs, security_services), routes)
+}
+
+fn cors_preflight_branch(cs: &CorsService, security_services: &[SecurityService]) -> TsStmt {
     let mut cond_terms = cs.paths.iter().map(|(path, _)| {
         strict_neq(
             call(

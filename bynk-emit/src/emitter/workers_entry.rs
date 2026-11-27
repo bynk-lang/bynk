@@ -48,7 +48,7 @@ pub use field_specs::{
 use http::{collect_http_routes, emit_http_route_dispatch};
 use http_policy::{
     CorsService, PathMethods, SecurityService, build_cors_services, build_path_method_table,
-    build_security_services, method_fall_through,
+    build_security_services, cors_preflight, method_fall_through,
 };
 pub(crate) use queue::dead_letter_binding;
 use queue::{collect_queue_routes, push_message_entries};
@@ -561,12 +561,9 @@ pub fn emit_worker_entry(
     }
 
     // v0.131 (ADR 0159): CORS preflight, one branch per CORS-enabled service.
-    // #3752 (D10): never for a path a pass-through route owns.
-    try_body.extend(pass_through::preflights(
-        &cors_services,
-        &security_services,
-        &http_routes,
-    ));
+    for cs in &cors_services {
+        try_body.push(cors_preflight(cs, &security_services, &http_routes));
+    }
 
     // 2. External HTTP routes.
     for route in &http_routes {
