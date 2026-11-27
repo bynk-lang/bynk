@@ -1,0 +1,2 @@
+bynk.types.inbound_request_at_boundary
+`Held`, which holds an `InboundRequest`, cannot appear in

@@ -583,7 +583,9 @@ A route the client cannot yet represent faithfully is named on stderr and left o
 never generated wrong: a raw `query: RequestQuery`, `cookies: RequestCookies` or `headers: RequestHeaders` view,
 a route guarded by a request signature (the client holds no secret), a route with a
 [rest segment](/reference/http/#rest-segments) (`/files/*key`, whose value holds `/`, which one encoded
-segment can't carry; `bynk openapi` leaves it out for the same reason), and a route whose types hold an `Option`
+segment can't carry; `bynk openapi` leaves it out for the same reason), a
+[pass-through route](/reference/http/#pass-through-routes) (`on ANY`, which answers with whatever its upstream
+does), and a route whose types hold an `Option`
 inside a `Map`, a `Set` or a `Result`. A WebSocket service whose frame or route-parameter types hold such an
 `Option` is left out the same way. If every selected route and connection is left out the command fails.
 

@@ -219,6 +219,7 @@ class __WsClient<C, In, Out> implements WsConnection<In, Out> {
   }
 
   close(code: number = 1000, reason: string = ""): void {
+    if (this.finished) return;
     this.ours = true;
     if (this.timer !== undefined) globalThis.clearTimeout(this.timer);
     if (this.live !== undefined) {

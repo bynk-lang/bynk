@@ -367,3 +367,16 @@ test("leaving the frames iterator early stops it buffering", async () => {
   FakeSocket.made[0].message('{"n":3}');
   assert.deepEqual(seen, [3]);
 });
+
+test("close() on a connection that is already closed does not tell the listeners again", async () => {
+  const c = connect(spec("bearer"), { bearer: "t" });
+  const closes: number[] = [];
+  c.onClose((x: { code: number }) => closes.push(x.code));
+  await tick();
+  FakeSocket.made[0].open();
+  c.close();
+  await tick();
+  c.close();
+  await tick();
+  assert.deepEqual(closes, [1000]);
+});
