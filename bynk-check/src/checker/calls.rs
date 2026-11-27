@@ -5076,7 +5076,8 @@ pub(super) const OPEN_SUM_NOTE: &str = "this actor sum admits an open member (`V
 
 /// #3939: `by Malformed` and `by Unknown` are an `ApiKey` seam's own refusals, refused on any
 /// other route; and an `ApiKey` key does not expire until `ttl` (slice 3), so `by Expired` is
-/// refused on an `ApiKey` route. Whether `bad` is one of these (each reported here).
+/// refused on an `ApiKey` route. `by Revoked` is admitted on one (slice 2): the driver mints a key,
+/// revokes it and presents it. Whether `bad` is one of these (each reported here).
 fn check_api_key_principal(
     bad: BadCredential,
     by: Option<&bynk_syntax::ast::ByClause>,
@@ -5098,6 +5099,7 @@ fn check_api_key_principal(
             ctx.errors.push(crate::api_key::expired_needs_ttl(span));
             true
         }
+        BadCredential::Revoked => api_key,
         _ => false,
     }
 }
@@ -6050,9 +6052,9 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
                 CompileError::new(
                     "bynk.test.revoked_needs_sessions_route",
                     p.span,
-                    "`by Revoked` sends a cookie for a revoked session, but this address reaches no http route guarded by a `SignedCookie` actor with `sessions = true`",
+                    "`by Revoked` sends a revoked session's cookie or a revoked API key, but this address reaches no http route guarded by a `SignedCookie` actor with `sessions = true` or by an `ApiKey` actor",
                 )
-                .with_note("use `by Revoked` on an http route guarded by a `SignedCookie` actor declared with `sessions = true`")
+                .with_note("use `by Revoked` on an http route guarded by a `SignedCookie` actor declared with `sessions = true`, or by an `ApiKey` actor")
             } else if bad == BadCredential::Expired {
                 CompileError::new(
                     "bynk.test.expired_needs_bearer_route",

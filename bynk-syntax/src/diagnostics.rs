@@ -5768,10 +5768,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "`by Revoked` sends a cookie for a session that was issued and then \
                 revoked in the session agent, so it needs a route whose seam \
                 checks one: a `SignedCookie` actor declared with `sessions = true`. \
-                A stateless cookie keeps no session to revoke, a route guarded by \
-                another scheme has no cookie, and a public route has no seam. \
-                Declare `sessions = true` on the actor, or test the cookie's \
-                signature and expiry with `by Forged` and `by Expired`.",
+                On a route an `ApiKey` actor guards, it sends a key that was minted \
+                and then revoked. A stateless cookie keeps no session to revoke, a \
+                route guarded by another scheme has nothing to revoke, and a public \
+                route has no seam. Declare `sessions = true` on the actor, or test \
+                the cookie's signature and expiry with `by Forged` and `by Expired`.",
         example: "// demo/api.bynk\n\
                   actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours), identity = UserId }\n\
                   actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours, sessions = true), identity = UserId }\n\n\
@@ -11374,7 +11375,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.revoked_needs_sessions_route",
-        "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it.",
+        "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true` or a single `ApiKey` actor; it sends a revoked session's correctly signed cookie, or a revoked key, so only a seam that keeps sessions or keys can refuse it.",
         &["case"],
     ),
     dg(

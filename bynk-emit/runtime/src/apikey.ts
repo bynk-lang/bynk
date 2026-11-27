@@ -578,6 +578,20 @@ export function apiKeyBadKey(kind: string, real: string, prefix: string): string
   }
 }
 
+/** `by Revoked` (slice 2): the real key `real`, revoked through `revoke` (the participant's
+ *  in-process `<Actor>KeyOwner.revoke`) before it is presented. Revoking deletes the record, so the
+ *  seam then compares the key once against the dummy digest, as for a key never minted. */
+export async function apiKeyRevokedForTest(
+  real: string,
+  prefix: string,
+  revoke: (handle: string, keyNo: string) => Promise<boolean>,
+): Promise<string> {
+  const parsed = parseApiKey(real, prefix);
+  if (parsed === null) throw new Error("bynk: the test key is not a key of this actor");
+  await revoke(parsed.handle, parsed.keyNo);
+  return real;
+}
+
 /** The key store's comparisons so far: every `Crypto.equal`, and those against the dummy digest. */
 export interface ApiKeyCompares {
   all: number;

@@ -13,9 +13,14 @@
 //!   parsing (counters by raw request, not timing);
 //! * one store call per request, whose body carries neither the pepper nor the secret, and the
 //!   emitted key-store agents name no pepper;
-//! * the CORS preflight allows the key's header.
+//! * the CORS preflight allows the key's header;
+//! * (slice 2) a revoked key is the same `401` after the same one dummy compare as a key never
+//!   minted; another identity's `revoke` answers `false` and leaves the key; `list` carries ids,
+//!   labels and times, never a secret; a mint after `revokeAll`'s failed second commit takes a
+//!   fresh handle; and `revokeAll` refuses every old key and rotates the handle.
 //!
-//! A `system`-tier suite cannot make the key store fail or queue, so those live here. Like the other
+//! A `system`-tier suite cannot make the key store fail or queue, or fail one of two commits, so
+//! those live here. Like the other
 //! tsc-driven tests it skips loudly without a toolchain; `BYNK_REQUIRE_TSC=1` turns the skip into a
 //! failure.
 
@@ -118,6 +123,7 @@ const env: Record<string, unknown> = {
 };
 env.CLIENT_KEYS = namespace(handlers.ClientKeys, env);
 env.CLIENT_KEY_OWNER = namespace(handlers.ClientKeyOwner, env);
+env.ACCOUNTS = namespace(handlers.Accounts, env);
 
 async function req(method: string, path: string, headers: Record<string, string>, body?: unknown, e = env): Promise<Response> {
   const init: RequestInit = { method, headers: { "content-type": "application/json", ...headers } };
@@ -237,9 +243,48 @@ assert((await req("GET", "/me", bearer(secret.key), undefined, spying)).status =
 assert(bodies.length === 1, "one store call per request (D3 D, nothing cached)");
 assert(!bodies[0].includes(PEPPER) && !bodies[0].includes(secret.key.slice(-49)), "neither the pepper nor the secret reaches the store");
 
+// #3939 (slice 2, §9) / §13 revocation: a revoked key is refused on the next request, as the same
+// 401 after the same one dummy compare as a key never minted.
+const second = (await (await req("POST", "/accounts/acct-7/keys", {}, { label: "second" })).json()) as { id: string; key: string };
+assert((await req("GET", "/me", bearer(second.key))).status === 200, "a second key is admitted");
+const foreign = await req("DELETE", `/accounts/acct-8/keys/${second.id}`, {});
+assert(foreign.status === 404, `revoking another identity's key answers false (404), got ${foreign.status}`);
+assert((await req("GET", "/me", bearer(second.key))).status === 200, "another identity's revoke leaves the key");
+assert((await req("DELETE", `/accounts/acct-7/keys/${second.id}`, {})).status === 204, "the owner's revoke answers true (204)");
+same(await work(second.key), [401, 1, 1, 1], "a revoked key is one dummy compare in one store call");
+assert((await refusal(bearer(second.key))) === want, "a revoked key is the same 401 as a malformed key");
+assert((await req("GET", "/me", bearer(secret.key))).status === 200, "revoking one key leaves the others");
+
+// §9 list: ids, labels, created, expires and last use; never a secret or a digest.
+const listed = (await (await req("GET", "/accounts/acct-7/keys", {})).json()) as Record<string, unknown>[];
+assert(listed.length === 1 && listed[0].id === secret.id && listed[0].label === "ci", `the one key left is listed: ${JSON.stringify(listed)}`);
+assert(JSON.stringify(Object.keys(listed[0]).sort()) === JSON.stringify(["created", "expires", "id", "label", "lastUsed"]), `a listed key has no other field: ${JSON.stringify(listed[0])}`);
+assert(!JSON.stringify(listed).includes(secret.key.slice(-49)), "the list never carries the secret");
+
+// §6: `revokeAll`'s first commit empties and retires the store; if its second commit (the owner's
+// new handle) fails, the owner still names the retired store, and the next mint rotates first.
+// The failure is simulated by clearing the store directly, without the owner's commit.
+const clear = await (env.CLIENT_KEYS as ReturnType<typeof namespace>).get(real.handle).fetch("https://agent/_bynk/agent/clear", { method: "POST", body: JSON.stringify({ args: [], deps: {}, key: real.handle }) });
+assert(clear.status === 200 && (await clear.json()) === 1, "the store's own clear empties its one key");
+assert((await req("GET", "/me", bearer(secret.key))).status === 401, "a key of a cleared store is refused");
+const rotated = (await (await req("POST", "/accounts/acct-7/keys", {}, { label: "after" })).json()) as { key: string };
+const after = parseApiKey(rotated.key, "acme")!;
+assert(after.handle !== real.handle, "a mint after a failed second commit takes a fresh handle");
+assert((await req("GET", "/me", bearer(rotated.key))).status === 200, "the rotated key is admitted");
+
+// §6 revokeAll: one commit empties the keys, then the handle is replaced, so an old id is refused
+// and a later key lives under a new handle.
+const closed = await req("POST", "/accounts/acct-7/close", {});
+assert(closed.status === 200 && (await closed.json()) === 1, "revokeAll answers the number revoked");
+assert((await req("GET", "/me", bearer(rotated.key))).status === 401, "an old key is refused after revokeAll");
+const fresh = (await (await req("POST", "/accounts/acct-7/keys", {}, { label: "fresh" })).json()) as { key: string };
+const freshHandle = parseApiKey(fresh.key, "acme")!.handle;
+assert(freshHandle !== after.handle && freshHandle !== real.handle, "revokeAll rotates the handle");
+assert((await req("GET", "/me", bearer(fresh.key))).status === 200, "a key minted after revokeAll is admitted");
+
 // A missing pepper faults the request; it never admits or refuses quietly.
 console.error = () => {};
-const noPepper = await req("GET", "/me", bearer(secret.key), undefined, { ...env, CLIENT_KEY_PEPPER: undefined });
+const noPepper = await req("GET", "/me", bearer(fresh.key), undefined, { ...env, CLIENT_KEY_PEPPER: undefined });
 console.error = quiet;
 assert(noPepper.status === 500, `a missing pepper faults the request, got ${noPepper.status}`);
 
@@ -373,8 +418,8 @@ fn copy_tree(from: &Path, to: &Path) {
 
 /// #3939 (track §10, Decision C): `bynk test --against` refuses, before any request, every case
 /// that needs the in-process key store: acting as the `ApiKey` actor, `by Malformed`, `by Unknown`,
-/// and `by Forged` at an `ApiKey` route (its key is built from one minted in process, and its
-/// compare count is taken in process). `--skip-unsupported` skips them with that reason.
+/// and `by Forged` or `by Revoked` at an `ApiKey` route (its key is built from one minted, and
+/// for `Revoked` revoked, in process, and its compare count is taken in process). `--skip-unsupported` skips them with that reason.
 #[test]
 fn a_remote_run_refuses_every_case_that_needs_the_in_process_key_store() {
     let root: PathBuf =
@@ -414,6 +459,7 @@ fn a_remote_run_refuses_every_case_that_needs_the_in_process_key_store() {
         "drives `by Malformed`",
         "drives `by Unknown`",
         "drives `by Forged` at a route an `ApiKey` actor guards",
+        "drives `by Revoked` at a route an `ApiKey` actor guards",
     ] {
         assert!(
             diagnostics.contains("bynk.test.remote_unsupported_api_key")

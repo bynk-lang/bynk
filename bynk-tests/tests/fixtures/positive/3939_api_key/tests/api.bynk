@@ -38,6 +38,22 @@ suite acme.api as system {
 		let r <- api.GET("/me") by Forged
 		expect r is Rejected(Unauthorized)
 	}
+	// #3939 (slice 2, §10) / §13 revocation: a key minted and then revoked is refused on the next
+	// request, after the dummy compare, the same as a key never minted.
+	case "a revoked key is refused after the dummy compare" {
+		let r <- api.GET("/me") by Revoked
+		expect r is Rejected(Unauthorized)
+	}
+	// §6 / §13 revocation: `revokeAll` ends every key the identity held. `by Client("acct-30")`
+	// presents the same key for the whole case, so after `close` the seam refuses it.
+	case "revokeAll refuses the identity's old key on the next request" {
+		let before <- api.GET("/me") by Client("acct-30")
+		expect before is Ok("acct-30")
+		let closed <- api.POST("/accounts/:id/close", "acct-30") by Visitor
+		expect closed is Ok(1)
+		let after <- api.GET("/me") by Client("acct-30")
+		expect after is Unauthorized
+	}
 	// §8 step 6 / D3 E: the key never reaches the handler.
 	case "the key's header is hidden from the handler" {
 		let r <- api.GET("/auth-header", RequestHeaders.of([])) by Client("acct-7")
