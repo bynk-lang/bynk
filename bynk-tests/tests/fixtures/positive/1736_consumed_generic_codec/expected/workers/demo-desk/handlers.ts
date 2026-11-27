@@ -48,20 +48,20 @@ export const settled = {
 export const sentBack = {
   async call(n: number, deps: { env: { DEMO_VAULT: __ServiceBinding } }): globalThis.Promise<number> {
     const e = await __callService(deps.env.DEMO_VAULT, "open", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(n), __deserialise_Envelope_Int, "demo.desk", "57700891e7302936", deps.env, "demo.vault");
-    return __callService(deps.env.DEMO_VAULT, "readBack", __serialise_Envelope_Int(e), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "demo.desk", "117e26b47336a282", deps.env, "demo.vault");
+    return __callService(deps.env.DEMO_VAULT, "readBack", __serialise_Envelope_Int(e), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "demo.desk", "117e26b47336a282", deps.env, "demo.vault");
   },
 };
 
 export const sent = {
   async call(s: string, deps: { env: { DEMO_VAULT: __ServiceBinding } }): globalThis.Promise<number> {
-    return __callService(deps.env.DEMO_VAULT, "read", __serialise_Envelope_String({ item: s, note: "out" }), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "demo.desk", "b797903bbb7dffed", deps.env, "demo.vault");
+    return __callService(deps.env.DEMO_VAULT, "read", __serialise_Envelope_String({ item: s, note: "out" }), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "demo.desk", "b797903bbb7dffed", deps.env, "demo.vault");
   },
 };
 
 export const sentWrapper = {
   async call(n: number, deps: { env: { DEMO_VAULT: __ServiceBinding } }): globalThis.Promise<number> {
     const w: Wrapper<number> = { item: n, note: "mine" };
-    return __callService(deps.env.DEMO_VAULT, "readBack", __serialise_Envelope_Int(w), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "demo.desk", "117e26b47336a282", deps.env, "demo.vault");
+    return __callService(deps.env.DEMO_VAULT, "readBack", __serialise_Envelope_Int(w), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "demo.desk", "117e26b47336a282", deps.env, "demo.vault");
   },
 };
 
@@ -80,7 +80,7 @@ export function __deserialise_Plain(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["n"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["n"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __n = obj["n"];
   return Ok({ n: __n } as demo_vault.Plain);
@@ -122,7 +122,7 @@ export function __deserialise_Envelope_Int(json: __JsonValue, path: string = "$"
     return Err({ kind: "StructuralMismatch", path: `${path}.item`, expected: "number", actual: typeof obj["item"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["item"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.item`, expected: "safe integer", actual: String(obj["item"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.item`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["item"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __item = obj["item"];
   if (typeof obj["note"] !== "string") {
@@ -178,7 +178,7 @@ export function __deserialise_Outcome_Int(json: __JsonValue, path: string = "$")
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "Done", value: __value } as demo_vault.Outcome<number>);
@@ -191,7 +191,7 @@ export function __deserialise_Outcome_Int(json: __JsonValue, path: string = "$")
       return Ok({ tag: "Pending", reason: __reason } as demo_vault.Outcome<number>);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

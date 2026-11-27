@@ -24,9 +24,10 @@ use bynk_syntax::ast::BaseType;
 
 pub use crate::kernel_op::KernelMethod;
 use crate::kernel_op::{
-    BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp,
-    InstantOp, IntOp, ListOp, MapOp, OptionOp, OrdOp, QueryOp, RequestCookiesOp, RequestHeadersOp,
-    RequestQueryOp, ResultOp, SecretOp, SetOp, StringOp, TestConnectionOp, TokenClaimsOp,
+    BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, EnumOp, FloatOp,
+    HttpResultOp, InstantOp, IntOp, ListOp, MapOp, OptionOp, OrdOp, QueryOp, RequestCookiesOp,
+    RequestHeadersOp, RequestQueryOp, ResultOp, SecretOp, SetOp, StringOp, TestConnectionOp,
+    TokenClaimsOp,
 };
 
 /// `List[T]` (v0.20b; v0.88 adds the ADR 0116 query/collection vocabulary).
@@ -94,6 +95,20 @@ pub const TEST_CONNECTION_METHODS: &[KernelMethod] = TestConnectionOp::TABLE;
 /// table: it belongs to no one receiver type, so it is offered beside the
 /// receiver's own table wherever [`is_ord_receiver`] holds.
 pub const ORD_RECEIVER_TABLE: &[KernelMethod] = OrdOp::TABLE;
+
+/// #4560: the method every enum has, `wireName`. Like `compare`, it belongs to no one receiver
+/// type: it is offered wherever [`is_enum_receiver`] holds.
+pub const ENUM_RECEIVER_TABLE: &[KernelMethod] = EnumOp::TABLE;
+
+/// Whether a receiver of type `ty` is an enum, so `wireName` applies. A named type is asked
+/// through `named_is_enum` (its declaration says whether every variant is payload-free, which
+/// only the caller can look up).
+pub fn is_enum_receiver(ty: TyId, tys: &Types, named_is_enum: &dyn Fn(&str) -> bool) -> bool {
+    matches!(
+        &*tys.get(ty),
+        Ty::Named { name, kind: NamedKind::Sum, args } if args.is_empty() && named_is_enum(name)
+    )
+}
 
 /// Whether a receiver of type `ty` is orderable, so `compare` applies. The
 /// built-in types decide structurally; a named type is asked through

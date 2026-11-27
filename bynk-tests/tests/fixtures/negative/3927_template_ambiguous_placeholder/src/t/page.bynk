@@ -1,0 +1,12 @@
+// #3927 (typed HTML, slice 1): a name that is both a field and an asset in scope is refused
+commons t.page
+
+uses bynk.html
+
+asset logo = "assets/logo.svg"
+
+type F = {
+	logo: String,
+}
+
+template shell: F = "embeds/page.html"

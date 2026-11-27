@@ -1,0 +1,10 @@
+// #3927 (typed HTML, slice 1): a placeholder in an unquoted attribute value is refused (C4)
+commons t.page
+
+uses bynk.html
+
+type F = {
+	v: String,
+}
+
+template shell: F = "embeds/page.html"

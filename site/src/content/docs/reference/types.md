@@ -790,7 +790,7 @@ rewrites it too). Its fields let a failed decode be explained in Bynk:
 |---|---|
 | `kind` | what went wrong, a `DecodeErrorKind` (below): `Malformed` (the text is not JSON), `StructuralMismatch` (the JSON has the wrong shape or a wrong-typed value), or `RefinementViolation` (a value broke a refined type's predicate); `Yaml.decode` adds the refusals listed under [`Yaml.decode`](#yaml-decode) |
 | `path` | where, as a path from the root `$`: `$` for the whole document, `$.qty` for a field, `$.items[2].id` for a list element's field |
-| `message` | a human-readable description, such as `expected number, got string` |
+| `message` | a human-readable description, such as `expected number, got string`. It names the path, what was expected and the JSON *kind* found (`string`, `number`, `object`, `unrecognised variant`), and it **never contains the value being decoded**, so it is safe to log: a number that is not a safe integer reads `integer outside the safe range` or `non-integer number`, and text that is not JSON reads `not valid JSON at offset 5`, without the parser's own words (which can quote the input) |
 
 A `DecodeError` has no string form, so `"\(e)"` is refused
 (`bynk.types.interpolation_non_scalar`); interpolate its fields instead:
@@ -1923,6 +1923,24 @@ document, the typed test drivers and a decode error's path use the wire name, so
 the Bynk variant name `ChargeSucceeded`, no longer read. An `enum` whose variants are named reads
 the bare string too (`"opened"`), whatever its discriminator, and a path, query, header or cookie
 value of that enum is the wire name. `Option` and `Result` keep their fixed shapes.
+
+An enum's wire name is also readable in the language. `e.wireName()` is the `String` the plain JSON
+codec, `Form`, and a path, query, header or cookie value use for `e`: the variant's `@name`, else its
+own name. `E.fromWireName(text)` is its inverse, an `Option[E]`: the variant whose wire name is
+exactly `text` (case-sensitive, so the Bynk name of a renamed variant is not it), else `None`.
+Both read the one table the codecs read, so they agree with them by construction, `@name`
+included, and a variant added later is covered without a `match` to update.
+
+```bynk
+type Action = enum { @name("opened") Opened, @name("closed") Closed }
+
+fn label(a: Action) -> String { a.wireName() }               // "opened"
+fn parse(text: String) -> Option[Action] { Action.fromWireName(text) }
+```
+
+They apply to an `enum` (a sum whose variants carry no payload, written `enum { … }` or with
+pipes), not to a sum with a payload variant or a record. A type that declares its own `wireName`
+method or `fromWireName` static keeps it: the built-in answers only where the type has none.
 
 Annotations go before the name they apply to: before the field (as for any annotation), after the
 `|` of a pipe-form variant or before a tag of the `enum { }` shorthand, before a payload field

@@ -56,6 +56,8 @@ pub struct D1SqlSite {
     /// #4200: the row's `Decimal` fields, which a SQLite column holds exactly only as
     /// `TEXT`: the numeric affinities hand the value back as a JSON number.
     pub decimals: Vec<String>,
+    /// #4046: the row's other columns with a storage convention (see [`Conventions`]).
+    pub conventions: Box<Conventions>,
     /// The number of values passed, when the list is a list literal.
     pub passed: Option<usize>,
     /// #3108: for `select`/`firstAs`, the literal's own decoded text and where it
@@ -106,6 +108,8 @@ pub struct D1DecodeSite {
     pub required: Vec<String>,
     /// #4200: the row's `Decimal` fields (see [`D1SqlSite::decimals`]).
     pub decimals: Vec<String>,
+    /// #4046: see [`D1SqlSite::conventions`].
+    pub conventions: Box<Conventions>,
     /// The `decodeSql` call, where a missing column is reported.
     pub span: Span,
 }
@@ -220,6 +224,7 @@ pub(crate) fn record_decode(arg: &Expr, call_span: Span, t: TyId, ctx: &mut Ctx)
         Callee::D1Decode(D1DecodeSite {
             site: link.site,
             decimals: row_base_fields(&name, &ctx.input.types, BaseType::Decimal),
+            conventions: Box::new(row_conventions(&name, &ctx.input.types)),
             row: name,
             required,
             span: call_span,
@@ -364,6 +369,7 @@ pub(crate) fn check_sql_argument(
                     span: sql.span,
                     row: None,
                     decimals: Vec::new(),
+                    conventions: Box::default(),
                     passed: literal_list_len(args.get(1), ctx),
                     literal: None,
                     batch: None,
@@ -533,6 +539,7 @@ fn record_batch_sites(cap: &str, list: Option<&Expr>, ctx: &mut Ctx) {
                 span: sql.span,
                 row: None,
                 decimals: Vec::new(),
+                conventions: Box::default(),
                 passed,
                 literal: None,
                 batch: Some(BatchPosition { group, index }),
@@ -920,7 +927,7 @@ pub(crate) fn check_typed_read(
             method.name
         ))
     } else {
-        check_row_shape_for(t, &ctx.input.types, tys, pg).and_then(|()| match &*tys.get(t) {
+        check_row_shape_for(t, &ctx.input.types, tys).and_then(|()| match &*tys.get(t) {
             Ty::Named { name, .. } if select_columns(name, &ctx.input.types).is_empty() => {
                 Err(format!("`{name}` has no fields to select"))
             }
@@ -934,20 +941,12 @@ pub(crate) fn check_typed_read(
                 type_args[0].span(),
                 format!("`{name}` reads SQL rows, but {why}"),
             )
-            .with_note(if pg {
+            .with_note(
                 "the row is a record whose fields are `Int`, `Float`, `String`, `Bool`, \
-                 `Bytes`, `Decimal` or `Instant` (or a refined or opaque type over one, or an \
-                 `Option` of either)"
-            } else if mysql {
-                "the row is a record whose fields are `Int`, `Float`, `String`, `Bool`, \
-                 `Bytes` or `Decimal` (or a refined or opaque type over one, or an `Option` \
-                 of either); a MySQL date or time arrives as text without a zone, so read it \
-                 as a `String`"
-            } else {
-                "the row is a record whose fields are `Int`, `Float`, `String`, `Bool`, \
-                 `Bytes` or `Decimal` (or a refined or opaque type over one, or an `Option` \
-                 of either); a `Decimal` is read from a `TEXT` column"
-            }),
+                 `Bytes`, `Decimal`, `Instant`, `Duration` or a payload-less enum (or a \
+                 refined or opaque type over a scalar one, or an `Option` of either), the \
+                 same for `D1`, `Postgres` and `MySql`",
+            ),
         );
         ok = false;
     }
@@ -1056,6 +1055,7 @@ pub(crate) fn check_typed_read(
                     record.fields.iter().map(|f| f.name.name.clone()).collect(),
                 )),
                 decimals: row_base_fields(row, &ctx.input.types, BaseType::Decimal),
+                conventions: Box::new(row_conventions(row, &ctx.input.types)),
                 passed: literal_list_len(args.get(1), ctx),
                 literal: select_literal,
                 batch: None,
@@ -1089,16 +1089,15 @@ pub(crate) fn check_row_shape(
     types: &HashMap<String, Arc<TypeDecl>>,
     tys: &Types,
 ) -> Result<(), String> {
-    check_row_shape_for(t, types, tys, false)
+    check_row_shape_for(t, types, tys)
 }
 
-/// [`check_row_shape`] for a dialect: a `Postgres` row (`pg`) may also hold an
-/// `Instant`, which a `timestamptz` column arrives as (#3320).
+/// The row-shape rule, one for every SQL capability (#4046): `D1`, `Postgres`,
+/// `MySql` and `Json.decodeSql` read the same column types.
 pub(crate) fn check_row_shape_for(
     t: TyId,
     types: &HashMap<String, Arc<TypeDecl>>,
     tys: &Types,
-    pg: bool,
 ) -> Result<(), String> {
     let row = match &*tys.get(t) {
         Ty::List(r) => *r,
@@ -1124,7 +1123,7 @@ pub(crate) fn check_row_shape_for(
         return Err(format!("`{name}` is not a row record"));
     };
     for f in &record.fields {
-        if !is_column(&f.type_ref, types, pg) {
+        if !is_column(&f.type_ref, types) {
             return Err(format!(
                 "field `{}` of `{name}` is not a column type",
                 f.name.name
@@ -1134,37 +1133,80 @@ pub(crate) fn check_row_shape_for(
     Ok(())
 }
 
-/// A type a SQLite column decodes to: a scalar (`Bytes` from base64), a
-/// refined or opaque type over one, or an `Option` of either.
-fn is_column(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>, pg: bool) -> bool {
+/// A type a SQL column decodes to: a scalar (`Bytes` from base64), a payload-less
+/// enum (its variant's name as text), a refined or opaque type over a scalar, or
+/// an `Option` of any of them.
+fn is_column(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     match r {
         TypeRef::Option(inner, _) => {
-            !matches!(**inner, TypeRef::Option(..)) && is_column(inner, types, pg)
+            !matches!(**inner, TypeRef::Option(..)) && is_column(inner, types)
         }
-        TypeRef::Base(b, _) => is_column_base(*b, pg),
+        TypeRef::Base(b, _) => is_column_base(*b),
         TypeRef::Named(id) => types.get(&id.name).is_some_and(|d| match &d.body {
-            TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => {
-                is_column_base(*base, pg)
-            }
-            _ => false,
+            TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => is_column_base(*base),
+            TypeBody::Sum(sum) => sum.variants.iter().all(|v| v.payload.is_empty()),
+            TypeBody::Record(_) => false,
         }),
         _ => false,
     }
 }
 
 /// The base types a row column decodes to, listed so a new base type is not
-/// admitted by accident (#4200). `Decimal` is read from a SQLite `TEXT` column,
-/// which keeps it exact; `check_decimal_affinity` warns on a column that is not.
-fn is_column_base(b: BaseType, pg: bool) -> bool {
+/// admitted by accident (#4200). `Decimal` is canonical `TEXT`, `Instant` and
+/// `Duration` are `INTEGER` milliseconds (#4046); `check_decimal_affinity` and
+/// `check_column_affinity` warn on a SQLite column declared otherwise.
+fn is_column_base(b: BaseType) -> bool {
     match b {
         BaseType::Int
         | BaseType::String
         | BaseType::Bool
         | BaseType::Float
         | BaseType::Bytes
-        | BaseType::Decimal => true,
-        BaseType::Instant => pg,
-        BaseType::Duration => false,
+        | BaseType::Decimal
+        | BaseType::Instant
+        | BaseType::Duration => true,
+    }
+}
+
+/// #4046: the row fields whose storage convention a SQLite column's declared type can
+/// contradict. `Decimal` has its own check (`bynk.d1.decimal_numeric_affinity`).
+#[derive(Debug, Clone, Default)]
+pub struct Conventions {
+    /// `Instant` and `Duration` fields: `INTEGER` milliseconds.
+    pub integers: Vec<String>,
+    /// Payload-less enum fields: `TEXT`, the variant's name.
+    pub texts: Vec<String>,
+}
+
+/// The [`Conventions`] of `row`'s fields.
+pub(crate) fn row_conventions(row: &str, types: &HashMap<String, Arc<TypeDecl>>) -> Conventions {
+    let mut integers = row_base_fields(row, types, BaseType::Instant);
+    integers.extend(row_base_fields(row, types, BaseType::Duration));
+    Conventions {
+        integers,
+        texts: row_enum_fields(row, types),
+    }
+}
+
+/// The names of `row`'s fields that are a payload-less enum (directly, or through an `Option`).
+fn row_enum_fields(row: &str, types: &HashMap<String, Arc<TypeDecl>>) -> Vec<String> {
+    fn is_enum(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+        match r {
+            TypeRef::Option(inner, _) => is_enum(inner, types),
+            TypeRef::Named(id) => types
+                .get(&id.name)
+                .is_some_and(|d| matches!(d.body, TypeBody::Sum(_))),
+            _ => false,
+        }
+    }
+    match types.get(row).map(|d| &d.body) {
+        Some(TypeBody::Record(record)) => record
+            .fields
+            .iter()
+            .filter(|f| is_enum(&f.type_ref, types))
+            .map(|f| f.name.name.clone())
+            .collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -1245,11 +1287,10 @@ mod column_base_tests {
             BaseType::Float,
             BaseType::Bytes,
             BaseType::Decimal,
+            BaseType::Instant,
+            BaseType::Duration,
         ] {
-            assert!(is_column_base(b, false), "{b:?}");
+            assert!(is_column_base(b), "{b:?}");
         }
-        assert!(!is_column_base(BaseType::Duration, true));
-        assert!(!is_column_base(BaseType::Instant, false));
-        assert!(is_column_base(BaseType::Instant, true));
     }
 }

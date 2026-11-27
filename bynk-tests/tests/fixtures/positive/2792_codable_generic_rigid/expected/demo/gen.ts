@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 import { __bynkCodecList } from "../__bynk_runtime/codec.js";
 
 /**
@@ -71,7 +71,7 @@ export function dec<T>(s: string, __codec_T: { encode: (v: T) => __JsonValue; de
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __codecOf_Box(__codec_T).decode(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Box<T>);
@@ -86,7 +86,7 @@ export function roundTrip<T>(b: Box<T>, __codec_T: { encode: (v: T) => __JsonVal
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __codecOf_Box(__codec_T).decode(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Box<T>);
@@ -105,7 +105,7 @@ export function decPair<A, B>(s: string, __codec_A: { encode: (v: A) => __JsonVa
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __codecOf_Pair(__codec_A, __codec_B).decode(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Pair<A, B>);
@@ -124,7 +124,7 @@ export function decMaybe<T>(s: string, __codec_T: { encode: (v: T) => __JsonValu
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __codecOf_Maybe(__codec_T).decode(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Maybe<T>);
@@ -143,7 +143,7 @@ export function decWrapped<T>(s: string, __codec_T: { encode: (v: T) => __JsonVa
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __codecOf_Wrapped(__codec_T).decode(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Wrapped<T>);
@@ -153,7 +153,7 @@ export function decWrapped<T>(s: string, __codec_T: { encode: (v: T) => __JsonVa
 }
 
 export function encNested<T>(b: Box<Pair<T, number>>, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): string {
-  return globalThis.JSON.stringify(__codecOf_Box(__codecOf_Pair(__codec_T, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } })).encode(b));
+  return globalThis.JSON.stringify(__codecOf_Box(__codecOf_Pair(__codec_T, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } })).encode(b));
 }
 
 export function decNested<T>(s: string, __codec_T: { encode: (v: T) => __JsonValue; decode: (j: __JsonValue, path: string) => Result<T, __BoundaryError> }): Result<Box<Pair<T, number>>, DecodeError> {
@@ -162,9 +162,9 @@ export function decNested<T>(s: string, __codec_T: { encode: (v: T) => __JsonVal
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
-    const __r = __codecOf_Box(__codecOf_Pair(__codec_T, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } })).decode(__j, "$");
+    const __r = __codecOf_Box(__codecOf_Pair(__codec_T, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } })).decode(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Box<Pair<T, number>>);
     const __be = __r.error;
     return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
@@ -181,7 +181,7 @@ export function decListOfBox<T>(s: string, __codec_T: { encode: (v: T) => __Json
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __bynkCodecList(__codecOf_Box(__codec_T)).decode(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as readonly Box<T>[]);
@@ -200,7 +200,7 @@ export function decOuter<T>(s: string, __codec_T: { encode: (v: T) => __JsonValu
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __codecOf_Outer(__codec_T).decode(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Outer<T>);
@@ -229,7 +229,7 @@ export function __deserialise_Box_Int(json: __JsonValue, path: string = "$"): Re
     return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __value = obj["value"];
   if (typeof obj["label"] !== "string") {
@@ -320,7 +320,7 @@ function __codecOf_Maybe<__P_T>(__codec___P_T: { encode: (v: __P_T) => __JsonVal
         return Ok({ tag: "Just", value: __value } as Maybe<__P_T>);
       }
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
     }
   }
   return { encode: __serialise_Maybe___P_T, decode: __deserialise_Maybe___P_T };

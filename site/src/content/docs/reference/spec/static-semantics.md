@@ -1763,18 +1763,20 @@ and `expect` apply to it unchanged. The rules:
   string literal or constant that continues from `FROM`
   (`bynk.types.select_tail_has_select`, `bynk.types.sql_not_literal`), `T` MUST
   be a row record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`,
-  `Decimal` or `Instant` (or a refined or opaque type over one, or an `Option`
-  of either) (`bynk.types.sql_row_shape`), and the call has type
+  `Decimal`, `Instant`, `Duration` or a payload-less enum (or a refined or opaque
+  type over a scalar one, or an `Option` of either), the same set for `D1`,
+  `Postgres` and `MySql` (`bynk.types.sql_row_shape`), and the call has type
   `Effect[Result[List[T], PgReadError]]` (`firstAs`: `Option[T]`). The compiler
   writes the column list from `T`'s field names as Postgres quoted identifiers.
   A derived `MySql` instance (Hyperdrive H5, #3322) is the same with `?`
   placeholders, `MySqlValue`, `MySqlStatement` and `MySqlReadError`, MySQL's
-  backtick-quoted identifiers, and no `Instant` row field (a MySQL date or time
-  arrives as text without a zone). Its optional `@tls` MUST be `"required"`,
+  backtick-quoted identifiers, and an `Instant` row field read from a `DATETIME` or
+  `TIMESTAMP`'s text as UTC. Its optional `@tls` MUST be `"required"`,
   `"verify-ca"` or `"verify-identity"` (`bynk.capability.invalid_option`).
   The rows decode through the boundary codec, with an `Int` field read from the
-  text of an `int8` and an `Instant` field from the ISO-8601 text of a
-  `timestamptz` (normalised to UTC) before it runs; `Json.decode` reads neither.
+  text of an `int8` (a `Duration` field likewise) and an `Instant` field from the
+  ISO-8601 text of a `timestamptz` (normalised to UTC) before it runs; `Json.decode`
+  reads neither.
 - A kind used only through instances MUST NOT be named bare in a `given`
   clause (`bynk.capability.instance_only`). `Service`, `R2`, `RateLimit`,
   `Queue`, `Analytics`, `EdgeCache`, `Email`, `Postgres` and `MySql` are such kinds.
@@ -2937,6 +2939,21 @@ will get an event queue named `bynk-ev-<slug>-<hash>` and a dead-letter queue na
 (`bynk.queue.reserved_name`). Only these two prefixes are reserved, not `bynk-` as
 a whole ([Reserved names](/reference/queue/#reserved-names)).
 
+**Event queue names.** Two `from Events` services MUST NOT get the same
+event queue name in any environment (`bynk.event.queue_name_collision`). The
+name keeps an 8-digit hash of `<context>/<service>` and a slug cut to fit 63
+characters, so two services can share one, rarely; the error names both, and
+renaming one resolves it.
+
+**Payload size.** An event's queue message (the signed wrapper, the envelope and
+the payload, as UTF-8) has a budget of 127,000 bytes. `Events.emit` measures each
+emission on every target and logs `EventNearLimit` (the event type, the size and
+the budget) once per event type per isolate when the message is 96,000 bytes or
+more; it does not fault yet. An `event` whose payload reaches a `Bytes`, or a
+`List`, `Map` or `Set` of a non-scalar type that no refinement (such as
+`MaxLength(n)`) bounds, draws the warning `bynk.event.unbounded_payload`
+([Keeping an event small](/book/concepts/events/understand-events/#keeping-an-event-small)).
+
 ## §5.8 Boundaries & cross-context
 
 `consumes` MUST appear only in a context, an adapter or a `commons` (a `suite`
@@ -3246,10 +3263,13 @@ handler (`bynk.test.service_unknown_route`). `tc` MUST have type
 route parameters and the call-site `by`; `f` MUST have the service's `in` type;
 `message` and `close` take no other arguments (`bynk.test.service_call_arity`)
 and no `by` (`bynk.test.ws_lifecycle_by`), because the connection carries the
-route values and the principal from `open`. The address MUST NOT occur in a
-`system`-tier `case` (`bynk.test.ws_needs_in_process`). `TestConnection[O]()` is
+route values and the principal from `open`. At the `system` tier the address
+performs a real upgrade through the target's Worker and its Durable Object: `open` presents the credential
+the handler's actor reads (the principal the `by` names, or a failure principal), and a refused upgrade
+leaves `tc` with no connection and `tc.refusedWith()` holding the status. `tc.refusedWith()` MUST NOT occur in a
+case below `system` (`bynk.test.ws_refusal_needs_system`). `TestConnection[O]()` is
 a value of a type that can be named only in a test body; `tc.sent()` has type
-`List[O]`, `tc.closed()` type `Bool`, and `tc.connection()` an owned
+`List[O]`, `tc.closed()` type `Bool`, `tc.refusedWith()` type `Option[Int]`, and `tc.connection()` an owned
 `Connection[O]`, available once per `tc`. A `message` or `close` on a `tc` that
 was not opened is a failure of the case at run time.
 
@@ -3993,7 +4013,8 @@ of the file it names.
   mark is dropped and `\r\n` and a bare `\r` are each replaced by `\n`, so the
   same source builds to the same value on every checkout. A trailing newline is
   kept. The text has no interpretation: `\(` and `{{ }}` in the file mean
-  nothing to the language.
+  nothing to the language. A `template` ([below](#templates)) is the
+  declaration whose text is interpreted.
 
 An embed is never served. It is emitted as an exported `string` constant of the
 declaring module, imported like a function by a unit that `uses` it; a bundler
@@ -4001,6 +4022,72 @@ drops one that nothing references. A unit-tier `suite` case names the embeds of
 its target and of the commons the target `uses`. A single file has no project
 root to find `embeds/` under, so building one that declares an embed is
 `bynk.embed.needs_project`; checking it is unaffected.
+
+### Templates {#templates}
+
+A **template** declaration, `template name: F = "path"` or `template name = "path"`
+(#3927, experimental behind `bynk.html.typed`), is an embed whose text is HTML with
+placeholders. Every rule above for an embed's placement, path, name, file and size applies to
+it, and its diagnostics name it a `template`. `template` is a contextual keyword at item position
+only. Every form below is `bynk.stability.experimental` without the gate (under the synthetic
+item `bynk.html.typed.template`, and `bynk.html.Html` for the type).
+
+- The unit MUST `uses bynk.html` (`bynk.template.needs_bynk_html`). `F`, when written, MUST
+  be a non-generic record type (`bynk.template.fields_not_record`) that carries no secret kind
+  (`bynk.template.secret_placeholder`).
+- A **placeholder** is `\(` followed by a name (`[A-Za-z_][A-Za-z0-9_]*`) and `)`, whose
+  backslash does not follow another backslash. Any other `\(` is text, and the file has no
+  other escape.
+- With no `F`, the template MUST have no placeholder
+  (`bynk.template.placeholder_without_fields`), and its name has type `Html`. With `F`, its name
+  is used only as `name.fill(e)` with `e: F`, of type `Html`
+  (`bynk.template.fill_required`).
+- Every placeholder MUST name a field of `F` (`bynk.template.unknown_placeholder`), MUST NOT
+  also name an asset in scope (`bynk.template.ambiguous_placeholder`), and every field MUST
+  be named by a placeholder (`bynk.template.unused_field`).
+- The text is tokenised by the WHATWG rules, scripting on, from the data state, with the tree
+  builder's effect on the tokeniser for raw-text and RCDATA elements, foreign content and
+  `<select>`. A state, or a piece of error recovery that changes a context, the tokeniser
+  does not model MUST NOT occur (`bynk.template.unsupported_markup`); the text MUST end in
+  the data state or after `<plaintext>`. Each `<svg>` and `<math>` MUST close in the same
+  file, a closer MUST have an opener, and neither MAY hold an integration point or an HTML
+  element that leaves foreign content (`bynk.template.foreign_unbalanced`). A `<noscript>`
+  MUST close in the same file (`bynk.template.placeholder_in_raw_text`), and a `<select>`
+  MUST close in it and hold only `<option>`, `<optgroup>` and `<hr>` elements.
+- Each placeholder's **context** is the tokeniser state at it, with the element and
+  attribute around it:
+  - element text (C1) takes a scalar (`String`, `Int`, `Float`, `Bool`, `Decimal`,
+    `Duration`, `Instant` or a refinement of one), written as its text and escaped with
+    `escapeText`, or `Html`, inserted as is; inside `<select>` a scalar only;
+  - the text of `<title>` or `<textarea>` (C2) takes a scalar, escaped with `escapeText`; an
+    `Html` value is `bynk.template.html_in_rcdata`;
+  - a quoted value of an ordinary attribute (C3) takes a scalar, escaped with `escapeAttr`;
+  - every other context takes nothing: an unquoted value (C4,
+    `bynk.template.unquoted_attribute`), `<script>` (C8,
+    `bynk.template.placeholder_in_script`), `<style>` or a `style` attribute (C10,
+    `bynk.template.placeholder_in_style`), an `on*` attribute, `srcdoc`, `<meta content>`
+    beside `http-equiv`, or an attribute whose literal value decides how its element is read
+    (`<script type>`, `<script language>`, `<meta http-equiv>`, `<meta charset>`,
+    `<link rel>`, `<iframe sandbox>`) (C11, `bynk.template.placeholder_in_code_attribute`), a
+    tag or attribute name, a comment, a doctype, CDATA or anything inside foreign content
+    (C13, `bynk.template.placeholder_position`), the text of `<xmp>`, `<iframe>`,
+    `<noembed>`, `<noframes>` or `<noscript>`, or after `<plaintext>` (C14,
+    `bynk.template.placeholder_in_raw_text`), a URL attribute, `srcset`, `imagesrcset` or any
+    attribute of `<base>` (`bynk.template.unsupported_markup`, until `Href`), and a
+    placeholder that continues a character reference or could complete an end tag
+    (`bynk.template.unsupported_markup`).
+  A field of a secret kind is `bynk.template.secret_placeholder` in every context; any other
+  field whose type its context does not take is `bynk.template.context_type`.
+
+A template's diagnostics in its file are reported at the file's line and column, with a
+related location at the declaration. A template with fields is emitted as an exported function
+of its fields record returning `Html`, the file's text with each placeholder replaced by its
+field's escaped text; one with no fields as an exported `Html` constant.
+
+`Html` is `bynk.html`'s opaque type, known by its declaration, never by its name. Outside
+`bynk.html` it has no constructor: `Html.of` is `bynk.html.no_constructor`. A type that
+is or holds `Html` MUST NOT be a request parameter, an agent `store` field, a cross-context
+signature or a codec's subject (`bynk.html.at_boundary`).
 
 ## §5.12b Named constants {#constants}
 

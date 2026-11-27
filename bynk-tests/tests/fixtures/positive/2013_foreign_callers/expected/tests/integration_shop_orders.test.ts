@@ -72,7 +72,7 @@ async function test_legacy_reaches_ping() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __callService(deps.env.SHOP_ORDERS, "ping", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(4), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "Legacy", "4082ce9e2b74e919", deps.env, "shop.orders");
+    const r = await __callService(deps.env.SHOP_ORDERS, "ping", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(4), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "Legacy", "4082ce9e2b74e919", deps.env, "shop.orders");
     if (!(r === 4)) { throw __bynkExpectFailure("tests/orders_system.test.bynk:12:12", 373, 379, "expect r == 4\n  expected: r == 4\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((4))); }
     return { pass: true };
   } catch (e) {

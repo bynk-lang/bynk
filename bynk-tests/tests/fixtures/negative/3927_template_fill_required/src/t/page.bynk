@@ -1,0 +1,14 @@
+// #3927 (typed HTML, slice 1): a template with fields is used through `fill`
+commons t.page
+
+uses bynk.html
+
+type F = {
+	v: String,
+}
+
+template shell: F = "embeds/page.html"
+
+fn page() -> Html {
+	shell
+}

@@ -366,21 +366,24 @@ fn apply_queues(
     let fresh = std::cell::RefCell::new(BTreeSet::new());
     let attempted = cx.live.unwrap_or(&fresh);
     let mut created = BTreeSet::new();
+    let mut adopted = BTreeSet::new();
     // Bound first, so the borrow of the run's attempts ends before any queue is made.
     let todo = unattempted_queues(declared, &mut attempted.borrow_mut());
     for queue in todo {
         match attempt_create(cx, &queue) {
-            Ok(true) => {
+            Ok(QueueAttempt::Created) => {
                 created.insert(queue);
             }
-            Ok(false) => {}
+            Ok(QueueAttempt::AdoptedAfterRefusal) => {
+                adopted.insert(queue);
+            }
+            Ok(QueueAttempt::AlreadyThere) => {}
             // #3999: the queues this step made before the failure are on the account, so they
             // are recorded as Bynk's before the failure is returned, and `--prune` can delete them.
             Err(failure) => {
                 let made = created.iter().map(|queue| record(cx, queue, true));
-                return Ok(made
-                    .fold(Applied::nothing(), Applied::with)
-                    .stopping(failure));
+                let applied = made.fold(Applied::nothing(), Applied::with);
+                return Ok(noting_adopted(cx, applied, &adopted).stopping(failure));
             }
         }
     }
@@ -392,18 +395,48 @@ fn apply_queues(
         let made = created.contains(&queue);
         applied = applied.with(record(cx, &queue, made));
     }
-    Ok(applied)
+    Ok(noting_adopted(cx, applied, &adopted))
+}
+
+/// #4602: `applied`, saying of each queue adopted after a refused create that it was, as an R2
+/// bucket's adoption is said.
+fn noting_adopted(
+    cx: &StepCx<'_, '_, Queue>,
+    applied: Applied<Queue>,
+    adopted: &BTreeSet<String>,
+) -> Applied<Queue> {
+    adopted.iter().fold(applied, |applied, queue| {
+        let physical = env_qualify(cx.environment, queue);
+        applied.noting(Notice::Plain(queue_adopted_note(&physical)))
+    })
+}
+
+/// What [`attempt_create`] found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum QueueAttempt {
+    /// This call made the queue.
+    Created,
+    /// The account already listed it, so nothing was asked of it.
+    AlreadyThere,
+    /// #4602: the create was refused, and the account lists the queue now: this run adopted it.
+    AdoptedAfterRefusal,
 }
 
 /// Make `queue` unless the account has it. Whether this call made it (a race-loser that finds it
-/// made in between did not).
-fn attempt_create(cx: &StepCx<'_, '_, Queue>, queue: &str) -> Result<bool, DeployFailure> {
+/// made in between did not, and says it adopted it).
+fn attempt_create(cx: &StepCx<'_, '_, Queue>, queue: &str) -> Result<QueueAttempt, DeployFailure> {
     let physical = env_qualify(cx.environment, queue);
     if queue_exists(cx.tools.api, &physical) {
-        return Ok(false);
+        return Ok(QueueAttempt::AlreadyThere);
     }
-    create_queue(cx.tools.api, &physical)
-        .map_err(|e| DeployFailure::driver(format!("could not create the queue `{physical}`: {e}")))
+    let made = create_queue(cx.tools.api, &physical).map_err(|e| {
+        DeployFailure::driver(format!("could not create the queue `{physical}`: {e}"))
+    })?;
+    Ok(if made {
+        QueueAttempt::Created
+    } else {
+        QueueAttempt::AdoptedAfterRefusal
+    })
 }
 
 /// Record `queue`, as Bynk's when this run `created` it and as reused otherwise: written when that
@@ -416,6 +449,15 @@ fn record(cx: &StepCx<'_, '_, Queue>, queue: &str, created: bool) -> Commit<Queu
             created,
         },
         &format!("provisioned the queue `{physical}`"),
+    )
+}
+
+/// #4602: what the apply says of a queue whose create was refused and which the account lists now.
+/// That is all the run knows: a concurrent deploy, another tool or a hand-made queue behind a lookup
+/// that failed first all look the same, so the note does not name the cause.
+fn queue_adopted_note(physical: &str) -> String {
+    format!(
+        "bynk: note: adopted the queue `{physical}` already on the account (the create was refused and the queue was then listed: it was made outside this run)"
     )
 }
 
@@ -506,6 +548,135 @@ mod tests {
     use crate::cloudflare::Op;
     use crate::cloudflare::fake::Recording;
     use crate::deploy::config::tests::project;
+
+    /// #4602: a create refused because the name was taken in the meantime, with the queue listed
+    /// now, is adopted, and the run says so; a queue made cleanly or already listed says nothing.
+    #[test]
+    fn a_queue_adopted_after_a_refused_create_says_so() {
+        use crate::cloudflare::Op;
+        use crate::cloudflare::fake::Recording;
+        use std::cell::Cell;
+        let run = |taken_in_race: bool, listed_first: bool| {
+            let lookups = Cell::new(0);
+            let api = Recording::new(move |op: &Op<'_>| match op {
+                Op::QueueInfo { .. } => {
+                    lookups.set(lookups.get() + 1);
+                    // The first lookup is the "is it there" check; a later one follows a refusal.
+                    let there = listed_first || (taken_in_race && lookups.get() > 1);
+                    Ok::<_, CloudflareError>(if there { "" } else { "absent" }.to_string())
+                }
+                Op::QueueCreate { .. } if taken_in_race => {
+                    Err(crate::cloudflare::RestError::answered(
+                        "POST",
+                        "/queues",
+                        409,
+                        r#"[{"code":11009,"message":"stand-in"}]"#,
+                    )
+                    .into())
+                }
+                _ => Ok(String::new()),
+            });
+            let tools = Tools {
+                api: &api,
+                project_root: std::path::Path::new("/nonexistent"),
+            };
+            let resources = project(vec![("shop", Resources::default().consumes(&["jobs"]))]);
+            let lock = DeployLock::default();
+            let step = QueueStep {
+                declared: &resources["shop"],
+            };
+            let done = Queue::apply(
+                &StepCx {
+                    environment: "default",
+                    worker: "shop",
+                    project: &resources,
+                    lock: &lock,
+                    live: None,
+                    tools,
+                },
+                &step,
+            )
+            .expect("the queue is provisioned");
+            (done.notes, api.calls())
+        };
+        let (notes, calls) = run(true, false);
+        assert_eq!(
+            notes,
+            [Notice::Plain(
+                "bynk: note: adopted the queue `jobs` already on the account (the create was refused and the queue was then listed: it was made outside this run)"
+                    .to_string()
+            )],
+            "{calls:?}"
+        );
+        assert_eq!(
+            calls,
+            ["queues info jobs", "queues create jobs", "queues info jobs"]
+        );
+        // Made cleanly: nothing to add to the plan line. Already listed: nothing was asked.
+        assert!(run(false, false).0.is_empty());
+        assert!(run(false, true).0.is_empty());
+    }
+
+    /// #4602: the deploy says a note once its step's commits are written, never before: a ledger
+    /// write that fails ends the step with that failure and says nothing.
+    #[test]
+    fn a_note_is_said_after_the_commits_are_written_and_not_when_the_write_fails() {
+        use crate::cloudflare::Op;
+        use crate::cloudflare::fake::Recording;
+        use crate::deploy::kind::PRINTED;
+        let declared = Resources::default().consumes(&["jobs"]);
+        let run = |lock_path: &Path| {
+            let lookups = std::cell::Cell::new(0);
+            let api = Recording::new(move |op: &Op<'_>| match op {
+                Op::QueueInfo { .. } => {
+                    lookups.set(lookups.get() + 1);
+                    Ok::<_, CloudflareError>(if lookups.get() > 1 { "" } else { "absent" }.into())
+                }
+                Op::QueueCreate { .. } => Err(crate::cloudflare::RestError::answered(
+                    "POST",
+                    "/queues",
+                    409,
+                    r#"[{"code":11009,"message":"stand-in"}]"#,
+                )
+                .into()),
+                _ => Ok(String::new()),
+            });
+            let project = BTreeMap::new();
+            let site = Site {
+                tools: Tools {
+                    api: &api,
+                    project_root: Path::new("/nonexistent"),
+                },
+                environment: "default",
+                worker: "shop",
+                project: &project,
+            };
+            let mut lock = DeployLock::default();
+            PRINTED.with(|printed| printed.borrow_mut().clear());
+            let outcome = provision_kind::<Queue>(
+                site,
+                &declared,
+                &mut LedgerWriter::new(&mut lock, lock_path),
+                Lives::default(),
+            );
+            (
+                outcome.is_ok(),
+                PRINTED.with(|printed| printed.borrow().clone()),
+            )
+        };
+        let dir = std::env::temp_dir().join(format!("bynk-queue-note-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (ok, said) = run(&dir.join(LOCK_FILE));
+        assert!(ok);
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert!(said[0].contains("adopted the queue `jobs`"), "{said:?}");
+        // The ledger cannot be written (its directory is gone): the step fails, and no note.
+        let (ok, said) = run(&dir.join("missing").join(LOCK_FILE));
+        assert!(!ok);
+        assert!(said.is_empty(), "{said:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_queue_bynk_made_is_its_own_and_one_it_found_is_reused_until_made() {
@@ -861,5 +1032,56 @@ mod tests {
         let on_disk = std::fs::read_to_string(&path).unwrap();
         assert!(on_disk.contains("a-jobs"), "{on_disk}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #4612 review: when the queues made before a failed create cannot be recorded either, both
+    /// failures are reported, the create's first, so neither is lost.
+    #[test]
+    fn a_stopped_step_whose_record_fails_reports_both_failures() {
+        use crate::cloudflare::{CloudflareError, Op, fake::Recording};
+        let declared = Resources::default().consumes(&["a-jobs", "b-jobs"]);
+        let api = Recording::new(|op: &Op<'_>| match op {
+            Op::QueueInfo { .. } => Ok("absent".to_string()),
+            Op::QueueCreate { name: "b-jobs" } => Err(CloudflareError::from(
+                crate::cloudflare::rest::RestError::answered("POST", "/queues", 500, "[]"),
+            )),
+            _ => Ok(String::new()),
+        });
+        let project = BTreeMap::new();
+        // A lock file in a directory that does not exist: every write fails.
+        let path = std::env::temp_dir()
+            .join(format!("bynk-queue-4612-missing-{}", std::process::id()))
+            .join("nested")
+            .join(LOCK_FILE);
+        let site = Site {
+            tools: Tools {
+                api: &api,
+                project_root: Path::new("/nonexistent"),
+            },
+            environment: "default",
+            worker: "shop",
+            project: &project,
+        };
+        let mut lock = DeployLock::default();
+        let failed = provision_kind::<Queue>(
+            site,
+            &declared,
+            &mut LedgerWriter::new(&mut lock, &path),
+            Lives::default(),
+        )
+        .unwrap_err();
+        let created = failed
+            .message
+            .find("could not create the queue `b-jobs`")
+            .expect(&failed.message);
+        let recorded = failed
+            .message
+            .find("could not record it in")
+            .expect(&failed.message);
+        assert!(
+            created < recorded,
+            "the create's failure first: {}",
+            failed.message
+        );
     }
 }

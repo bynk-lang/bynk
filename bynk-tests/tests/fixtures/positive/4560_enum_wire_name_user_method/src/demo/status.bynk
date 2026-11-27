@@ -1,0 +1,19 @@
+---
+#4560: a type that declares its own `wireName` method or `fromWireName` static keeps it: the
+built-in answers only where the type has declared none, so a program that compiled before
+the built-ins existed means what it did.
+---
+commons demo.status
+
+type Status = enum { Open, Shipped }
+
+fn Status.wireName(self) -> String {
+  match self {
+    Open => "mine-open"
+    Shipped => "mine-shipped"
+  }
+}
+
+fn Status.fromWireName(text: String) -> Option[Status] {
+  if text == "mine-open" { Some(Open) } else { None }
+}

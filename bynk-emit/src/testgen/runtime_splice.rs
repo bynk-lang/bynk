@@ -72,11 +72,13 @@ pub(super) enum TestRuntimeModule {
     TestFilter,
     /// #2683: the harness clock on virtual time.
     VirtualTime,
+    /// #3901: the client side of a `system` case's WebSocket address (`__bynkWsOpen`).
+    WsClient,
 }
 
 impl TestRuntimeModule {
     /// Every module, in the table's order.
-    pub(super) const ALL: [TestRuntimeModule; 22] = [
+    pub(super) const ALL: [TestRuntimeModule; 23] = [
         TestRuntimeModule::AssetGet,
         TestRuntimeModule::CaseTiming,
         TestRuntimeModule::Clock,
@@ -99,6 +101,7 @@ impl TestRuntimeModule {
         TestRuntimeModule::StubWire,
         TestRuntimeModule::TestFilter,
         TestRuntimeModule::VirtualTime,
+        TestRuntimeModule::WsClient,
     ];
 
     /// The module's name: its file under `runtime/src/testing/`, without the extension.
@@ -126,6 +129,7 @@ impl TestRuntimeModule {
             TestRuntimeModule::StubWire => "stub_wire",
             TestRuntimeModule::TestFilter => "test_filter",
             TestRuntimeModule::VirtualTime => "virtual_time",
+            TestRuntimeModule::WsClient => "ws_client",
         }
     }
 

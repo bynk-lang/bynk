@@ -132,7 +132,7 @@ function __option_value_Instant(raw: __JsonValue, at: string): Result<unknown, _
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof __v$ms });
   }
   if (!globalThis.Number.isSafeInteger(__v$ms)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(__v$ms) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(__v$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = __v$ms;
   return Ok(__v);

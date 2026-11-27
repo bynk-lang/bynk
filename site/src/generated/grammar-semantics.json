@@ -474,8 +474,8 @@
       "summary": "A case's `svc.message(tc, frame)` or `svc.close(tc)` on a `from websocket` service carries a `by` clause; the connection's principal is given once, at `open`, and carried from there."
     },
     {
-      "code": "bynk.test.ws_needs_in_process",
-      "summary": "A `system`-tier case drives a `from websocket` service by address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`); a deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive, so the case runs at `unit` or `integration`."
+      "code": "bynk.test.ws_refusal_needs_system",
+      "summary": "A case below `system` reads `tc.refusedWith()` of a `TestConnection`; only a `system` case performs a real upgrade through the Worker, which can be refused, so there is nothing to read below it."
     },
     {
       "code": "bynk.tier.cross_context_needs_system",
@@ -1519,7 +1519,7 @@
     },
     {
       "code": "bynk.types.sql_row_shape",
-      "summary": "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). A `Postgres` row may also hold a `Decimal` or an `Instant` (Hyperdrive H3)."
+      "summary": "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`, `Decimal`, `Instant`, `Duration` or a payload-less enum (or a refined or opaque type over a scalar one, or an `Option` of either), or a `List` of such records, one set for `D1`, `Postgres` and `MySql` (standard-library P4c, #4046)."
     },
     {
       "code": "bynk.within.in_agent_handler",

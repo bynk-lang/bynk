@@ -1,0 +1,9 @@
+// #3901: a `Visitor` service at `system`: a real upgrade with no credential, admitted and welcomed.
+suite lobby as system {
+  case "a public service admits an upgrade with no credential" {
+    let tc = TestConnection[Frame]()
+    let _ <- open_room.open(tc, "abc")
+    expect tc.refusedWith() == None
+    expect tc.sent() == [Frame { text: "hello" }]
+  }
+}

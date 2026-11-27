@@ -1,0 +1,10 @@
+{
+  "blurb": "`Html` is markup the compiler checked, by its template's escaping. A decoded, stored or received one would skip that check, so a type that holds `Html` is not data at a boundary: it has no codec, and is refused as a request parameter and in an agent's `store`. Keep the text and build the markup where it is shown, or send `toString()` where markup must leave the service.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.html.at_boundary",
+  "constructs": [],
+  "example": "// t/page.bynk\nfn parse(s: String) -> Result[Card, DecodeError] {\n    Json.decode[Card](s)   // ✗ `Card` holds `Html`\n}\n\nfn show(c: Card) -> String {\n    c.body.toString()   // ✓\n}",
+  "severity": "error",
+  "summary": "A type that is or holds `Html` is decoded, stored, received or sent (#3927)."
+}

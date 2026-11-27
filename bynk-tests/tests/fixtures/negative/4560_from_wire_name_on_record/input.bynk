@@ -1,0 +1,7 @@
+commons demo {
+  type Order = { id: Int }
+
+  fn wrong(text: String) -> Option[Order] {
+    Order.fromWireName(text)
+  }
+}

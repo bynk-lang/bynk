@@ -1,0 +1,10 @@
+// #3927 (typed HTML, slice 1): a placeholder inside `<svg>` is refused (C13)
+commons t.page
+
+uses bynk.html
+
+type F = {
+	v: String,
+}
+
+template shell: F = "embeds/page.html"

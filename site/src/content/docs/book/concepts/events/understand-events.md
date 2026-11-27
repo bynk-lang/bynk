@@ -507,6 +507,40 @@ it is the same all-or-nothing handler-commit boundary agents already have
 in the same handler body, including one raised inside a plain `service` that
 calls into the agent.
 
+## Keeping an event small
+
+Durable event delivery ([#3898](https://github.com/bynk-lang/bynk/issues/3898)) will
+carry each event to each subscriber as one Cloudflare Queue message. A message
+holds at most 128 KB, so the budget for an event's message, envelope and
+signature included, is **127,000 bytes**. Today's delivery accepts more, so
+nothing faults yet. Instead, two warnings find the events that would:
+
+- **At run time, `EventNearLimit`.** `Events.emit` measures the message each
+  emission will be sent as, on every target, and logs `EventNearLimit` with the
+  event type, its size and the budget once an emission reaches 96,000 bytes,
+  three quarters of the budget. It is logged once per event type in each isolate
+  (or process), so run the project as usual, or under `bynk test`, and search the
+  logs for it.
+- **At compile time, `bynk.event.unbounded_payload`.** An `event` whose payload
+  reaches a `Bytes`, or a `List`, `Map` or `Set` of records, sums with payloads
+  or other collections, is warned of: that is where large events come from. A
+  collection bounded with a refinement such as `MaxLength(n)` is not, and nor is
+  a payload of scalars, `String`s and enums.
+
+When the queues take over delivery, an emission over the budget will fault its
+handler before it commits, so nothing is persisted and nothing is lost. To keep
+an event small, store the large value (in R2 or D1) and send a reference to it:
+
+```bynk
+context media
+
+// The bytes are stored in R2 under `key`.
+event Uploaded = {
+	name: String,
+	key: String,
+}
+```
+
 ## Delivery, concretely, per platform
 
 The fan-out substrate differs by target, but the emit/subscribe surface above

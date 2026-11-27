@@ -1,0 +1,32 @@
+context lobby
+
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+// #3901: a public WebSocket service (no credential) is driven at `system` as any other: the upgrade offers none,
+// and the Worker admits it.
+service open_room from websocket(in: Frame, out: Frame) {
+  on open(room: RoomKey) -> Effect[()] by who: Visitor {
+    let _ <- connection.send(Frame { text: "hello" })
+    let _ <- Rooms(room).keep(connection)
+  }
+
+  on close(room: RoomKey) -> Effect[()] by who: Visitor {
+    let _ <- Rooms(room).drop()
+  }
+}
+
+agent Rooms {
+  key id: RoomKey
+  store held: Map[String, Connection[Frame]]
+
+  on call keep(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- held.put("c", conn)
+    ()
+  }
+
+  on call drop() -> Effect[()] {
+    let _ <- held.remove("c")
+    ()
+  }
+}

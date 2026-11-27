@@ -585,12 +585,32 @@ export function __bynkInstantFromPgText(s: string): number | null {
   return local.value - (m[6] === "-" ? -offsetMs : offsetMs);
 }
 
+const MYSQL_DATETIME = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/;
+
+/** A MySQL `DATETIME`/`TIMESTAMP` text as epoch milliseconds, read as UTC; `null` when it is not one. */
+function __bynkInstantFromMySqlText(s: string): number | null {
+  const m = MYSQL_DATETIME.exec(s);
+  if (m === null) {
+    return null;
+  }
+  const at = __bynkInstantFromIso(`${m[1]}T${m[2]}Z`);
+  return at.tag === "Some" ? at.value : null;
+}
+
 // A typed `Postgres` read's pass over the parsed rows, before the codec: at
 // each `Instant` column (`instants`) a text becomes epoch milliseconds, and at
 // each `Int` column (`ints`) the text of an `int8` becomes a number when it is
 // a whole number within ±(2^53 − 1). Anything else is left alone, so the codec
 // reports it: an `int8` past 2^53 fails the decode rather than losing digits.
-export function __bynkPgRow(row: unknown, instants: readonly string[], ints: readonly string[]): void {
+//
+// A typed `MySql` read (`mysql`) reads an `Instant` from a `DATETIME`/`TIMESTAMP`'s zone-less
+// text (`2026-01-02 03:04:05.678`, which the driver keeps as text), as UTC (#4046).
+export function __bynkPgRow(
+  row: unknown,
+  instants: readonly string[],
+  ints: readonly string[],
+  mysql: boolean = false,
+): void {
   if (row === null || typeof row !== "object" || Array.isArray(row)) {
     return;
   }
@@ -598,7 +618,7 @@ export function __bynkPgRow(row: unknown, instants: readonly string[], ints: rea
   for (const k of instants) {
     const v = o[k];
     if (typeof v === "string") {
-      const ms = __bynkInstantFromPgText(v);
+      const ms = mysql ? __bynkInstantFromMySqlText(v) : __bynkInstantFromPgText(v);
       if (ms !== null) {
         o[k] = ms;
       }
@@ -1657,7 +1677,7 @@ export function __deserialise_Event(json: __JsonValue, path: string = "$"): Resu
     case "Closed":
       return Ok({ tag: "Closed" } as __Wire_Event);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -1683,7 +1703,7 @@ export function __deserialise_Filter(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.limit`, expected: "number", actual: typeof __d_limit });
   }
   if (!globalThis.Number.isSafeInteger(__d_limit)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.limit`, expected: "safe integer", actual: String(__d_limit) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.limit`, expected: "safe integer", actual: globalThis.Number.isInteger(__d_limit) ? "integer outside the safe range" : "non-integer number" });
   }
   const __limit = __d_limit;
   const __r_tags = __deserialise_List_String(obj["tags"], `${path}.tags`);
@@ -1771,7 +1791,7 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.placedAt`, expected: "number", actual: typeof __placedAt$ms });
   }
   if (!globalThis.Number.isSafeInteger(__placedAt$ms)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.placedAt`, expected: "safe integer", actual: String(__placedAt$ms) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.placedAt`, expected: "safe integer", actual: globalThis.Number.isInteger(__placedAt$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __placedAt = __placedAt$ms;
   if (typeof obj["price"] !== "string") {
@@ -1900,7 +1920,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);

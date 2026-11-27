@@ -10,6 +10,7 @@ use crate::ts_build::{as_expr, call, ident, member, ret, str_lit};
 
 use super::field::{emit_field_deserialise, serialise_field_expr, serialise_field_expr_via};
 use super::inner_ts_name;
+use super::support::number_failure_class;
 
 /// v0.22b: an expression-form serialise for a codec target — the same
 /// dispatch as a record field's serialisation.
@@ -523,6 +524,7 @@ pub(crate) fn deserialise_expr_via(
                     typeof_str
                 }
             };
+            let is_integral = matches!(b, BaseType::Int | BaseType::Duration | BaseType::Instant);
             let typeof_v = || TsExpr::Unary {
                 op: TsUnaryOp::Typeof,
                 expr: Box::new(ident("__v")),
@@ -547,23 +549,12 @@ pub(crate) fn deserialise_expr_via(
                     vec![json.clone()],
                 );
             };
-            // The two failure modes are **not** the same error, and collapsing
-            // them is what made both predecessors imprecise in opposite
-            // directions. The `Json` path reported `typeof` for both, losing the
-            // predicate failure's detail; the workers path reported
-            // `String(value)` for both, which echoes an arbitrary caller-supplied
-            // value into a 400 response body (an `Int` sent `"hunter2"` reported
-            // `actual: "hunter2"`) and violates the ADR 0107 discipline of never
-            // reporting the offending value.
-            //
-            // Split them and both problems go away. A wrong `typeof` reports the
-            // `typeof` — the value could be anything, so it is never echoed. A
-            // *failed predicate* means the `typeof` already matched, so the value
-            // is provably a **number**: `String(__v)` is `"3.5"` for a
-            // non-integer `Int`, and provably one of `"NaN"` / `"Infinity"` /
-            // `"-Infinity"` for a non-finite `Float` — a closed set. That is
-            // strictly more precise than either predecessor, with strictly less
-            // exposure.
+            // The two failure modes are **not** the same error. A wrong `typeof` reports the
+            // `typeof`: the value could be anything, so it is never echoed. A *failed predicate*
+            // means the `typeof` already matched, so the value is a number, and what is reported
+            // is the class of failure from a closed set (`non-integer number`, `integer outside
+            // the safe range`, `non-finite number`), never the number (#4604: it can be personal
+            // data, and a `DecodeError` is logged; ADR 0107 never reports the offending value).
             call(
                 TsExpr::Arrow {
                     params: vec![TsParam::new("__v".to_string(), None)],
@@ -582,7 +573,7 @@ pub(crate) fn deserialise_expr_via(
                             consequent: Box::new(call(ident("Ok"), vec![ident("__v")])),
                             alternate: Box::new(structural_mismatch(
                                 expected,
-                                call(ident("String"), vec![ident("__v")]),
+                                number_failure_class(is_integral, &ident("__v")),
                             )),
                         }),
                     }))),

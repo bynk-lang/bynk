@@ -1005,6 +1005,17 @@ not grammar ones: this rule is admitted in every body, like `asset_decl`.
 `embed` is a contextual keyword, so it remains usable as an ordinary
 identifier elsewhere. This slice checks an embed but does not yet build one.
 
+### template_decl {#rule-template_decl}
+
+{{#grammar template_decl}}
+
+`template name: Fields = "path"` or `template name = "path"` (#3927) — an HTML file from
+`embeds/` whose `\(name)` placeholders are checked against the record `Fields` and escaped
+for their contexts; experimental, behind `bynk.html.typed`. The path follows an embed's rules.
+`template` is a contextual keyword, matched only at item position before a name, so a binding,
+field or function named `template` keeps parsing as an identifier. See
+[Templates](/reference/embeds/#templates).
+
 ### const_decl {#rule-const_decl}
 
 {{#grammar const_decl}}

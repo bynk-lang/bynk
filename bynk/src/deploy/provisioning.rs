@@ -416,8 +416,8 @@ pub(crate) fn queues_to_record(declared: &Resources, created: &BTreeSet<String>)
 ///
 /// Found by name and deleted by id (1D.4d, #4056). Idempotent against a queue
 /// already gone, so a re-run `--prune` is safe (#839): one the listing does not
-/// show, or a delete answered with Cloudflare's `10104 QueueNotFound`, is
-/// success.
+/// show, or a delete answered with one of [`queues::NOT_FOUND`](crate::cloudflare::rest::queues::NOT_FOUND)
+/// (Cloudflare's recorded `11000`, or the documented `10104 QueueNotFound`), is success.
 ///
 /// Only the consumers in `detach`, the project's own Workers, are removed before the queue
 /// (#4601); any other consumer refuses the delete before anything is removed.
@@ -429,8 +429,11 @@ pub(crate) fn delete_queue(
     match api.queue_delete(name, detach) {
         Ok(_) => Ok(()),
         Err(e)
-            if e.rest()
-                .is_some_and(|r| r.has_code(crate::cloudflare::rest::queues::NOT_FOUND)) =>
+            if e.rest().is_some_and(|r| {
+                crate::cloudflare::rest::queues::NOT_FOUND
+                    .iter()
+                    .any(|code| r.has_code(*code))
+            }) =>
         {
             Ok(())
         }
@@ -622,11 +625,19 @@ mod tests {
     #[test]
     fn a_queue_already_deleted_is_success() {
         // #839, over REST since 1D.4d: a queue the listing no longer shows, or a delete answered
-        // with `10104 QueueNotFound`, is the end state `--prune` asked for.
+        // with a not-found code, is the end state `--prune` asked for. `11000` is what Cloudflare
+        // answered for a queue already gone (#4056's sandbox check, #4600); `10104
+        // QueueNotFound` is what its reference documents.
         let absent = Recording::new(|_: &Op<'_>| Ok::<_, CloudflareError>("absent".into()));
         assert_eq!(delete_queue(&absent, "jobs", &BTreeSet::new()), Ok(()));
-        let raced = Recording::new(|_: &Op<'_>| Err(queue_refusal("DELETE", 404, 10104)));
-        assert_eq!(delete_queue(&raced, "jobs", &BTreeSet::new()), Ok(()));
+        for code in [11000, 10104] {
+            let raced = Recording::new(move |_: &Op<'_>| Err(queue_refusal("DELETE", 404, code)));
+            assert_eq!(
+                delete_queue(&raced, "jobs", &BTreeSet::new()),
+                Ok(()),
+                "code {code}"
+            );
+        }
         // Any other refusal is a real failure, in Cloudflare's words.
         let other = Recording::new(|_: &Op<'_>| Err(queue_refusal("DELETE", 400, 10107)));
         let e = delete_queue(&other, "jobs", &BTreeSet::new()).unwrap_err();
@@ -644,7 +655,8 @@ mod tests {
     fn an_existing_queue_is_success_not_a_failure() {
         // D2, read from the account since 1D.4d: a create that loses the race against a
         // concurrent deploy is refused, and is a success only when the queue is now listed. The
-        // API reference documents no code for a name already taken, so the code is not read.
+        // API reference documents no code for a name already taken (Cloudflare answered 409
+        // `11009`, #4056), so the code is not read.
         for code in [11009, 10101, 100] {
             let raced = Recording::new(move |op: &Op<'_>| match op {
                 Op::QueueCreate { .. } => Err(queue_refusal("POST", 409, code)),
@@ -655,11 +667,11 @@ mod tests {
         }
         // Refused and still not listed: the create's own error.
         let refused = Recording::new(|op: &Op<'_>| match op {
-            Op::QueueCreate { .. } => Err(queue_refusal("POST", 400, 11009)),
+            Op::QueueCreate { .. } => Err(queue_refusal("POST", 409, 11009)),
             _ => Ok("absent".to_string()),
         });
         let e = create_queue(&refused, "jobs").unwrap_err();
-        assert!(e.to_string().contains("400"), "{e}");
+        assert!(e.to_string().contains("409"), "{e}");
         // A denied token or a server error is never adopted, and is not followed by a lookup.
         for status in [403, 500] {
             let failing =

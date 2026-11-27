@@ -112,7 +112,7 @@ export function __deserialise_Meta(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.year`, expected: "number", actual: typeof obj["year"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["year"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.year`, expected: "safe integer", actual: String(obj["year"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.year`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["year"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __year = obj["year"];
   return Ok({ category: __category, year: __year } as Meta);
@@ -185,7 +185,7 @@ export function __deserialise_List_Float(json: __JsonValue, path: string = "$"):
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
     }
     if (!globalThis.Number.isFinite(item)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "finite number", actual: String(item) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "finite number", actual: "non-finite number" });
     }
     const __el = item;
     out.push(__el as number);

@@ -151,7 +151,7 @@ export const skew = {
       }
       throw new globalThis.Error("non-exhaustive match");
     } else {
-      const n = await once(id, 7, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }, deps);
+      const n = await once(id, 7, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }, deps);
       switch (n.tag) {
         case "Some": {
           const v = n.value;
@@ -189,7 +189,7 @@ export function __deserialise_Result_String_String(json: __JsonValue, path: stri
     const __e = obj["error"];
     return Ok(Err(__e) as Result<string, string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Receipt(value: Receipt): __JsonValue {
@@ -212,7 +212,7 @@ export function __deserialise_Receipt(json: __JsonValue, path: string = "$"): Re
     return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "number", actual: typeof obj["total"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["total"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "safe integer", actual: String(obj["total"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["total"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __total = obj["total"];
   return Ok({ id: __id, total: __total } as Receipt);

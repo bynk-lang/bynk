@@ -1,0 +1,2 @@
+bynk.template.placeholder_position a placeholder cannot be an attribute name
+# exact

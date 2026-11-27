@@ -1,0 +1,11 @@
+// #3927 (typed HTML, slice 1): a field no placeholder uses is refused
+commons t.page
+
+uses bynk.html
+
+type F = {
+	title: String,
+	subtitle: String,
+}
+
+template shell: F = "embeds/page.html"

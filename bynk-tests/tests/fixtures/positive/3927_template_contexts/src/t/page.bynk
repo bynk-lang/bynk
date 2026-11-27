@@ -1,0 +1,39 @@
+commons t.page
+
+uses bynk.html
+
+---
+What the page shell needs: text for C1 and C2, attribute text for C3, and markup for C1.
+---
+type PageFields = {
+	title: String,
+	alt: String,
+	count: Int,
+	price: Decimal,
+	note: String,
+	content: Html,
+}
+
+---
+The page shell.
+---
+template shell: PageFields = "embeds/page.html"
+
+---
+A footer with no placeholders: an `Html` value as it stands.
+---
+template footer = "embeds/footer.html"
+
+---
+`shell` filled with the footer as its content.
+---
+fn render(title: String, alt: String, note: String) -> Html {
+	shell.fill(PageFields {
+		title: title,
+		alt: alt,
+		count: 3,
+		price: 2.50d,
+		note: note,
+		content: footer,
+	})
+}

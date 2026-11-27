@@ -1,0 +1,6 @@
+// #3927 (typed HTML, slice 1): error recovery that changes a context is refused: a repeated attribute
+commons t.page
+
+uses bynk.html
+
+template shell = "embeds/page.html"

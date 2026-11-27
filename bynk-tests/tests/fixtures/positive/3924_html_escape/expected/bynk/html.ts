@@ -1,1 +1,1 @@
-<<bynk-shared: std/bynk/html.ts#none>>
+<<bynk-shared: std/bynk/html.ts#errors+result>>

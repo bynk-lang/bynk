@@ -799,7 +799,11 @@ pub(super) fn emit_integration_module(
             http_support.route_body.clone(),
             http_support.type_ns.clone(),
             http_support.claims.clone(),
-            job_support.services.clone(),
+            {
+                let mut jobs = job_support.services.clone();
+                jobs.ws = http_support.ws.clone();
+                jobs
+            },
             harness_bound,
             input.source,
             &input.rel_path,

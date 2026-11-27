@@ -1,0 +1,9 @@
+// #3901: `refusedWith()` is the status a real upgrade was refused with, which only a `system` case performs;
+// below it the read has nothing to answer.
+suite chat {
+  case "a refusal read below system" {
+    let tc = TestConnection[ServerFrame]()
+    let _ <- ChatGateway.open(tc, Val[RoomId]) by Participant(Val[UserId])
+    expect tc.refusedWith() == None
+  }
+}

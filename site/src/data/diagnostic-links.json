@@ -660,8 +660,14 @@
   "bynk.event.pattern_variant_payload": [
     "/book/concepts/events/understand-events/#filtering-delivery-with-a-pattern"
   ],
+  "bynk.event.queue_name_collision": [
+    "/reference/spec/static-semantics/#events"
+  ],
   "bynk.event.return_not_effect_unit": [
     "/book/concepts/events/understand-events/#emission-never-reports-an-outcome-and-release-at-commit"
+  ],
+  "bynk.event.unbounded_payload": [
+    "/book/concepts/events/understand-events/#keeping-an-event-small"
   ],
   "bynk.event.unknown_annotation": [
     "/book/concepts/events/understand-events/#asserting-a-schema-version-with-scheman"
@@ -2078,8 +2084,8 @@
   "bynk.test.ws_lifecycle_by": [
     "/reference/testing/#websocket-address"
   ],
-  "bynk.test.ws_needs_in_process": [
-    "/reference/testing/#websocket-address"
+  "bynk.test.ws_refusal_needs_system": [
+    "/reference/testing/#websocket-system"
   ],
   "bynk.tier.cross_context_needs_system": [
     "/reference/testing/#tiers-the-as-tier-clause",

@@ -1,0 +1,10 @@
+// #3927 (typed HTML, slice 1): a placeholder that names no field is refused, with the nearest field
+commons t.page
+
+uses bynk.html
+
+type F = {
+	title: String,
+}
+
+template shell: F = "embeds/page.html"

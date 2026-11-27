@@ -1,0 +1,10 @@
+// #3927 (typed HTML, slice 1): an `Html` field in `<title>` is refused (C2)
+commons t.page
+
+uses bynk.html
+
+type F = {
+	v: Html,
+}
+
+template shell: F = "embeds/page.html"

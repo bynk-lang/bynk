@@ -1603,6 +1603,13 @@ t("WorkersD1: binds each SqlValue positionally, a Boolean as 1 or 0", async () =
   ]);
 });
 
+t("WorkersD1: a Numeric binds as its canonical text and a Timestamp as epoch milliseconds (#4046)", async () => {
+  const db = fakeD1();
+  const dec = { coefficient: 1250n, scale: 2 };
+  await d1(db).run("INSERT INTO t VALUES (?1, ?2)", [{ tag: "Numeric", value: dec }, { tag: "Timestamp", value: 1_700_000_000_000 }]);
+  assert.deepEqual(db.seen, [{ sql: "INSERT INTO t VALUES (?1, ?2)", values: ["12.50", 1_700_000_000_000] }]);
+});
+
 t("WorkersD1.all: the rows as JSON, each blob as standard base64 whatever its shape", async () => {
   const ab = new Uint8Array([0xfb, 0xff]).buffer;
   const db = fakeD1({

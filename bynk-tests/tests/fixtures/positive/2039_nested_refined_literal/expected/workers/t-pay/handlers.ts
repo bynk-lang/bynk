@@ -218,7 +218,7 @@ export function __deserialise_Result_Int_Cents(json: __JsonValue, path: string =
       return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["value"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = obj["value"];
     return Ok(Ok(__v) as Result<number, __CommonsCents>);
@@ -228,7 +228,7 @@ export function __deserialise_Result_Int_Cents(json: __JsonValue, path: string =
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<number, __CommonsCents>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Result_Cents_String(value: Result<__CommonsCents, string>): __JsonValue {
@@ -253,7 +253,7 @@ export function __deserialise_Result_Cents_String(json: __JsonValue, path: strin
     const __e = obj["error"];
     return Ok(Err(__e) as Result<__CommonsCents, string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Option_Delta(value: Option<__CommonsDelta>): __JsonValue {

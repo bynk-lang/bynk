@@ -1659,6 +1659,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "on schedule(\"*/45 * * * *\") () -> Effect[Result[(), String]] { … }   // ⚠ fires at :00 and :45, then :00 again\n\non schedule(\"0,45 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ says so explicitly",
     },
     Explain {
+        code: "bynk.d1.column_affinity",
+        blurb: "A typed read of a `D1` row reads each field by one storage convention: an `Instant` or `Duration` is `INTEGER` milliseconds, and a payload-less enum is `TEXT`, the variant's name. A SQLite column declared with the other affinity stores the value in a form the field does not read (a timestamp kept as ISO text, an enum kept as a number), so the decode fails, naming the field. Declare the column to match, or read it into a field of the column's own type (`String` or `Int`) and convert. Only a column read straight from a table has a declared type, so this is a warning on the common case, not a proof. `Decimal` has its own check, `bynk.d1.decimal_numeric_affinity`.",
+        example: "CREATE TABLE orders (id TEXT PRIMARY KEY, placed TEXT NOT NULL);       // ⚠ read as an `Instant`, it is text\n\nCREATE TABLE orders (id TEXT PRIMARY KEY, placed INTEGER NOT NULL);    // ✓ epoch milliseconds",
+    },
+    Explain {
         code: "bynk.d1.decimal_numeric_affinity",
         blurb: "A `Decimal` is exact only as text. A `Json.decodeSql` or `select` row may hold a `Decimal`, read from a SQLite `TEXT` column, which keeps its digits. A column declared `DECIMAL`, `NUMERIC`, `REAL` or an integer type has numeric affinity, so SQLite hands the value back as a number, and a number does not decode as a `Decimal`. Declare the column `TEXT` (the compiler stores a `Decimal` as its canonical text), or read the column into a `Float`. Only a column read straight from a table has a declared type, so this is a warning on the common case, not a proof.",
         example: "CREATE TABLE prices (id TEXT PRIMARY KEY, amount NUMERIC NOT NULL);   // ⚠ read as a `Decimal`, it arrives as a number\n\nCREATE TABLE prices (id TEXT PRIMARY KEY, amount TEXT NOT NULL);      // ✓ the digits stay exact",
@@ -2068,9 +2073,19 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Region =\n    | Domestic\n    | International\n    | Refunded(reason: String)\nevent Paid = { id: String, region: Region }\n\nservice onPaid from Events(Paid { region: Region.Refunded, .. }) {   // ✗ `Refunded` carries a `reason`\n\nservice onPaid from Events(Paid { region: Region.Domestic, .. }) {   // ✓ no payload",
     },
     Explain {
+        code: "bynk.event.queue_name_collision",
+        blurb: "On Workers each `from Events` service will receive its events through a queue the compiler creates, named `bynk-ev-` followed by its context and service and a short hash of them, with a matching `bynk-dl-` dead-letter queue. The name has to fit Cloudflare's 63 characters, so the context and service may be cut short and the hash is only 8 hex digits: two different services can, rarely, get the same name, in every environment or only in one with a long name. They would then share a queue, which has one consumer, so one of them would never see its events. The compiler knows every subscriber in the project, so it refuses such a pair and names both. Rename one of the two services.",
+        example: "service notify23278 from Events(Paid) {\n    on event(e: Paid) -> Effect[()] { … }\n}\n\nservice notify24925 from Events(Paid) {   // ✗ its event queue's name would be `notify23278`'s\nservice notifyRefund from Events(Paid) {   // ✓\n    on event(e: Paid) -> Effect[()] { … }\n}",
+    },
+    Explain {
         code: "bynk.event.return_not_effect_unit",
         blurb: "Emission is fire-and-forget: nothing receives a subscriber's result, so an `on event` handler returns `Effect[()]` and anything else is refused. Return `Effect.pure(())` once its work is done, and move a value it computes into an effect the handler performs, such as a write. A handler that does not return an `Effect` at all is `bynk.service.return_not_effect`.",
         example: "service onPaid from Events(Paid) {\n    on event(e: Paid) -> Effect[Int] { … }   // ✗ the result has nowhere to go\n    on event(e: Paid) -> Effect[()] { … }    // ✓\n}",
+    },
+    Explain {
+        code: "bynk.event.unbounded_payload",
+        blurb: "On Workers an event will travel as one Cloudflare Queue message, which holds at most 128 KB, so an emission larger than about 127,000 bytes will fault its handler. Its size is known only at run time, so the compiler cannot check it, but it can point at where large events come from: a `Bytes` field, or a `List`, `Map` or `Set` of records, sums with payloads or other collections, with no refinement such as `MaxLength(n)` that bounds it. A payload of scalars, `String`s and enums does not warn. Store the large value elsewhere (R2 or D1) and send a reference to it; a collection can instead be bounded with `MaxLength(n)`. It is only a warning: a field that is small in practice may stay as it is.",
+        example: "event Uploaded = { name: String, data: Bytes }   // ⚠ `data` has no size bound\n\nevent Uploaded = { name: String, key: String }   // ✓ the bytes are stored in R2 under `key`",
     },
     Explain {
         code: "bynk.event.unknown_annotation",
@@ -2594,6 +2609,16 @@ agent Cart {
         code: "bynk.history.restates_invariant",
         blurb: "Every state a driven run reaches has already passed the agent's `invariant` and `transition` checks, so a history property that only asserts the same thing over `run` cannot fail. The compiler flags it, and the check is deliberately narrow, so a near-copy may pass. Assert something the per-state rules do not say, such as a protocol across steps: a spend is accepted only after a top-up.",
         example: "// demo/wallet.bynk\ninvariant nonneg: balance >= 0\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { expect run.all((s) => s.new.balance >= 0) }   // ✗ the invariant says this\nfor all run: History[Wallet] { expect run.all((s) => (s.call is Spend && s.accepted) implies run.upTo(s).any((p) => p.call is TopUp && p.accepted)) }   // ✓ a protocol across steps",
+    },
+    Explain {
+        code: "bynk.html.at_boundary",
+        blurb: "`Html` is markup the compiler checked, by its template's escaping. A decoded, stored or received one would skip that check, so a type that holds `Html` is not data at a boundary: it has no codec, and is refused as a request parameter and in an agent's `store`. Keep the text and build the markup where it is shown, or send `toString()` where markup must leave the service.",
+        example: "// t/page.bynk\nfn parse(s: String) -> Result[Card, DecodeError] {\n    Json.decode[Card](s)   // ✗ `Card` holds `Html`\n}\n\nfn show(c: Card) -> String {\n    c.body.toString()   // ✓\n}",
+    },
+    Explain {
+        code: "bynk.html.no_constructor",
+        blurb: "`Html` is markup the compiler built: a template's `fill`, or a template with no fields. An opaque type's `of` would turn any `String` into one with no check, a door to unescaped markup that nothing audits, so `Html` has none. Pass the text as a `String` field of a template, which escapes it for where it sits.",
+        example: "// t/page.bynk\nfn quote(text: String) -> Option[Html] {   // ✗\n    match Html.of(text) {   // ✗ any string, unchecked\n        Ok(h) => Some(h),\n        Err(_) => None,\n    }\n}\n\nfn quote(text: String) -> Html {   // ✓\n    card.fill(Card { title: text })   // ✓ escaped for its place\n}",
     },
     Explain {
         code: "bynk.http.body_cap_defaulted",
@@ -5454,6 +5479,91 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "bynk build --target workers --platform browser   // ✗ Workers are not a browser build\n\nbynk build --target bundle --platform browser    // ✓",
     },
     Explain {
+        code: "bynk.template.ambiguous_placeholder",
+        blurb: "A placeholder in a code-loading attribute names an asset and anywhere else names a field, so a name that is both could change what it binds to when an asset or a field is renamed. A template refuses the name wherever it appears. Rename the field or the asset.",
+        example: "// t/page.bynk\nasset logo = \"assets/logo.svg\"\n\ntype Card = {\n    logo: String,   // ✗ also the asset `logo`\n    logoText: String,   // ✓\n}\n\n// embeds/page.html\n<p>\\(logo)</p>   // ✗ the field, or the asset?\n<p>\\(logoText)</p>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.context_type",
+        blurb: "Each context takes particular types. Element text takes a scalar (`String`, `Int`, `Float`, `Bool`, `Decimal`, `Duration`, `Instant` or a refinement of one), escaped as text, or `Html`, inserted as is; a quoted attribute value and the text of `<title>` take a scalar. Anything else, such as an `Option` or a record, has no text of its own. Give the field a type the context takes, deciding in Bynk what an absent value shows.",
+        example: "// t/page.bynk\ntype Card = {\n    note: Option[String],   // ✗ an `Option` has no text\n    note: String,   // ✓\n}\n\n// embeds/page.html\n<p>\\(note)</p>   // ✗ element text takes a scalar or `Html`",
+    },
+    Explain {
+        code: "bynk.template.fields_not_record",
+        blurb: "`fill` takes a template's fields as one record, whose field names its placeholders name. A refined type, a sum or a generic record has no such fields. Declare a record for the template.",
+        example: "// t/page.bynk\ntemplate greeting: String = \"embeds/page.html\"   // ✗ not a record\ntemplate greeting: Greeting = \"embeds/page.html\"   // ✓",
+    },
+    Explain {
+        code: "bynk.template.fill_required",
+        blurb: "A template with a fields type is a function of its fields: `card.fill(fields)` takes the whole record and gives the page as `Html`. Only a template with no fields is `Html` as it stands. Call `fill`.",
+        example: "// t/page.bynk\nfn show(title: String) -> Html {\n    card   // ✗ not filled\n    card.fill(Card { title: title })   // ✓\n}",
+    },
+    Explain {
+        code: "bynk.template.foreign_unbalanced",
+        blurb: "Inside `<svg>` and `<math>` a browser tokenises by different rules: `<script>` and `<style>` do not switch it to raw text, and SVG's `<script href>` loads code. A template checked on its own cannot see an `<svg>` another piece of markup opened, so every `<svg>` and `<math>` must open and close in the same template, and may not hold `<foreignObject>`, MathML's text points or an HTML element that makes the browser leave it. Close the element in the template that opens it.",
+        example: "// embeds/page.html\n<svg viewBox=\"0 0 10 10\">   // ✗ never closed here\n<svg viewBox=\"0 0 10 10\"></svg>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.html_in_rcdata",
+        blurb: "The text of `<title>` and `<textarea>` is never parsed as markup: a browser shows tags there as text. An `Html` value is markup, so it cannot be the text of either. Pass the text as a `String` field instead, which is escaped as text.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<title>\\(heading)</title>   // ✗ markup where only text is read\n<h1>\\(heading)</h1>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.needs_bynk_html",
+        blurb: "A template's value is `Html`, which `bynk.html` declares, so a unit with a template uses that commons. Add `uses bynk.html`.",
+        example: "// t/page.bynk\ncommons t.page   // ✗ with no `uses bynk.html`\n\nuses bynk.html   // ✓\n\ntemplate footer = \"embeds/page.html\"   // ✗",
+    },
+    Explain {
+        code: "bynk.template.placeholder_in_code_attribute",
+        blurb: "An event handler such as `onclick` holds code, `srcdoc` holds a whole document, `<meta content>` beside `http-equiv` acts as a header, and attributes such as `<script type>`, `<link rel>` and `<iframe sandbox>` decide how the rest of the element is read. No escape makes a value safe in any of them, so a template refuses a placeholder there. Write the attribute literally, and pass data through an ordinary attribute.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<button onclick=\"buy('\\(item)')\">Buy</button>   // ✗ a value here is code\n<button data-item=\"\\(item)\">Buy</button>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.placeholder_in_raw_text",
+        blurb: "The text of these elements is not parsed as markup, and `<noscript>` is read one way with scripting on and another with it off, so a value inside one has no context the compiler can escape for. A template refuses a placeholder in any of them, and every `<noscript>` it opens must close in the same template. Move the value outside the element.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<noscript>\\(tip)</noscript>   // ✗ read differently with scripting on and off\n<p class=\"tip\">\\(tip)</p>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.placeholder_in_script",
+        blurb: "A script's text is code, and no escape makes a value safe inside it: a string can be closed, and `</script>` ends the element. So a template refuses a placeholder anywhere in `<script>`. Pass data to a script another way, such as a `data-` attribute it reads, which is escaped for an attribute. A JSON data block is a later increment.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<script>greet(\"\\(name)\")</script>   // ✗ a value here is code\n<div id=\"greeting\" data-name=\"\\(name)\"></div>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.placeholder_in_style",
+        blurb: "CSS has its own escaping and its own URL context, `url(…)`, and a style can leak a page's data without any script. A template has no CSS type, so it refuses a placeholder in `<style>` and in a `style` attribute. Choose among classes the stylesheet defines instead, with the class name as the placeholder.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<p style=\"color: \\(tone)\">Saved</p>   // ✗ CSS, which a value could break out of\n<p class=\"tone-\\(tone)\">Saved</p>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.placeholder_position",
+        blurb: "A placeholder fills element text or a quoted attribute value, never the markup's structure: in a tag or attribute name it could make any element or attribute, and in a comment or a doctype it could end it early. Inside `<svg>` and `<math>` a browser parses by other rules, so a placeholder is refused anywhere there. Write the structure literally and put the value in text or a quoted attribute.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<h\\(level)>News</h1>   // ✗ a tag name\n<h1 class=\"level-\\(level)\">News</h1>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.placeholder_without_fields",
+        blurb: "A template with no fields type is `Html` as it stands, so a `\\(name)` in it has nothing to fill it. Declare the fields record, or write the text itself as `&#92;(name)`. Any other backslash and parenthesis, such as MathJax's `\\(x^2\\)`, is already text.",
+        example: "// t/page.bynk\ntemplate footer = \"embeds/page.html\"   // ✗\ntemplate footer: Footer = \"embeds/page.html\"   // ✓\n\n// embeds/page.html\n<p>\\(year)</p>   // ✗ nothing fills it",
+    },
+    Explain {
+        code: "bynk.template.unknown_placeholder",
+        blurb: "Every `\\(name)` in a template must name a field of the record the template declares; the nearest field is suggested. An asset's name fills only a code-loading attribute, such as `<script src>`, so elsewhere it is an unknown placeholder too. Correct the name, or add the field.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<h1>\\(titel)</h1>   // ✗ no field `titel`\n<h1>\\(title)</h1>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.unquoted_attribute",
+        blurb: "An unquoted attribute value ends at the first space, so a value that holds one could add attributes of its own, such as an event handler. Escaping cannot make that safe, so a template refuses a placeholder in an unquoted value. Quote the value; the placeholder is then escaped for an attribute, quotes included.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<img alt=\\(alt)>   // ✗ unquoted: a space in `alt` would start a new attribute\n<img alt=\"\\(alt)\">   // ✓",
+    },
+    Explain {
+        code: "bynk.template.unsupported_markup",
+        blurb: "The compiler tokenises a template as a browser does and refuses what it does not model, rather than guessing: a repeated attribute (a browser keeps the first), a `<` in an attribute name, an unclosed comment, a `</script` that is not the end tag, a URL attribute, which will take a checked URL. Each of these changes where a value would land. Write the markup the way a browser reads it without recovering.",
+        example: "// embeds/page.html\n<p class=\"lead\" class=\"wide\">Hi</p>   // ✗ `class` twice\n<p class=\"lead wide\">Hi</p>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.unused_field",
+        blurb: "A template's fields record is its whole contract: every field reaches the page, so a field no placeholder uses is a mistake on one side or the other. Add the placeholder to the template, or remove the field.",
+        example: "// t/page.bynk\ntype Card = {\n    title: String,\n    subtitle: String,   // ✗ no `\\(subtitle)` in the template\n}\n\ntemplate card: Card = \"embeds/page.html\"   // ✗\n\n// embeds/page.html\n<h1>\\(title)</h1>\n<h2>\\(subtitle)</h2>   // ✓",
+    },
+    Explain {
         code: "bynk.test.actor_identity_required",
         blurb: "An actor that declares an `identity` stands for one particular \
                 caller, and the handler reads that identity. A case that acts as \
@@ -6069,9 +6179,9 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "// tests/room.test.bynk\nlet tc = TestConnection[Frame]()\nlet _ <- Gateway.open(tc, RoomId.unsafe(\"r\")) by Member(UserId.unsafe(\"ann\"))\nlet _ <- Gateway.message(tc, Frame { text: \"hi\" }) by Member(UserId.unsafe(\"ann\"))    // ✗ given at `open`\nlet _ <- Gateway.message(tc, Frame { text: \"hi\" })                                    // ✓",
     },
     Explain {
-        code: "bynk.test.ws_needs_in_process",
-        blurb: "`svc.open(tc, …)`, `svc.message` and `svc.close` drive a `from websocket` service in process, against a `TestConnection`. A deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive, so the address has nothing to run. Drive the service in a case at `unit` or `integration` instead.",
-        example: "// tests/room.test.bynk\ncase \"a join\" as system {         // ✗ a `system` case cannot drive a WebSocket\ncase \"a join\" as integration {    // ✓\n    let tc = TestConnection[Frame]()\n    let _ <- Gateway.open(tc, Val[RoomId]) by Member(Val[UserId])\n}",
+        code: "bynk.test.ws_refusal_needs_system",
+        blurb: "`tc.refusedWith()` is the status a `system` case's upgrade was refused with (`401`, `403`, `400`): only a real upgrade through the deployed Worker can be refused. Below `system` the connection is never refused, so the read would be `None` whatever the case did, and an assertion on it would fail misleadingly or pass vacuously. Read it in a `suite … as system`.",
+        example: "// tests/room.test.bynk\nsuite chat.room {\n    case \"a stranger is refused\" as integration {   // ✗ `refusedWith` below `system`\n        let tc = TestConnection[Frame]()\n        let _ <- Gateway.open(tc, Val[RoomId]) by Member(Val[UserId])\n        expect tc.refusedWith() == Some(401)\n    }\n}\n\nsuite chat.room {\n    case \"a stranger is refused\" as system {   // ✓ the Worker refuses the upgrade\n        let tc = TestConnection[Frame]()\n        let _ <- Gateway.open(tc, Val[RoomId]) by Nobody\n        expect tc.refusedWith() == Some(401)\n    }\n}",
     },
     Explain {
         code: "bynk.tier.cross_context_needs_system",
@@ -6085,8 +6195,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.tier.system_needs_wire",
-        blurb: "A `system` case exists to cross a real serialise, JSON, deserialise boundary. A target has one if it consumes another context, or exposes an `http`, `queue` or `email` service. One with neither has nothing to cross, so a `system` suite adds nothing over `unit`. Run the suite at `unit` or `integration`, or give the target a service that has a boundary.",
-        example: "suite commerce.payment as system {   // ✗ no other context, and no `http`, `queue` or `email` service\n    case \"authorises\" { … }\n}\n\nsuite commerce.payment as integration {   // ✓ real collaborators, no wire\n    case \"authorises\" { … }\n}",
+        blurb: "A `system` case exists to cross a real serialise, JSON, deserialise boundary. A target has one if it consumes another context, or exposes an `http`, `queue`, `email` or `from websocket` service. One with neither has nothing to cross, so a `system` suite adds nothing over `unit`. Run the suite at `unit` or `integration`, or give the target a service that has a boundary.",
+        example: "suite commerce.payment as system {   // ✗ no other context, and no `http`, `queue`, `email` or `from websocket` service\n    case \"authorises\" { … }\n}\n\nsuite commerce.payment as integration {   // ✓ real collaborators, no wire\n    case \"authorises\" { … }\n}",
     },
     Explain {
         code: "bynk.transition.collection_scan",
@@ -7038,7 +7148,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.sql_row_shape",
-        blurb: "`select[T]`, `firstAs[T]` and `Json.decodeSql` read each SQL row into a record, and a column holds only a plain value. So `T` must be a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes`, or a refined or opaque type over one, or an `Option` of either (Postgres and MySQL also read `Decimal`); a nested record, a list or an enum has no column to read. `T` is the row itself, so `select[List[Row]]` is refused too. Flatten the record.",
+        blurb: "`select[T]`, `firstAs[T]` and `Json.decodeSql` read each SQL row into a record, and a column holds only a plain value. So `T` must be a record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`, `Decimal`, `Instant`, `Duration` or a payload-less enum, or a refined or opaque type over a scalar one, or an `Option` of either, the same for `D1`, `Postgres` and `MySql`; a nested record, a list or an enum with payloads has no column to read. `T` is the row itself, so `select[List[Row]]` is refused too. Flatten the record.",
         example: "type Money = { cents: Int }\ntype Order = { id: String, total: Money }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✗ `total` is a record\n\ntype Order = { id: String, total: Int }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✓",
     },
     Explain {
@@ -7584,6 +7694,14 @@ pub const RETIRED: &[Retired] = &[
         why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
         replacement: Some(
             "the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`",
+        ),
+    },
+    Retired {
+        code: "bynk.test.ws_needs_in_process",
+        last_release: "0.661.1",
+        why: "A `system` case now drives a `from websocket` service by address (#3901): `open` performs a real upgrade through the deployed Worker, so a case keeps its meaning at every tier.",
+        replacement: Some(
+            "`svc.open(tc, …)`, `svc.message(tc, frame)` and `svc.close(tc)` in a `suite … as system`",
         ),
     },
     Retired {
@@ -8479,6 +8597,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["cron_handler"],
     )),
     warn(d(
+        "bynk.d1.column_affinity",
+        "An `Instant`, `Duration` or enum row field is read from a SQLite column declared with the other affinity (`INTEGER` milliseconds, or `TEXT` for an enum), so the typed read fails to decode; declare the column to match (warning).",
+    )),
+    warn(d(
         "bynk.d1.decimal_numeric_affinity",
         "A `Decimal` row field is read from a SQLite column declared with numeric affinity (`DECIMAL`, `NUMERIC`, `REAL`), which hands the value back as a number that does not decode; declare the column `TEXT` (warning).",
     )),
@@ -8540,8 +8662,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.deploy.agent_move_refused",
-        "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
+        "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Move it with its state with `--move-agent <context>` (planned with `--dry-run` in this release), or start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use. A `reason` says why a named move is refused: `chained`, `partial_selection`, `order`, `routes`, `tombstones`, `renamed_in_place`, `both`, or `apply_not_yet` outside `--dry-run`.",
     ),
+    warn(d(
+        "bynk.deploy.agent_move_window",
+        "A `--move-agent` move keeps its agents' state, but from the commit (the source's push) until the receiver goes live again, calls to the moving contexts fail: a window of about one push. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`, beside the plan's `moves`.",
+    )),
     warn(d(
         "bynk.deploy.agent_starts_fresh",
         "A context that hosts agents moves to a different Worker script and `--accept-fresh-agent <context>` named it, so its agents start with fresh state there and the old state stays in the old script, which is no longer a Worker of the project: do not delete it if the data matters. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`.",
@@ -8617,6 +8743,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.deploy.ledger_unreadable",
         "`bynk deploy` could not read `bynk.deploy.lock`, the ledger of what is deployed, so it stopped before planning: a plan made without it would call everything new. Fix or restore the file (it is plain TOML). With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
+        "bynk.deploy.move_agent_unused",
+        "A `--move-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
+    ),
+    d(
+        "bynk.deploy.move_commit_unconfirmed",
+        "An agent move's sources had pushed their commit, but the account's Durable Object namespace listing did not show each moved class's namespace on its receiving script with the id recorded before the move, so `bynk deploy` stopped before the receiver went live: serving a class before its commit starts it empty and drops the transfer. Nothing is lost; the move's record in `bynk.deploy.lock` stays at `committing`, and the next `bynk deploy` pushes the unconfirmed sources' commit again.",
+    ),
+    d(
+        "bynk.deploy.move_interleaved",
+        "A Worker of an agent move was deployed by something other than the move since the move recorded it (another checkout, a hand `wrangler deploy`), or a move is already under way or done for a checkout whose `bynk.deploy.lock` does not record it, so `bynk deploy` stopped rather than push over that deployment. Pull `bynk.deploy.lock`, and deploy from the checkout that holds the move's record.",
+    ),
+    d(
+        "bynk.deploy.move_open",
+        "An agent move is under way in this environment, and this run cannot finish it: the manifest no longer puts a moving context on its receiver, or a new `--move-agent` move shares a Worker script with it. A move under way resumes on a plain `bynk deploy` with the manifest it started with; finish it first.",
+    ),
+    d(
+        "bynk.deploy.move_transfer_lost",
+        "An agent move's commit was refused because the receiver no longer expects the class (`transferred_pending_not_found`): its pending transfer was cancelled, or the receiver was pushed with the class live. Nothing has committed and the data is safe on the source; the next `bynk deploy` pushes the receiver's phase 1 again, then the commit.",
     ),
     d(
         "bynk.deploy.multiple_websocket_members",
@@ -8941,6 +9087,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.event.pattern_variant_payload",
         "A `from Events(E { ... })` subscription pattern's variant value names a variant that carries a payload — only nullary variants are admitted, since testing the tag alone would silently ignore the payload.",
     ),
+    d(
+        "bynk.event.queue_name_collision",
+        "Two `from Events` services would get the same compiler-owned event queue name in some environment.",
+    ),
     dg(
         "bynk.event.return_not_effect_unit",
         "An `on event` handler returns an `Effect` of something other than `()`; emission is fire-and-forget, so it returns `Effect[()]`.",
@@ -8950,6 +9100,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.event.schema_version_mismatch",
         "An event's `@schema(N)` annotation disagrees with the version the schema registry computes from the event's build history.",
     ),
+    warn(d(
+        "bynk.event.unbounded_payload",
+        "An `event`'s payload reaches a `Bytes`, or a `List`, `Map` or `Set` of a non-scalar type that no refinement bounds (warning).",
+    )),
     d(
         "bynk.event.unknown_annotation",
         "An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set.",
@@ -9331,6 +9485,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.history.restates_invariant",
         "A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155).",
+    ),
+    d(
+        "bynk.html.at_boundary",
+        "A type that is or holds `Html` is decoded, stored, received or sent (#3927).",
+    ),
+    d(
+        "bynk.html.no_constructor",
+        "`Html.of(s)` is called outside `bynk.html` (#3927).",
     ),
     hint(d(
         "bynk.http.body_cap_defaulted",
@@ -11296,6 +11458,78 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A deployment unit uses a platform-native capability but the build selects another `--platform`.",
         &["consumes_decl"],
     ),
+    d(
+        "bynk.template.ambiguous_placeholder",
+        "A template placeholder's name is both a field and an asset in scope (#3927).",
+    ),
+    d(
+        "bynk.template.context_type",
+        "A template field's type is not one its placeholder's context accepts (#3927).",
+    ),
+    d(
+        "bynk.template.fields_not_record",
+        "A template's fields type is not a non-generic record (#3927).",
+    ),
+    d(
+        "bynk.template.fill_required",
+        "A template with fields is named as a value instead of being filled (#3927).",
+    ),
+    d(
+        "bynk.template.foreign_unbalanced",
+        "A template opens an `<svg>` or `<math>` it does not close, closes one it did not open, or holds an integration point or an HTML element inside one (#3927).",
+    ),
+    d(
+        "bynk.template.html_in_rcdata",
+        "An `Html` value fills the text of `<title>` or `<textarea>` (#3927).",
+    ),
+    d(
+        "bynk.template.needs_bynk_html",
+        "A unit declares a `template` without `uses bynk.html` (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_in_code_attribute",
+        "A template placeholder is in an event handler, `srcdoc`, or another attribute whose value is code or decides how markup is read (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_in_raw_text",
+        "A template placeholder is inside `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>`, `<plaintext>` or `<noscript>`, or a `<noscript>` is left open (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_in_script",
+        "A template placeholder is inside `<script>` (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_in_style",
+        "A template placeholder is inside `<style>` or a `style` attribute (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_position",
+        "A template placeholder is in a tag or attribute name, a comment, a doctype, CDATA, or inside `<svg>` or `<math>` (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_without_fields",
+        "A template declared without a fields type has a placeholder (#3927).",
+    ),
+    d(
+        "bynk.template.secret_placeholder",
+        "A secret kind (`Secret`, `Authorization`, `ApiKeyValue`) reaches a template placeholder or fields type (#3927).",
+    ),
+    d(
+        "bynk.template.unknown_placeholder",
+        "A template placeholder names no field of its fields record (#3927).",
+    ),
+    d(
+        "bynk.template.unquoted_attribute",
+        "A template placeholder fills an unquoted attribute value (#3927).",
+    ),
+    d(
+        "bynk.template.unsupported_markup",
+        "A template holds markup the compiler does not model, or markup a browser reads only by error recovery that changes a context (#3927).",
+    ),
+    d(
+        "bynk.template.unused_field",
+        "A template's fields record has a field no placeholder uses (#3927).",
+    ),
     dg(
         "bynk.test.actor_identity_required",
         "A test omits the identity an identity-carrying actor requires: a bare call-site `by <Actor>`, or no `by` at all on a handler that binds its `Caller`.",
@@ -11607,8 +11841,8 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
-        "bynk.test.ws_needs_in_process",
-        "A `system`-tier case drives a `from websocket` service by address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`); a deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive, so the case runs at `unit` or `integration`.",
+        "bynk.test.ws_refusal_needs_system",
+        "A case below `system` reads `tc.refusedWith()` of a `TestConnection`; only a `system` case performs a real upgrade through the Worker, which can be refused, so there is nothing to read below it.",
         &["case"],
     ),
     dg(
@@ -11623,7 +11857,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.tier.system_needs_wire",
-        "An `as system` suite whose target has no serialisation edge: it consumes no other context and exposes no `http`, `queue` or `email` service, so there is no wire for a `system` case to cross.",
+        "An `as system` suite whose target has no serialisation edge: it consumes no other context and exposes no `http`, `queue`, `email` or `from websocket` service, so there is no wire for a `system` case to cross.",
     ),
     d(
         "bynk.transition.collection_scan",
@@ -12235,7 +12469,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.sql_row_shape",
-        "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). A `Postgres` row may also hold a `Decimal` or an `Instant` (Hyperdrive H3).",
+        "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool`, `Bytes`, `Decimal`, `Instant`, `Duration` or a payload-less enum (or a refined or opaque type over a scalar one, or an `Option` of either), or a `List` of such records, one set for `D1`, `Postgres` and `MySql` (standard-library P4c, #4046).",
         &["method_call"],
     ),
     d(

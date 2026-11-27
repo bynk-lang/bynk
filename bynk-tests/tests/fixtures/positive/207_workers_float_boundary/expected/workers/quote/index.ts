@@ -50,7 +50,7 @@ export default {
               const __r_sku = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.sku", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["sku"]);
               if (__r_sku.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_sku.error)), { status: 400, headers: { "content-type": "application/json" } });
               const sku = __r_sku.value;
-              const __r_price = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.price", expected: "finite number", actual: typeof __v } as __BoundaryError) : globalThis.Number.isFinite(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.price", expected: "finite number", actual: String(__v) } as __BoundaryError))(argsObj["price"]);
+              const __r_price = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.price", expected: "finite number", actual: typeof __v } as __BoundaryError) : globalThis.Number.isFinite(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.price", expected: "finite number", actual: "non-finite number" } as __BoundaryError))(argsObj["price"]);
               if (__r_price.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_price.error)), { status: 400, headers: { "content-type": "application/json" } });
               const price = __r_price.value;
               const result = await surface.quotes(sku, price);

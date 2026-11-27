@@ -1,0 +1,10 @@
+{
+  "blurb": "An event handler such as `onclick` holds code, `srcdoc` holds a whole document, `<meta content>` beside `http-equiv` acts as a header, and attributes such as `<script type>`, `<link rel>` and `<iframe sandbox>` decide how the rest of the element is read. No escape makes a value safe in any of them, so a template refuses a placeholder there. Write the attribute literally, and pass data through an ordinary attribute.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.placeholder_in_code_attribute",
+  "constructs": [],
+  "example": "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<button onclick=\"buy('\\(item)')\">Buy</button>   // ✗ a value here is code\n<button data-item=\"\\(item)\">Buy</button>   // ✓",
+  "severity": "error",
+  "summary": "A template placeholder is in an event handler, `srcdoc`, or another attribute whose value is code or decides how markup is read (#3927)."
+}

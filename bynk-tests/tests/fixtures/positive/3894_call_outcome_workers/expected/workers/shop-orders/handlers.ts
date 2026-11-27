@@ -45,7 +45,7 @@ const __entryFieldsOfBasket = [] as const;
 
 function __rehydrateBasketState(s: BasketState, stored: BasketState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "paid")) {
-    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "paid", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "paid", expected: "safe integer", actual: String(__v) } as __BoundaryError))((s.paid as unknown as __JsonValue));
+    const __r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "paid", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "paid", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))((s.paid as unknown as __JsonValue));
     if (__r.tag === "Err") throw __rehydrationViolation("Basket", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).paid = __r.value as unknown as (typeof s)["paid"];
   }
@@ -122,7 +122,7 @@ export class Basket {
 }
 
 const __BasketWire: __AgentWire = {
-  charge: { args: [{ enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j) }], result: { enc: (__v: boolean) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j) } },
+  charge: { args: [{ enc: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), dec: (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j) }], result: { enc: (__v: boolean) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j) } },
 };
 
 export function __makeBasket(key: string, env?: { BASKET?: __DurableObjectNamespace }): Basket {
@@ -197,7 +197,7 @@ export function __deserialise_Result_String_String(json: __JsonValue, path: stri
     const __e = obj["error"];
     return Ok(Err(__e) as Result<string, string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_PaymentError(value: shop_pay.PaymentError): __JsonValue {
@@ -217,7 +217,7 @@ export function __deserialise_PaymentError(json: __JsonValue, path: string = "$"
       case "Down":
         return Ok({ tag: "Down" } as shop_pay.PaymentError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -231,7 +231,7 @@ export function __deserialise_PaymentError(json: __JsonValue, path: string = "$"
     case "Down":
       return Ok({ tag: "Down" } as shop_pay.PaymentError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -275,7 +275,7 @@ export function __deserialise_Result_Receipt_PaymentError(json: __JsonValue, pat
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<shop_pay.Receipt, shop_pay.PaymentError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Result_Unit_String(value: Result<void, string>): __JsonValue {
@@ -298,5 +298,5 @@ export function __deserialise_Result_Unit_String(json: __JsonValue, path: string
     const __e = obj["error"];
     return Ok(Err(__e) as Result<void, string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

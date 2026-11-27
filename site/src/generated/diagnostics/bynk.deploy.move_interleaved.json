@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.move_interleaved",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A Worker of an agent move was deployed by something other than the move since the move recorded it (another checkout, a hand `wrangler deploy`), or a move is already under way or done for a checkout whose `bynk.deploy.lock` does not record it, so `bynk deploy` stopped rather than push over that deployment. Pull `bynk.deploy.lock`, and deploy from the checkout that holds the move's record."
+}

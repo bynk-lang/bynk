@@ -61,13 +61,14 @@ mod cookie_lints;
 mod d1;
 mod events_emit;
 pub mod peek;
-pub use d1::{BatchPosition, D1DecodeSite, D1SqlSite, RowLink};
+pub use d1::{BatchPosition, Conventions, D1DecodeSite, D1SqlSite, RowLink};
 pub(crate) mod equality;
 pub mod keying;
 pub mod ordering;
 use equality::EqScope;
 mod api_key_calls;
 mod effect_more;
+pub mod enum_wire;
 mod erase;
 mod expressions;
 mod kernels;
@@ -89,7 +90,9 @@ mod refined_range;
 mod refinements;
 mod result_more;
 mod session_calls;
+mod sql_decimal_param;
 mod sum_bad_principal;
+mod template_calls;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::refinement_example;
 pub use refinements::split_regex_flags;
@@ -842,6 +845,8 @@ pub enum Callee {
     Ctor { sum: Arc<TypeDecl>, tag: String },
     /// `T.of(value)` — the refined/opaque runtime constructor.
     Refine(Arc<TypeDecl>),
+    /// #4560: `E.fromWireName(text)` on an enum `E`: the variant whose wire name is `text`, or `None`.
+    EnumFromWireName(Arc<TypeDecl>),
     /// `T.unsafe(value)` — the opaque constructor, defining-unit only.
     Unsafe(Arc<TypeDecl>),
     /// A user-declared static method (`Type.method(...)`). The `Vec<TyId>` is
@@ -874,6 +879,9 @@ pub enum Callee {
     /// #3939: `ApiKey.equal(a, b)`, the generated key store's constant-time digest comparison,
     /// reachable only from the agents generated for an `ApiKey` actor. An `Effect[Bool]`.
     ApiKeyEqual,
+    /// Typed HTML (#3927, slice 1): `shell.fill(fields)` on the template
+    /// `template`: its emitted function, applied to the fields record.
+    TemplateFill { template: String },
     /// #3446: `Record.field.cookie(value)` / `Record.field.expire()` on a cookie record: the
     /// `Cookie` the field's decoder reads back (named by its wire name, valued by the decoder's
     /// leaf rules), or its matching deletion.

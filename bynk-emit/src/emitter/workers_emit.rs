@@ -994,32 +994,60 @@ fn render_inspect_members(members: &[(&str, &[String])]) -> String {
 /// another script must not be redeployed over empty state unannounced. Only a group has one
 /// (a Worker that is one context owns its own classes). `None` when no member hosts an agent.
 ///
+/// #3565: `tombstones` names, for each hosting context that carries any, the old classes of its
+/// `replaces` and `removed agent` tombstones (a supported move of such a context is refused in
+/// v1). Left out when no context carries one, so a manifest without is as before.
+///
 /// Written as `serde_json::to_string_pretty` would (sorted keys, two-space indent).
 fn agents_manifest(members: &[(&MemberParts, &UnitTable)]) -> Option<String> {
-    let agents: BTreeMap<&str, Vec<String>> = members
-        .iter()
-        .filter_map(|(parts, table)| {
-            let mut classes: Vec<String> = table.agents.keys().cloned().collect();
-            classes.sort();
-            (!classes.is_empty()).then_some((parts.context.as_str(), classes))
-        })
-        .collect();
-    (!agents.is_empty()).then(|| render_agents(&agents))
+    let mut agents: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    let mut tombstones: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    for (parts, table) in members {
+        let mut classes: Vec<String> = table.agents.keys().cloned().collect();
+        classes.sort();
+        if classes.is_empty() {
+            continue;
+        }
+        agents.insert(parts.context.as_str(), classes);
+        let carried = emitter::ClassTombstones::of(table);
+        let mut old: Vec<String> = carried.renamed.into_iter().map(|(o, _)| o).collect();
+        old.extend(carried.deleted);
+        old.sort();
+        old.dedup();
+        if !old.is_empty() {
+            tombstones.insert(parts.context.as_str(), old);
+        }
+    }
+    (!agents.is_empty()).then(|| render_agents(&agents, &tombstones))
 }
 
-/// The manifest of [`agents_manifest`], from each hosting context's classes.
-fn render_agents(agents: &BTreeMap<&str, Vec<String>>) -> String {
-    let entries: Vec<String> = agents
+/// The manifest of [`agents_manifest`]: each hosting context's classes, and the old classes of
+/// the tombstones any of them carries.
+fn render_agents(
+    agents: &BTreeMap<&str, Vec<String>>,
+    tombstones: &BTreeMap<&str, Vec<String>>,
+) -> String {
+    let section = |map: &BTreeMap<&str, Vec<String>>| -> String {
+        map.iter()
+            .map(|(context, classes)| {
+                format!(
+                    "    {}: {}",
+                    bynk_project::json_string(context),
+                    json_string_array(classes, 4)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",\n")
+    };
+    let mut keys = vec![("agents", section(agents))];
+    if !tombstones.is_empty() {
+        keys.push(("tombstones", section(tombstones)));
+    }
+    let body: Vec<String> = keys
         .iter()
-        .map(|(context, classes)| {
-            format!(
-                "    {}: {}",
-                bynk_project::json_string(context),
-                json_string_array(classes, 4)
-            )
-        })
+        .map(|(key, entries)| ["  \"", key, "\": {\n", entries, "\n  }"].concat())
         .collect();
-    format!("{{\n  \"agents\": {{\n{}\n  }}\n}}\n", entries.join(",\n"))
+    ["{\n", &body.join(",\n"), "\n}\n"].concat()
 }
 
 /// A JSON array of strings, one item per line at `indent` + 2 spaces, as
@@ -1213,6 +1241,14 @@ mod tests {
         } }))
         .unwrap()
             + "\n";
-        assert_eq!(render_agents(&agents), theirs);
+        assert_eq!(render_agents(&agents, &BTreeMap::new()), theirs);
+        let tombstones = BTreeMap::from([("shop.pay", classes(&["Old"]))]);
+        let theirs = serde_json::to_string_pretty(&json!({
+            "agents": { "shop.pay": ["Counter", "Ledger"], odd_context.as_str(): AWKWARD, "\u{e9}clair": ["A"] },
+            "tombstones": { "shop.pay": ["Old"] },
+        }))
+        .unwrap()
+            + "\n";
+        assert_eq!(render_agents(&agents, &tombstones), theirs);
     }
 }

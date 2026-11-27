@@ -113,7 +113,7 @@ impl<'a> Account<'a> {
     /// the cycle. Only the project's own Workers (`detach`) are removed: any other consumer (a
     /// foreign Worker, an HTTP pull consumer) refuses the delete before anything is removed. A
     /// removal answered 404 (the consumer, or the whole queue, already gone) is skipped: the
-    /// queue's own delete then answers for it, and a queue already gone reads as such (`10104`)
+    /// queue's own delete then answers for it, and a queue already gone reads as such (`11000`)
     /// to the prune. Any other refusal stops before the queue is deleted, naming the order and
     /// any consumers this call already removed, since those stay removed.
     fn remove_queue_consumers(

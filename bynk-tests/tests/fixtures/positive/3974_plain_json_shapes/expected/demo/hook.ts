@@ -5,7 +5,7 @@ import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkInstantToIso, __bynkInstantFromWire } from "../__bynk_runtime/time.js";
 import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 import { __bynkCodecMap } from "../__bynk_runtime/codec.js";
 
 export type Action =
@@ -80,7 +80,7 @@ export function read(body: string): Result<Hook, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Hook(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Hook);
@@ -95,7 +95,7 @@ export function read_map<T>(body: string, __codec_T: { encode: (v: T) => __JsonV
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __bynkCodecMap({ encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, __codec_T, true).decode(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<string, T>);
@@ -125,7 +125,7 @@ export function __deserialise_Action(json: __JsonValue, path: string = "$"): Res
       case "Reopened":
         return Ok({ tag: "Reopened" } as Action);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -141,7 +141,7 @@ export function __deserialise_Action(json: __JsonValue, path: string = "$"): Res
     case "Reopened":
       return Ok({ tag: "Reopened" } as Action);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -170,14 +170,14 @@ export function __deserialise_Hook(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.created_at`, expected: "number", actual: typeof __created_at$ms });
   }
   if (!globalThis.Number.isSafeInteger(__created_at$ms)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.created_at`, expected: "safe integer", actual: String(__created_at$ms) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.created_at`, expected: "safe integer", actual: globalThis.Number.isInteger(__created_at$ms) ? "integer outside the safe range" : "non-integer number" });
   }
   const __created_at = __created_at$ms;
   if (typeof obj["wait"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.wait`, expected: "number", actual: typeof obj["wait"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["wait"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.wait`, expected: "safe integer", actual: String(obj["wait"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.wait`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["wait"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __wait = obj["wait"];
   return Ok({ action: __action, labels: __labels, created_at: __created_at, wait: __wait } as Hook);

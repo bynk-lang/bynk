@@ -1,0 +1,7 @@
+suite chat.room {
+  case "a stranger is refused" as system {
+    let tc = TestConnection[Frame]()
+    let _ <- Gateway.open(tc, Val[RoomId]) by Nobody
+    expect tc.refusedWith() == Some(401)
+  }
+}

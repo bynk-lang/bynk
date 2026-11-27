@@ -1,0 +1,11 @@
+commons t.page
+
+uses bynk.html
+
+asset logo = "assets/logo.svg"
+
+type Card = {
+	logoText: String,
+}
+
+template card: Card = "embeds/page.html"

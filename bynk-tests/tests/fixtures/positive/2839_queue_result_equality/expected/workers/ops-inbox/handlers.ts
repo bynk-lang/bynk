@@ -39,7 +39,7 @@ export function __deserialise_Job(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path: `${path}.attempt`, expected: "number", actual: typeof obj["attempt"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["attempt"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.attempt`, expected: "safe integer", actual: String(obj["attempt"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.attempt`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["attempt"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __attempt = obj["attempt"];
   return Ok({ id: __id, attempt: __attempt } as Job);

@@ -1,0 +1,2 @@
+bynk.test.ws_refusal_needs_system case `"a refusal read below system"` reads `refusedWith()` of a `TestConnection`, but is not a `system`-tier case
+# exact

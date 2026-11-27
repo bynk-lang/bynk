@@ -37,6 +37,7 @@
 // module uses is declared below (as `email.ts` does for `postal-mime`).
 // @ts-ignore TS2307 when the package is not installed
 import postgres from "postgres";
+import { __bynkDecimalToString, type __BynkDecimalValue } from "./decimal.ts";
 
 /** A `PgValue` as the binding hands it over (the tag and its one field). */
 export type PgParam =
@@ -48,7 +49,7 @@ export type PgParam =
   | { readonly tag: "PgBoolean"; readonly value: boolean }
   | { readonly tag: "PgTimestamp"; readonly value: number }
   | { readonly tag: "PgJson"; readonly value: string }
-  | { readonly tag: "PgNumeric"; readonly value: string };
+  | { readonly tag: "PgNumeric"; readonly value: __BynkDecimalValue };
 
 /** How a statement failed, before the binding gives it its `PgError` variant. */
 export type PgFailure = {
@@ -226,6 +227,8 @@ function driverParam(p: PgParam): unknown {
       return null;
     case "PgTimestamp":
       return new Date(p.value);
+    case "PgNumeric":
+      return __bynkDecimalToString(p.value);
     default:
       return p.value;
   }

@@ -183,6 +183,48 @@ fn with_kind_appendix(
     }
 }
 
+/// Rung 1a: a `given` entry's capability path (#2469), a dataset placeholder
+/// (#4451), or (#3959) a binding's parameter name, `given St|ore = Sessions`.
+fn fallback_section(a: &HoverAnalysis<'_>, input: &HoverInput<'_>) -> Option<String> {
+    capability_path_section(a)
+        .or_else(|| dataset_hover(input))
+        .or_else(|| binding_param_section(a))
+}
+
+/// The appendices of an indexed declaration's hover: its kind's (`with_kind_appendix`)
+/// and (#3959) a call's bindings.
+fn with_appendices(
+    content: String,
+    a: &HoverAnalysis<'_>,
+    key: &bynk_check::index::SymbolKey,
+    path: &std::path::Path,
+    text: &str,
+) -> String {
+    with_call_bindings(with_kind_appendix(content, a, key, path, text), a)
+}
+
+/// #3959: the hover for a binding's parameter name, `given St|ore = Sessions`.
+fn binding_param_section(a: &HoverAnalysis<'_>) -> Option<String> {
+    let text = a.snapshots.get(a.rel)?;
+    let (callee, b) = crate::binding_hover::binding_param_at(text, a.offset)?;
+    Some(crate::binding_hover::binding_param_hover(&callee, &b))
+}
+
+/// #3959: a call's bindings, appended to its function's description.
+fn with_call_bindings(content: String, a: &HoverAnalysis<'_>) -> String {
+    let bindings = a
+        .snapshots
+        .get(a.rel)
+        .and_then(|text| crate::binding_hover::call_bindings_at(text, a.offset));
+    match bindings {
+        Some(b) => format!(
+            "{content}\n\n{}",
+            crate::binding_hover::bindings_section(&b)
+        ),
+        None => content,
+    }
+}
+
 /// #4451: a `{dataset}` placeholder in an Analytics SQL literal names its table.
 fn dataset_hover(input: &HoverInput<'_>) -> Option<String> {
     let (text, offset) = input.doc?;
@@ -267,7 +309,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 &key.unit,
                 Some(&ctx),
             );
-            let content = with_kind_appendix(content, a, key, &def.path, def_text);
+            let content = with_appendices(content, a, key, &def.path, def_text);
             return Some(with_capability_path(
                 with_used_name_note(content, a, key),
                 a,
@@ -275,7 +317,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         }
         // 1a. #2469: a `given` entry whose capability rung 1 could not describe
         //    still explains why the declaration needs it.
-        if let Some(section) = capability_path_section(a).or_else(|| dataset_hover(input)) {
+        if let Some(section) = fallback_section(a, input) {
             return Some(section);
         }
         // 2. #611 (gap C): a `store` field's operation (`items.put(…)`), and (#4036) the
@@ -436,8 +478,8 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     if let Some(content) = crate::symbols::describe_test_only_at(text, span.start) {
         return Some(content);
     }
-    // 5a''. #2841: the contextual `fixture` of a suite `fixture` declaration.
-    if let Some(content) = crate::symbols::describe_fixture_at(text, span.start) {
+    // 5a''. #2841, #3927: the contextual `fixture` of a suite fixture, or `template`.
+    if let Some(content) = crate::symbols::describe_template_or_fixture_at(text, span.start) {
         return Some(content);
     }
     // 5b. #2136: a `schedule` / `message` address in a `system`-tier case,

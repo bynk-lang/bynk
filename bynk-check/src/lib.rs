@@ -69,6 +69,8 @@ pub mod embeds;
 pub mod emitted_names;
 pub mod entailment;
 pub mod env_consts;
+mod event_payload_size;
+mod event_queue_names;
 pub mod exec_plan;
 pub mod exports;
 pub mod expr_types;
@@ -125,6 +127,7 @@ pub mod stub_agent;
 pub mod stub_outcome;
 pub mod suite_instances;
 pub mod symbols;
+pub mod templates;
 pub mod test_env;
 pub mod test_suites;
 #[cfg(test)]

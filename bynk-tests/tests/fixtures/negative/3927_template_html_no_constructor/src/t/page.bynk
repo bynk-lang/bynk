@@ -1,0 +1,11 @@
+// #3927 (typed HTML, slice 1): `Html.of` would let any string become markup unchecked, so it is refused
+commons t.page
+
+uses bynk.html
+
+fn raw(s: String) -> Option[Html] {
+	match Html.of(s) {
+		Ok(h) => Some(h),
+		Err(_) => None,
+	}
+}

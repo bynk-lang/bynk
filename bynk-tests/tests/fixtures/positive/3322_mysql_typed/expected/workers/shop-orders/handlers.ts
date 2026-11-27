@@ -2,19 +2,32 @@
 // context shop.orders
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import { __bynkPgRow } from "../../__bynk_runtime/time.js";
+import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
+import { __bynkPgRow, __bynkInstantFromWire } from "../../__bynk_runtime/time.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 import { MySqlValue } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 
+export type Status =
+    { readonly tag: "Open" }
+  | { readonly tag: "Shipped" };
+
+export const Status = {
+  Open: { tag: "Open" } as Status,
+  Shipped: { tag: "Shipped" } as Status,
+};
+
 export interface Order {
   readonly id: number;
   readonly name: string;
-  readonly placed: string;
+  readonly placed: number;
+  readonly wait: number;
+  readonly total: { readonly coefficient: bigint; readonly scale: number };
+  readonly status: Status;
   readonly note: Option<string>;
   readonly paid: boolean;
 }
@@ -34,9 +47,9 @@ export const api = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
-        const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [], ["id"]);
+        const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, ["placed"], ["id", "wait"], true);
         if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
         else __fix(__j);
         const __r = __deserialise_List_Order(__j, "$");
@@ -44,7 +57,7 @@ export const api = {
         const __be = __r.error;
         return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       };
-      const __r = await deps.Legacy.all("SELECT `id`, `name`, `placed`, `note`, `paid` FROM orders WHERE id > ? ORDER BY id LIMIT ?, ?", [MySqlValue.MySqlInteger(0), MySqlValue.MySqlInteger(0), MySqlValue.MySqlInteger(20)]);
+      const __r = await deps.Legacy.all("SELECT `id`, `name`, `placed`, `wait`, `total`, `status`, `note`, `paid` FROM orders WHERE id > ? ORDER BY id LIMIT ?, ?", [MySqlValue.MySqlInteger(0), MySqlValue.MySqlInteger(0), MySqlValue.MySqlInteger(20)]);
       if (__r.tag === "Err") return Err({ tag: "MySqlSql" as const, error: __r.error });
       const __d = __decode(__r.value);
       return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "MySqlDecode" as const, error: __d.error });
@@ -68,9 +81,9 @@ export const api = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
-        const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [], ["id"]);
+        const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, ["placed"], ["id", "wait"], true);
         if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
         else __fix(__j);
         const __r = __deserialise_Order(__j, "$");
@@ -78,7 +91,7 @@ export const api = {
         const __be = __r.error;
         return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       };
-      const __r = await deps.Legacy.first("SELECT `id`, `name`, `placed`, `note`, `paid` FROM orders ORDER BY placed DESC LIMIT 1", []);
+      const __r = await deps.Legacy.first("SELECT `id`, `name`, `placed`, `wait`, `total`, `status`, `note`, `paid` FROM orders ORDER BY placed DESC LIMIT 1", []);
       if (__r.tag === "Err") return Err({ tag: "MySqlSql" as const, error: __r.error });
       if (__r.value.tag === "None") return Ok(None);
       const __d = __decode(__r.value.value);
@@ -116,7 +129,10 @@ export function __serialise_Order(value: Order): __JsonValue {
   return {
     id: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.id),
     name: value.name as __JsonValue,
-    placed: value.placed as __JsonValue,
+    placed: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.placed),
+    wait: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Duration outside the safe-integer range at boundary"); return v as __JsonValue; })(value.wait),
+    total: __bynkDecimalToString(value.total) as __JsonValue,
+    status: __serialise_Status(value.status),
     note: __serialise_Option_String(value.note),
     paid: value.paid as __JsonValue,
   };
@@ -131,17 +147,39 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "number", actual: typeof obj["id"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["id"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: String(obj["id"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["id"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __id = obj["id"];
   if (typeof obj["name"] !== "string") {
     return Err({ kind: "StructuralMismatch", path: `${path}.name`, expected: "string", actual: typeof obj["name"] });
   }
   const __name = obj["name"];
-  if (typeof obj["placed"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "string", actual: typeof obj["placed"] });
+  const __placed$ms = __bynkInstantFromWire(obj["placed"]);
+  if (typeof __placed$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "number", actual: typeof __placed$ms });
   }
-  const __placed = obj["placed"];
+  if (!globalThis.Number.isSafeInteger(__placed$ms)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "safe integer", actual: globalThis.Number.isInteger(__placed$ms) ? "integer outside the safe range" : "non-integer number" });
+  }
+  const __placed = __placed$ms;
+  if (typeof obj["wait"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.wait`, expected: "number", actual: typeof obj["wait"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["wait"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.wait`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["wait"]) ? "integer outside the safe range" : "non-integer number" });
+  }
+  const __wait = obj["wait"];
+  if (typeof obj["total"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "decimal string", actual: typeof obj["total"] });
+  }
+  const __b_total = __bynkDecimalParseWire(obj["total"]);
+  if (__b_total.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "decimal string", actual: "invalid decimal" });
+  }
+  const __total = __b_total.value;
+  const __r_status = __deserialise_Status(obj["status"], `${path}.status`);
+  if (__r_status.tag === "Err") return __r_status;
+  const __status = __r_status.value;
   const __r_note = __deserialise_Option_String(obj["note"], `${path}.note`);
   if (__r_note.tag === "Err") return __r_note;
   const __note = __r_note.value;
@@ -149,7 +187,42 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.paid`, expected: "boolean", actual: typeof obj["paid"] });
   }
   const __paid = obj["paid"];
-  return Ok({ id: __id, name: __name, placed: __placed, note: __note, paid: __paid } as Order);
+  return Ok({ id: __id, name: __name, placed: __placed, wait: __wait, total: __total, status: __status, note: __note, paid: __paid } as Order);
+}
+
+export function __serialise_Status(value: Status): __JsonValue {
+  switch (value.tag) {
+    case "Open":
+      return { kind: "Open" };
+    case "Shipped":
+      return { kind: "Shipped" };
+  }
+}
+
+export function __deserialise_Status(json: __JsonValue, path: string = "$"): Result<Status, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Open":
+        return Ok({ tag: "Open" } as Status);
+      case "Shipped":
+        return Ok({ tag: "Shipped" } as Status);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
+    }
+  }
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Open":
+      return Ok({ tag: "Open" } as Status);
+    case "Shipped":
+      return Ok({ tag: "Shipped" } as Status);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
+  }
 }
 
 
