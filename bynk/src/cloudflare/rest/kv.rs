@@ -28,6 +28,7 @@ pub(crate) fn create(title: &str) -> Request {
         method: Method::Post,
         path: NAMESPACES.to_string(),
         body: Some(serde_json::json!({ "title": title })),
+        header: None,
         idempotent: Idempotent::No,
     }
 }
@@ -46,6 +47,7 @@ pub(crate) fn list_page(page: u64) -> Request {
         method: Method::Get,
         path: format!("{NAMESPACES}?per_page={PER_PAGE}&page={page}"),
         body: None,
+        header: None,
         idempotent: Idempotent::Yes,
     }
 }
@@ -74,6 +76,7 @@ pub(crate) fn delete(id: &str) -> Request {
         method: Method::Delete,
         path: format!("{NAMESPACES}/{id}"),
         body: None,
+        header: None,
         idempotent: Idempotent::Yes,
     }
 }

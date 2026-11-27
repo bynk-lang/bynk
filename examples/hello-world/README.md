@@ -52,7 +52,7 @@ bynk doctor
 From this directory:
 
 ```sh
-bynk check src
+bynk check
 bynk test .
 ```
 

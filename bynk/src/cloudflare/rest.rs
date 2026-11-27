@@ -17,7 +17,9 @@ use std::time::Duration;
 use super::error::CloudflareError;
 use super::retry::{Idempotent, Policy};
 
+pub(crate) mod d1;
 pub(crate) mod kv;
+pub(crate) mod r2;
 
 pub(crate) const API: &str = "https://api.cloudflare.com/client/v4";
 
@@ -164,6 +166,8 @@ pub(crate) fn for_purpose(doing: &str, needs: &str) -> Result<Rest, CloudflareEr
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Purpose {
     Kv,
+    R2,
+    D1,
 }
 
 impl Purpose {
@@ -171,6 +175,8 @@ impl Purpose {
     pub(crate) fn doing(self) -> &'static str {
         match self {
             Purpose::Kv => "create or delete the account's KV namespaces",
+            Purpose::R2 => "create the account's R2 buckets",
+            Purpose::D1 => "create the account's D1 databases",
         }
     }
 
@@ -178,6 +184,8 @@ impl Purpose {
     pub(crate) fn permission(self) -> &'static str {
         match self {
             Purpose::Kv => "Workers KV Storage: Edit",
+            Purpose::R2 => "Workers R2 Storage: Edit",
+            Purpose::D1 => "D1: Edit",
         }
     }
 
@@ -212,6 +220,8 @@ pub(crate) struct Request {
     pub(crate) method: Method,
     pub(crate) path: String,
     pub(crate) body: Option<serde_json::Value>,
+    /// One more request header (an R2 call's `cf-r2-jurisdiction`).
+    pub(crate) header: Option<(&'static str, String)>,
     pub(crate) idempotent: Idempotent,
 }
 
@@ -461,14 +471,20 @@ impl Rest {
     /// Send `request`, answered as [`Rest::get`] is.
     pub(crate) fn request(&self, request: &Request) -> Result<serde_json::Value, RestError> {
         let path = &request.path;
+        let header = request.header.as_ref().map(|(n, v)| (*n, v.as_str()));
         match request.method {
-            Method::Get => self.get(path),
-            Method::Post => self.post(
+            Method::Get => match header {
+                Some(header) => self.get_with_header(path, header),
+                None => self.get(path),
+            },
+            Method::Post => self.send_with(
+                "POST",
                 path,
-                request.body.as_ref().unwrap_or(&serde_json::Value::Null),
+                Some(request.body.as_ref().unwrap_or(&serde_json::Value::Null)),
                 request.idempotent,
+                header,
             ),
-            Method::Delete => self.delete(path),
+            Method::Delete => self.send_with("DELETE", path, None, Idempotent::Yes, header),
         }
     }
 
@@ -481,27 +497,47 @@ impl Rest {
         body: Option<&serde_json::Value>,
         idempotent: Idempotent,
     ) -> Result<serde_json::Value, RestError> {
+        self.send_with(method, path, body, idempotent, None)
+    }
+
+    /// [`Rest::send`] with one more request header on a `POST` or `DELETE`.
+    fn send_with(
+        &self,
+        method: &'static str,
+        path: &str,
+        body: Option<&serde_json::Value>,
+        idempotent: Idempotent,
+        header: Option<(&str, &str)>,
+    ) -> Result<serde_json::Value, RestError> {
         let url = format!("{}/accounts/{}{path}", self.base, self.credentials.account);
         let auth = format!("Bearer {}", self.credentials.token);
+        let (extra, value) = header.unwrap_or(("", ""));
         self.policy.run(idempotent, || {
             let response = match (method, body) {
-                ("POST", Some(b)) => self
-                    .agent
-                    .post(&url)
-                    .header("Authorization", &auth)
-                    .header("Content-Type", "application/json")
-                    .send(b.to_string()),
+                ("POST", Some(b)) => {
+                    let mut request = self
+                        .agent
+                        .post(&url)
+                        .header("Authorization", &auth)
+                        .header("Content-Type", "application/json");
+                    if !extra.is_empty() {
+                        request = request.header(extra, value);
+                    }
+                    request.send(b.to_string())
+                }
                 ("PUT", Some(b)) => self
                     .agent
                     .put(&url)
                     .header("Authorization", &auth)
                     .header("Content-Type", "application/json")
                     .send(b.to_string()),
-                _ => self
-                    .agent
-                    .delete(&url)
-                    .header("Authorization", &auth)
-                    .call(),
+                _ => {
+                    let mut request = self.agent.delete(&url).header("Authorization", &auth);
+                    if !extra.is_empty() {
+                        request = request.header(extra, value);
+                    }
+                    request.call()
+                }
             };
             answered(method, path, response)
         })

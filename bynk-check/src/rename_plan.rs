@@ -37,7 +37,15 @@ impl Renamable for FieldShape {
         self.renamed_from = names;
     }
     fn rename_to(&mut self, new: &str) {
-        self.name = new.to_string();
+        let old = std::mem::replace(&mut self.name, new.to_string());
+        // #4523: the paths inside a record field are rooted at the field's name.
+        for p in &mut self.paths {
+            if let Some(rest) = p.path.strip_prefix(&old)
+                && rest.chars().next().is_none_or(|c| !is_name_char(c))
+            {
+                p.path = format!("{new}{rest}");
+            }
+        }
     }
 }
 
@@ -420,6 +428,7 @@ mod tests {
             ty: "String".to_string(),
             default: false,
             renamed_from: from.iter().map(|s| s.to_string()).collect(),
+            paths: Vec::new(),
         }
     }
 
