@@ -223,15 +223,6 @@ const OPERATIONS: &[(&str, Run)] = &[
     ("d1 migrations apply (--env staging)", |p, root| {
         shown(apply_d1_migrations(p, root, "DB", "staging"))
     }),
-    ("d1 create", |p, _| {
-        shown(create_d1(p, "shop-db", None).map(|(id, _)| id))
-    }),
-    ("r2 bucket create", |p, _| {
-        shown(create_r2_bucket(p, "shop-files", None))
-    }),
-    ("r2 bucket create (--jurisdiction eu)", |p, _| {
-        shown(create_r2_bucket(p, "shop-files", Some("eu")))
-    }),
     ("vectorize list", |p, _| shown(index_exists(p, "docs"))),
     ("vectorize get", |p, _| shown(read_index_config(p, "docs"))),
     ("vectorize create", |p, _| {
@@ -302,110 +293,6 @@ const SPECIAL: &[(&str, &str, Script)] = &[
         "d1 migrations apply (default)",
         "applied",
         Script::Answers(&[("*", answer(0, "Migrations applied.\n", ""))]),
-    ),
-    (
-        "d1 create",
-        "created",
-        Script::Answers(&[(
-            "*",
-            answer(
-                0,
-                "[[d1_databases]]\nbinding = \"DB\"\ndatabase_name = \"shop-db\"\ndatabase_id = \"0a1b-2c3d\"\n",
-                "",
-            ),
-        )]),
-    ),
-    (
-        "d1 create",
-        "created, JSON snippet",
-        Script::Answers(&[(
-            "*",
-            answer(
-                0,
-                "{ \"d1_databases\": [{ \"database_id\": \"ffee-0011\" }] }\n",
-                "",
-            ),
-        )]),
-    ),
-    (
-        "d1 create",
-        "already exists, listed",
-        Script::Answers(&[
-            (
-                "d1\\ create*",
-                answer(
-                    1,
-                    "",
-                    "A database with that name already exists [code: 7502]\n",
-                ),
-            ),
-            (
-                "d1\\ list*",
-                answer(
-                    0,
-                    "[WARNING] a banner\n[{\"name\":\"other\",\"uuid\":\"9999\"},{\"name\":\"shop-db\",\"uuid\":\"abcd-ef01\"}]\n",
-                    "",
-                ),
-            ),
-        ]),
-    ),
-    (
-        "d1 create",
-        "already exists, not listed",
-        Script::Answers(&[
-            (
-                "d1\\ create*",
-                answer(1, "", "database with that name already exists\n"),
-            ),
-            ("d1\\ list*", answer(0, "[]\n", "")),
-        ]),
-    ),
-    (
-        "d1 create",
-        "already exists, listing fails",
-        Script::Answers(&[
-            (
-                "d1\\ create*",
-                answer(1, "", "database with that name already exists\n"),
-            ),
-            ("d1\\ list*", answer(1, "", "could not list\n")),
-        ]),
-    ),
-    (
-        "d1 create",
-        "already exists, listing silent",
-        Script::Answers(&[
-            (
-                "d1\\ create*",
-                answer(1, "", "database with that name already exists\n"),
-            ),
-            ("d1\\ list*", answer(2, "", "")),
-        ]),
-    ),
-    (
-        "r2 bucket create",
-        "created",
-        Script::Answers(&[("*", answer(0, "Created bucket.\n", ""))]),
-    ),
-    (
-        "r2 bucket create",
-        "already exists, and you own it",
-        Script::Answers(&[(
-            "*",
-            answer(
-                1,
-                "",
-                "The bucket you tried to create already exists, and you own it. [code: 10004]\n",
-            ),
-        )]),
-    ),
-    (
-        "r2 bucket create",
-        "already exists, not yours",
-        Script::Answers(&[(
-            "*",
-            answer(1, "", "The bucket already exists and is not available.\n"),
-        )]),
     ),
     (
         "vectorize list",
@@ -768,55 +655,154 @@ const REST_OPERATIONS: &[(&str, Run)] = &[
     ("KV delete (REST)", |p, _| {
         shown(delete_kv_namespace(p, "0123abcd"))
     }),
+    ("D1 create (REST)", |p, _| {
+        shown(create_d1(p, "shop-db", None))
+    }),
+    ("D1 create (REST, jurisdiction eu)", |p, _| {
+        shown(create_d1(p, "shop-db", Some("eu")))
+    }),
+    ("R2 create (REST)", |p, _| {
+        shown(create_r2_bucket(p, "shop-files", None))
+    }),
+    ("R2 create (REST, jurisdiction eu)", |p, _| {
+        shown(create_r2_bucket(p, "shop-files", Some("eu")))
+    }),
 ];
 
 /// The answers each moved operation treats specially: its success, and a failure it reads as one.
-const REST_SPECIAL: &[(&str, &str, u16, &str)] = &[
+/// Answers a stub gives in turn: a status and a body each.
+type Answers = &'static [(u16, &'static str)];
+
+/// The calls a stub saw, read once it has served them.
+type Seen = Box<dyn FnOnce() -> Vec<String>>;
+
+const REST_SPECIAL: &[(&str, &str, Answers)] = &[
     (
         "KV create (REST)",
         "created",
-        200,
-        r#"{"success":true,"errors":[],"result":{"id":"0123abcd","title":"shop-api"}}"#,
+        &[(
+            200,
+            r#"{"success":true,"errors":[],"result":{"id":"0123abcd","title":"shop-api"}}"#,
+        )],
     ),
     (
         "KV create (REST)",
         "title taken, code 10014",
-        400,
-        r#"{"success":false,"errors":[{"code":10014,"message":"a namespace with this account ID and title already exists"}],"result":null}"#,
+        &[(
+            400,
+            r#"{"success":false,"errors":[{"code":10014,"message":"a namespace with this account ID and title already exists"}],"result":null}"#,
+        )],
     ),
     (
         "KV list (REST)",
         "two namespaces, one page",
-        200,
-        r#"{"success":true,"result":[{"id":"b2","title":"x"},{"id":"a1","title":"y"}],"result_info":{"page":1,"per_page":100,"count":2,"total_count":2,"total_pages":1}}"#,
+        &[(
+            200,
+            r#"{"success":true,"result":[{"id":"b2","title":"x"},{"id":"a1","title":"y"}],"result_info":{"page":1,"per_page":100,"count":2,"total_count":2,"total_pages":1}}"#,
+        )],
     ),
     (
         "KV delete (REST)",
         "deleted",
-        200,
-        r#"{"success":true,"errors":[],"result":null}"#,
+        &[(200, r#"{"success":true,"errors":[],"result":null}"#)],
     ),
     (
         "KV delete (REST)",
         "not found, code 10013",
-        404,
-        r#"{"success":false,"errors":[{"code":10013,"message":"delete namespace: 'namespace not found'"}],"result":null}"#,
+        &[(
+            404,
+            r#"{"success":false,"errors":[{"code":10013,"message":"delete namespace: 'namespace not found'"}],"result":null}"#,
+        )],
+    ),
+    (
+        "D1 create (REST)",
+        "created",
+        &[(
+            200,
+            r#"{"success":true,"errors":[],"result":{"uuid":"0a1b2c3d-0000-4000-8000-000000000000","name":"shop-db"}}"#,
+        )],
+    ),
+    (
+        "D1 create (REST)",
+        "refused, the name is the account's: adopted",
+        &[
+            (
+                400,
+                r#"{"success":false,"errors":[{"code":7502,"message":"A database with that name already exists"}]}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"name":"shop-db-old","uuid":"9999"},{"name":"shop-db","uuid":"abcd-ef01"}],"result_info":{"page":1,"per_page":100,"count":2}}"#,
+            ),
+        ],
+    ),
+    (
+        "D1 create (REST)",
+        "refused, no database of exactly that name",
+        &[
+            (
+                400,
+                r#"{"success":false,"errors":[{"code":7502,"message":"A database with that name already exists"}]}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"name":"shop-db-old","uuid":"9999"}],"result_info":{"page":1,"per_page":100,"count":1}}"#,
+            ),
+        ],
+    ),
+    (
+        "R2 create (REST)",
+        "created",
+        &[(
+            200,
+            r#"{"success":true,"errors":[],"result":{"name":"shop-files"}}"#,
+        )],
+    ),
+    (
+        "R2 create (REST)",
+        "conflict, the account's own bucket: accepted",
+        &[
+            (
+                409,
+                r#"{"success":false,"errors":[{"code":10073,"message":"Bucket name already exists."}]}"#,
+            ),
+            (200, r#"{"success":true,"result":{"name":"shop-files"}}"#),
+        ],
+    ),
+    (
+        "R2 create (REST)",
+        "conflict, another account's bucket",
+        &[
+            (
+                409,
+                r#"{"success":false,"errors":[{"code":10073,"message":"Bucket name already exists."}]}"#,
+            ),
+            (
+                404,
+                r#"{"success":false,"errors":[{"code":10006,"message":"The specified bucket does not exist."}]}"#,
+            ),
+        ],
     ),
 ];
 
-/// One moved operation's case: its request, and what it returned.
+/// One moved operation's case: its requests, and what it returned. One answer logs the request
+/// with its body; a sequence logs each request's method and path.
 fn rest_case(
     operation: &str,
     run: Run,
     shape: &str,
-    answer: Option<(u16, &'static str)>,
+    answers: &'static [(u16, &'static str)],
 ) -> String {
-    let (base, seen) = match answer {
+    let (base, seen): (String, Option<Seen>) = match answers {
         // A port nothing listens on: the connection is refused.
-        None => ("http://127.0.0.1:9".to_string(), None),
-        Some((status, body)) => {
-            let (base, seen) = answering(status, body);
-            (base, Some(seen))
+        [] => ("http://127.0.0.1:9".to_string(), None),
+        [(status, body)] => {
+            let (base, seen) = answering(*status, body);
+            (base, Some(Box::new(move || vec![seen.join().unwrap()])))
+        }
+        _ => {
+            let (base, seen) = crate::cloudflare::rest::tests::answering_in_turn(answers);
+            (base, Some(Box::new(move || seen.join().unwrap())))
         }
     };
     let scratch = Scratch::new();
@@ -828,7 +814,9 @@ fn rest_case(
     let result = run(&api, &scratch.dir);
     let mut out = format!("== {operation} · {shape}\n");
     if let Some(seen) = seen {
-        out.push_str(&format!("   request: {}\n", seen.join().unwrap()));
+        for request in seen() {
+            out.push_str(&format!("   request: {request}\n"));
+        }
     }
     let result = os_error_number(&result.replace(&base, "<base>"));
     for (i, line) in result.lines().enumerate() {
@@ -843,10 +831,14 @@ fn rest_kind_messages() -> String {
     let mut out = String::new();
     for (operation, run) in REST_OPERATIONS {
         for (shape, answer) in REST_SHAPES {
-            out.push_str(&rest_case(operation, *run, shape, *answer));
+            let answers: &'static [(u16, &'static str)] = match answer {
+                None => &[],
+                Some(answer) => std::slice::from_ref(answer),
+            };
+            out.push_str(&rest_case(operation, *run, shape, answers));
         }
-        for (_, shape, status, body) in REST_SPECIAL.iter().filter(|(op, ..)| op == operation) {
-            out.push_str(&rest_case(operation, *run, shape, Some((*status, body))));
+        for (_, shape, answers) in REST_SPECIAL.iter().filter(|(op, ..)| op == operation) {
+            out.push_str(&rest_case(operation, *run, shape, answers));
         }
         out.push('\n');
     }
@@ -1146,6 +1138,24 @@ fn each_rest_consumer_names_its_purpose_when_credentials_are_missing() {
         "KV namespaces (pre-flight)",
         kv.as_ref().map(|e| e.to_string()).unwrap_or_default(),
     );
+    for (who, purpose) in [
+        (
+            "R2 buckets (pre-flight)",
+            crate::cloudflare::rest::Purpose::R2,
+        ),
+        (
+            "D1 databases (pre-flight)",
+            crate::cloudflare::rest::Purpose::D1,
+        ),
+    ] {
+        said(
+            who,
+            crate::cloudflare::rest::for_kind(purpose)
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
+        );
+    }
     said(
         "KV drift read (plan note)",
         kv.as_ref()

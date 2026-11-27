@@ -34,7 +34,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::Stdio;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[path = "../require/mod.rs"]
 mod require;
@@ -323,24 +323,18 @@ fn a_streamed_raw_body_is_counted_left_unread_and_sent_to_r2_on_workerd() {
     };
     let wrangler = Wranglers(vec![child]);
 
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if request(port, "GET", "/ready", None).is_ok_and(|r| r.status == 200) {
-            break;
+    if let Err(why) = wrangler::wait_until_ready(&log_path, port, &|| {
+        request(port, "GET", "/ready", None).is_ok_and(|r| r.status == 200)
+    }) {
+        let log = read_log(&log_path);
+        drop(wrangler);
+        let _ = fs::remove_dir_all(&tmp);
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})\n{log}"
+        )) {
+            return;
         }
-        if Instant::now() > deadline {
-            let log = read_log(&log_path);
-            drop(wrangler);
-            let _ = fs::remove_dir_all(&tmp);
-            if skip(&format!(
-                "wrangler dev did not serve within the boot window (likely no network to \
-                 provision {WRANGLER})\n{log}"
-            )) {
-                return;
-            }
-            unreachable!()
-        }
-        std::thread::sleep(Duration::from_millis(500));
+        unreachable!()
     }
     let log = || {
         std::thread::sleep(Duration::from_millis(1000)); // let wrangler flush the Worker's console

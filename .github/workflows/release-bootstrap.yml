@@ -61,7 +61,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
       # #1671: Node 22, like ci.yml's and release.yml's test legs — this job runs
       # the suite under BYNK_REQUIRE_TSC, so its strip-types checks need >= 22.13.
@@ -121,7 +121,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
       - name: cargo publish (bynk-std -> bynk-syntax -> bynk-project -> bynk-registry-core -> bynk-ts -> bynk-fmt -> bynk-check -> bynk-model -> bynk-emit -> bynk-strip -> bynk-ide -> bynk-driver -> bynk -> bynk-lsp)
         env:

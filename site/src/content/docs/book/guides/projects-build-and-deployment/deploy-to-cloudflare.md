@@ -21,11 +21,12 @@ Authenticate first. There are two halves:
   Cloudflare's API, which needs both `CLOUDFLARE_API_TOKEN` and
   `CLOUDFLARE_ACCOUNT_ID`. A `wrangler login` session is not enough, and the
   token needs the permission of each kind it touches; the sections below name
-  them. Today that is KV, along with Hyperdrive and the linked kinds.
+  them. Today that is KV, R2 and D1, along with Hyperdrive and the linked kinds.
 
   A deploy that needs them and lacks one stops before the confirmation, with
   nothing created, and names the missing variable and the permission. A
-  redeploy whose namespaces are all recorded needs neither. `bynk doctor`
+  redeploy whose namespaces, buckets and databases are all recorded needs
+  neither. `bynk doctor`
   shows a `cloudflare api` row for a project that declares account resources.
 
 Use `--yes` in an automated, non-interactive invocation:
@@ -591,8 +592,13 @@ deploy shop-cart
 ```
 
 A bucket is named `<worker>-<capability>`, with an environment suffix under
-`--env` (`shop-cart-archives-staging`), and created with
-`wrangler r2 bucket create`, in its `@jurisdiction` when it has one. R2 allows
+`--env` (`shop-cart-archives-staging`), and created through Cloudflare's API,
+in its `@jurisdiction` when it has one. That needs `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`, the token with "Workers R2 Storage: Edit", when a bucket
+is created; a recorded bucket is reused without a call. If the create is refused
+because the name is taken, the deploy asks the account for the bucket by name:
+one this account holds is adopted, and one another account owns stays a
+failure. R2 allows
 3 to 63 lowercase letters, digits and hyphens, not starting or ending with a
 hyphen. A derived name outside that is refused at plan time, naming the
 instance, as is a name two instances would share. R2 bucket names are treated
@@ -809,16 +815,19 @@ d1 create shop-cart-orders (D1_ORDERS)
 deploy shop-cart
 ```
 
-The first deploy runs `wrangler d1 create`, records the name and the
-`database_id` Cloudflare minted, in `d1_instances`, before the push (an
-interrupted run never makes a second one), and writes both into the generated
-`[[d1_databases]]` entry. If a database of that name is already on the account,
-deploy adopts it, looking its id up with `wrangler d1 list`. Under `--env` the
-environment gets its own database and id.
+The first deploy creates the database through Cloudflare's API, records the
+name and the `database_id` Cloudflare minted, in `d1_instances`, before the push
+(an interrupted run never makes a second one), and writes both into the
+generated `[[d1_databases]]` entry. Creating one needs `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`, the token with "D1: Edit"; a recorded database is reused
+without a call. If the create is refused and a database of exactly that name is
+already on the account, deploy adopts it, looking its id up by name. Under
+`--env` the environment gets its own database and id. Migrations still run
+through wrangler, so a `wrangler login` session covers them on a redeploy.
 
 A `D1` with `@jurisdiction("eu")` is planned as
 `d1 create shop-cart-orders (D1_ORDERS) in jurisdiction eu` and created with
-`--jurisdiction eu`; the ledger records the jurisdiction beside the id. It is fixed at creation, so a
+that jurisdiction; the ledger records the jurisdiction beside the id. It is fixed at creation, so a
 source that later adds or changes it for a database already in the ledger is refused with an
 explanation, never recreated. A database already on the account but not in the ledger would be adopted,
 and Bynk cannot read back the jurisdiction it was made with, so with `@jurisdiction` the plan notes

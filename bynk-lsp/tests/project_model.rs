@@ -346,16 +346,16 @@ fn every_path_a_round_produces_is_a_file_the_round_analysed() {
     for e in &r.index.impls {
         check("index impl site", &e.site.path);
     }
-    for (p, _) in r.hints.iter() {
+    for p in r.hints.keys() {
         check("hints", p);
     }
-    for (p, _) in r.locals.iter() {
+    for p in r.locals.keys() {
         check("locals", p);
     }
-    for (p, _) in r.expr_types.iter() {
+    for p in r.expr_types.keys() {
         check("expr_types", p);
     }
-    for (p, _) in r.requirements.iter() {
+    for p in r.requirements.keys() {
         check("requirements", p);
     }
     for (unit, paths) in &r.unit_sources {

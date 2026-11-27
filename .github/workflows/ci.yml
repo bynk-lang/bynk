@@ -122,7 +122,7 @@ env:
 # pinned to match so the runner installs exactly one toolchain (with the
 # rustfmt/clippy components the gates need). The `msrv` job installs the
 # toolchain named by the *declared* `rust-version`; today that equals the pin
-# (1.95), so it verifies the declared floor still builds. A tripwire in that job
+# (1.98), so it verifies the declared floor still builds. A tripwire in that job
 # fails if `rust-version` and the pinned channel ever diverge — at which point
 # the MSRV genuinely differs from the dev toolchain and the leg must go back to
 # running on every code PR (see the job for details).
@@ -695,7 +695,7 @@ jobs:
           persist-credentials: false
       # Define the toolchain explicitly (rust-toolchain.toml would otherwise
       # trigger an implicit download when `cargo audit` dispatches in-repo).
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
         if: ${{ (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
         with:
           components: rustfmt
@@ -806,7 +806,7 @@ jobs:
             echo "target/ is over 40 GB; wiping it (next build is cold)"
             rm -rf target
           fi
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
@@ -832,7 +832,7 @@ jobs:
       - *self_hosted_preflight
       - *self_hosted_checkout
       - *self_hosted_clean
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
         if: runner.environment != 'self-hosted'
         with:
@@ -886,7 +886,7 @@ jobs:
       - *self_hosted_preflight
       - *self_hosted_checkout
       - *self_hosted_clean
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
         if: runner.environment != 'self-hosted'
         with:
@@ -1119,7 +1119,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
         with:
           save-if: ${{ github.event_name != 'merge_group' }}
@@ -1225,7 +1225,7 @@ jobs:
       - *self_hosted_preflight
       - *self_hosted_checkout
       - *self_hosted_clean
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
         if: runner.environment != 'self-hosted'
         with:
@@ -1270,8 +1270,9 @@ jobs:
     # asserting an MSRV nobody checks. If this fails, raise rust-version to match
     # what the code needs — don't lower the toolchain here.
     #
-    # The floor rose to 1.95 in the in-browser track's slice 1: `oxc` (behind
-    # `bynk-strip`) requires rustc 1.94. 1.95 now equals the pinned
+    # The floor rose to 1.95 in the in-browser track's slice 1 (`oxc`, behind
+    # `bynk-strip`, then required rustc 1.94) and to 1.98 with `oxc` 0.159 (#3636).
+    # 1.98 now equals the pinned
     # `rust-toolchain.toml`, so the dtolnay action (which exports RUSTUP_TOOLCHAIN,
     # outranking the repo file) installs the same toolchain the main legs use —
     # this leg still earns its keep by building `--locked` against the *declared*
@@ -1284,7 +1285,7 @@ jobs:
     # rust-toolchain.toml / a workflow) or the event isn't a PR — so a new or
     # bumped dependency (which touches Cargo.lock) still re-checks the MSRV,
     # while a plain `**/*.rs` PR no longer pays for a redundant full-workspace
-    # build (the main 1.95 legs already compile that code on the same toolchain).
+    # build (the main 1.98 legs already compile that code on the same toolchain).
     # Ready set (see `ready-gate` and `test-os` for the `!cancelled()` form).
     if: >-
       !cancelled()
@@ -1301,7 +1302,7 @@ jobs:
       # Derive the toolchain from the *declared* rust-version rather than a
       # hardcoded copy of the pin, so this leg cannot silently degrade into
       # re-running the main toolchain when the two drift apart (#520). Today
-      # they coincide (1.95); if rust-version ever falls below what the code
+      # they coincide (1.98); if rust-version ever falls below what the code
       # needs, this leg is the one that goes red.
       - name: Read declared rust-version
         id: msrv
@@ -1319,7 +1320,7 @@ jobs:
       # exactly the manifest/toolchain PR that would introduce the divergence) with
       # instructions to restore the broad `rust` gate, so the optimisation cannot
       # silently outlive its precondition. Compare on major.minor (rust-version may
-      # omit the patch, e.g. "1.95" vs the channel's "1.95.0").
+      # omit the patch, e.g. "1.98" vs the channel's "1.98.0").
       - name: Guard — declared MSRV still equals the pinned dev toolchain
         run: |
           channel="$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml | head -n1)"
@@ -1329,7 +1330,7 @@ jobs:
             echo "::error::declared rust-version (${{ steps.msrv.outputs.version }}) no longer matches the pinned toolchain ($channel). The MSRV now differs from the dev toolchain, so a code-only PR can use features newer than the floor undetected. Re-gate the msrv job on 'needs.changes.outputs.rust == true || needs.changes.outputs.all == true' so it runs on every code PR again."
             exit 1
           fi
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0 (rev only; toolchain comes from `with`)
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0 (rev only; toolchain comes from `with`)
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
@@ -1373,7 +1374,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
         with:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
@@ -1403,7 +1404,7 @@ jobs:
       - *self_hosted_preflight
       - *self_hosted_checkout
       - *self_hosted_clean
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
@@ -1435,7 +1436,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
@@ -1484,7 +1485,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
@@ -1795,7 +1796,7 @@ jobs:
       - *self_hosted_preflight
       - *self_hosted_checkout
       - *self_hosted_clean
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
       - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
         if: runner.environment != 'self-hosted'
         with:
@@ -1976,7 +1977,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: dtolnay/rust-toolchain@516c5a67e611cdaf2ef0bb5d78620e3c7d245fe6 # 1.98.0
         with:
           targets: aarch64-apple-darwin
       # No rust-cache: a job that saves one must be named in the `queue` step's RUST_CACHES, and
