@@ -1,0 +1,10 @@
+{
+  "blurb": "A template's fields record is its whole contract: every field reaches the page, so a field no placeholder uses is a mistake on one side or the other. Add the placeholder to the template, or remove the field.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.unused_field",
+  "constructs": [],
+  "example": "// t/page.bynk\ntype Card = {\n    title: String,\n    subtitle: String,   // ✗ no `\\(subtitle)` in the template\n}\n\ntemplate card: Card = \"embeds/page.html\"   // ✗\n\n// embeds/page.html\n<h1>\\(title)</h1>\n<h2>\\(subtitle)</h2>   // ✓",
+  "severity": "error",
+  "summary": "A template's fields record has a field no placeholder uses (#3927)."
+}

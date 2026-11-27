@@ -1,0 +1,10 @@
+{
+  "blurb": "A placeholder fills element text or a quoted attribute value, never the markup's structure: in a tag or attribute name it could make any element or attribute, and in a comment or a doctype it could end it early. Inside `<svg>` and `<math>` a browser parses by other rules, so a placeholder is refused anywhere there. Write the structure literally and put the value in text or a quoted attribute.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.placeholder_position",
+  "constructs": [],
+  "example": "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<h\\(level)>News</h1>   // ✗ a tag name\n<h1 class=\"level-\\(level)\">News</h1>   // ✓",
+  "severity": "error",
+  "summary": "A template placeholder is in a tag or attribute name, a comment, a doctype, CDATA, or inside `<svg>` or `<math>` (#3927)."
+}

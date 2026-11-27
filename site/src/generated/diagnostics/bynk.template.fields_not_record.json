@@ -1,0 +1,10 @@
+{
+  "blurb": "`fill` takes a template's fields as one record, whose field names its placeholders name. A refined type, a sum or a generic record has no such fields. Declare a record for the template.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.fields_not_record",
+  "constructs": [],
+  "example": "// t/page.bynk\ntemplate greeting: String = \"embeds/page.html\"   // ✗ not a record\ntemplate greeting: Greeting = \"embeds/page.html\"   // ✓",
+  "severity": "error",
+  "summary": "A template's fields type is not a non-generic record (#3927)."
+}

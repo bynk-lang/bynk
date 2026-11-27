@@ -18,9 +18,9 @@ context_decl ::= "context" qualified_name ("{" context_body_item* "}" | context_
 adapter_decl ::= "adapter" qualified_name ("{" adapter_body_item* "}" | adapter_body_item*)
 suite_decl ::= "suite" qualified_name ("as" ("unit" | "integration" | "system"))? ("{" test_body_item* "}" | test_body_item*)
 qualified_name ::= identifier ("." identifier)*
-commons_body_item ::= uses_decl | consumes_decl | type_decl | fn_decl | messages_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | event_decl | asset_decl | embed_decl | const_decl
-context_body_item ::= uses_decl | consumes_decl | exports_decl | type_decl | fn_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | messages_decl | event_decl | asset_decl | embed_decl | const_decl | removed_agent_decl
-adapter_body_item ::= binding_decl | uses_decl | consumes_decl | exports_decl | type_decl | fn_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | messages_decl | event_decl | asset_decl | embed_decl | const_decl
+commons_body_item ::= uses_decl | consumes_decl | type_decl | fn_decl | messages_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | event_decl | asset_decl | embed_decl | template_decl | const_decl
+context_body_item ::= uses_decl | consumes_decl | exports_decl | type_decl | fn_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | messages_decl | event_decl | asset_decl | embed_decl | template_decl | const_decl | removed_agent_decl
+adapter_body_item ::= binding_decl | uses_decl | consumes_decl | exports_decl | type_decl | fn_decl | capability_decl | provider_decl | service_decl | agent_decl | actor_decl | messages_decl | event_decl | asset_decl | embed_decl | template_decl | const_decl
 test_body_item ::= uses_decl | consumes_decl | env_clause | stub_clause | fixture_decl | type_decl | const_decl | fn_decl | case | property_decl
 uses_decl ::= "uses" qualified_name ("as" identifier | "{" (consumes_item ("," consumes_item)*)? ","? "}")?
 consumes_decl ::= "consumes" qualified_name ("as" identifier | "{" (consumes_item ("," consumes_item)*)? ","? "}")?
@@ -41,6 +41,7 @@ record_field ::= store_annotation* identifier ":" type_ref ("where" refinement)?
 event_decl ::= "event" identifier store_annotation* "=" record_type
 asset_decl ::= visibility_modifier? "asset" identifier "=" string_literal ("at" string_literal)?
 embed_decl ::= visibility_modifier? "embed" identifier "=" string_literal
+template_decl ::= visibility_modifier? "template" identifier (":" type_ref)? "=" string_literal
 fixture_decl ::= "fixture" identifier "=" string_literal
 const_decl ::= visibility_modifier? "const" identifier ":" type_ref "=" expression
 sum_type ::= sum_variant+ ("embeds" type_ref "as" constant_name ("," type_ref "as" constant_name)*)?
