@@ -521,7 +521,6 @@
 /book/reference/diagnostics/bynk.http.cache_duplicate/
 /book/reference/diagnostics/bynk.http.cache_max_age_fractional_seconds/
 /book/reference/diagnostics/bynk.http.cache_on_non_get/
-/book/reference/diagnostics/bynk.http.cache_on_pass_through/
 /book/reference/diagnostics/bynk.http.cache_public_reads_cookies/
 /book/reference/diagnostics/bynk.http.cache_unknown_arg/
 /book/reference/diagnostics/bynk.http.cf_wrong_type/
@@ -547,7 +546,6 @@
 /book/reference/diagnostics/bynk.http.cors_unknown_field/
 /book/reference/diagnostics/bynk.http.cors_wildcard_credentials/
 /book/reference/diagnostics/bynk.http.cors_wildcard_expose_credentials/
-/book/reference/diagnostics/bynk.http.cors_with_pass_through/
 /book/reference/diagnostics/bynk.http.duplicate_rejected/
 /book/reference/diagnostics/bynk.http.duplicate_route/
 /book/reference/diagnostics/bynk.http.error_status_position/
@@ -565,7 +563,6 @@
 /book/reference/diagnostics/bynk.http.form_unknown_arg/
 /book/reference/diagnostics/bynk.http.header_question_not_found/
 /book/reference/diagnostics/bynk.http.headers_wrong_type/
-/book/reference/diagnostics/bynk.http.inbound_request_not_pass_through/
 /book/reference/diagnostics/bynk.http.invalid_path/
 /book/reference/diagnostics/bynk.http.invalid_response_header/
 /book/reference/diagnostics/bynk.http.json_duplicate/
@@ -585,8 +582,6 @@
 /book/reference/diagnostics/bynk.http.limits_not_http/
 /book/reference/diagnostics/bynk.http.limits_unknown_field/
 /book/reference/diagnostics/bynk.http.multipart_large_cap/
-/book/reference/diagnostics/bynk.http.pass_through_not_emitted/
-/book/reference/diagnostics/bynk.http.pass_through_signature/
 /book/reference/diagnostics/bynk.http.path_param_not_stringy/
 /book/reference/diagnostics/bynk.http.query_field_not_stringy/
 /book/reference/diagnostics/bynk.http.query_not_http/
@@ -1041,7 +1036,6 @@
 /book/reference/diagnostics/bynk.types.if_branch_mismatch/
 /book/reference/diagnostics/bynk.types.if_non_bool_cond/
 /book/reference/diagnostics/bynk.types.if_without_else_requires_unit/
-/book/reference/diagnostics/bynk.types.inbound_request_at_boundary/
 /book/reference/diagnostics/bynk.types.interpolation_non_scalar/
 /book/reference/diagnostics/bynk.types.invalid_regex/
 /book/reference/diagnostics/bynk.types.inverted_range/
@@ -1757,6 +1751,7 @@
 /reference/diagnostics/bynk.http.cache_max_age_fractional_seconds/
 /reference/diagnostics/bynk.http.cache_no_store_conflict/
 /reference/diagnostics/bynk.http.cache_on_non_get/
+/reference/diagnostics/bynk.http.cache_on_pass_through/
 /reference/diagnostics/bynk.http.cache_public_authenticated/
 /reference/diagnostics/bynk.http.cache_public_reads_cookies/
 /reference/diagnostics/bynk.http.cache_unknown_arg/
@@ -1783,6 +1778,7 @@
 /reference/diagnostics/bynk.http.cors_unknown_field/
 /reference/diagnostics/bynk.http.cors_wildcard_credentials/
 /reference/diagnostics/bynk.http.cors_wildcard_expose_credentials/
+/reference/diagnostics/bynk.http.cors_with_pass_through/
 /reference/diagnostics/bynk.http.duplicate_rejected/
 /reference/diagnostics/bynk.http.duplicate_route/
 /reference/diagnostics/bynk.http.error_status_position/
@@ -1804,6 +1800,7 @@
 /reference/diagnostics/bynk.http.headers_field_consumed_optional/
 /reference/diagnostics/bynk.http.headers_field_not_stringy/
 /reference/diagnostics/bynk.http.headers_wrong_type/
+/reference/diagnostics/bynk.http.inbound_request_not_pass_through/
 /reference/diagnostics/bynk.http.invalid_path/
 /reference/diagnostics/bynk.http.invalid_response_header/
 /reference/diagnostics/bynk.http.json_duplicate/
@@ -1824,6 +1821,8 @@
 /reference/diagnostics/bynk.http.limits_unknown_field/
 /reference/diagnostics/bynk.http.multipart_body_unbounded/
 /reference/diagnostics/bynk.http.multipart_large_cap/
+/reference/diagnostics/bynk.http.pass_through_not_emitted/
+/reference/diagnostics/bynk.http.pass_through_signature/
 /reference/diagnostics/bynk.http.path_param_not_stringy/
 /reference/diagnostics/bynk.http.query_field_not_stringy/
 /reference/diagnostics/bynk.http.query_not_http/
@@ -2315,6 +2314,7 @@
 /reference/diagnostics/bynk.types.if_branch_mismatch/
 /reference/diagnostics/bynk.types.if_non_bool_cond/
 /reference/diagnostics/bynk.types.if_without_else_requires_unit/
+/reference/diagnostics/bynk.types.inbound_request_at_boundary/
 /reference/diagnostics/bynk.types.interpolation_non_scalar/
 /reference/diagnostics/bynk.types.invalid_regex/
 /reference/diagnostics/bynk.types.inverted_range/
