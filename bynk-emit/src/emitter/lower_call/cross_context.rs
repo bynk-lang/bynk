@@ -68,9 +68,11 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
             let cast = return_cast(
                 &consumed,
                 cx.cross_context(),
-                &cx.commons().types,
+                &CallerView {
+                    types: &cx.commons().types,
+                    rebrands: &|n| cx.rebrands_commons_type(n),
+                },
                 cx.consumed_type_ns(),
-                &|n| cx.rebrands_commons_type(n),
                 method,
                 service,
                 cx.in_test_scaffold(),
@@ -655,9 +657,8 @@ fn consumed_type_ns_unaliased(
 pub(crate) fn return_cast(
     consumed: &str,
     info: &bynk_check::resolver::CrossContextInfo,
-    caller_types: &HashMap<String, Arc<TypeDecl>>,
+    caller: &CallerView,
     consumed_type_ns: &HashMap<String, String>,
-    rebrands: &dyn Fn(&str) -> bool,
     method: &Ident,
     call: TsExpr,
     in_test_scaffold: bool,
@@ -673,7 +674,7 @@ pub(crate) fn return_cast(
     let consumed_type_ns = &consumed_type_ns_unaliased(info, consumed, consumed_type_ns);
     let mut names = HashSet::new();
     type_ref_names(&return_type, &mut names);
-    if !reaches_brand(&names, caller_types, consumed_type_ns, rebrands) {
+    if !reaches_brand(&names, caller, consumed_type_ns) {
         return call;
     }
     let ns_of = |owner: &str| {
@@ -685,7 +686,7 @@ pub(crate) fn return_cast(
     };
     let type_ns: HashMap<String, String> = names
         .iter()
-        .filter(|n| consumed_type_ns.contains_key(*n) || !caller_types.contains_key(*n))
+        .filter(|n| consumed_type_ns.contains_key(*n) || !caller.types.contains_key(*n))
         .map(|n| {
             if let Some(ns) = consumed_type_ns.get(n) {
                 return (n.clone(), ns.clone());
@@ -703,15 +704,21 @@ pub(crate) fn return_cast(
     cast_through_unknown(call, ty)
 }
 
+/// What [`return_cast`] reads of the calling module: the types its commons declares, and whether
+/// one of them is a `uses`d commons type it rebrands (#3807).
+pub(crate) struct CallerView<'a> {
+    pub(crate) types: &'a HashMap<String, Arc<TypeDecl>>,
+    pub(crate) rebrands: &'a dyn Fn(&str) -> bool,
+}
+
 /// #2828: whether any of `names`, or a type their caller-bound declarations
 /// name in a field or payload, is a refined or opaque type the caller binds.
 /// A consumed context's own type (`consumed_type_ns`) is never the caller's
 /// declaration, so it neither counts nor is searched.
 fn reaches_brand(
     names: &HashSet<String>,
-    caller_types: &HashMap<String, Arc<TypeDecl>>,
+    caller: &CallerView,
     consumed_type_ns: &HashMap<String, String>,
-    rebrands: &dyn Fn(&str) -> bool,
 ) -> bool {
     let mut seen: HashSet<String> = HashSet::new();
     let mut todo: Vec<String> = names.iter().cloned().collect();
@@ -721,10 +728,10 @@ fn reaches_brand(
         }
         // #3807: a `uses`d commons type is rebranded per context (`__ctxBrand`), so the callee's
         // value of it is not the caller's, whatever its fields hold.
-        if rebrands(&n) {
+        if (caller.rebrands)(&n) {
             return true;
         }
-        let Some(decl) = caller_types.get(&n) else {
+        let Some(decl) = caller.types.get(&n) else {
             continue;
         };
         let mut inner = HashSet::new();
@@ -923,7 +930,7 @@ mod tests {
 
 #[cfg(test)]
 mod reaches_brand_tests {
-    use super::reaches_brand;
+    use super::{CallerView, reaches_brand};
     use std::collections::{HashMap, HashSet};
 
     /// #3807: a `uses`d commons type the caller rebrands carries a brand whatever its fields hold,
@@ -934,11 +941,15 @@ mod reaches_brand_tests {
         let names: HashSet<String> = ["Expr".to_string()].into();
         let types = HashMap::new();
         let ns = HashMap::new();
-        assert!(reaches_brand(&names, &types, &ns, &|n| n == "Expr"));
-        assert!(!reaches_brand(&names, &types, &ns, &|_| false));
+        let view = |rebrands: &'static dyn Fn(&str) -> bool| CallerView {
+            types: &types,
+            rebrands,
+        };
+        assert!(reaches_brand(&names, &view(&|n| n == "Expr"), &ns));
+        assert!(!reaches_brand(&names, &view(&|_| false), &ns));
         let consumed: HashMap<String, String> = [("Expr".to_string(), "other".to_string())].into();
         assert!(
-            !reaches_brand(&names, &types, &consumed, &|n| n == "Expr"),
+            !reaches_brand(&names, &view(&|n| n == "Expr"), &consumed),
             "a consumed context's own type is never the caller's declaration"
         );
     }
