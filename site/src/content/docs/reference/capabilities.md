@@ -99,7 +99,9 @@ and a commons suite's suite-local instances are experimental. A project opts in 
 A commons is shared by contexts that hold different capabilities, and most
 `bynk.cloudflare` kinds (`D1`, `R2`, `Queue`, `Service`, …) are used only through a
 context's own derived instances. A **free function in a commons** therefore takes
-the instance it needs as a **capability parameter**, and every call names it:
+the instance it needs as a **capability parameter**, and every call names it. The
+guide [Write a library that uses a capability](/book/guides/effects-and-capabilities/write-a-library-that-uses-a-capability/)
+walks through one from declaration to tests:
 
 ```bynk,fragment
 commons shop.cache
