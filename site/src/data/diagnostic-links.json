@@ -832,6 +832,9 @@
   "bynk.given.parameter_outside_commons": [
     "/reference/capabilities/#capability-parameters"
   ],
+  "bynk.given.parameterised_fn_value": [
+    "/reference/capabilities/#capability-parameters"
+  ],
   "bynk.given.shared_as_parameter": [
     "/reference/capabilities/#capability-parameters"
   ],

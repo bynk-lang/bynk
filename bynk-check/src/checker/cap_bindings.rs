@@ -291,3 +291,30 @@ pub(crate) fn binding_on_a_non_function(name: &Ident, b: &CapBinding) -> Compile
     )
     .with_note("only a call to a commons function with capability parameters takes bindings: remove `given …` from the arguments")
 }
+
+/// `bynk.given.parameterised_fn_value` (track Q8): a function with capability
+/// parameters named as a value. A binding must be chosen, and a lambda that
+/// binds says which explicitly; partial application of bindings is not a
+/// value form.
+pub(crate) fn parameterised_fn_value(name: &Ident, callee: &FnDecl) -> CompileError {
+    let params: Vec<String> = callee
+        .given
+        .iter()
+        .filter(|g| g.is_parameter())
+        .map(|g| format!("{} = …", g.key()))
+        .collect();
+    CompileError::new(
+        "bynk.given.parameterised_fn_value",
+        name.span,
+        format!(
+            "`{}` takes capability parameters, so it cannot be named as a value",
+            name.name
+        ),
+    )
+    .with_label(callee.name.ident().span, format!("`{}` is declared here", name.name))
+    .with_note(format!(
+        "every call binds its parameters, and a value would leave them unchosen: write a lambda that binds them, as in `(x) => {}(x, given {})`",
+        name.name,
+        params.join(", ")
+    ))
+}

@@ -2411,6 +2411,11 @@ agent Cart {
         example: "context shop\n\nfn forget(id: String) -> Effect[()] given Store: Kv { … }   // ✗ a context function\n\nfn forget(id: String) -> Effect[()] given Sessions {         // ✓ the instance, by name\n\tSessions.delete(id)\n}",
     },
     Explain {
+        code: "bynk.given.parameterised_fn_value",
+        blurb: "A function with capability parameters (`given Store: Kv`) has its parameters bound at every call, inside the argument list. Named as a value, as in `keys.forEach(evict)`, it would leave them unchosen, and a binding is never inferred. Write a lambda that binds them instead, `(k) => evict(k, given Inner = Store)`: it says which instance each call uses, where review sees it. A function with only shared capabilities, or none, may still be named as a value.",
+        example: "fn evict(key: String) -> Effect[()] given Inner: Kv { … }\n\nfn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {\n\tkeys.forEach(evict)                              // ✗ `Inner` is unbound\n}\n\nfn evictAll(keys: List[String]) -> Effect[()] given Store: Kv {\n\tkeys.forEach((k) => evict(k, given Inner = Store))   // ✓ a lambda that binds\n}",
+    },
+    Explain {
         code: "bynk.given.shared_as_parameter",
         blurb: "A capability parameter exists to choose between instances, so its bound must be a kind with instances (`Kv`, `D1`, `R2`, …). A capability with none (`Clock`, `Random`, `Logger`, `Fetch`, `Secrets`, `Locale`, `Idempotency`, the Cloudflare singletons, `Crypto`) has exactly one per caller, so a binding would add a name and no choice. Name it bare, as a shared capability: `given Logger`.",
         example: "fn note(text: String) -> Effect[()] given L: Logger {   // ✗ there is only one `Logger`\n\tL.info(text)\n}\n\nfn note(text: String) -> Effect[()] given Logger {      // ✓ a shared capability\n\tLogger.info(text)\n}",
@@ -8992,6 +8997,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.given.parameter_outside_commons",
         "`given Name: Kind` on a context function, a method, a handler, a provider or a suite helper; only a commons function takes capability parameters.",
         &["given_clause"],
+    ),
+    dg(
+        "bynk.given.parameterised_fn_value",
+        "A function with capability parameters is named as a value; a lambda that binds them takes its place.",
+        &["call"],
     ),
     dg(
         "bynk.given.shared_as_parameter",

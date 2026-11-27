@@ -1,0 +1,27 @@
+context shop
+
+uses lib.chain
+consumes bynk.cloudflare { Kv }
+
+capability Sessions = Kv
+
+capability Archive = Kv
+
+service api {
+	on call(key: String) -> Effect[Int] by Caller given Sessions {
+		top[Int](key, [3, 1, 2], given Store = Sessions)
+	}
+}
+
+service swapper {
+	on call(n: Int) -> Effect[Bool] by Caller given Sessions, Archive {
+		let _ <- Sessions.put("k", "x")
+		swap(n, given A = Sessions, B = Archive)
+	}
+}
+
+service cleaner {
+	on call(keys: List[String]) -> Effect[()] by Caller given Sessions {
+		evictAll(keys, given Store = Sessions)
+	}
+}
