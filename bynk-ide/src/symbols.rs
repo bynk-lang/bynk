@@ -4212,13 +4212,13 @@ pub(crate) fn describe_service(s: &ServiceDecl) -> String {
     out
 }
 
-/// v0.123 (slice 2): a store field's kind — `Cell[Int]`, `Map[K, V]`, or a bare
-/// head with no type args.
 /// A store kind as written, `Map[String, Order]`.
 pub fn store_kind_text(k: &StoreKind) -> String {
     store_kind_str(k)
 }
 
+/// v0.123 (slice 2): a store field's kind — `Cell[Int]`, `Map[K, V]`, or a bare
+/// head with no type args.
 fn store_kind_str(k: &StoreKind) -> String {
     if k.args.is_empty() {
         k.head.name.clone()

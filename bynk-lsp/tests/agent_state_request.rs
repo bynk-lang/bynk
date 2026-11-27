@@ -434,6 +434,7 @@ agent Cart {
     let _ <- audit.append(line)
     let _ <- prices.upsert(line.sku, line.qty, (q) => q + line.qty)
     let _ <- prices.update(line.sku, (q) => q + 1)
+    let _ <- files.upsert(line.sku, data, (d) => d)
     let _ <- sessions.put(line.sku, line)
     let _ <- sessions.upsert(line.sku, line, (l) => l)
     let _ <- sessions.update(line.sku, (l) => l)
@@ -520,6 +521,11 @@ fn writes_report_the_type_they_store() {
         }
     }
     assert_eq!(by("sessions", "put")["valueType"], "Line");
+    // The unbounded case the platform-limit hints exist for: an `upsert` of `Bytes` into a map.
+    let upserted = by("files", "upsert");
+    assert_eq!(upserted["valueType"], "Bytes");
+    assert_eq!(upserted["valueRef"]["kind"], "Bytes");
+    assert_eq!(upserted["fieldType"], "Map[String, Bytes]");
 
     // A remove stores no value, and says what the field still is.
     let removed = by("prices", "remove");
