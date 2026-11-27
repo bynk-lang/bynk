@@ -644,6 +644,7 @@
 /book/reference/diagnostics/bynk.lex.unterminated_string/
 /book/reference/diagnostics/bynk.list.deprecated_function/
 /book/reference/diagnostics/bynk.locale.multiple_message_bundles/
+/book/reference/diagnostics/bynk.locale.render_shadows_bundle/
 /book/reference/diagnostics/bynk.messages.cross_unit_render/
 /book/reference/diagnostics/bynk.messages.format_mismatch/
 /book/reference/diagnostics/bynk.messages.incomplete/
@@ -1905,6 +1906,7 @@
 /reference/diagnostics/bynk.list.par_limit_range/
 /reference/diagnostics/bynk.list.par_traverse_unit/
 /reference/diagnostics/bynk.locale.multiple_message_bundles/
+/reference/diagnostics/bynk.locale.render_shadows_bundle/
 /reference/diagnostics/bynk.map.deprecated_function/
 /reference/diagnostics/bynk.match.as_on_wildcard/
 /reference/diagnostics/bynk.match.refined_pattern_is_range/

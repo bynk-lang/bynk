@@ -3330,6 +3330,20 @@ agent Cart {
         example: "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
     },
     Explain {
+        code: "bynk.locale.render_shadows_bundle",
+        blurb: "A message bundle's `render` belongs to the unit that declares it, so a `uses` of that unit does not bring it in. A unit that also `uses bynk.locale` gets `bynk.locale`'s `render`, which reads no bundle and returns the code, so a bare `render` there is probably not the one meant. The warning names the unit or units that declare a bundle. To render a bundle's messages, call a function the unit that declares it exports: the bundle's own `render` is not importable, and `Messages.render` is `bynk.messages.cross_unit_render`. If the code-echo is what you want, the warning is the one thing to leave, or name it with `bynk.locale`'s alias (`Locale.render`).",
+        example: "// shop/cart.bynk\n\
+                commons shop.cart\n\
+                \n\
+                uses bynk.locale\n\
+                uses shop.messages\n\
+                \n\
+                fn banner(tag: LocaleTag, name: String) -> String {\n\
+                \x20 render(tag, message(\"cart.greeting\"))     // ✗ `bynk.locale`'s `render`: it returns the code\n\
+                \x20 greet(tag, name)                           // ✓ call what shop.messages exports\n\
+                }",
+    },
+    Explain {
         code: "bynk.match.as_on_wildcard",
         blurb: "`pattern as name` binds `name` to the whole value the pattern matched, so that a pattern can check a value's shape and keep the value too: `Some(Order { status: Paid, .. } as paid)`. On `_` it adds nothing, because `_` already matches every value and a bare name binds that same value: `_ as x` is `x`. The warning's quick fix writes the name, and `bynk check --fix` applies it. If the pattern was meant to check a shape first, write that shape in front of `as`.",
         example: "match o {\n    Some(_ as order) => ship(order)    // ✗ `_ as order` is just `order`\n    None => nothing()\n}\n\nmatch o {\n    Some(order) => ship(order)        // ✓\n    None => nothing()\n}",
@@ -9943,6 +9957,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.locale.multiple_message_bundles",
         "A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against.",
     ),
+    warn(d(
+        "bynk.locale.render_shadows_bundle",
+        "A unit that `uses bynk.locale` and also `uses` a unit that declares a message bundle calls a bare `render`, which is `bynk.locale`'s: it reads no bundle and returns the code (warning).",
+    )),
     warn(d(
         "bynk.map.deprecated_function",
         "A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).",

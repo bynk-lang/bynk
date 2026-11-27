@@ -755,6 +755,7 @@ pub fn check_file_core(
     let empty_types = HashMap::new();
     let empty_events = HashMap::new();
     let local_table = unit_info.get(name).map(|i| &i.table);
+    let local_uses = unit_info.get(name).map_or(&[][..], |i| i.uses.as_slice());
     let local_types = local_table.map(|t| &t.types).unwrap_or(&empty_types);
     let local_events = local_table.map(|t| &t.events).unwrap_or(&empty_events);
     let empty_fns = HashMap::new();
@@ -778,10 +779,9 @@ pub fn check_file_core(
     // #3959: a commons' free functions may declare `given`.
     .with_is_commons(kind == UnitKind::Commons)
     // #911: what a literal `message("code")` here is checked against.
-    .with_message_scope(
-        local_table.and_then(|t| t.message_codes.clone()),
-        crate::symbols::locale_message_span(|u| unit_info.get(u).map(|i| &i.table)),
-    )
+    .with_message_scope(crate::symbols::message_scope(name, local_uses, |u| {
+        unit_info.get(u).map(|i| &i.table)
+    }))
     // #1883, slice 1a: this unit's assets plus its `uses`d commons' ([DECISION G]).
     .with_assets(crate::assets::compose_unit_assets(name, unit_info))
     // #2387, slice 1: likewise this unit's embeds and its `uses`d commons'.

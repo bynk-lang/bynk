@@ -234,14 +234,9 @@ pub struct ResolvedCommons {
     /// whose free functions may declare capability parameters and shared
     /// capabilities. Set with [`ResolvedCommons::with_is_commons`].
     pub(crate) is_commons: bool,
-    /// #911: the codes of this unit's `@reference` message bundle (see
-    /// [`crate::symbols::UnitTable::message_codes`]). `None` where there is no bundle to check a
-    /// literal `message("code")` against. Set with [`ResolvedCommons::with_message_scope`].
-    pub(crate) message_codes: Option<Arc<std::collections::BTreeSet<String>>>,
-    /// #911: where `bynk.locale`'s `message` is declared, which identifies a call to it however
-    /// the unit spells the import (`Locale.message`, `message as msg`). `None` where the check
-    /// has nothing to compare against.
-    pub(crate) locale_message: Option<Span>,
+    /// #911: what the checker needs to know about message bundles for this unit's bodies (see
+    /// [`crate::symbols::MessageScope`]). Set with [`ResolvedCommons::with_message_scope`].
+    pub(crate) message_scope: crate::symbols::MessageScope,
     /// Names of types brought into scope via `uses` of a *commons*
     /// specifically (as opposed to a local declaration, or a type surfaced
     /// via `consumes`) — every name [`compute_is_uses_commons_type`] accepts
@@ -557,22 +552,14 @@ impl ResolvedCommons {
             unselected_types: HashSet::new(),
             stability: Default::default(),
             is_commons: false,
-            message_codes: None,
-            locale_message: None,
+            message_scope: Default::default(),
         }
     }
 
-    /// #911: record what a literal `message("code")` in this unit is checked against: the codes
-    /// of its `@reference` message bundle, and where `bynk.locale`'s `message` is declared (so the
-    /// call is recognised by where the function is from, not how it is spelled). A builder, so a
-    /// construction without a bundle need not call it.
-    pub fn with_message_scope(
-        mut self,
-        codes: Option<Arc<std::collections::BTreeSet<String>>>,
-        locale_message: Option<Span>,
-    ) -> Self {
-        self.message_codes = codes;
-        self.locale_message = locale_message;
+    /// #911: record this unit's [`crate::symbols::MessageScope`]. A builder, so a construction
+    /// without a bundle need not call it.
+    pub fn with_message_scope(mut self, scope: crate::symbols::MessageScope) -> Self {
+        self.message_scope = scope;
         self
     }
 
@@ -1091,8 +1078,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             stability: Default::default(),
             is_commons: false,
             // Single-file mode has no bundle to check a literal code against.
-            message_codes: None,
-            locale_message: None,
+            message_scope: Default::default(),
         };
         (resolved, errors)
     }

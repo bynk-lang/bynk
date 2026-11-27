@@ -183,7 +183,8 @@ the code `cart.greeting` without colliding, and no unit reads another's bundle.
   shop.messages`, a braced `uses shop.messages { render }` or an alias
   (`Messages.render(…)`), is `bynk.messages.cross_unit_render`. (If the unit also
   `uses bynk.locale`, a bare `render` is `bynk.locale`'s, which returns the code
-  and reads no bundle.)
+  and reads no bundle: the compiler warns,
+  `bynk.locale.render_shadows_bundle`, naming the unit that declares one.)
 - **A literal code must be one of the unit's own.** In a unit that declares a
   bundle, `message("cart.greting")` is `bynk.messages.unknown_code`: the code is
   not in the `@reference` block, and the diagnostic suggests the nearest one that

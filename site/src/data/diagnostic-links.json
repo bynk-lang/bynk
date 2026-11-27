@@ -1186,6 +1186,9 @@
   "bynk.lex.unterminated_string": [
     "/reference/spec/lexical-grammar/#32-literals"
   ],
+  "bynk.locale.render_shadows_bundle": [
+    "/book/guides/localisation/declare-a-message-bundle/#message-codes-belong-to-their-unit"
+  ],
   "bynk.messages.cross_unit_render": [
     "/book/guides/localisation/declare-a-message-bundle/#message-codes-belong-to-their-unit"
   ],

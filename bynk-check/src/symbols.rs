@@ -2107,12 +2107,38 @@ fn synthetic_render_fn() -> FnDecl {
     }
 }
 
-/// #911: where `bynk.locale`'s `message` is declared, given each unit's table: the identity a call
-/// to it is recognised by, whatever the importing unit calls it.
-pub fn locale_message_span<'a>(table_of: impl Fn(&str) -> Option<&'a UnitTable>) -> Option<Span> {
-    table_of("bynk.locale")
-        .and_then(|t| t.fns.get("message"))
-        .map(|f| f.span)
+/// #911: what the checker needs to know about message bundles for one unit's bodies.
+#[derive(Clone, Default)]
+pub struct MessageScope {
+    /// The codes of the unit's own `@reference` block ([`UnitTable::message_codes`]): what a
+    /// literal `message("code")` is checked against. `None` where there is no bundle.
+    pub codes: Option<Arc<std::collections::BTreeSet<String>>>,
+    /// Where `bynk.locale`'s `message` is declared, which identifies a call to it however the unit
+    /// spells the import (`Locale.message`, `message as msg`).
+    pub locale_message: Option<Span>,
+    /// Likewise `bynk.locale`'s `render`.
+    pub locale_render: Option<Span>,
+    /// The units this unit `uses` that declare a message bundle, whose `render` it does not get.
+    pub bundle_units: Vec<String>,
+}
+
+/// #911: the [`MessageScope`] of unit `name`, which `uses` the units `uses`, given each unit's table.
+pub fn message_scope<'a>(
+    name: &str,
+    uses: &[String],
+    table_of: impl Fn(&str) -> Option<&'a UnitTable>,
+) -> MessageScope {
+    let locale = table_of("bynk.locale");
+    MessageScope {
+        codes: table_of(name).and_then(|t| t.message_codes.clone()),
+        locale_message: locale.and_then(|t| t.fns.get("message")).map(|f| f.span),
+        locale_render: locale.and_then(|t| t.fns.get("render")).map(|f| f.span),
+        bundle_units: uses
+            .iter()
+            .filter(|u| table_of(u).is_some_and(UnitTable::has_bundle_render))
+            .cloned()
+            .collect(),
+    }
 }
 
 /// #911: the codes of a unit's `@reference` message block, across its files: what a literal

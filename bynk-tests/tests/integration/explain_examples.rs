@@ -74,6 +74,10 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
 const WARNING_ONLY: &[(&str, &str)] = &[
     (
+        "bynk.locale.render_shadows_bundle",
+        "a warning; `positive/911_message_codes_per_unit` holds it (`shop.mixed`) with `expected_warnings.txt`",
+    ),
+    (
         "bynk.container.unbounded_instances",
         "a warning; `positive/4112_container_unbounded_instances` holds it with `expected_warnings.txt`, and `positive/4112_container_bounded_instances` holds the good cases",
     ),
