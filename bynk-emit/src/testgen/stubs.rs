@@ -1625,11 +1625,12 @@ pub(super) fn platform_double(
             // `generate`, whose text it reads.
             let generate_json = "    async generateJson() {\n      throw new globalThis.Error(\"bynk: `Ai.generateValue` is not stubbed, and a test never reaches Workers AI — add `stub Ai.generate(_, _) returns …` (its `text` is the JSON the model answered)\");\n    },\n";
             format!(
-                "  return globalThis.Object.assign({{\n{}{}{}{}  }}, {{\n{}  }});\n",
+                "  return globalThis.Object.assign({{\n{}{}{}{}{}  }}, {{\n{}  }});\n",
                 op("run", "_, _"),
                 op("generate", "_, _"),
                 op("embed", "_, _"),
                 op("runStream", "_, _"),
+                op("generateStream", "_, _"),
                 generate_json
             )
         }
