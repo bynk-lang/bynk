@@ -564,10 +564,11 @@ The client reconnects after the server closes the connection with `1008` and the
 (a credential's expiry is re-checked at every frame; see [WebSocket](/reference/websocket/#a-credential-that-expires-on-a-live-connection))
 and after `1006`, an abnormal disconnection, with an exponential backoff (250 ms doubling, at most 30 s;
 `backoff(attempt)` replaces it) for at most `maxAttempts` (5) in a row, asking `credentials` for a fresh credential
-each time. A close the client made (`close()`, or a frame it refused) never reconnects, and neither does another
-`1008`. **Frames are not replayed**: a frame sent while the connection was down, or one the server sent meanwhile,
+each time; without `credentials` it offers the credentials `connect` was given again, so a reconnect never quietly
+becomes an anonymous connection. A close the client made (`close()`, or a frame it refused) never reconnects, and
+neither does another `1008`; `close()` also stops an attempt that is still being made, so nothing opens after it. **Frames are not replayed**: a frame sent while the connection was down, or one the server sent meanwhile,
 is the application's to resend or fetch again, and a frame still queued when the connection closes is dropped,
-never resent on the next one. `credentials` is called once for every attempt, not once per connection. The `frames` iterator and the listeners carry across a reconnect.
+never resent on the next one. `credentials` is called once for every attempt, not once per connection. The `frames` iterator and the listeners carry across a reconnect, and leaving a `for await` early stops that iterator buffering.
 
 **Environment.** The client uses the platform `WebSocket` (browsers, Workers, Node 22 and later) and no
 dependency. A `webSocket` option on `createClient` supplies another constructor, as `fetch` does: a Node client

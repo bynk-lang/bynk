@@ -925,6 +925,9 @@ class __WsClient<C, In, Out> implements WsConnection<In, Out> {
   state: "connecting" | "open" | "reconnecting" | "closed" = "connecting";
   readonly opened: globalThis.Promise<void>;
   private socket: globalThis.WebSocket | undefined;
+  // The socket of the attempt in progress, until that attempt settles: what `close()` must close.
+  private live: globalThis.WebSocket | undefined;
+  private readonly credentials: C | undefined;
   private readonly queue: (string | globalThis.Uint8Array)[] = [];
   private readonly frameListeners = new globalThis.Set<(frame: Out) => void>();
   private readonly closeListeners = new globalThis.Set<(close: WsClose) => void>();
@@ -955,6 +958,7 @@ class __WsClient<C, In, Out> implements WsConnection<In, Out> {
     this.spec = spec;
     this.url = url;
     this.connect = connect;
+    this.credentials = credentials;
     this.opened = new globalThis.Promise<void>((resolve, reject) => {
       this.resolveOpened = resolve;
       this.rejectOpened = reject;
@@ -967,14 +971,25 @@ class __WsClient<C, In, Out> implements WsConnection<In, Out> {
   get frames(): globalThis.AsyncIterable<Out> {
     this.pending ??= [];
     return {
-      [globalThis.Symbol.asyncIterator]: (): AsyncIterator<Out> => ({
+      [globalThis.Symbol.asyncIterator]: (): AsyncIterator<Out> => {
+        // Leaving the loop early (`break`) stops this iterator buffering: it reads nothing more.
+        let left = false;
+        return {
         next: (): globalThis.Promise<IteratorResult<Out>> => {
+          if (left) return globalThis.Promise.resolve({ done: true, value: undefined });
           const have = this.pending!.shift();
           if (have !== undefined) return globalThis.Promise.resolve({ done: false, value: have });
           if (this.finished) return globalThis.Promise.resolve({ done: true, value: undefined });
           return new globalThis.Promise((resolve) => this.waiting.push(resolve));
         },
-      }),
+        return: (): globalThis.Promise<IteratorResult<Out>> => {
+          left = true;
+          this.pending = undefined;
+          for (const waiter of this.waiting.splice(0)) waiter({ done: true, value: undefined });
+          return globalThis.Promise.resolve({ done: true, value: undefined });
+        },
+        };
+      },
     };
   }
 
@@ -1014,8 +1029,9 @@ class __WsClient<C, In, Out> implements WsConnection<In, Out> {
   close(code: number = 1000, reason: string = ""): void {
     this.ours = true;
     if (this.timer !== undefined) globalThis.clearTimeout(this.timer);
-    if (this.socket !== undefined && this.state !== "closed" && this.state !== "reconnecting") {
-      this.socket.close(code, reason);
+    if (this.live !== undefined) {
+      // An attempt is under way, or the connection is open: closing its socket ends it through its own `close` event.
+      this.live.close(code, reason);
     } else {
       const info = { code, reason, clean: true };
       for (const l of [...this.closeListeners]) l({ ...info, willReconnect: false });
@@ -1029,6 +1045,8 @@ class __WsClient<C, In, Out> implements WsConnection<In, Out> {
       const make = this.options.webSocket ?? (globalThis as { readonly WebSocket?: typeof globalThis.WebSocket }).WebSocket;
       if (make === undefined) throw new globalThis.Error("this environment has no WebSocket");
       const protocols = await __wsProtocols(this.spec, credentials);
+      // `close()` while the token was being read: this attempt makes no socket.
+      if (this.ours || this.finished) return;
       socket = protocols.length === 0 ? new make(this.url) : new make(this.url, protocols);
     } catch {
       this.closed({ code: 1006, reason: "", clean: false });
@@ -1036,6 +1054,7 @@ class __WsClient<C, In, Out> implements WsConnection<In, Out> {
     }
     socket.binaryType = "arraybuffer";
     this.socket = socket;
+    this.live = socket;
     // A browser fires `error` then `close` for an upgrade the server refuses, but some platforms (Node's
     // own `WebSocket`) fire only `error` and never `close`: an error before the socket ever opened is the
     // end of this attempt, and whichever of the two arrives second is ignored.
@@ -1044,6 +1063,7 @@ class __WsClient<C, In, Out> implements WsConnection<In, Out> {
     const settle = (info: { readonly code: number; readonly reason: string; readonly clean: boolean }): void => {
       if (settled) return;
       settled = true;
+      if (this.live === socket) this.live = undefined;
       this.closed(info);
     };
     socket.addEventListener("error", () => {
@@ -1119,7 +1139,10 @@ class __WsClient<C, In, Out> implements WsConnection<In, Out> {
     this.timer = globalThis.setTimeout(() => {
       void (async (): Promise<void> => {
         try {
-          const fresh = await reconnect!.credentials?.();
+          // Without `reconnect.credentials` the credentials `connect` was given are used again (a token that is a
+          // function is read again): a reconnect never quietly becomes an anonymous connection.
+          const fresh = (await reconnect!.credentials?.()) ?? this.credentials;
+          if (this.ours || this.finished) return;
           await this.open(fresh);
         } catch {
           this.closed({ code: 1006, reason: "", clean: false });

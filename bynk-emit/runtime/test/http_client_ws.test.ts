@@ -279,3 +279,91 @@ test("a frame queued before a close is never resent on a reconnect, and credenti
   assert.equal(asked, 2);
   assert.deepEqual(FakeSocket.made.slice(1).map((s) => s.protocols), [["bynk.bearer", "fresh1"], ["bynk.bearer", "fresh2"]]);
 });
+
+test("a reconnect without `reconnect.credentials` offers the credentials connect was given, a function token read again", async () => {
+  let read = 0;
+  const c = connect(spec("bearer"), { bearer: () => `t${++read}` }, { reconnect: { backoff: () => 0 } });
+  await tick();
+  assert.deepEqual(FakeSocket.made[0].protocols, ["bynk.bearer", "t1"]);
+  FakeSocket.made[0].open();
+  FakeSocket.made[0].finish(1008, "authentication expired", true);
+  await tick();
+  await tick();
+  assert.equal(FakeSocket.made.length, 2);
+  assert.deepEqual(FakeSocket.made[1].protocols, ["bynk.bearer", "t2"]);
+  FakeSocket.made[1].open();
+  assert.equal(c.state, "open");
+  // An optional-bearer service does not quietly come back as the anonymous actor either.
+  const d = connect(spec("bearer?"), { bearer: "tok" }, { reconnect: { backoff: () => 0 } });
+  await tick();
+  FakeSocket.made[0].open();
+  FakeSocket.made[0].finish(1006, "", false);
+  await tick();
+  await tick();
+  assert.deepEqual(FakeSocket.made[1].protocols, ["bynk.bearer", "tok"]);
+  assert.equal(d.state, "reconnecting");
+});
+
+test("close() while the token is still being read makes no socket", async () => {
+  let release!: (t: string) => void;
+  const token = new Promise<string>((r) => (release = r));
+  const c = connect(spec("bearer"), { bearer: () => token });
+  const closes: number[] = [];
+  c.onClose((x: { code: number }) => closes.push(x.code));
+  c.close();
+  release("late");
+  await tick();
+  await tick();
+  assert.equal(FakeSocket.made.length, 0);
+  assert.equal(c.state, "closed");
+  assert.deepEqual(closes, [1000]);
+});
+
+test("close() during a reconnect, before the new socket opens, leaves nothing open", async () => {
+  // While the credentials are still being fetched.
+  let release!: (c: { bearer: string }) => void;
+  const later = new Promise<{ bearer: string }>((r) => (release = r));
+  const c = connect(spec(), { bearer: "old" }, { reconnect: { credentials: () => later, backoff: () => 0 } });
+  await tick();
+  FakeSocket.made[0].open();
+  FakeSocket.made[0].finish(1006, "", false);
+  await tick();
+  assert.equal(c.state, "reconnecting");
+  c.close();
+  release({ bearer: "new" });
+  await tick();
+  await tick();
+  assert.equal(FakeSocket.made.length, 1);
+  assert.equal(c.state, "closed");
+  // And once the new socket exists but has not opened: it is closed, and never fires `onReconnect`.
+  const reconnects: number[] = [];
+  const d = connect(spec(), { bearer: "old" }, { reconnect: { credentials: () => ({ bearer: "new" }), backoff: () => 0 } });
+  d.onReconnect((n: number) => reconnects.push(n));
+  await tick();
+  FakeSocket.made[0].open();
+  FakeSocket.made[0].finish(1006, "", false);
+  await tick();
+  await tick();
+  assert.equal(FakeSocket.made.length, 2);
+  d.close();
+  await tick();
+  assert.deepEqual(FakeSocket.made[1].closed, { code: 1000, reason: "" });
+  assert.equal(d.state, "closed");
+  assert.deepEqual(reconnects, []);
+});
+
+test("leaving the frames iterator early stops it buffering", async () => {
+  const c = connect(spec("none" as never), undefined);
+  await tick();
+  FakeSocket.made[0].open();
+  const iterator = c.frames[Symbol.asyncIterator]();
+  FakeSocket.made[0].message('{"n":1}');
+  assert.deepEqual(await iterator.next(), { done: false, value: { n: 1 } });
+  await iterator.return();
+  FakeSocket.made[0].message('{"n":2}');
+  assert.deepEqual(await iterator.next(), { done: true, value: undefined });
+  const seen: number[] = [];
+  c.onFrame((f: { n: number }) => seen.push(f.n));
+  FakeSocket.made[0].message('{"n":3}');
+  assert.deepEqual(seen, [3]);
+});
