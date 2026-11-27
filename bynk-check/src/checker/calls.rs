@@ -4,6 +4,7 @@
 //! re-exports these via `use calls::*`.
 
 use super::codable::{check_op_codable_args, check_reply_codable, op_encoding};
+use super::pass_through_calls::check_pass_through_call;
 use super::*;
 
 /// v0.39 (ADR 0072): record a parameter-name inlay hint for one call argument,
@@ -3803,9 +3804,7 @@ fn check_method_call_inner(
         return r;
     }
     // #3752: an `InboundRequest`'s and a `Forwarded`'s reads.
-    if let Some(r) = super::pass_through_calls::check_pass_through_call(
-        recv_ty, method, args, span, expr_id, ctx,
-    ) {
+    if let Some(r) = check_pass_through_call(recv_ty, method, args, span, expr_id, ctx) {
         return r;
     }
     // Find a named type for the receiver, then look up its instance methods.

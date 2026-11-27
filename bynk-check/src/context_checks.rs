@@ -1,3 +1,4 @@
+use crate::http_pass_through::check_pass_through_routes;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -3893,12 +3894,7 @@ fn check_service_decls(
 
     check_unreachable_routes(table, errors);
     crate::http_rest::check_rest_routes(table, &typed.stability, errors);
-    crate::http_pass_through::check_pass_through_routes(
-        table,
-        &typed.types,
-        &typed.stability,
-        errors,
-    );
+    check_pass_through_routes(table, &typed.types, &typed.stability, errors);
 
     // v0.140 (ADR 0163): validate handler-position annotations (`@cache`) across
     // every handler — services and agents — so a misplaced annotation is caught

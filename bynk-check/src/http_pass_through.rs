@@ -389,6 +389,18 @@ pub(crate) fn held_at_boundary(
     .with_note(instead)
 }
 
+/// #3752 (slice 3a): `bynk.http.pass_through_not_emitted`, for the `on ANY` route
+/// `path` a build reaches. The driver reports it once the program checks clean;
+/// slice 3b, which builds the route, retires it.
+pub fn not_emitted_error(path: &str, span: bynk_syntax::Span) -> CompileError {
+    CompileError::new(
+        "bynk.http.pass_through_not_emitted",
+        span,
+        format!("the pass-through route `ANY {path}` checks, but this release can't build it yet"),
+    )
+    .with_note("its router and the `Upstream` exchange arrive in the next increment; `bynk check` accepts it meanwhile")
+}
+
 #[cfg(test)]
 mod tests {
     use super::upstream_origin_problem as problem;

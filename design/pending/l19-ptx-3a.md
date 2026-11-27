@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics
+probes: emit_diagnostics, diagnostic_coverage, explained_codes
 changelog: An `on ANY(…)` pass-through route returning `Effect[PassThrough]`, with `bynk`'s `InboundRequest`, `Forwarded`, `PassThrough`, `UpstreamError` and an `Upstream` capability whose `@origin` is declared, now type-checks; its router and the upstream exchange arrive in the next increment, so a build with one is refused (`bynk.http.pass_through_not_emitted`); experimental, behind `bynk.http.ANY` and the `bynk` items in `[unstable] allow`. A bare variant that several sums share is now picked by a body's `Effect[T]` as by a plain `T`, so an email handler's `Forward` stays `EmailVerdict.Forward` beside `PassThrough.Forward`
 ---
 

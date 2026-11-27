@@ -2527,16 +2527,16 @@ mod tests {
     #[test]
     fn bynk_surface_capabilities_match_the_adapter() {
         let src = BYNK_ADAPTER_SRC;
-        let line = src
-            .lines()
-            .find(|l| l.trim_start().starts_with("exports capability {"))
+        // The list may span lines once `bynk-fmt` wraps it.
+        let (_, after) = src
+            .split_once("exports capability {")
             .expect("adapter declares `exports capability`");
-        let inner = line
-            .split_once('{')
-            .and_then(|(_, r)| r.split_once('}'))
-            .map(|(names, _)| names)
-            .expect("braced capability list");
-        let declared: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+        let (inner, _) = after.split_once('}').expect("braced capability list");
+        let declared: Vec<&str> = inner
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
         assert_eq!(
             declared, BYNK_SURFACE_CAPABILITIES,
             "BYNK_SURFACE_CAPABILITIES is out of sync with bynk.bynk"
