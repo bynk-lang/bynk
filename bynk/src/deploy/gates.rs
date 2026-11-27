@@ -4,6 +4,7 @@
 //! managed keys. Each returns `Err` with the code `run` exits with, after printing what it always
 //! printed, in the order it always printed it.
 
+use super::edge_slots::{EdgeDecisions, Expired, decide_edge_keys, now_secs};
 use super::*;
 use bynk_driver::{colour, emsg};
 
@@ -373,6 +374,10 @@ pub(crate) struct KeysCx<'a> {
 pub(crate) struct Keys {
     pub(crate) listed: BTreeMap<String, Option<BTreeSet<String>>>,
     pub(crate) edge_keys: BTreeMap<Edge, EdgeKey>,
+    /// #4526: the retiring edge-key slots whose window has passed, by callee Worker, to clean up.
+    pub(crate) expired: BTreeMap<String, Vec<Expired>>,
+    /// #4526: the retiring slots (worker, first-slot name) the run cleaned up, as it goes.
+    pub(crate) cleaned: std::cell::RefCell<BTreeSet<(String, String)>>,
     pub(crate) foreign_secrets: BTreeSet<String>,
     pub(crate) foreign_keys: BTreeMap<(String, String), ForeignKey>,
 }
@@ -412,40 +417,10 @@ pub(crate) fn decide_keys(cx: &KeysCx<'_>, secret_source: &SecretSource) -> Resu
             (worker.to_string(), answer)
         })
         .collect();
-    let mut edge_keys: BTreeMap<Edge, EdgeKey> = BTreeMap::new();
-    for edge in &edges {
-        let names = match edge.keys() {
-            Ok(names) => names,
-            Err(e) => {
-                emsg!("bynk: error: {e}");
-                return Err(ExitCode::FAILURE);
-            }
-        };
-        let held = |worker: &str, keys: &[String]| {
-            end_presence(edge, worker, keys, &listed, lock, &opts.environment)
-        };
-        let callee = held(&edge.callee, &names.on_callee);
-        let caller = held(&edge.caller, &names.on_caller);
-        let both_in_run =
-            in_run.contains(edge.caller.as_str()) && in_run.contains(edge.callee.as_str());
-        match decide_edge_key(
-            edge,
-            caller,
-            callee,
-            both_in_run,
-            opts.force,
-            &mut mint_edge_key,
-            &opts.environment,
-        ) {
-            Ok(decision) => {
-                edge_keys.insert(edge.clone(), decision);
-            }
-            Err(e) => {
-                emsg!("bynk: error: {e}");
-                return Err(ExitCode::FAILURE);
-            }
-        }
-    }
+    let EdgeDecisions {
+        keys: edge_keys,
+        expired,
+    } = decide_edge_keys(&edges, &in_run, &listed, lock, opts, now_secs())?;
     // I3 (#1971): each foreign caller's secret, and (#3386) each `SignedCookie` actor's signing
     // key, on the context in the run that holds it. Only that end is ours, so a `--context` run
     // decides them too.
@@ -465,6 +440,8 @@ pub(crate) fn decide_keys(cx: &KeysCx<'_>, secret_source: &SecretSource) -> Resu
     Ok(Keys {
         listed,
         edge_keys,
+        expired,
+        cleaned: std::cell::RefCell::new(BTreeSet::new()),
         foreign_secrets,
         foreign_keys,
     })
@@ -482,7 +459,7 @@ pub(crate) struct AccountCx<'a> {
 }
 
 /// #4056 Decision E: a run whose steps will call the account's REST API for a resource kind
-/// (KV since 1D.4a, R2 and D1 since 1D.4b) needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, checked here, after
+/// (KV since 1D.4a, R2 and D1 since 1D.4b, Vectorize since 1D.4c) needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, checked here, after
 /// the plan and before the confirmation, so a missing one is refused before anything is created.
 /// The first kind in list order that needs them reports, in its own words. A run that needs
 /// nothing asks nothing: a redeploy with everything recorded still works with `wrangler login`.
@@ -492,9 +469,14 @@ fn account_resource_credentials(cx: &AccountCx<'_>) -> Result<(), ExitCode> {
         resources: cx.resources,
         order: cx.order,
     };
-    let checked = resource_credentials(&project, &cx.plan.orphans.kv, cx.opts.prune, |purpose| {
-        crate::cloudflare::rest::for_kind(purpose).map(drop)
-    });
+    let orphans = &cx.plan.orphans;
+    let checked = resource_credentials(
+        &project,
+        &orphans.kv,
+        &orphans.vectorize,
+        cx.opts.prune,
+        |purpose| crate::cloudflare::rest::for_kind(purpose).map(drop),
+    );
     checked.map_err(|refusal| {
         emsg!("bynk: error: {refusal}");
         ExitCode::FAILURE
@@ -507,6 +489,7 @@ fn account_resource_credentials(cx: &AccountCx<'_>) -> Result<(), ExitCode> {
 pub(crate) fn resource_credentials(
     project: &ProjectCx<'_>,
     kv_orphans: &[OrphanKv],
+    vectorize_orphans: &[OrphanVectorize],
     prune: bool,
     credentials: impl Fn(
         crate::cloudflare::rest::Purpose,
@@ -520,6 +503,10 @@ pub(crate) fn resource_credentials(
         ),
         (Purpose::R2, r2_calls_the_account(project)),
         (Purpose::D1, d1_calls_the_account(project)),
+        (
+            Purpose::Vectorize,
+            vectorize_calls_the_account(project, vectorize_orphans, prune),
+        ),
     ];
     for (purpose, _) in needed.into_iter().filter(|(_, needed)| *needed) {
         credentials(purpose).map_err(|e| e.to_string())?;

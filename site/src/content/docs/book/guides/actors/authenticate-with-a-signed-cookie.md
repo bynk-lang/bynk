@@ -59,6 +59,11 @@ on POST("/logout") () -> Effect[HttpResult[()]] by u: User {
 }
 ```
 
+A route that issues is checked against cross-site sign-in before its body runs: the request must be
+same-origin, or carry an `Origin` your service's `cors` lists. A sign-in made from another origin needs
+`cors { origins: [...], credentials: true }`; a request with neither header is refused. Issue from a
+`POST`, as a `GET` is not checked (and warns).
+
 Check the user's credentials before you issue the cookie; the scheme proves *who the cookie was issued
 to*, not that they should have it.
 

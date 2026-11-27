@@ -397,6 +397,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "let c <- User.issue(body)   // ✗ the handler lists no `given Clock`\n\nlet c <- User.issue(body)   // ✓ with `given Clock` on the handler",
     },
     Explain {
+        code: "bynk.actor.signed_cookie_issue_on_safe_method",
+        blurb: "A route that issues a session cannot be guarded by the actor it issues for: the caller has no session yet. So that route is where login CSRF happens, a hostile page making a signed-out visitor's browser post the attacker's own credential, after which the victim works signed in as the attacker, and `SameSite` does not help because the attacker wants the cookie set. A route that issues a session and is not a `GET` is therefore checked as a guarded route is, before its body: fetch metadata, then `Origin` against the service's `cors` origins. A `GET` is outside that check (a link click, a prefetch and an image all send one), so a sign-in done as a `GET` is unprotected, and this warns. A `GET` guarded by the same actor, which re-issues its caller's own session, is not warned: there is no session to plant. Issue the session from a `POST`.",
+        example: "on GET(\"/login\") (token: String) -> Effect[HttpResult[String]] by v: Visitor given Clock { … }   // ⚠ issues a session from a `GET`\n\non POST(\"/login\") (body: Login) -> Effect[HttpResult[String]] by v: Visitor given Clock { … }   // ✓ checked for login CSRF",
+    },
+    Explain {
         code: "bynk.actor.signed_cookie_issue_outside_handler",
         blurb: "The signing key reaches a service handler, which is where a request arrives and a `Set-Cookie` is sent. A provider or an agent holds only the capabilities in its `given`, so `User.issue(identity)` there would find no key and fault on every request. Issue the cookie in the handler.",
         example: "User.issue(id)   // ✗ in a provider or an agent\n\nlet c <- User.issue(body)   // ✓ in a service handler",
@@ -1360,6 +1365,25 @@ pub const EXPLANATIONS: &[Explain] = &[
                   [build]\n\
                   out = \"../dist\"    # ✗ outside the project\n\
                   out = \"dist\"       # ✓ inside it",
+    },
+    Explain {
+        code: "bynk.container.unbounded_instances",
+        blurb: "`Container.send` starts, or reuses, one container for each distinct instance name, \
+                and a running container costs money. A name built from a request's own input on a \
+                route whose caller is not authenticated (`by Visitor`) lets anyone start as many \
+                containers as they have values to send, with nothing limiting how many. The check \
+                follows the handler's parameters, and the locals bound from them, into the instance \
+                argument; a name that comes from a constant, from the authenticated identity or from \
+                a closed set (an enum's names) does not warn, and neither does one passed through a \
+                function, which is where a set is bounded and is not followed. Serve the route `by` \
+                an authenticated actor, or choose the name from a fixed set. A refined type limits \
+                the shape of a name, not how many there are, so pair a keyed instance with an \
+                authenticated actor or a `RateLimit`. A later release is expected to let an \
+                instance declare a typed key that bounds its names, and a name from such a key \
+                will then not warn; that is not available yet.",
+        example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\n\
+                  service api from http {\n    on GET(\"/render/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {\n        let res <- Renderer.send(\"tenant-\\(tenant)\", req)   // ⚠ any caller picks the instance\n        …\n    }\n}\n\n\
+                  service api from http {\n    on GET(\"/render\") () -> Effect[HttpResult[String]] by m: Member given Renderer {\n        let res <- Renderer.send(m.identity, req)       // ✓ the authenticated identity chooses\n        …\n    }\n}",
     },
     Explain {
         code: "bynk.context.consumes_cycle",
@@ -2760,6 +2784,11 @@ agent Cart {
         example: "type Signup = { email: String }\n\n@form(contentType: \"application/x-www-form-urlencoded\")    // ✗ `@form` takes no argument\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }\n\n@form    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.handler_name_collision",
+        blurb: "Each HTTP handler becomes a method on its service, named from its method and route: `http_GET`, then one part per segment, `Param_id` for `:id` and `Rest_key` for `*key`, with every character outside `A-Z`, `a-z` and `0-9` written `_`. That spelling is not one-to-one, so two routes can share a name (`/a-b`, `/a_b` and `/a/b` all give `http_GET_a_b`), and one handler would then answer both paths. Every service of a context is composed into one object, so the names are the context's, and the second such route in a context is refused, whichever services the two are in. Spell one route differently.",
+        example: "on GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a_b\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ both are `http_GET_a_b`\n\non GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/ab\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
         code: "bynk.http.headers_field_consumed",
         blurb: "A route guarded by an actor consumes the credential it carries before the handler runs: `authorization` for a `Bearer` or `Oidc` actor, the signature header for a `Signature` one, and the session cookie out of `cookie` for a `SignedCookie` one. The typed `headers` record is built from what is left, so a field that reads one of them is always absent, and a required field makes every request a `400`. The route compiles but can never succeed, so it is refused. Read the credential through the actor's principal instead, or drop the field. An `Option` or `List` field is allowed, because it is merely always empty, but it draws `bynk.http.headers_field_consumed_optional`.",
         example: "type Auth = { authorization: String }          // ✗ the Bearer actor consumes `authorization`\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }\n\ntype Auth = { accept: String }                 // ✓ a header the actor does not consume\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }",
@@ -2974,8 +3003,18 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.reserved_route_syntax",
-        blurb: "`*`, `{` and `}` are reserved in a route, both in a literal segment and in a `:name` parameter, for a future form that matches the rest of a path. Matched literally, such a segment would quietly change meaning when that form arrives, so it is refused now. To match a literal `*` or brace, take the segment as a `:name` parameter and check its value in the handler. A route that does not start with `/` is `bynk.http.invalid_path`.",
-        example: "on GET(\"/files/*key\") () -> Effect[HttpResult[String]] by v: Visitor { … }             // ✗ `*` is reserved\n\non GET(\"/files/:key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        blurb: "`{` and `}` are reserved in a route, in a literal segment and in a `:name` parameter, for a future in-segment form, and so is `*` everywhere but one place: the start of a route's last segment, where `*name` is a rest segment that matches the rest of the path. Matched literally, a reserved character would quietly change meaning when its form arrives, so it is refused now. To match a literal `*` or brace, take the segment as a `:name` parameter and check its value in the handler. A bare final `*` is `bynk.http.rest_unnamed`; a route that does not start with `/` is `bynk.http.invalid_path`.",
+        example: "on GET(\"/files/*key/raw\") () -> Effect[HttpResult[String]] by v: Visitor { … }        // ✗ a rest is last\n\non GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.rest_param_type",
+        blurb: "A `*name` rest segment binds the rest of the path as it was received: one text value, still percent-encoded, that starts with `/` unless it is empty and keeps empty segments and a trailing slash. Only `String` can hold that faithfully, so the parameter it binds must be typed `String`. Decode it in the handler with `percentDecode()` (which is `None` for a malformed escape), or parse it there. A `:name` parameter may take other types; see `bynk.http.path_param_not_stringy`.",
+        example: "on GET(\"/files/*key\") (key: Int) -> Effect[HttpResult[String]] by v: Visitor { … }      // ✗\n\non GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.rest_unnamed",
+        blurb: "A rest segment, a route's last segment written `*name`, matches the rest of a path and binds it to the handler parameter of that name, as a `:name` segment binds one segment. A bare `*` binds nothing, so it is refused. Name it and take the parameter. A `*` anywhere other than the start of the last segment is `bynk.http.reserved_route_syntax`.",
+        example: "on GET(\"/files/*\") () -> Effect[HttpResult[String]] by v: Visitor { … }                // ✗\n\non GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
         code: "bynk.http.return_not_effect_http_result",
@@ -3029,7 +3068,7 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.unreachable_route",
-        blurb: "A router tries the routes of a method in a fixed order: they are compared segment by segment, left to right, and at the first segment where two differ a literal segment beats a `:name` one. So `GET /users/me` answers `/users/me` and `GET /users/:id` answers every other `/users/<x>`, whichever is written first. Overlap is fine, even intended. But a route is refused when every path it matches is answered first by other routes (of the same method, in this context or, in a worker group, in any member): no request could ever reach it. Parameter names are not part of the shape, so `GET /a/:x` beside `GET /a/:y` leaves the second unreachable. Remove the route, or make it match a path the others do not.",
+        blurb: "A router tries the routes of a method in a fixed order: they are compared segment by segment, left to right, and at the first segment where two differ a literal segment beats a `:name` one, and a `:name` beats a `*name` rest. So `GET /users/me` answers `/users/me` and `GET /users/:id` answers every other `/users/<x>`, whichever is written first. Overlap is fine, even intended. But a route is refused when every path it matches is answered first by other routes (of the same method, in this context or, in a worker group, in any member): no request could ever reach it. Parameter names are not part of the shape, so `GET /a/:x` beside `GET /a/:y` leaves the second unreachable. Remove the route, or make it match a path the others do not.",
         example: "on GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:y\") (y: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `/a/:x` already answers every path it matches\n\non GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓ a literal and a parameter overlap, and each is reachable",
     },
     Explain {
@@ -5647,6 +5686,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   let r <- api.GET(\"/items\") by User(\"ada\")   // ✓",
     },
     Explain {
+        code: "bynk.test.rest_argument",
+        blurb: "A test case addresses a rest route by its pattern and then the rest, which the case gives as the router would bind it: `\"\"`, or text that starts with `/`, as a request carries it. At the `system` tier the rest is sent as written after the prefix, so a rest without its leading `/` would request another path (`/raw/*path` with `\"a/b\"` asks for `/rawa/b`), and the case would mean one thing at one tier and another at the next. So a literal rest is refused when it is neither `\"\"` nor starts with `/`, when it is `\"\"` under a root rest (which always holds at least `/`), or when it holds `?`, `#` or a `.` or `..` segment, which a path never brings to a rest. Write the rest as the request would.",
+        example: "let r <- api.GET(\"/raw/*path\", \"a/b\") by Visitor   // ✗\n\nlet r <- api.GET(\"/raw/*path\", \"/a/b\") by Visitor   // ✓",
+    },
+    Explain {
         code: "bynk.test.revoked_needs_sessions_route",
         blurb: "`by Revoked` sends a cookie for a session that was issued and then \
                 revoked in the session agent, so it needs a route whose seam \
@@ -6256,6 +6300,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.file_at_boundary",
         blurb: "A `File` is one uploaded part of a `@multipart` request, held in memory for the handler that receives it. A record may have a `File` field, alone, in an `Option` or in a `List`, which is how a `@multipart` `body` names its parts. But a `File`, or a record carrying one, is refused as an agent store field or key, an event field, a handler result, or any handler parameter but that `body`. Take the part's `bytes`, and the `filename` and `contentType` you need, in the handler, and keep those.",
         example: "consumes bynk { File }\n\nagent Gallery {\n    key id: String\n    store photo: Cell[Option[File]]     // ✗ an upload is not kept as a `File`\n}\n\nagent Gallery {\n    key id: String\n    store photo: Cell[Option[Bytes]]    // ✓ keep its bytes\n}",
+    },
+    Explain {
+        code: "bynk.types.float_literal_pattern",
+        blurb: "A `Float` cannot be matched against a literal. Floating-point equality is exact and `NaN` never equals itself, so an arm such as `0.1 =>` rarely means what it seems: the value a calculation produces is seldom exactly `0.1`. The same holds for a `Float` field of a record pattern or a payload. A `Float` is not a `match` scrutinee at all, so compare it with `<`, `>=` or a tolerance in an `if`: `if x < 0.5 { … }`. A `Decimal` has none of this trouble: its literal patterns match by value (`20d`, `20.0d` and `20.00d` are one pattern), so a price tier or a VAT rate is written as a `Decimal` literal arm.",
+        example: "fn band(x: Float) -> String {\n    match x {\n        0.1 => \"tenth\"    // ✗ a `Float` can't be matched against a literal\n        _ => \"other\"\n    }\n}\n\nfn band(x: Float) -> String {\n    if x < 0.5 { \"low\" } else { \"other\" }    // ✓ compare instead\n}",
     },
     Explain {
         code: "bynk.types.form_uncodable",
@@ -7628,6 +7677,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.actor.signed_cookie_issue_needs_clock",
         "`Actor.issue(identity)` on a `SignedCookie` actor is called where the handler does not list `Clock` in `given`.",
     ),
+    warn(d(
+        "bynk.actor.signed_cookie_issue_on_safe_method",
+        "A `GET` route issues a `SignedCookie` session, so it is outside the login-CSRF check a state-changing route gets (warning, #3825).",
+    )),
     d(
         "bynk.actor.signed_cookie_issue_outside_handler",
         "`Actor.issue(identity)` on a `SignedCookie` actor is called outside a service handler (in a provider or an agent).",
@@ -8000,6 +8053,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`.",
     ),
     d(
+        "bynk.cloudflare.credentials_missing",
+        "A command that reads the Cloudflare account needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and one or both are not set, so it stopped before reading anything. With `--format json`, `bynk revert` writes `{\"error\": {\"code\", \"missing\", \"message\"}}` to stdout, `missing` naming each variable that is unset; the message says what the token needs.",
+    ),
+    d(
         "bynk.cloudflare.edge_cache_duplicate",
         "A context declares a second `EdgeCache` instance; the edge cache is one setting for the whole Worker.",
     ),
@@ -8129,6 +8186,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.container.output_outside_project",
         "A build with a `Container` is written to an output directory outside the project, so `wrangler` cannot reach the container's Dockerfile from the Worker's output directory by a relative path inside the project.",
     ),
+    warn(d(
+        "bynk.container.unbounded_instances",
+        "A `Container` instance name is built from a request's own input on a route whose caller is not authenticated, so any caller can start as many containers as they have values to send (warning).",
+    )),
     d(
         "bynk.context.consumes_cycle",
         "Contexts form a `consumes` dependency cycle.",
@@ -9289,6 +9350,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.form_unknown_arg",
         "A `@form` annotation is given an argument; it takes none.",
     ),
+    dg(
+        "bynk.http.handler_name_collision",
+        "Two HTTP handlers of a context would be emitted under one method name (`/a-b` and `/a_b` are both `http_GET_a_b`).",
+        &["http_handler"],
+    ),
     warn(d(
         "bynk.http.header_question_not_found",
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
@@ -9474,7 +9540,17 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.http.reserved_route_syntax",
-        "A route segment contains `*`, `{` or `}`, which are reserved for a future route form.",
+        "A route segment contains `{` or `}`, or a `*` other than a final `*name` rest, which are reserved for a future route form.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.rest_param_type",
+        "The parameter a route's `*name` rest segment binds is not typed `String`.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.rest_unnamed",
+        "A route's last segment is a bare `*`, a rest segment with no name to bind.",
         &["http_handler"],
     ),
     dg(
@@ -11158,6 +11234,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `system` case runs a cron handler with `svc.schedule(…)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a cron handler.",
         &["case"],
     ),
+    d(
+        "bynk.test.rest_argument",
+        "A test case gives a route's `*name` rest a literal the router could never bind: not `\"\"` or `/…`, `\"\"` under a root rest, or holding `?`, `#` or a dot segment.",
+    ),
     dg(
         "bynk.test.revoked_needs_sessions_route",
         "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it.",
@@ -11534,6 +11614,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.file_at_boundary",
         "A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned.",
+    ),
+    dg(
+        "bynk.types.float_literal_pattern",
+        "A `Float` literal is used as a pattern, at any depth; floating-point equality is exact and `NaN` never equals itself.",
+        &["literal_pattern"],
     ),
     d(
         "bynk.types.form_uncodable",

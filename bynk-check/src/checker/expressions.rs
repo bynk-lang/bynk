@@ -3,6 +3,7 @@
 //! Split out of `checker.rs` (v0.29.10) verbatim; the parent module
 //! re-exports these via `use expressions::*`.
 
+use super::pattern_literals::{is_float_literal, skips_duplicate_check};
 use super::usefulness::{Coverage, FUTURE_VARIANT_CLOSE, FUTURE_VARIANT_OPEN};
 use super::*;
 
@@ -4372,7 +4373,11 @@ pub(super) fn literal_base_of(ty: TyId, tys: &Types) -> Option<BaseType> {
         } => *b,
         _ => return None,
     };
-    matches!(base, BaseType::Int | BaseType::String | BaseType::Bool).then_some(base)
+    matches!(
+        base,
+        BaseType::Int | BaseType::String | BaseType::Bool | BaseType::Decimal
+    )
+    .then_some(base)
 }
 
 /// The base type a literal pattern matches against.
@@ -4381,6 +4386,8 @@ fn literal_value_base(value: &LiteralValue) -> BaseType {
         LiteralValue::Int(_) => BaseType::Int,
         LiteralValue::Str(_) => BaseType::String,
         LiteralValue::Bool(_) => BaseType::Bool,
+        LiteralValue::Decimal { .. } => BaseType::Decimal,
+        LiteralValue::Float(_) => BaseType::Float,
     }
 }
 
@@ -4484,7 +4491,7 @@ pub(crate) fn check_match(
     } else if arms.iter().any(|a| {
         pattern_alternatives(&a.pattern)
             .iter()
-            .any(|p| matches!(p, Pattern::List { .. } | Pattern::Range(_)))
+            .any(|p| matches!(p, Pattern::List { .. } | Pattern::Range(_)) || is_float_literal(p))
     }) {
         // #2680, #2699: a list or range pattern on a value that is not a list
         // or an `Int` (a record, a `Set`, a `Float`, a function) is that
@@ -4500,7 +4507,7 @@ pub(crate) fn check_match(
             "bynk.types.match_non_sum_discriminant",
             discriminant.span,
             format!(
-                "cannot match on a value of type `{}` — `match` requires a sum, `Result`, `Option`, or a primitive `Int`/`String`/`Bool`",
+                "cannot match on a value of type `{}` — `match` requires a sum, `Result`, `Option`, or a primitive `Int`/`String`/`Bool`/`Decimal`",
                 disc_ty.display(tys)
             ),
         ));
@@ -4543,8 +4550,7 @@ pub(crate) fn check_match(
                 // A list or range pattern's overlap with another is the
                 // usefulness engine's to judge (`unreachable_arm`): `[x, ..]`
                 // after `[_, ..]`, or `0..5` after `0..9`, is not a mere duplicate.
-                if cand.is_irrefutable() || matches!(cand, Pattern::List { .. } | Pattern::Range(_))
-                {
+                if skips_duplicate_check(cand) {
                     continue;
                 }
                 if seen.iter().any(|p| patterns_equal(p, cand)) {
@@ -5069,7 +5075,9 @@ fn check_sub_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             ctx.bind(id.name.clone(), ty);
         }
         Pattern::Literal { value, span, .. } => {
-            if let Some(base) = literal_base_of(ty, tys) {
+            if let Some(e) = super::pattern_literals::float_literal_pattern(value, *span) {
+                ctx.errors.push(e);
+            } else if let Some(base) = literal_base_of(ty, tys) {
                 let lit_base = literal_value_base(value);
                 if lit_base != base {
                     ctx.errors.push(CompileError::new(
@@ -5088,7 +5096,7 @@ fn check_sub_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                     "bynk.types.pattern_type_mismatch",
                     *span,
                     format!(
-                        "literal pattern `{}` cannot match a value of type `{}` — literal patterns match `Int`/`String`/`Bool` scrutinees",
+                        "literal pattern `{}` cannot match a value of type `{}` — literal patterns match `Int`/`String`/`Bool`/`Decimal` scrutinees",
                         value.describe(),
                         ty.display(tys)
                     ),
@@ -5129,7 +5137,9 @@ fn check_sub_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             span,
         } => {
             check_sub_pattern(inner, ty, ctx);
-            if let Some(base) = literal_base_of(ty, tys) {
+            // A refined pattern matches an `Int` or a `String`; a `Decimal` has literal patterns
+            // (#3973) but no refined ones, which keep the error below as they always had.
+            if let Some(base) = literal_base_of(ty, tys).filter(|b| *b != BaseType::Decimal) {
                 check_refinement(base, *span, Some(predicate), ctx.errors);
                 // #3972: on an `Int` a range pattern is the stronger spelling.
                 if base == BaseType::Int

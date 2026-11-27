@@ -41,6 +41,7 @@ bynk.actor.signed_cookie_bad_ttl
 bynk.actor.signed_cookie_duplicate_key
 bynk.actor.signed_cookie_identity_not_string_constructible
 bynk.actor.signed_cookie_issue_needs_clock
+bynk.actor.signed_cookie_issue_on_safe_method
 bynk.actor.signed_cookie_issue_outside_handler
 bynk.actor.signed_cookie_missing_secret
 bynk.actor.signed_cookie_missing_ttl
@@ -148,6 +149,7 @@ bynk.consumes.unknown_service
 bynk.container.build_missing
 bynk.container.build_path
 bynk.container.output_outside_project
+bynk.container.unbounded_instances
 bynk.context.consumes_cycle
 bynk.context.duplicate_binding
 bynk.context.external_construction

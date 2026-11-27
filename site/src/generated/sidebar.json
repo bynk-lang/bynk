@@ -348,6 +348,10 @@
             "link": "/book/guides/entry-points/stream-a-large-upload/"
           },
           {
+            "label": "Serve files whose keys contain /",
+            "link": "/book/guides/entry-points/serve-files-by-path/"
+          },
+          {
             "label": "Call your API from a front end",
             "link": "/book/guides/entry-points/call-from-a-front-end/"
           },

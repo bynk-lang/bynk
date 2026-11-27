@@ -2088,10 +2088,13 @@ parse error.
 
 {{#grammar literal_pattern}}
 
-Matches a primitive scrutinee (`Int`/`String`/`Bool`, or a refinement over one)
-by value equality — an integer (optionally negated), a string, or a boolean.
-A literal-pattern `match` needs a wildcard `_` arm to be exhaustive, except over
-`Bool`, which is complete once both `true` and `false` appear.
+Matches a primitive scrutinee (`Int`/`String`/`Bool`/`Decimal`, or a refinement
+over one) by value equality — an integer (optionally negated), a string, a
+boolean, or a `Decimal` literal (`20.0d`, `-1.5d`), which matches by value at any
+scale. A literal-pattern `match` needs a wildcard `_` arm to be exhaustive, except
+over `Bool`, which is complete once both `true` and `false` appear. A `Float`
+literal parses so that the checker can say why it is refused
+([`bynk.types.float_literal_pattern`](/reference/diagnostics/bynk.types.float_literal_pattern/)).
 
 ### or_pattern {#rule-or_pattern}
 

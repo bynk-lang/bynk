@@ -74,12 +74,20 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
 const WARNING_ONLY: &[(&str, &str)] = &[
     (
+        "bynk.container.unbounded_instances",
+        "a warning; `positive/4112_container_unbounded_instances` holds it with `expected_warnings.txt`, and `positive/4112_container_bounded_instances` holds the good cases",
+    ),
+    (
         "bynk.http.body_cap_defaulted",
         "a hint, which the positive-fixture gate leaves out; `tests/system/body_cap_hint.rs` holds it",
     ),
     (
         "bynk.store.unique_implies_indexed",
         "a warning; `positive/4038_store_unique_behaviour` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.actor.signed_cookie_issue_on_safe_method",
+        "a warning; `positive/3825_issue_on_safe_method` holds it with `expected_warnings.txt`",
     ),
     (
         "bynk.actor.signed_cookie_ttl_long",

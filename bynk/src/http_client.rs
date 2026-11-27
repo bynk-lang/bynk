@@ -396,6 +396,15 @@ fn routes_of(
         let BoundaryKind::Http { method, path } = &model.kind else {
             continue;
         };
+        // #3752 (D6): a rest binds a path with `/` in it, which one encoded segment can't carry.
+        if let Some(why) = crate::openapi::left_out::left_out_because(path) {
+            skipped.push(format!(
+                "`{} {path}` of `{}`: {why}",
+                method.as_str(),
+                sel.service.name.name,
+            ));
+            continue;
+        }
         match route_of(sel, h, &model, *method, path) {
             Ok(r) => routes.push(r),
             Err(why) => skipped.push(format!(

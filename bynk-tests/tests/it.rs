@@ -421,6 +421,8 @@ mod system {
     mod examples;
     #[path = "expect_is_narrowing_behaviour.rs"]
     mod expect_is_narrowing_behaviour;
+    #[path = "expect_literal_narrowing_behaviour.rs"]
+    mod expect_literal_narrowing_behaviour;
     #[path = "expect_was_behaviour.rs"]
     mod expect_was_behaviour;
     #[path = "failure_explanation_behaviour.rs"]
@@ -467,6 +469,8 @@ mod system {
     mod http_recursive_body_behaviour;
     #[path = "http_response_headers.rs"]
     mod http_response_headers;
+    #[path = "http_rest_segment_behaviour.rs"]
+    mod http_rest_segment_behaviour;
     #[path = "http_security_behaviour.rs"]
     mod http_security_behaviour;
     #[path = "idempotency_workerd.rs"]
@@ -485,6 +489,8 @@ mod system {
     mod large_suite_behaviour;
     #[path = "let_else_staircase.rs"]
     mod let_else_staircase;
+    #[path = "login_csrf_seam.rs"]
+    mod login_csrf_seam;
     #[path = "malformed_project_config_behaviour.rs"]
     mod malformed_project_config_behaviour;
     #[path = "multi_actor_sum.rs"]

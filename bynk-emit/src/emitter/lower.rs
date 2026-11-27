@@ -39,6 +39,7 @@ mod claims;
 mod control;
 mod expect;
 pub(super) mod expect_bindings;
+pub(super) mod expect_narrowing;
 pub(super) mod expect_was;
 mod ident;
 mod is;

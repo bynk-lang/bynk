@@ -66,7 +66,7 @@ stopped: exit 1: could not create the R2 bucket `shop-new` for `shop`'s `R2_NEW`
 +132 [environments.default.workers.shop-cart.expects]
 +133 
 -- call 10 fails: vectorize create-metadata-index shop-docs --propertyName category --type string
-stopped: exit 1: could not create the metadata index `category:string` on the Vectorize index `shop-docs` for `shop`'s `VECTORIZE_DOCS`: ✘ [ERROR] the stand-in failed call 10
+stopped: exit 1: could not create the metadata index `category:string` on the Vectorize index `shop-docs` for `shop`'s `VECTORIZE_DOCS`: Cloudflare answered 500 to call 10
 + 20 [environments.default.kv_instances.shop.KV_CART]
 + 21 id = "kv-shop-cart"
 + 22 
@@ -91,7 +91,7 @@ stopped: exit 1: could not create the metadata index `category:string` on the Ve
 +135 [environments.default.workers.shop-cart.expects]
 +136 
 -- call 13 fails: vectorize create shop-new --dimensions 384 --metric euclidean
-stopped: exit 1: could not create the Vectorize index `shop-new` for `shop`'s `VECTORIZE_NEW`: ✘ [ERROR] the stand-in failed call 13
+stopped: exit 1: could not create the Vectorize index `shop-new` for `shop`'s `VECTORIZE_NEW`: Cloudflare answered 500 to call 13
 + 20 [environments.default.kv_instances.shop.KV_CART]
 + 21 id = "kv-shop-cart"
 + 22 
@@ -1992,7 +1992,7 @@ stopped: exit 1: could not create the R2 bucket `shop-new-staging` for `shop`'s 
 +169 
 +170 [environments.staging.workers.shop-cart.expects]
 -- call 12 fails: vectorize create-metadata-index shop-docs-staging --propertyName category --type string
-stopped: exit 1: could not create the metadata index `category:string` on the Vectorize index `shop-docs-staging` for `shop`'s `VECTORIZE_DOCS`: ✘ [ERROR] the stand-in failed call 12
+stopped: exit 1: could not create the metadata index `category:string` on the Vectorize index `shop-docs-staging` for `shop`'s `VECTORIZE_DOCS`: Cloudflare answered 500 to call 12
 +127 queues = [
 +128     "old-jobs",
 +129     "shared-feed",
@@ -2030,7 +2030,7 @@ stopped: exit 1: could not create the metadata index `category:string` on the Ve
 +176 
 +177 [environments.staging.workers.shop-cart.expects]
 -- call 15 fails: vectorize create shop-new-staging --dimensions 384 --metric euclidean
-stopped: exit 1: could not create the Vectorize index `shop-new-staging` for `shop`'s `VECTORIZE_NEW`: ✘ [ERROR] the stand-in failed call 15
+stopped: exit 1: could not create the Vectorize index `shop-new-staging` for `shop`'s `VECTORIZE_NEW`: Cloudflare answered 500 to call 15
 +127 queues = [
 +128     "old-jobs",
 +129     "shared-feed",
