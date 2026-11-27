@@ -493,7 +493,7 @@ pub(crate) enum BodyMode {
         system_http_claims: Box<SystemHttpClaims>,
         /// #2136: the target's cron and queue services, driven at `system`
         /// through the Worker's `scheduled` / `queue` entry points.
-        system_jobs: SystemJobServices,
+        system_jobs: Box<SystemJobServices>,
     },
 }
 

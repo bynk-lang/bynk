@@ -359,6 +359,11 @@ pub(in crate::emitter) fn lower_system_schedule_call(
 
 // ---- The `system`-tier WebSocket call ----
 
+/// #3901: whether `service` is a WebSocket service the `system` case in `cx` drives through a real upgrade.
+fn has_system_ws_service(cx: &LowerCtx, service: &str) -> bool {
+    matches!(&cx.mode, crate::emitter::ctx::BodyMode::IntegrationCase { system_jobs, .. } if system_jobs.ws.contains_key(service))
+}
+
 /// Lower a `system`-tier WebSocket address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`),
 /// driven through a real upgrade against the participant Worker, or `None` when the call is not one (#3901).
 /// `open` names the driver of the credential the case's `by` presents (`by Nobody` offers none, `by Forged`
@@ -374,7 +379,7 @@ pub(in crate::emitter) fn lower_system_ws_call(
     let ExprKind::Ident(svc) = &receiver.kind else {
         return None;
     };
-    if cx.is_local(&svc.name) || cx.system_ws_service(&svc.name).is_none() {
+    if cx.is_local(&svc.name) || !has_system_ws_service(cx, &svc.name) {
         return None;
     }
     let Some(HandlerAddress::Ws(shape)) = test_address(cx, e) else {
@@ -384,7 +389,7 @@ pub(in crate::emitter) fn lower_system_ws_call(
         Some(a) => pre.lower_node(a, cx),
         None => cx.missing_fact(e.span, "`TestConnection` argument of a websocket call"),
     };
-    let driver = |what: &str| ident(format!("__sysdrive_ws_{what}_{}", svc.name));
+    let driver = |what: &str| ident(["__sysdrive_ws_", what, "_", svc.name.as_str()].concat());
     Some(match shape {
         WsAddress::Open => {
             let kind = system_driver(cx, false).kind;

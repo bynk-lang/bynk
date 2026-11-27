@@ -28,7 +28,7 @@ fn is_plain_bytes(t: &bynk_syntax::ast::TypeRef) -> bool {
 
 /// `__sysdrive_ws_<what>_<service>`.
 fn driver_name(what: &str, service: &str) -> String {
-    format!("__sysdrive_ws_{what}_{service}")
+    ["__sysdrive_ws_", what, "_", service].concat()
 }
 
 /// The drivers of the `from websocket` service `sname`, or `None` when it has no `on open` handler.
@@ -210,9 +210,14 @@ pub(super) fn ws_service_drivers(
                 vec![TsStmt::throw_stmt(
                     TsExpr::New {
                         callee: Box::new(ident("globalThis.Error")),
-                        args: vec![str_lit(format!(
-                            "`{sname}.open` at `system`: this service's actor is not one a `system` case presents yet (only `Bearer` and public services are); drive it at `unit` or `integration`"
-                        ))],
+                        args: vec![str_lit(
+                            [
+                                "`",
+                                sname,
+                                ".open` at `system`: this service's actor is not one a `system` case presents yet (only `Bearer` and public services are); drive it at `unit` or `integration`",
+                            ]
+                            .concat(),
+                        )],
                     },
                     None,
                 )],

@@ -3225,10 +3225,13 @@ handler (`bynk.test.service_unknown_route`). `tc` MUST have type
 route parameters and the call-site `by`; `f` MUST have the service's `in` type;
 `message` and `close` take no other arguments (`bynk.test.service_call_arity`)
 and no `by` (`bynk.test.ws_lifecycle_by`), because the connection carries the
-route values and the principal from `open`. The address MUST NOT occur in a
-`system`-tier `case` (`bynk.test.ws_needs_in_process`). `TestConnection[O]()` is
+route values and the principal from `open`. At the `system` tier the address
+performs a real upgrade through the target's Worker and its Durable Object: `open` presents the credential
+the handler's actor reads (the principal the `by` names, or a failure principal), and a refused upgrade
+leaves `tc` with no connection and `tc.refusedWith()` holding the status. `tc.refusedWith()` MUST NOT occur in a
+case below `system` (`bynk.test.ws_refusal_needs_system`). `TestConnection[O]()` is
 a value of a type that can be named only in a test body; `tc.sent()` has type
-`List[O]`, `tc.closed()` type `Bool`, and `tc.connection()` an owned
+`List[O]`, `tc.closed()` type `Bool`, `tc.refusedWith()` type `Option[Int]`, and `tc.connection()` an owned
 `Connection[O]`, available once per `tc`. A `message` or `close` on a `tc` that
 was not opened is a failure of the case at run time.
 

@@ -183,7 +183,7 @@ pub fn lower_integration_case_body(
                 system_http_route_body,
                 system_http_type_ns,
                 system_http_claims: Box::new(system_http_claims),
-                system_jobs,
+                system_jobs: Box::new(system_jobs),
             },
         );
         cx.harness_bound = harness_bound;
