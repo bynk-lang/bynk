@@ -16,7 +16,10 @@ import {
   serialiseBundleAgent,
   StateRegistry,
   stubAgents,
+  stripRebuiltDeps,
+  WIRE_SAFE_DEPS_KEYS,
   type DurableObjectNamespace,
+  type DurableObjectStub,
 } from "../src/agent.ts";
 import { makeTestState, type DurableObjectState } from "../src/storage.ts";
 import { makeIntegrationDoNamespace } from "../src/testing/bindings.ts";
@@ -810,4 +813,62 @@ test("callAgentOutcome: across a Durable Object boundary, a busy instance is Unr
     callAgentOutcome(callDurableObjectMethod(broken.get(broken.idFromName("k")), "m", [], {}), "Broken.m"),
   );
   assert.deepEqual(faulted, { tag: "Faulted" });
+});
+
+// #4554: no key material in an agent call's request body.
+
+/** A stub that records the body of the one request it is sent. */
+function recordingStub(): { stub: DurableObjectStub; bodies: string[] } {
+  const bodies: string[] = [];
+  const stub = {
+    async fetch(_url: string, init?: { body?: string }): Promise<Response> {
+      bodies.push(String(init?.body));
+      return new Response("null", { status: 200 });
+    },
+  } as unknown as DurableObjectStub;
+  return { stub, bodies };
+}
+
+// The deps a Worker compose builds for a context with a `SignedCookie` actor and the API-key pepper,
+// plus the entries a Durable Object may legitimately be sent.
+const SECRET = "s3cret-signing-key-current";
+const PREVIOUS = "s3cret-signing-key-previous";
+const PEPPER = "pepper-for-api-key-hashes";
+const composeDeps = () => ({
+  Clock: { now: 1 },
+  env: { SESSION_SECRET: SECRET, VAR: "plain" },
+  __session: { Visitors: { secret: SECRET, previous: PREVIOUS } },
+  __apiKey: { pepper: PEPPER },
+  __exec: { waitUntil() {} },
+  __eventsDispatch: () => {},
+  identity: "user-1",
+});
+
+test("an agent call's request body carries no signing key, previous key or pepper, by value", async () => {
+  const { stub, bodies } = recordingStub();
+  await callDurableObjectMethod(stub, "add", ["sid", 1], composeDeps());
+  assert.equal(bodies.length, 1);
+  for (const secret of [SECRET, PREVIOUS, PEPPER]) {
+    assert.ok(!bodies[0]!.includes(secret), `the body must not contain ${secret}: ${bodies[0]}`);
+  }
+  // What the callee does read still crosses.
+  assert.deepEqual(JSON.parse(bodies[0]!), {
+    args: ["sid", 1],
+    deps: { Clock: { now: 1 }, identity: "user-1" },
+  });
+});
+
+test("a compose-private entry nobody has classified is dropped by default, at any depth", () => {
+  const wire = stripRebuiltDeps({
+    a: 1,
+    __futureSecret: "boom",
+    provider: { __alsoPrivate: "boom", kept: 2 },
+  });
+  assert.deepEqual(wire, { a: 1, provider: { kept: 2 } });
+});
+
+test("the wire-safe list is empty: nothing `__`-prefixed is sent to a Durable Object today", () => {
+  // Adding a key here is a deliberate decision to put it in a request body; the strip's other
+  // tests then need to say why it is safe.
+  assert.equal(WIRE_SAFE_DEPS_KEYS.size, 0);
 });

@@ -3148,11 +3148,19 @@ fn member_candidates_from(
                 CommonsItem::Actor(a) if a.name.name == receiver && is_signed_cookie_actor(a) => {
                     for (label, sig) in signed_cookie_members(a) {
                         if seen.insert(label.to_string()) {
-                            out.push(Completion::item(
+                            let item = Completion::item(
                                 label,
                                 CompletionKind::Member,
                                 Some(format!("{sig} — session cookie of `{receiver}`")),
-                            ));
+                            );
+                            // #3825: a handler that issues is refused when cross-site, like a guarded one.
+                            out.push(if label == "issue" {
+                                item.with_doc(Some(
+                                    "CSRF-checked: a non-`GET` route that issues a session is refused when the request is cross-site (fetch metadata, then `Origin` against the service's `cors` origins), before its body runs.",
+                                ))
+                            } else {
+                                item
+                            });
                         }
                     }
                 }

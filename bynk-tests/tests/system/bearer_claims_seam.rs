@@ -211,7 +211,7 @@ const TSCONFIG_JSON: &str = r#"{
 "#;
 
 /// Compile `fixture` (a Workers fixture) and run `driver` against its emitted Worker under Node.
-fn drive(fixture_name: &str, driver: &str) {
+pub(super) fn drive(fixture_name: &str, driver: &str) {
     let runner = match discover_tsc() {
         Some(r) => r,
         None => {
