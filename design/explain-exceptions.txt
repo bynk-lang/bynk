@@ -59,6 +59,7 @@ bynk.deploy.upload_order_cycle: needs the network, git, a registry, lockfile sta
 bynk.deploy.workers_unreadable: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.accept_fresh_agent_unused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.agent_move_refused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.move_agent_unused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.foreign_contract_skew: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.account_name_conflict: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.hyperdrive_settings_unreadable: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
