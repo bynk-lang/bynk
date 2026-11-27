@@ -1,0 +1,2 @@
+bynk.queue.reserved_name
+`bynk-dl-outbound` starts with `bynk-dl-`, which Bynk reserves for its event queues

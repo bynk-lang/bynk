@@ -2067,6 +2067,7 @@
 /reference/diagnostics/bynk.queue.message_type_mismatch/
 /reference/diagnostics/bynk.queue.no_dead_letter/
 /reference/diagnostics/bynk.queue.producer_never_sends/
+/reference/diagnostics/bynk.queue.reserved_name/
 /reference/diagnostics/bynk.queue.retry_delay_out_of_range/
 /reference/diagnostics/bynk.queue.return_not_queue_result/
 /reference/diagnostics/bynk.queue.undecodable_unreachable/
