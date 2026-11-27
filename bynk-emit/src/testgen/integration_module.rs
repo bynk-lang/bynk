@@ -5,6 +5,7 @@
 use super::*;
 use crate::emitter::RuntimeUse;
 use crate::emitter::bindings::{BindingSource, WorkerBinding};
+use bynk_check::firstparty::BYNK_UNIT;
 // #1759: every namespace a test module imports, from one definition.
 use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
@@ -80,7 +81,7 @@ fn destructure_named_participant_types(
     participant_types: &[(String, Vec<String>)],
     trees: &[&[TsStmt]],
     unit_tables: &HashMap<String, UnitTable>,
-) {
+) -> bool {
     let is_participant_type = |n: &str| {
         participant_types
             .iter()
@@ -109,7 +110,17 @@ fn destructure_named_participant_types(
         .iter()
         .flat_map(|stmts| bynk_ts::unbound_names_in(stmts, is_participant_type))
         .collect();
+    // #4613: the std `bynk` unit's types are named the same way (`(__x: CloseInfo) => …`), but a
+    // name it shares with a TypeScript global (`Request`, `Response`) is left to the global: the
+    // case's own drivers spell the global, and the lowering never spells the std one.
+    let used_non_global: HashSet<String> = trees
+        .iter()
+        .flat_map(|stmts| bynk_ts::unbound_names_in(stmts, |_| false))
+        .collect();
+    let mut bound_std = false;
     for (p, names) in participant_types {
+        let std = p == BYNK_UNIT;
+        let used = if std { &used_non_global } else { &used };
         let named: Vec<String> = names
             .iter()
             .filter(|n| used.contains(*n))
@@ -123,7 +134,49 @@ fn destructure_named_participant_types(
         };
         let type_names = aliased_types(t, |n| named.contains(n));
         case_out.extend(emit_ns_destructure(&test_ns(p), &named, &type_names));
+        bound_std |= std;
     }
+    bound_std
+}
+
+/// #4613: the std `bynk` unit's types, as a `(unit, names)` entry for `participant_types`: a
+/// lowered case names one when it annotates a lambda over a `CloseInfo` (`(__x: CloseInfo) => …`),
+/// and the test module binds it from the unit's namespace as it does a participant's type. Pushed
+/// after the participants, which keep any name they share with it; the names are reserved in
+/// `harness_bound`, and destructured only when the lowered body names one.
+fn std_unit_types(
+    unit_tables: &HashMap<String, UnitTable>,
+    view: &test_suites::SuiteView,
+    harness_bound: &mut HashSet<String>,
+) -> Option<(String, Vec<String>)> {
+    let t = unit_tables.get(BYNK_UNIT)?;
+    let mut names: Vec<String> = t
+        .types
+        .keys()
+        .filter(|n| {
+            !harness_bound.contains(*n)
+                && view.types.get(*n).is_some_and(|d| {
+                    let mine = &t.types[*n];
+                    Arc::ptr_eq(d, mine) || d.span == mine.span
+                })
+        })
+        .cloned()
+        .collect();
+    names.sort();
+    harness_bound.extend(names.iter().cloned());
+    Some((BYNK_UNIT.to_string(), names))
+}
+
+/// #4613: `import * as __ns_bynk from "../bynk.js"`, the namespace a case's std types come from.
+fn std_namespace_import() -> TsStmt {
+    TsStmt::decl(
+        TsDecl::ImportNamespace {
+            type_only: false,
+            alias: test_ns(BYNK_UNIT),
+            from: sibling_specifier(&relative_import_for_test(&commons_dir_for(BYNK_UNIT)), "js"),
+        },
+        None,
+    )
 }
 
 /// Emit a single integration-test module plus its [`RunnableTest`] pointer.
@@ -294,6 +347,9 @@ pub(super) fn emit_integration_module(
             None,
         ));
     }
+    // #4613: where the std `bynk` namespace is imported, when a case names one of its types.
+    let std_import_at = stmts.len();
+    let mut std_namespace_used = false;
 
     // Expectation helper used by lowered `expect` statements — committed `.ts`
     // source (Decision C), carried as one `Raw` statement. Its own text already
@@ -684,6 +740,10 @@ pub(super) fn emit_integration_module(
             harness_bound.extend(names.iter().cloned());
             participant_types.push((p.clone(), names));
         }
+        // #4613: the std `bynk` unit's types a lowered case names (see `std_unit_types`).
+        if let Some(entry) = std_unit_types(unit_tables, view, &mut harness_bound) {
+            participant_types.push(entry);
+        }
         // #3147: the `D1` value types a peeked statement's parameters name,
         // from `bynk.cloudflare`, which is no participant.
         if peeks && let Some(cloudflare) = unit_tables.get(bynk_check::firstparty::CLOUDFLARE_UNIT)
@@ -752,7 +812,7 @@ pub(super) fn emit_integration_module(
             runtime_use,
             roots_mark,
         ));
-        destructure_named_participant_types(
+        std_namespace_used |= destructure_named_participant_types(
             &mut case_out,
             &participant_types,
             &[&body.stmts, &helper],
@@ -764,6 +824,11 @@ pub(super) fn emit_integration_module(
         let mut case_stmt = async_runner_fn(&runner_name, vec![try_stmt]);
         case_stmt.nested_map_source_id = src_id;
         stmts.push(case_stmt);
+    }
+
+    // #4613: a case destructured a type of the std `bynk` unit, so the module imports its namespace.
+    if std_namespace_used && !uses_imports.iter().any(|(ns, _)| *ns == test_ns(BYNK_UNIT)) {
+        stmts.insert(std_import_at, std_namespace_import());
     }
 
     // Module runner. v0.127: `only` filters to a single case by name (the
