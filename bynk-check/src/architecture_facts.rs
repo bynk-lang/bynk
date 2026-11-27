@@ -132,6 +132,21 @@ pub struct HandlerUsesFact {
     /// Model-diagrams slice 5: the services and agents the handler calls, as
     /// the checker resolved them. One entry per target, at its first call.
     pub calls: Vec<CallFact>,
+    /// #3959: each capability parameter a call in the handler binds, in source
+    /// order: the commons function, its parameter and the instance bound.
+    pub bindings: Vec<BindingFact>,
+}
+
+/// #3959: one `given Param = Instance` binding of a call to a commons function.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BindingFact {
+    /// The commons function called.
+    pub function: String,
+    /// Its capability parameter.
+    pub parameter: String,
+    /// The capability bound to it, the handler's own.
+    pub capability: String,
+    pub site: FactSite,
 }
 
 /// What a handler calls (model-diagrams slice 5).
@@ -342,6 +357,7 @@ impl<'a> UnitCx<'a> {
                         uses.push(HandlerUsesFact {
                             uses: self.use_facts(&p.given, None, &site),
                             calls: self.calls(&op.body, &site),
+                            bindings: bindings(&op.body, &site),
                             member,
                         });
                     }
@@ -401,6 +417,7 @@ impl<'a> UnitCx<'a> {
         uses.push(HandlerUsesFact {
             uses: self.use_facts(&h.given, Some(h.span), site),
             calls: self.calls(&h.body, site),
+            bindings: bindings(&h.body, site),
             member,
         });
     }
@@ -554,4 +571,37 @@ fn stub_facts(inp: &FactInputs<'_>) -> Vec<StubFact> {
         ))
     });
     out
+}
+
+/// #3959: the capability bindings of the calls in `body`, in source order.
+fn bindings(body: &bynk_syntax::ast::Block, site: &dyn Fn(Span) -> FactSite) -> Vec<BindingFact> {
+    let mut found: Vec<(Span, BindingFact)> = Vec::new();
+    let mut stack = Vec::new();
+    for s in &body.statements {
+        statement_exprs(s, &mut stack);
+    }
+    stack.push(&body.tail);
+    while let Some(e) = stack.pop() {
+        if let bynk_syntax::ast::ExprKind::Call {
+            name,
+            bindings: Some(bs),
+            ..
+        } = &e.kind
+        {
+            for b in bs.iter() {
+                found.push((
+                    b.span,
+                    BindingFact {
+                        function: name.name.clone(),
+                        parameter: b.param.name.clone(),
+                        capability: b.value.display_name(),
+                        site: site(b.span),
+                    },
+                ));
+            }
+        }
+        stack.extend(expr_children(e));
+    }
+    found.sort_by_key(|(span, _)| span.start);
+    found.into_iter().map(|(_, b)| b).collect()
 }

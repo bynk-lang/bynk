@@ -217,14 +217,14 @@ export function __deserialise_Item(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "number", actual: typeof obj["score"] });
   }
   if (!globalThis.Number.isFinite(obj["score"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: String(obj["score"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.score`, expected: "finite number", actual: "non-finite number" });
   }
   const __score = obj["score"];
   if (typeof obj["div"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.div`, expected: "number", actual: typeof obj["div"] });
   }
   if (!globalThis.Number.isFinite(obj["div"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.div`, expected: "finite number", actual: String(obj["div"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.div`, expected: "finite number", actual: "non-finite number" });
   }
   const __div = obj["div"];
   const __r_tag = __deserialise_Tag(obj["tag"], `${path}.tag`);
@@ -261,7 +261,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);

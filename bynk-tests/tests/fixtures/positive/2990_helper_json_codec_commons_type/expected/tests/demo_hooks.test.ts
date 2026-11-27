@@ -4,7 +4,7 @@
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 import * as __ns_demo_hooks from "./../demo/hooks.js";
 import * as __ns_demo_types from "./../demo/types.js";
 
@@ -33,7 +33,7 @@ async function test_a_helper_encodes_a_commons_record() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_UserRef(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as UserRef);
@@ -71,7 +71,7 @@ async function test_a_helper_encodes_a_list_of_commons_records() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_UserRef(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as UserRef);
@@ -109,7 +109,7 @@ async function test_a_helper_decodes_a_commons_record() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_UserRef(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as UserRef);
@@ -142,7 +142,7 @@ export function __deserialise_Payload(json: __JsonValue, path: string = "$"): Re
     return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "number", actual: typeof obj["id"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["id"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: String(obj["id"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["id"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __id = obj["id"];
   return Ok({ id: __id } as __ns_demo_types.Payload);

@@ -224,6 +224,6 @@ export function __deserialise_t_vault__Choice_t_vault__Code(json: __JsonValue, p
     case "Nope":
       return Ok({ tag: "Nope" } as t_vault.Choice<t_vault.Code>);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }

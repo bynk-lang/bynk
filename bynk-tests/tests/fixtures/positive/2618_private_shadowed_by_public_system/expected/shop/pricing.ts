@@ -40,7 +40,7 @@ export function __deserialise_Item(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "number", actual: typeof obj["price"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["price"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "safe integer", actual: String(obj["price"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.price`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["price"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __price = obj["price"];
   return Ok({ name: __name, price: __price } as Item);

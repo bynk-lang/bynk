@@ -7159,6 +7159,167 @@ service api from http {
 }
 
 #[cfg(test)]
+mod prelude_result_tests {
+    /// #4618: a context whose services return `bynk` prelude records, which it takes with
+    /// `consumes bynk`. The `http` service gives a `system` suite its serialisation edge.
+    const ORDERS: &str = "context shop.orders
+
+consumes bynk { CloseInfo, Cookie }
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }
+
+service api from http {
+  on GET(\"/ping\") () -> Effect[HttpResult[String]] by u: User {
+    Ok(\"pong\")
+  }
+}
+
+service one {
+  on call() -> Effect[CloseInfo] by Caller {
+    Effect.pure(CloseInfo { code: 1000, reason: \"done\", clean: true })
+  }
+}
+
+service many {
+  on call() -> Effect[List[CloseInfo]] by Caller {
+    Effect.pure([CloseInfo { code: 1000, reason: \"done\", clean: true }])
+  }
+}
+
+service session {
+  on call() -> Effect[Cookie] by Caller {
+    Effect.pure(Cookie { name: \"sid\", value: \"a\" })
+  }
+}
+";
+
+    fn system(body: &str) -> crate::testkit::Analysed {
+        crate::testkit::analyse(&[
+            ("shop/orders.bynk", ORDERS),
+            (
+                "shop/tests/orders.test.bynk",
+                &format!("suite shop.orders as system {{\n  case \"c\" {{\n{body}\n  }}\n}}\n"),
+            ),
+        ])
+    }
+
+    /// A `system` case binds the result of a service whose signature names a prelude record, a
+    /// list of one, or the prelude `Cookie`, and reads it as the type the service declares.
+    #[test]
+    fn a_system_call_has_the_prelude_type_its_service_declares() {
+        for body in [
+            "    let c <- shop.orders.one()\n    expect c.code == 1000",
+            "    let cs <- shop.orders.many()\n    expect cs.length() == 1",
+            "    let k <- shop.orders.session()\n    expect k.name == \"sid\"",
+        ] {
+            system(body).assert_clean();
+        }
+        // It is the declared type, not any type: a field the record lacks is refused.
+        system("    let c <- shop.orders.one()\n    expect c.nope == 1")
+            .assert_reports("bynk.types.unknown_field");
+    }
+
+    /// A prelude type a record of the context's own holds is resolved as well: the walk goes
+    /// through the context's own types, not only the ones a signature names.
+    const WRAPPED: &str = "context shop.orders
+
+consumes bynk { Cookie }
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }
+
+service api from http {
+  on GET(\"/ping\") () -> Effect[HttpResult[String]] by u: User {
+    Ok(\"pong\")
+  }
+}
+
+type Session = { cookie: Cookie, user: String }
+
+service session {
+  on call() -> Effect[Session] by Caller {
+    Effect.pure(Session { cookie: Cookie { name: \"sid\", value: \"a\" }, user: \"ada\" })
+  }
+}
+";
+
+    #[test]
+    fn a_prelude_type_inside_a_record_of_the_context_resolves() {
+        let suite = "suite shop.orders as system {\n  case \"c\" {\n    let s <- shop.orders.session()\n    expect s.cookie.name == \"sid\"\n  }\n}\n";
+        crate::testkit::analyse(&[
+            ("shop/orders.bynk", WRAPPED),
+            ("shop/tests/orders.test.bynk", suite),
+        ])
+        .assert_clean();
+        crate::testkit::analyse(&[
+            ("shop/orders.bynk", WRAPPED),
+            (
+                "shop/web.bynk",
+                "context shop.web\n\nconsumes shop.orders\n\nservice w {\n  on call() -> Effect[String] by Caller {\n    let s <- shop.orders.session()\n    Effect.pure(s.cookie.name)\n  }\n}\n",
+            ),
+        ])
+        .assert_clean();
+    }
+
+    /// `bynk.crypto` is a first-party adapter too.
+    #[test]
+    fn a_crypto_type_in_a_signature_resolves() {
+        let orders = "context shop.orders
+
+consumes bynk.crypto { CryptoError }
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }
+
+service api from http {
+  on GET(\"/ping\") () -> Effect[HttpResult[String]] by u: User {
+    Ok(\"pong\")
+  }
+}
+
+service check {
+  on call() -> Effect[Result[String, CryptoError]] by Caller {
+    Effect.pure(Ok(\"fine\"))
+  }
+}
+";
+        let suite = "suite shop.orders as system {\n  case \"c\" {\n    let r <- shop.orders.check()\n    expect r is Ok(_)\n  }\n}\n";
+        let a = crate::testkit::analyse(&[
+            ("shop/orders.bynk", orders),
+            ("shop/tests/orders.test.bynk", suite),
+        ]);
+        // `bynk.crypto` is experimental, which is reported; the call's result is not read as `()`.
+        assert!(
+            !a.categories().contains(&"bynk.effect.bind_on_non_effect"),
+            "{:?}",
+            a.categories()
+        );
+    }
+
+    /// The same holds for a consuming context: a call is typed by the callee's signature
+    /// whether or not the caller names the prelude record itself.
+    #[test]
+    fn a_consumers_call_has_the_prelude_type_the_service_declares() {
+        for consumes in [
+            "consumes shop.orders",
+            "consumes shop.orders\nconsumes bynk { CloseInfo }",
+        ] {
+            crate::testkit::analyse(&[
+                ("shop/orders.bynk", ORDERS),
+                (
+                    "shop/web.bynk",
+                    &format!(
+                        "context shop.web\n\n{consumes}\n\nservice w {{\n  on call() -> Effect[Int] by Caller {{\n    let c <- shop.orders.one()\n    Effect.pure(c.code)\n  }}\n}}\n"
+                    ),
+                ),
+            ])
+            .assert_clean();
+        }
+    }
+}
+
+#[cfg(test)]
 mod participant_tests {
     use super::*;
 

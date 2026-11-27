@@ -6,7 +6,7 @@ import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callSe
 
 export const check = {
   async call(n: number, deps: { env: { DEMO_VAULT: __ServiceBinding } }): globalThis.Promise<number> {
-    return __callService(deps.env.DEMO_VAULT, "open", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(n), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "demo.desk", "67d1924079d47559", deps.env, "demo.vault");
+    return __callService(deps.env.DEMO_VAULT, "open", ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(n), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "demo.desk", "67d1924079d47559", deps.env, "demo.vault");
   },
 };
 

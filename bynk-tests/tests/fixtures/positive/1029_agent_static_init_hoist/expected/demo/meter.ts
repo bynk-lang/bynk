@@ -168,14 +168,14 @@ export function __deserialise_Totals(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.hits`, expected: "number", actual: typeof obj["hits"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["hits"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.hits`, expected: "safe integer", actual: String(obj["hits"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.hits`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["hits"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __hits = obj["hits"];
   if (typeof obj["bytes"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.bytes`, expected: "number", actual: typeof obj["bytes"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["bytes"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.bytes`, expected: "safe integer", actual: String(obj["bytes"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.bytes`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["bytes"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __bytes = obj["bytes"];
   return Ok({ hits: __hits, bytes: __bytes } as Totals);

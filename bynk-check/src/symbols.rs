@@ -691,6 +691,10 @@ pub struct UnitTable {
     /// values, so [`UnitTable::unselected_consumed_types`] leaves them out).
     /// What `bynk.consumes.type_not_selected` is reported against.
     pub unlisted_consumed_types: std::collections::BTreeSet<String>,
+    /// #4618: the first-party units this unit consumes, in any form (`consumes bynk { Cookie }`,
+    /// `consumes bynk.crypto`). The types its service signatures name from them are part of its
+    /// contract. Recorded by [`record_unselected_consumed_types`].
+    pub first_party_consumes: std::collections::BTreeSet<String>,
     /// S4a (#1966): the derived capabilities (`capability Sessions = Kv`)
     /// this context declares, by name, once resolved to their base by
     /// [`crate::project_model::phase_resolve_derived`]. Each is also in
@@ -822,6 +826,7 @@ impl UnitTable {
             consumed_type_aliases,
             unselected_consumed_types,
             unlisted_consumed_types,
+            first_party_consumes,
             derived,
             use_views,
             ambiguous_uses,
@@ -836,6 +841,7 @@ impl UnitTable {
             sorted(consumed_type_aliases),
             unselected_consumed_types,
             unlisted_consumed_types,
+            first_party_consumes,
             sorted(derived),
             // A view is a function of the used commons' public surface and of
             // this unit's clauses: its names are what a change to either shows.
@@ -1287,6 +1293,7 @@ pub fn record_unselected_consumed_types(
 ) {
     type Sets = std::collections::BTreeSet<String>;
     let mut out: HashMap<String, (Sets, Sets)> = HashMap::new();
+    let mut consumed: HashMap<String, Sets> = HashMap::new();
     for (unit, clauses) in consumes {
         // target -> Some(listed names) | None for the whole-module form.
         let mut selection: HashMap<&str, Option<std::collections::HashSet<&str>>> = HashMap::new();
@@ -1306,6 +1313,12 @@ pub fn record_unselected_consumed_types(
                     selection.insert(target, Some(names.iter().map(String::as_str).collect()));
                 }
             }
+        }
+        for target in selection.keys() {
+            consumed
+                .entry(unit.clone())
+                .or_default()
+                .insert((*target).to_string());
         }
         for (target, listed) in selection {
             let (Some(listed), Some(table)) = (listed, unit_tables.get(target)) else {
@@ -1328,6 +1341,11 @@ pub fn record_unselected_consumed_types(
                     .filter(|t| !reached.contains(*t))
                     .cloned(),
             );
+        }
+    }
+    for (unit, first_party) in consumed {
+        if let Some(t) = unit_tables.get_mut(&unit) {
+            t.first_party_consumes = first_party;
         }
     }
     for (unit, (unlisted, unselected)) in out {
@@ -2297,6 +2315,136 @@ pub fn uses_span_of(
     None
 }
 
+/// #4618: the types `table`'s service signatures name, directly or through its own types, that it
+/// takes from a first-party unit it consumes (`consumes bynk { CloseInfo, Cookie }`), with what
+/// they reach, added to `types`. A caller reads a signature in `types`, and those units' names
+/// are in neither the unit's own types nor its `uses` commons', so without them a service
+/// returning `CloseInfo` read as returning nothing, and one returning a record with a `Cookie`
+/// field held `Cookie` unresolved.
+///
+/// Only the first-party units the table records as consumed are read
+/// ([`UnitTable::first_party_consumes`], in name order; a `system` harness holds only its
+/// participants for its target's entry of the `consumes` map, #2832), so a name two of them declare
+/// is taken from the one the unit consumed. A type renamed with `consumes U { T as A }` is filed
+/// under its alias. A name an adapter type reaches that the unit binds to another declaration (its
+/// own `SameSite` beside `Cookie`'s) is filed under a qualified key, `bynk__SameSite`, and the
+/// reference renamed, as for a consumed context's types (#2087). Both sides of a call hash the
+/// contract from this one table.
+fn add_adapter_signature_types(
+    table: &UnitTable,
+    unit_tables: &HashMap<String, UnitTable>,
+    types: &mut HashMap<String, Arc<TypeDecl>>,
+) {
+    let adapters: Vec<(&String, &UnitTable)> = table
+        .first_party_consumes
+        .iter()
+        .filter_map(|u| Some((u, unit_tables.get(u)?)))
+        .collect();
+    if adapters.is_empty() {
+        return;
+    }
+    let no_vars = std::collections::HashSet::new();
+    let mut queue: Vec<String> = Vec::new();
+    let mut names: Vec<_> = table.services.iter().collect();
+    names.sort_by_key(|(n, _)| n.as_str());
+    for (sname, sdecl) in names {
+        let Some(svc) = resolver::cross_context_service_for(sname, sdecl) else {
+            continue;
+        };
+        for (_, tr) in &svc.params {
+            crate::project_model::type_ref_names(tr, &no_vars, &mut queue);
+        }
+        crate::project_model::type_ref_names(&svc.return_type, &no_vars, &mut queue);
+    }
+    let mut imported: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    while let Some(name) = queue.pop() {
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        if let Some(decl) = types.get(&name) {
+            // The unit's own type, or one already filed: what it names is read in its namespace.
+            if !imported.contains(&name) {
+                queue.extend(crate::project_model::type_decl_ref_names(decl));
+            }
+            continue;
+        }
+        let from = match table.consumed_type_aliases.get(&name) {
+            Some(a) => adapters
+                .iter()
+                .find(|(u, _)| **u == a.target)
+                .map(|(u, t)| (*u, *t, a.original.clone())),
+            None => adapters
+                .iter()
+                .find(|(_, t)| t.types.contains_key(&name))
+                .map(|(u, t)| (*u, *t, name.clone())),
+        };
+        if let Some((unit, adapter, original)) = from {
+            import_adapter_type(
+                (unit, adapter),
+                &original,
+                &name,
+                table,
+                types,
+                &mut imported,
+            );
+        }
+    }
+}
+
+/// [`add_adapter_signature_types`]: file `adapter`'s type `original` in `types` under `key`, and
+/// each type its declaration names, resolved in the adapter's namespace.
+fn import_adapter_type(
+    adapter: (&String, &UnitTable),
+    original: &str,
+    key: &str,
+    consumer: &UnitTable,
+    types: &mut HashMap<String, Arc<TypeDecl>>,
+    imported: &mut std::collections::HashSet<String>,
+) {
+    let (unit, adapter) = adapter;
+    let Some(decl) = adapter.types.get(original) else {
+        return;
+    };
+    if types.contains_key(key) {
+        return;
+    }
+    // Filed before what it names is read, so a type that names itself ends the walk.
+    types.insert(key.to_string(), decl.clone());
+    imported.insert(key.to_string());
+    // The consumer's renames of this adapter's types, which a reference to one reads as its alias.
+    let renames: HashMap<String, String> = consumer
+        .consumed_type_aliases
+        .iter()
+        .filter(|(_, a)| a.target == *unit)
+        .map(|(alias, a)| (a.original.clone(), alias.clone()))
+        .collect();
+    let mut subst: HashMap<String, String> = HashMap::new();
+    for r in crate::project_model::type_decl_ref_names(decl) {
+        let Some(target) = adapter.types.get(&r) else {
+            continue;
+        };
+        let wanted = renames.get(&r).cloned().unwrap_or_else(|| r.clone());
+        let bound_elsewhere = types
+            .get(&wanted)
+            .is_some_and(|b| !(Arc::ptr_eq(b, target) || b.span == target.span));
+        let filed = if bound_elsewhere {
+            format!("{}__{r}", unit.replace('.', "_"))
+        } else {
+            wanted
+        };
+        if filed != r {
+            subst.insert(r.clone(), filed.clone());
+        }
+        import_adapter_type((unit, adapter), &r, &filed, consumer, types, imported);
+    }
+    if key != original || !subst.is_empty() {
+        let mut renamed = rename_decl_refs(decl, &subst);
+        renamed.name.name = key.to_string();
+        types.insert(key.to_string(), Arc::new(renamed));
+    }
+}
+
 /// Build the [`resolver::CrossContextInfo`] for a given consuming context.
 /// Used by both the resolver/checker (per-file processing) and the emitter
 /// (composition root + boundary casts).
@@ -2896,6 +3044,11 @@ pub fn resolve_given_cap_ref(
 /// anyway (an exported clash is `bynk.consumes.name_conflict`), and a body
 /// that reaches it does so through its own context's qualified key.
 ///
+/// #4618: the types a service signature names from a first-party unit the
+/// context consumes (`consumes bynk { CloseInfo, Cookie }`), directly or through
+/// one of its own types, are added too, as those units are not contexts and a
+/// signature naming one otherwise did not resolve (`add_adapter_signature_types`).
+///
 /// Both sides of a cross-context call build the contract hash from this one
 /// table, so they agree by construction.
 pub fn contract_types_for(
@@ -3119,6 +3272,9 @@ fn contract_types_inner(
         if !subst.is_empty() {
             out.insert(key, Arc::new(rename_decl_refs(&decl, &subst)));
         }
+    }
+    if let Some(table) = unit_tables.get(unit) {
+        add_adapter_signature_types(table, unit_tables, &mut out);
     }
     walk.visiting.remove(unit);
     if !cyclic {

@@ -137,7 +137,7 @@ export function __deserialise_Filter(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.page-size`, expected: "number", actual: typeof __d_pageSize });
   }
   if (!globalThis.Number.isSafeInteger(__d_pageSize)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.page-size`, expected: "safe integer", actual: String(__d_pageSize) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.page-size`, expected: "safe integer", actual: globalThis.Number.isInteger(__d_pageSize) ? "integer outside the safe range" : "non-integer number" });
   }
   const __pageSize = __d_pageSize;
   const __r_status = __deserialise_Option_String(obj["filter[status]"], `${path}.filter[status]`);

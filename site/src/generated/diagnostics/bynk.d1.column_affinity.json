@@ -1,0 +1,10 @@
+{
+  "blurb": "A typed read of a `D1` row reads each field by one storage convention: an `Instant` or `Duration` is `INTEGER` milliseconds, and a payload-less enum is `TEXT`, the variant's name. A SQLite column declared with the other affinity stores the value in a form the field does not read (a timestamp kept as ISO text, an enum kept as a number), so the decode fails, naming the field. Declare the column to match, or read it into a field of the column's own type (`String` or `Int`) and convert. Only a column read straight from a table has a declared type, so this is a warning on the common case, not a proof. `Decimal` has its own check, `bynk.d1.decimal_numeric_affinity`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.d1.column_affinity",
+  "constructs": [],
+  "example": "CREATE TABLE orders (id TEXT PRIMARY KEY, placed TEXT NOT NULL);       // ⚠ read as an `Instant`, it is text\n\nCREATE TABLE orders (id TEXT PRIMARY KEY, placed INTEGER NOT NULL);    // ✓ epoch milliseconds",
+  "severity": "warning",
+  "summary": "An `Instant`, `Duration` or enum row field is read from a SQLite column declared with the other affinity (`INTEGER` milliseconds, or `TEXT` for an enum), so the typed read fails to decode; declare the column to match (warning)."
+}

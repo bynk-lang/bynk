@@ -54,10 +54,10 @@ export function __deserialise_Result_Receipt_Int(json: __JsonValue, path: string
       return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "number", actual: typeof obj["error"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["error"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: String(obj["error"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.error`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["error"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __e = obj["error"];
     return Ok(Err(__e) as Result<demo_payment.Receipt, number>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

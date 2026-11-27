@@ -87,7 +87,7 @@ export function __deserialise_Plain(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["n"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["n"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __n = obj["n"];
   return Ok({ n: __n } as Plain);
@@ -129,7 +129,7 @@ export function __deserialise_Envelope_Int(json: __JsonValue, path: string = "$"
     return Err({ kind: "StructuralMismatch", path: `${path}.item`, expected: "number", actual: typeof obj["item"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["item"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.item`, expected: "safe integer", actual: String(obj["item"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.item`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["item"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __item = obj["item"];
   if (typeof obj["note"] !== "string") {
@@ -185,7 +185,7 @@ export function __deserialise_Outcome_Int(json: __JsonValue, path: string = "$")
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "Done", value: __value } as Outcome<number>);
@@ -198,7 +198,7 @@ export function __deserialise_Outcome_Int(json: __JsonValue, path: string = "$")
       return Ok({ tag: "Pending", reason: __reason } as Outcome<number>);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

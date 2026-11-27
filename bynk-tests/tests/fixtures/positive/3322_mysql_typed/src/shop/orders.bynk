@@ -3,8 +3,10 @@ context shop.orders
 // Hyperdrive H5 (#3322): typed reads and a transaction on a `MySql` instance.
 // `select[T]` and `firstAs[T]` write the column list from `T`'s fields, quoted
 // with backticks, and decode the rows: a `BIGINT` arrives as text at an `Int`
-// field and a `TINYINT(1)` as a flag at a `Bool`. A MySQL date or time arrives
-// as text without a zone, so it is read as a `String`. `transaction` runs a
+// field and a `TINYINT(1)` as a flag at a `Bool`. A `DATETIME` or `TIMESTAMP`
+// arrives as text without a zone and is read as UTC at an `Instant` (#4046), as
+// a `Duration` is `BIGINT` milliseconds, a `Decimal` its text and an enum the
+// variant's name. `transaction` runs a
 // fixed list of statements in order, all or none. A failure is a
 // `MySqlReadError` (`MySqlSql`, `MySqlDecode`) or a `MySqlError`.
 
@@ -13,10 +15,15 @@ consumes bynk.cloudflare { MySql, MySqlError, MySqlReadError, MySqlRun, MySqlSta
 
 capability Legacy = MySql @tls("required")
 
+type Status = enum { Open, Shipped }
+
 type Order = {
 	id: Int,
 	name: String,
-	placed: String,
+	placed: Instant,
+	wait: Duration,
+	total: Decimal,
+	status: Status,
 	note: Option[String],
 	paid: Bool,
 }

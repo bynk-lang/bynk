@@ -43,7 +43,7 @@ export function __deserialise_Expr(json: __JsonValue, path: string = "$", depth:
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "Lit", value: __value } as Expr);
@@ -55,7 +55,7 @@ export function __deserialise_Expr(json: __JsonValue, path: string = "$", depth:
       return Ok({ tag: "Block", stmts: __stmts } as Expr);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

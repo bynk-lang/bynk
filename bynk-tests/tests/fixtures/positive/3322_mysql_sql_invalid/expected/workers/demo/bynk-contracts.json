@@ -1,10 +1,10 @@
 {
   "version": 1,
   "provides": {
-    "probe": "dffb7fab86d8f779"
+    "probe": "de35ab7b2e6902f1"
   },
   "expects": {},
   "provides_shapes": {
-    "probe": "Svc(\"probe\",Ret(R(B(\"String\"),N(\"MySqlError\"))))"
+    "probe": "Svc(\"probe\",Ret(R(B(\"String\"),Sum(\"MySqlError\",V(\"MySqlConnection\",F(\"message\",B(\"String\"))),V(\"MySqlConstraint\",F(\"code\",B(\"Int\")),F(\"message\",B(\"String\"))),V(\"MySqlFailed\",F(\"code\",B(\"Int\")),F(\"message\",B(\"String\"))),V(\"MySqlSerialization\",F(\"code\",B(\"Int\")),F(\"message\",B(\"String\")))))))"
   }
 }

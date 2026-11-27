@@ -128,7 +128,7 @@ export class Room {
   }
 
   async __wsMessage_chat(connection: Connection<Frame>, room: RoomKey, frame: Frame, deps: { env: { LEDGER: __ServiceBinding }; identity: UserId }): globalThis.Promise<void> {
-    const __r0 = await __callService(deps.env.LEDGER, "tally", frame.text as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "room", "e97d8f1272553b84", deps.env, "ledger");
+    const __r0 = await __callService(deps.env.LEDGER, "tally", frame.text as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "room", "e97d8f1272553b84", deps.env, "ledger");
     return undefined;
   }
 

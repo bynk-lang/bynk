@@ -83,6 +83,7 @@
 /book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/
 /book/guides/effects-and-capabilities/what-a-timeout-stops/
 /book/guides/effects-and-capabilities/wrap-a-library/
+/book/guides/effects-and-capabilities/write-a-library-that-uses-a-capability/
 /book/guides/entry-points/
 /book/guides/entry-points/accept-a-file-upload/
 /book/guides/entry-points/accept-a-form/
@@ -1561,6 +1562,7 @@
 /reference/diagnostics/bynk.cron.numeric_weekday/
 /reference/diagnostics/bynk.cron.return_not_effect_result/
 /reference/diagnostics/bynk.cron.uneven_step/
+/reference/diagnostics/bynk.d1.column_affinity/
 /reference/diagnostics/bynk.d1.decimal_numeric_affinity/
 /reference/diagnostics/bynk.d1.migration_invalid/
 /reference/diagnostics/bynk.d1.migration_name/
@@ -1577,6 +1579,7 @@
 /reference/diagnostics/bynk.deploy.adoption_unmatched/
 /reference/diagnostics/bynk.deploy.adoption_unreadable/
 /reference/diagnostics/bynk.deploy.agent_move_refused/
+/reference/diagnostics/bynk.deploy.agent_move_window/
 /reference/diagnostics/bynk.deploy.agent_starts_fresh/
 /reference/diagnostics/bynk.deploy.asset_path_conflict/
 /reference/diagnostics/bynk.deploy.binding_collision/
@@ -1596,6 +1599,7 @@
 /reference/diagnostics/bynk.deploy.hyperdrive_settings_unreadable/
 /reference/diagnostics/bynk.deploy.hyperdrive_unresolved/
 /reference/diagnostics/bynk.deploy.ledger_unreadable/
+/reference/diagnostics/bynk.deploy.move_agent_unused/
 /reference/diagnostics/bynk.deploy.multiple_websocket_members/
 /reference/diagnostics/bynk.deploy.no_workers_built/
 /reference/diagnostics/bynk.deploy.not_a_context/
@@ -1673,8 +1677,10 @@
 /reference/diagnostics/bynk.event.pattern_unknown_field/
 /reference/diagnostics/bynk.event.pattern_unknown_variant/
 /reference/diagnostics/bynk.event.pattern_variant_payload/
+/reference/diagnostics/bynk.event.queue_name_collision/
 /reference/diagnostics/bynk.event.return_not_effect_unit/
 /reference/diagnostics/bynk.event.schema_version_mismatch/
+/reference/diagnostics/bynk.event.unbounded_payload/
 /reference/diagnostics/bynk.event.unknown_annotation/
 /reference/diagnostics/bynk.event.unknown_subscription/
 /reference/diagnostics/bynk.exec.unavailable/

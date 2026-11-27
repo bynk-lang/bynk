@@ -75,7 +75,7 @@ export function __deserialise_Refused(json: __JsonValue, path: string = "$"): Re
       case "Stale":
         return Ok({ tag: "Stale" } as Refused);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -89,7 +89,7 @@ export function __deserialise_Refused(json: __JsonValue, path: string = "$"): Re
     case "Stale":
       return Ok({ tag: "Stale" } as Refused);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -113,5 +113,5 @@ export function __deserialise_Result_Unit_Refused(json: __JsonValue, path: strin
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<void, Refused>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

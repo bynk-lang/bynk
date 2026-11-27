@@ -88,6 +88,19 @@ type Action = enum { @name("opened") Opened, @name("closed") Closed }
 
 `"opened"` decodes to `Opened`. A query, path, header or cookie value of the type is the wire name.
 
+Code that needs the text itself (a SQL parameter, a header, a log field) reads it instead of
+writing a `match` that has to follow every variant and drifts from `@name`. `a.wireName()` is the
+wire name of `a`, and `Action.fromWireName(text)` is its inverse, an `Option[Action]`:
+
+```bynk,fragment
+fn label(a: Action) -> String { a.wireName() }               // "opened"
+fn parse(text: String) -> Option[Action] { Action.fromWireName(text) }
+```
+
+`fromWireName("opened")` is `Some(Opened)`; `fromWireName("Opened")`, the Bynk name, is `None`, because
+the wire name is exact. Both read the one table the codecs read, so renaming a variant with `@name`
+changes them together. They exist on an `enum`, not on a sum with a payload.
+
 ## What a wire name does not do
 
 A wire name is part of the type's one encoding, so it applies everywhere the type is encoded: a

@@ -113,6 +113,18 @@ async function __wsProtocols(spec: { readonly credential: string }, credentials:
   return [marker, typeof token === "function" ? await token() : token];
 }
 
+/**
+ * #4610: whether this connection will offer a token: the service takes a bearer or OIDC one, and the call
+ * gives one, or gives `reconnect.credentials` to read one for each attempt. A cookie or anonymous service
+ * offers none, and a `bearer?` one with no token given connects anonymously.
+ */
+function __wsOffersToken(spec: { readonly credential: string }, credentials: unknown, connect: WsConnectOptions<unknown> | undefined): boolean {
+  if (spec.credential !== "bearer" && spec.credential !== "bearer?" && spec.credential !== "oidc") return false;
+  const given = (credentials as { readonly bearer?: __WsToken; readonly oidc?: __WsToken } | undefined) ?? {};
+  const token = spec.credential === "oidc" ? given.oidc : given.bearer;
+  return token !== undefined || connect?.reconnect?.credentials !== undefined;
+}
+
 class __WsClient<C, In, Out> implements WsConnection<In, Out> {
   state: "connecting" | "open" | "reconnecting" | "closed" = "connecting";
   readonly opened: globalThis.Promise<void>;
@@ -380,5 +392,8 @@ export function __webSocket<C, In, Out>(
   } catch (cause) {
     return { kind: "Transport", cause } satisfies CallFailure;
   }
+  // #4610: the token would cross the network readable. Refused here, before any socket is made: inside `open`
+  // a failure is a silent `1006` close (and a reconnect), which would hide why.
+  if (__wsOffersToken(spec, credentials, connect) && __cleartextRemote(url)) throw new CleartextCredential(url);
   return new __WsClient<C, In, Out>(options, spec, url, credentials, connect);
 }

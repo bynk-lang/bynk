@@ -8,7 +8,7 @@ import { __BynkKeyMap, __BynkKeySet, __bynkMapInsert, __bynkSetOf } from "../__b
 import { __bynkCmpInt, __bynkCmpString } from "../__bynk_runtime/compare.js";
 import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 import * as __ns_demo_gen from "./../demo/gen.js";
 
 <<bynk-shared: testing/expectation>>
@@ -71,7 +71,7 @@ async function test_a_refined_type_is_revalidated_through_the_witness() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Email(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_gen.Email);
@@ -83,7 +83,7 @@ async function test_a_refined_type_is_revalidated_through_the_witness() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Email(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_gen.Email);
@@ -110,12 +110,12 @@ async function test_base_types_and_Bytes() {
     type Email = __ns_demo_gen.Email;
     type P = __ns_demo_gen.P;
     type Tagged = __ns_demo_gen.Tagged;
-    if (!(__bynkEq(roundTrip(7, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }), Ok(7)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:28:10", 782, 803, "expect roundTrip(7) == Ok(7)\n  expected: roundTrip(7) == Ok(7)\n  actual:   " + __bynkShow((roundTrip(7, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((Ok(7)))); }
+    if (!(__bynkEq(roundTrip(7, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }), Ok(7)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:28:10", 782, 803, "expect roundTrip(7) == Ok(7)\n  expected: roundTrip(7) == Ok(7)\n  actual:   " + __bynkShow((roundTrip(7, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((Ok(7)))); }
     if (!(__bynkEq(roundTrip("s", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }), Ok("s")))) { throw __bynkExpectFailure("tests/demo/gen.bynk:29:10", 813, 838, "expect roundTrip(\"s\") == Ok(\"s\")\n  expected: roundTrip(\"s\") == Ok(\"s\")\n  actual:   " + __bynkShow((roundTrip("s", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }))) + " == " + __bynkShow((Ok("s")))); }
     if (!(__bynkEq(roundTrip(true, { encode: (__v: boolean) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "boolean") { return Err({ kind: "StructuralMismatch", path: __p, expected: "boolean", actual: typeof __j }); } const __v = __j; return Ok(__v as boolean); } }), Ok(true)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:30:10", 848, 875, "expect roundTrip(true) == Ok(true)\n  expected: roundTrip(true) == Ok(true)\n  actual:   " + __bynkShow((roundTrip(true, { encode: (__v: boolean) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "boolean") { return Err({ kind: "StructuralMismatch", path: __p, expected: "boolean", actual: typeof __j }); } const __v = __j; return Ok(__v as boolean); } }))) + " == " + __bynkShow((Ok(true)))); }
     if (!(enc(new globalThis.TextEncoder().encode("hi"), { encode: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "base64 string", actual: typeof __j }); } const __b_v = __bynkBytesFromBase64(__j); if (__b_v.tag === "None") { return Err({ kind: "StructuralMismatch", path: __p, expected: "base64 string", actual: "invalid base64" }); } const __v = __b_v.value; return Ok(__v as globalThis.Uint8Array); } }) === globalThis.JSON.stringify(__bynkBytesToBase64(new globalThis.TextEncoder().encode("hi")) as __JsonValue))) { throw __bynkExpectFailure("tests/demo/gen.bynk:31:10", 885, 947, "expect enc(Bytes.fromUtf8(\"hi\")) == Json.encode(Bytes.fromUtf8(\"hi\"))\n  expected: enc(Bytes.fromUtf8(\"hi\")) == Json.encode(Bytes.fromUtf8(\"hi\"))\n  actual:   " + __bynkShow((enc(new globalThis.TextEncoder().encode("hi"), { encode: (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "base64 string", actual: typeof __j }); } const __b_v = __bynkBytesFromBase64(__j); if (__b_v.tag === "None") { return Err({ kind: "StructuralMismatch", path: __p, expected: "base64 string", actual: "invalid base64" }); } const __v = __b_v.value; return Ok(__v as globalThis.Uint8Array); } }))) + " == " + __bynkShow((globalThis.JSON.stringify(__bynkBytesToBase64(new globalThis.TextEncoder().encode("hi")) as __JsonValue)))); }
-    if (!((dec("\"no\"", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }).tag === "Ok") === false)) { throw __bynkExpectFailure("tests/demo/gen.bynk:32:10", 957, 991, "expect dec[Int](\"\\\"no\\\"\").isOk() == false\n  expected: dec[Int](\"\\\"no\\\"\").isOk() == false\n  actual:   " + __bynkShow(((dec("\"no\"", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }).tag === "Ok"))) + " == " + __bynkShow((false))); }
-    if (!(__bynkEq(dec("5", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }), Ok(5)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:33:10", 1001, 1023, "expect dec[Int](\"5\") == Ok(5)\n  expected: dec[Int](\"5\") == Ok(5)\n  actual:   " + __bynkShow((dec("5", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((Ok(5)))); }
+    if (!((dec("\"no\"", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }).tag === "Ok") === false)) { throw __bynkExpectFailure("tests/demo/gen.bynk:32:10", 957, 991, "expect dec[Int](\"\\\"no\\\"\").isOk() == false\n  expected: dec[Int](\"\\\"no\\\"\").isOk() == false\n  actual:   " + __bynkShow(((dec("\"no\"", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }).tag === "Ok"))) + " == " + __bynkShow((false))); }
+    if (!(__bynkEq(dec("5", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }), Ok(5)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:33:10", 1001, 1023, "expect dec[Int](\"5\") == Ok(5)\n  expected: dec[Int](\"5\") == Ok(5)\n  actual:   " + __bynkShow((dec("5", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((Ok(5)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -140,7 +140,7 @@ async function test_a_list_agrees_with_the_monomorphised_codec() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_List_P(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as readonly __ns_demo_gen.P[]);
@@ -152,7 +152,7 @@ async function test_a_list_agrees_with_the_monomorphised_codec() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_P(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly __ns_demo_gen.P[]);
@@ -165,7 +165,7 @@ async function test_a_list_agrees_with_the_monomorphised_codec() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_List_P(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as readonly __ns_demo_gen.P[]);
@@ -177,7 +177,7 @@ async function test_a_list_agrees_with_the_monomorphised_codec() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_P(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly __ns_demo_gen.P[]);
@@ -185,24 +185,24 @@ async function test_a_list_agrees_with_the_monomorphised_codec() {
         return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })("[{\"x\":1}]"))));
     }
-    if (!(__bynkEq(decList("{}", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<readonly number[], DecodeError> => {
+    if (!(__bynkEq(decList("{}", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<readonly number[], DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_List_Int(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as readonly number[]);
       const __be = __r.error;
       return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })("{}")))) {
-      throw __bynkExpectFailure("tests/demo/gen.bynk:41:10", 1328, 1378, "expect decList[Int](\"{}\") == Json.decode[List[Int]](\"{}\")\n  expected: decList[Int](\"{}\") == Json.decode[List[Int]](\"{}\")\n  actual:   " + __bynkShow((decList("{}", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((((__s: string): Result<readonly number[], DecodeError> => {
+      throw __bynkExpectFailure("tests/demo/gen.bynk:41:10", 1328, 1378, "expect decList[Int](\"{}\") == Json.decode[List[Int]](\"{}\")\n  expected: decList[Int](\"{}\") == Json.decode[List[Int]](\"{}\")\n  actual:   " + __bynkShow((decList("{}", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((((__s: string): Result<readonly number[], DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_List_Int(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly number[]);
@@ -236,19 +236,19 @@ async function test_an_option_agrees__including_its_lenient_forms() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Option_P(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Option<__ns_demo_gen.P>);
       const __be = __r.error;
       return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(s)))(__x)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:49:10", 1608, 1811, "expect [\"null\", \"{\\\"kind\\\":\\\"None\\\"}\", \"{\\\"x\\\":1,\\\"y\\\":2}\", \"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":{\\\"x\\\":1,\\\"y\\\":2}}\", \"{\\\"kind\\\":\\\"Some\\\",\\\"value\\\":3}\", \"7\", \"[]\"].all((s) => decOpt[P](s) == Json.decode[Option[P]](s))"); }
-    if (!((["null", "5", "\"x\"", "{\"kind\":\"Some\",\"value\":5}"]).every((__x: string) => ((s: string) => __bynkEq(decOpt(s, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<Option<number>, DecodeError> => {
+    if (!((["null", "5", "\"x\"", "{\"kind\":\"Some\",\"value\":5}"]).every((__x: string) => ((s: string) => __bynkEq(decOpt(s, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<Option<number>, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Option_Int(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Option<number>);
@@ -281,7 +281,7 @@ async function test_a_result_agrees() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Result_P_String(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Result<__ns_demo_gen.P, string>);
@@ -312,7 +312,7 @@ async function test_a_set_with_a_composite_element_agrees__duplicates_included()
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Set_P(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<__ns_demo_gen.P>);
@@ -321,25 +321,25 @@ async function test_a_set_with_a_composite_element_agrees__duplicates_included()
     })(t)))(__x)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:64:10", 2547, 2707, "expect [\"[{\\\"x\\\":1,\\\"y\\\":1},{\\\"x\\\":2,\\\"y\\\":2}]\", \"[{\\\"x\\\":1,\\\"y\\\":1},{\\\"x\\\":1,\\\"y\\\":1}]\", \"[]\", \"{}\", \"[{\\\"x\\\":1}]\"].all((t) => decSet[P](t) == Json.decode[Set[P]](t))"); }
     if (!((decSet("[{\"x\":1,\"y\":1},{\"x\":1,\"y\":1}]", { encode: __serialise_P, decode: __deserialise_P }).tag === "Ok") === false)) { throw __bynkExpectFailure("tests/demo/gen.bynk:65:10", 2717, 2783, "expect decSet[P](\"[{\\\"x\\\":1,\\\"y\\\":1},{\\\"x\\\":1,\\\"y\\\":1}]\").isOk() == false\n  expected: decSet[P](\"[{\\\"x\\\":1,\\\"y\\\":1},{\\\"x\\\":1,\\\"y\\\":1}]\").isOk() == false\n  actual:   " + __bynkShow(((decSet("[{\"x\":1,\"y\":1},{\"x\":1,\"y\":1}]", { encode: __serialise_P, decode: __deserialise_P }).tag === "Ok"))) + " == " + __bynkShow((false))); }
     const plain: ReadonlySet<number> = new globalThis.Set<number>([1, 2, 3]);
-    if (!(encSet(plain, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }) === globalThis.JSON.stringify(__serialise_Set_Int(plain)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:67:10", 2835, 2870, "expect encSet(plain) == Json.encode(plain)\n  expected: encSet(plain) == Json.encode(plain)\n  actual:   " + __bynkShow((encSet(plain, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_Set_Int(plain))))); }
-    if (!(__bynkEq(decSet("[1,2,2]", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<ReadonlySet<number>, DecodeError> => {
+    if (!(encSet(plain, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }) === globalThis.JSON.stringify(__serialise_Set_Int(plain)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:67:10", 2835, 2870, "expect encSet(plain) == Json.encode(plain)\n  expected: encSet(plain) == Json.encode(plain)\n  actual:   " + __bynkShow((encSet(plain, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_Set_Int(plain))))); }
+    if (!(__bynkEq(decSet("[1,2,2]", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<ReadonlySet<number>, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Set_Int(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<number>);
       const __be = __r.error;
       return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })("[1,2,2]")))) {
-      throw __bynkExpectFailure("tests/demo/gen.bynk:68:10", 2880, 2938, "expect decSet[Int](\"[1,2,2]\") == Json.decode[Set[Int]](\"[1,2,2]\")\n  expected: decSet[Int](\"[1,2,2]\") == Json.decode[Set[Int]](\"[1,2,2]\")\n  actual:   " + __bynkShow((decSet("[1,2,2]", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((((__s: string): Result<ReadonlySet<number>, DecodeError> => {
+      throw __bynkExpectFailure("tests/demo/gen.bynk:68:10", 2880, 2938, "expect decSet[Int](\"[1,2,2]\") == Json.decode[Set[Int]](\"[1,2,2]\")\n  expected: decSet[Int](\"[1,2,2]\") == Json.decode[Set[Int]](\"[1,2,2]\")\n  actual:   " + __bynkShow((decSet("[1,2,2]", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((((__s: string): Result<ReadonlySet<number>, DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Set_Int(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<number>);
@@ -347,24 +347,24 @@ async function test_a_set_with_a_composite_element_agrees__duplicates_included()
         return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })("[1,2,2]"))));
     }
-    if (!(__bynkEq(decSet("[3,1]", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<ReadonlySet<number>, DecodeError> => {
+    if (!(__bynkEq(decSet("[3,1]", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<ReadonlySet<number>, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Set_Int(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<number>);
       const __be = __r.error;
       return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })("[3,1]")))) {
-      throw __bynkExpectFailure("tests/demo/gen.bynk:69:10", 2948, 3002, "expect decSet[Int](\"[3,1]\") == Json.decode[Set[Int]](\"[3,1]\")\n  expected: decSet[Int](\"[3,1]\") == Json.decode[Set[Int]](\"[3,1]\")\n  actual:   " + __bynkShow((decSet("[3,1]", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((((__s: string): Result<ReadonlySet<number>, DecodeError> => {
+      throw __bynkExpectFailure("tests/demo/gen.bynk:69:10", 2948, 3002, "expect decSet[Int](\"[3,1]\") == Json.decode[Set[Int]](\"[3,1]\")\n  expected: decSet[Int](\"[3,1]\") == Json.decode[Set[Int]](\"[3,1]\")\n  actual:   " + __bynkShow((decSet("[3,1]", { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((((__s: string): Result<ReadonlySet<number>, DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Set_Int(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<number>);
@@ -377,7 +377,7 @@ async function test_a_set_with_a_composite_element_agrees__duplicates_included()
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Set_Tagged(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<__ns_demo_gen.Tagged>);
@@ -389,7 +389,7 @@ async function test_a_set_with_a_composite_element_agrees__duplicates_included()
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Set_Tagged(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<__ns_demo_gen.Tagged>);
@@ -415,13 +415,13 @@ async function test_a_map_with_a_composite_key_agrees() {
     type P = __ns_demo_gen.P;
     type Tagged = __ns_demo_gen.Tagged;
     const m: ReadonlyMap<P, number> = __bynkMapInsert<P, number>(__bynkMapInsert<P, number>(new globalThis.Map<P, number>(), { x: 1, y: 1 }, 10), { x: 2, y: 2 }, 20);
-    if (!(encMap(m, { encode: __serialise_P, decode: __deserialise_P }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }) === globalThis.JSON.stringify(__serialise_Map_P_Int(m)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:75:10", 3325, 3352, "expect encMap(m) == Json.encode(m)\n  expected: encMap(m) == Json.encode(m)\n  actual:   " + __bynkShow((encMap(m, { encode: __serialise_P, decode: __deserialise_P }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_Map_P_Int(m))))); }
-    if (!((["[[{\"x\":1,\"y\":1},10]]", "[[{\"x\":1,\"y\":1},10],[{\"x\":1,\"y\":1},11]]", "[[1,2,3]]", "[[{\"x\":1,\"y\":1},\"no\"]]", "[]", "5"]).every((__x: string) => ((t: string) => __bynkEq(decMap(t, { encode: __serialise_P, decode: __deserialise_P }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<ReadonlyMap<__ns_demo_gen.P, number>, DecodeError> => {
+    if (!(encMap(m, { encode: __serialise_P, decode: __deserialise_P }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }) === globalThis.JSON.stringify(__serialise_Map_P_Int(m)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:75:10", 3325, 3352, "expect encMap(m) == Json.encode(m)\n  expected: encMap(m) == Json.encode(m)\n  actual:   " + __bynkShow((encMap(m, { encode: __serialise_P, decode: __deserialise_P }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_Map_P_Int(m))))); }
+    if (!((["[[{\"x\":1,\"y\":1},10]]", "[[{\"x\":1,\"y\":1},10],[{\"x\":1,\"y\":1},11]]", "[[1,2,3]]", "[[{\"x\":1,\"y\":1},\"no\"]]", "[]", "5"]).every((__x: string) => ((t: string) => __bynkEq(decMap(t, { encode: __serialise_P, decode: __deserialise_P }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<ReadonlyMap<__ns_demo_gen.P, number>, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Map_P_Int(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<__ns_demo_gen.P, number>);
@@ -429,25 +429,25 @@ async function test_a_map_with_a_composite_key_agrees() {
       return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(t)))(__x)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:76:10", 3362, 3558, "expect [\"[[{\\\"x\\\":1,\\\"y\\\":1},10]]\", \"[[{\\\"x\\\":1,\\\"y\\\":1},10],[{\\\"x\\\":1,\\\"y\\\":1},11]]\", \"[[1,2,3]]\", \"[[{\\\"x\\\":1,\\\"y\\\":1},\\\"no\\\"]]\", \"[]\", \"5\"].all((t) => decMap[P, Int](t) == Json.decode[Map[P, Int]](t))"); }
     const sm: ReadonlyMap<string, number> = new globalThis.Map(new globalThis.Map(new globalThis.Map<string, number>()).set("a", 1)).set("b", 2);
-    if (!(encMap(sm, { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }) === globalThis.JSON.stringify(__serialise_Map_String_Int(sm)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:78:10", 3639, 3668, "expect encMap(sm) == Json.encode(sm)\n  expected: encMap(sm) == Json.encode(sm)\n  actual:   " + __bynkShow((encMap(sm, { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_Map_String_Int(sm))))); }
-    if (!(__bynkEq(decMap("[[\"a\",1],[\"b\",2]]", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
+    if (!(encMap(sm, { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }) === globalThis.JSON.stringify(__serialise_Map_String_Int(sm)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:78:10", 3639, 3668, "expect encMap(sm) == Json.encode(sm)\n  expected: encMap(sm) == Json.encode(sm)\n  actual:   " + __bynkShow((encMap(sm, { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((globalThis.JSON.stringify(__serialise_Map_String_Int(sm))))); }
+    if (!(__bynkEq(decMap("[[\"a\",1],[\"b\",2]]", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Map_String_Int(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<string, number>);
       const __be = __r.error;
       return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })("[[\"a\",1],[\"b\",2]]")))) {
-      throw __bynkExpectFailure("tests/demo/gen.bynk:79:10", 3678, 3780, "expect decMap[String, Int](\"[[\\\"a\\\",1],[\\\"b\\\",2]]\") == Json.decode[Map[String, Int]](\"[[\\\"a\\\",1],[\\\"b\\\",2]]\")\n  expected: decMap[String, Int](\"[[\\\"a\\\",1],[\\\"b\\\",2]]\") == Json.decode[Map[String, Int]](\"[[\\\"a\\\",1],[\\\"b\\\",2]]\")\n  actual:   " + __bynkShow((decMap("[[\"a\",1],[\"b\",2]]", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
+      throw __bynkExpectFailure("tests/demo/gen.bynk:79:10", 3678, 3780, "expect decMap[String, Int](\"[[\\\"a\\\",1],[\\\"b\\\",2]]\") == Json.decode[Map[String, Int]](\"[[\\\"a\\\",1],[\\\"b\\\",2]]\")\n  expected: decMap[String, Int](\"[[\\\"a\\\",1],[\\\"b\\\",2]]\") == Json.decode[Map[String, Int]](\"[[\\\"a\\\",1],[\\\"b\\\",2]]\")\n  actual:   " + __bynkShow((decMap("[[\"a\",1],[\"b\",2]]", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Map_String_Int(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<string, number>);
@@ -455,24 +455,24 @@ async function test_a_map_with_a_composite_key_agrees() {
         return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })("[[\"a\",1],[\"b\",2]]"))));
     }
-    if (!(__bynkEq(decMap("[[\"a\",\"x\"]]", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
+    if (!(__bynkEq(decMap("[[\"a\",\"x\"]]", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }), ((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Map_String_Int(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<string, number>);
       const __be = __r.error;
       return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })("[[\"a\",\"x\"]]")))) {
-      throw __bynkExpectFailure("tests/demo/gen.bynk:80:10", 3790, 3880, "expect decMap[String, Int](\"[[\\\"a\\\",\\\"x\\\"]]\") == Json.decode[Map[String, Int]](\"[[\\\"a\\\",\\\"x\\\"]]\")\n  expected: decMap[String, Int](\"[[\\\"a\\\",\\\"x\\\"]]\") == Json.decode[Map[String, Int]](\"[[\\\"a\\\",\\\"x\\\"]]\")\n  actual:   " + __bynkShow((decMap("[[\"a\",\"x\"]]", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
+      throw __bynkExpectFailure("tests/demo/gen.bynk:80:10", 3790, 3880, "expect decMap[String, Int](\"[[\\\"a\\\",\\\"x\\\"]]\") == Json.decode[Map[String, Int]](\"[[\\\"a\\\",\\\"x\\\"]]\")\n  expected: decMap[String, Int](\"[[\\\"a\\\",\\\"x\\\"]]\") == Json.decode[Map[String, Int]](\"[[\\\"a\\\",\\\"x\\\"]]\")\n  actual:   " + __bynkShow((decMap("[[\"a\",\"x\"]]", { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow((((__s: string): Result<ReadonlyMap<string, number>, DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Map_String_Int(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as ReadonlyMap<string, number>);
@@ -504,7 +504,7 @@ async function test_a_nested_container_agrees() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Option_List_P(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Option<readonly __ns_demo_gen.P[]>);
@@ -516,7 +516,7 @@ async function test_a_nested_container_agrees() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Option_List_P(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Option<readonly __ns_demo_gen.P[]>);
@@ -529,7 +529,7 @@ async function test_a_nested_container_agrees() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
       }
       const __r = __deserialise_Option_List_P(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Option<readonly __ns_demo_gen.P[]>);
@@ -541,7 +541,7 @@ async function test_a_nested_container_agrees() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Option_List_P(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Option<readonly __ns_demo_gen.P[]>);
@@ -566,7 +566,7 @@ async function test_a_comparator_and_a_codec_witness_are_both_passed() {
     type Email = __ns_demo_gen.Email;
     type P = __ns_demo_gen.P;
     type Tagged = __ns_demo_gen.Tagged;
-    if (!(ordered(2, 1, __bynkCmpInt, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }) === "1")) { throw __bynkExpectFailure("tests/demo/gen.bynk:91:10", 4270, 4290, "expect ordered(2, 1) == \"1\"\n  expected: ordered(2, 1) == \"1\"\n  actual:   " + __bynkShow((ordered(2, 1, __bynkCmpInt, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: String(__j) }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow(("1"))); }
+    if (!(ordered(2, 1, __bynkCmpInt, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }) === "1")) { throw __bynkExpectFailure("tests/demo/gen.bynk:91:10", 4270, 4290, "expect ordered(2, 1) == \"1\"\n  expected: ordered(2, 1) == \"1\"\n  actual:   " + __bynkShow((ordered(2, 1, __bynkCmpInt, { encode: (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "number") { return Err({ kind: "StructuralMismatch", path: __p, expected: "number", actual: typeof __j }); } if (!globalThis.Number.isSafeInteger(__j)) { return Err({ kind: "StructuralMismatch", path: __p, expected: "safe integer", actual: globalThis.Number.isInteger(__j) ? "integer outside the safe range" : "non-integer number" }); } const __v = __j; return Ok(__v as number); } }))) + " == " + __bynkShow(("1"))); }
     if (!(ordered("a", "b", __bynkCmpString, { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }) === "\"a\"")) { throw __bynkExpectFailure("tests/demo/gen.bynk:92:10", 4300, 4328, "expect ordered(\"a\", \"b\") == \"\\\"a\\\"\"\n  expected: ordered(\"a\", \"b\") == \"\\\"a\\\"\"\n  actual:   " + __bynkShow((ordered("a", "b", __bynkCmpString, { encode: (__v: string) => __v as __JsonValue, decode: (__j: __JsonValue, __p: string) => { if (typeof __j !== "string") { return Err({ kind: "StructuralMismatch", path: __p, expected: "string", actual: typeof __j }); } const __v = __j; return Ok(__v as string); } }))) + " == " + __bynkShow(("\"a\""))); }
     return { pass: true };
   } catch (e) {
@@ -626,14 +626,14 @@ export function __deserialise_P(json: __JsonValue, path: string = "$"): Result<_
     return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "number", actual: typeof obj["x"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["x"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "safe integer", actual: String(obj["x"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.x`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["x"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __x = obj["x"];
   if (typeof obj["y"] !== "number") {
     return Err({ kind: "StructuralMismatch", path: `${path}.y`, expected: "number", actual: typeof obj["y"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["y"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.y`, expected: "safe integer", actual: String(obj["y"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.y`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["y"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __y = obj["y"];
   return Ok({ x: __x, y: __y } as __ns_demo_gen.P);
@@ -662,7 +662,7 @@ export function __deserialise_Tagged(json: __JsonValue, path: string = "$"): Res
         return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["n"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["n"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __n = obj["n"];
       return Ok({ tag: "Num", n: __n } as __ns_demo_gen.Tagged);
@@ -675,7 +675,7 @@ export function __deserialise_Tagged(json: __JsonValue, path: string = "$"): Res
       return Ok({ tag: "Str", s: __s } as __ns_demo_gen.Tagged);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -714,7 +714,7 @@ export function __deserialise_List_Int(json: __JsonValue, path: string = "$"): R
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
     }
     if (!globalThis.Number.isSafeInteger(item)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: globalThis.Number.isInteger(item) ? "integer outside the safe range" : "non-integer number" });
     }
     const __el = item;
     out.push(__el as number);
@@ -772,7 +772,7 @@ function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __Bou
     return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
   }
   if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: globalThis.Number.isInteger(raw) ? "integer outside the safe range" : "non-integer number" });
   }
   const __v = raw;
   return Ok(__v);
@@ -828,7 +828,7 @@ export function __deserialise_Result_P_String(json: __JsonValue, path: string = 
     const __e = obj["error"];
     return Ok(Err(__e) as Result<__ns_demo_gen.P, string>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Set_P(value: ReadonlySet<__ns_demo_gen.P>): __JsonValue {
@@ -868,7 +868,7 @@ export function __deserialise_Set_Int(json: __JsonValue, path: string = "$"): Re
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "number", actual: typeof item });
     }
     if (!globalThis.Number.isSafeInteger(item)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: String(item) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "safe integer", actual: globalThis.Number.isInteger(item) ? "integer outside the safe range" : "non-integer number" });
     }
     const __el = item;
     if (out.has(__el as number)) {
@@ -931,7 +931,7 @@ export function __deserialise_Map_P_Int(json: __JsonValue, path: string = "$"): 
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
     }
     if (!globalThis.Number.isSafeInteger(entryV)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: globalThis.Number.isInteger(entryV) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = entryV;
     out.set(__k as __ns_demo_gen.P, __v as number);
@@ -973,7 +973,7 @@ export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
     }
     if (!globalThis.Number.isSafeInteger(entryV)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: globalThis.Number.isInteger(entryV) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = entryV;
     out.set(__k as string, __v as number);

@@ -4,7 +4,7 @@
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkIsIsoDate } from "../__bynk_runtime/time.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 
 /**
  * #2867: `IsoDate` through the emit paths the declared-type fixture does not
@@ -35,7 +35,7 @@ export function decodeEvent(json: string): Result<Event, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Event(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Event);

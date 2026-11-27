@@ -9,6 +9,7 @@ import { __StoreMap, __fillMap, __wireEntries, __wireMap, __wirePostings } from 
 import { __readStored, __commitStored, __eraseStored, __markErased, __newErasure, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
 import { __attachLazy } from "../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __bynkMeasureEvent } from "../__bynk_runtime/queue_signing.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 export interface Order {
@@ -131,7 +132,7 @@ export class Account {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       await (async () => {
-        __events.push({ type: "AccountClosed", payload: { id: this.__key }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.account", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push(__bynkMeasureEvent({ type: "AccountClosed", payload: { id: this.__key }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.account", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } }));
       })();
       return __markErased(__erasure);
     })();

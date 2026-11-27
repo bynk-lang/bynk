@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import type { DecodeError } from "./__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "./__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "./__bynk_runtime/boundary.js";
 
 export interface Paginated<T> {
   readonly items: readonly T[];
@@ -47,7 +47,7 @@ export function load(s: string): Result<Paginated<User>, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Paginated_User(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Paginated<User>);
@@ -97,7 +97,7 @@ export function __deserialise_User(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "number", actual: typeof obj["id"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["id"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: String(obj["id"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["id"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __id = obj["id"];
   if (typeof obj["name"] !== "string") {

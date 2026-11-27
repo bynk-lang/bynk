@@ -2,15 +2,15 @@
   "version": 1,
   "provides": {
     "listing": "abdead4292b3d7bb",
-    "save": "773d2ea3edbf2955",
+    "save": "65605df70df5fcd7",
     "taxes": "55d023879dd10ac8",
-    "taxesTyped": "7ee47adb73ec8e6d"
+    "taxesTyped": "c6fd53454bc5859d"
   },
   "expects": {},
   "provides_shapes": {
     "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Price\",F(\"amount\",B(\"Decimal\")),F(\"id\",B(\"String\")))),B(\"String\"))))",
-    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"amount\",B(\"String\")),Ret(R(N(\"SqlRun\"),N(\"SqlError\"))))",
+    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"amount\",B(\"String\")),Ret(R(Rec(\"SqlRun\",F(\"changes\",B(\"Int\")),F(\"lastRowId\",B(\"Int\"))),Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\")))))))",
     "taxes": "Svc(\"taxes\",Ret(R(L(Rec(\"Taxed\",F(\"id\",B(\"String\")),F(\"tax\",B(\"Decimal\")))),B(\"String\"))))",
-    "taxesTyped": "Svc(\"taxesTyped\",Ret(R(L(Rec(\"Taxed\",F(\"id\",B(\"String\")),F(\"tax\",B(\"Decimal\")))),N(\"SqlReadError\"))))"
+    "taxesTyped": "Svc(\"taxesTyped\",Ret(R(L(Rec(\"Taxed\",F(\"id\",B(\"String\")),F(\"tax\",B(\"Decimal\")))),Sum(\"SqlReadError\",V(\"Decode\",F(\"error\",N(\"DecodeError\"))),V(\"Sql\",F(\"error\",Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\"))))))))))"
   }
 }

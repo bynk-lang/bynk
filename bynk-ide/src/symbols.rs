@@ -3634,7 +3634,16 @@ pub(crate) fn fn_given_str(f: &FnDecl) -> String {
     if f.given.is_empty() {
         return String::new();
     }
-    let names: Vec<String> = f.given.iter().map(|g| g.display_name()).collect();
+    // #3959: a capability parameter shows its bound, `Store: Kv`, so a caller
+    // sees what each binding takes.
+    let names: Vec<String> = f
+        .given
+        .iter()
+        .map(|g| match &g.bound {
+            Some(kind) => format!("{}: {}", g.display_name(), kind.name),
+            None => g.display_name(),
+        })
+        .collect();
     format!(" given {}", names.join(", "))
 }
 

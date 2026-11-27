@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../__bynk_runtime/boundary.js";
 
 /**
  * #2656: a recursive type's boundary codec bounds its nesting at 256 levels. A
@@ -99,7 +99,7 @@ export function indexRoundTrips(i: Index): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Index(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Index);
@@ -124,7 +124,7 @@ export function exprRoundTrips(e: Expr): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Expr(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Expr);
@@ -149,7 +149,7 @@ export function chainRoundTrips(c: Chain): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Chain(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Chain);
@@ -174,7 +174,7 @@ export function treeRoundTrips(t: Tree): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Tree(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Tree);
@@ -199,7 +199,7 @@ export function decodesChain(s: string): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Chain(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Chain);
@@ -223,7 +223,7 @@ export function chainError(s: string): string {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
     }
     const __r = __deserialise_Chain(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Chain);
@@ -262,7 +262,7 @@ export function __deserialise_Chain(json: __JsonValue, path: string = "$", depth
     return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __value = obj["value"];
   const __r_next = __deserialise_Option_Chain(obj["next"], `${path}.next`, depth + 1);
@@ -298,7 +298,7 @@ export function __deserialise_Expr(json: __JsonValue, path: string = "$", depth:
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       return Ok({ tag: "Lit", value: __value } as Expr);
@@ -310,7 +310,7 @@ export function __deserialise_Expr(json: __JsonValue, path: string = "$", depth:
       return Ok({ tag: "Block", stmts: __stmts } as Expr);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -361,7 +361,7 @@ export function __deserialise_Stmt(json: __JsonValue, path: string = "$", depth:
       return Ok({ tag: "Eval", expr: __expr } as Stmt);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -396,7 +396,7 @@ export function __deserialise_Tree(json: __JsonValue, path: string = "$", depth:
         return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
       }
       if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
       }
       const __value = obj["value"];
       const __r_right = __deserialise_Tree(obj["right"], `${path}.right`, depth + 1);
@@ -405,7 +405,7 @@ export function __deserialise_Tree(json: __JsonValue, path: string = "$", depth:
       return Ok({ tag: "Node", left: __left, value: __value, right: __right } as Tree);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

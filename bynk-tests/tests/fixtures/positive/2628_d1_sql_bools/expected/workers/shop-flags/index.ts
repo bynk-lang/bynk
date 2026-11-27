@@ -74,9 +74,9 @@ export default {
             case "save": {
               __route = "call save";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "e00619628de99d94") {
-                globalThis.console.error("ContractMismatch shop.flags call save", { service: "save", expected: "e00619628de99d94", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "save", expected: "e00619628de99d94", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "3c3c5fc97f25a6d2") {
+                globalThis.console.error("ContractMismatch shop.flags call save", { service: "save", expected: "3c3c5fc97f25a6d2", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "save", expected: "3c3c5fc97f25a6d2", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {
@@ -121,9 +121,9 @@ export default {
             case "stock": {
               __route = "call stock";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "393fd11938181c0d") {
-                globalThis.console.error("ContractMismatch shop.flags call stock", { service: "stock", expected: "393fd11938181c0d", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "stock", expected: "393fd11938181c0d", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "2a08252ec11444a7") {
+                globalThis.console.error("ContractMismatch shop.flags call stock", { service: "stock", expected: "2a08252ec11444a7", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "stock", expected: "2a08252ec11444a7", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {

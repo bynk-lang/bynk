@@ -167,6 +167,9 @@ pub(in super::super) enum DecodeSource {
     /// Hyperdrive H3 (#3320), the typed `Postgres` reads: JSON, with an `int8`'s
     /// text read at an `Int` field and a `timestamptz`'s text at an `Instant`.
     Pg,
+    /// #4046, the typed `MySql` reads: the `Postgres` pass, with a `DATETIME`/`TIMESTAMP`'s
+    /// zone-less text read as UTC at an `Instant` field.
+    MySql,
     /// #3214, `Yaml.decode`: the text is YAML, parsed to the same JSON-shaped tree.
     Yaml,
     /// #3276, `Form.decode`: the text is a form body, read by the router's own rules.
@@ -251,8 +254,8 @@ pub(in super::super) fn json_decoder_fn(
     };
     let row_pass = if sql {
         sql_bool_pass(t, cx)
-    } else if source == DecodeSource::Pg {
-        pg_row_pass(t, cx)
+    } else if matches!(source, DecodeSource::Pg | DecodeSource::MySql) {
+        pg_row_pass(t, source == DecodeSource::MySql, cx)
     } else {
         Vec::new()
     };
@@ -285,7 +288,7 @@ fn decoder_result_ty(ts: &TsType) -> TsType {
 }
 
 /// `let __j: __JsonValue; try { __j = JSON.parse(__s) as __JsonValue; } catch (__e) { return
-/// Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) }); }`.
+/// Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) }); }`.
 fn json_parse_step() -> Vec<TsStmt> {
     let malformed = TsExpr::object(vec![
         (
@@ -295,7 +298,7 @@ fn json_parse_step() -> Vec<TsStmt> {
         ("path".to_string(), str_lit("$")),
         (
             "message".to_string(),
-            call(ident("String"), vec![ident("__e")]),
+            call(ident("__bynkJsonParseMessage"), vec![ident("__e")]),
         ),
     ]);
     let parsed = TsExpr::As {
@@ -725,7 +728,7 @@ fn apply_to_rows(pass: &str) -> TsStmt {
 /// (ADR 0799 F), so the runtime's `__bynkPgRow` converts exactly the row's
 /// `Instant` and `Int` fields, and leaves anything it cannot convert for the
 /// codec to refuse. Empty when the row has neither.
-fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
+fn pg_row_pass(t: bynk_check::checker::TyId, mysql: bool, cx: &LowerCtx) -> Vec<TsStmt> {
     let tys = cx.ty_render();
     let row = tys.get(t).as_list().unwrap_or(t);
     let Ty::Named { name, .. } = &*tys.get(row) else {
@@ -733,7 +736,13 @@ fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
     };
     let types = &cx.commons().types;
     let instants = bynk_check::checker::row_base_fields(name, types, BaseType::Instant);
-    let ints = bynk_check::checker::row_base_fields(name, types, BaseType::Int);
+    // A `Duration` column is `bigint` milliseconds (#4046), which arrives as text like an `int8`.
+    let mut ints = bynk_check::checker::row_base_fields(name, types, BaseType::Int);
+    ints.extend(bynk_check::checker::row_base_fields(
+        name,
+        types,
+        BaseType::Duration,
+    ));
     if instants.is_empty() && ints.is_empty() {
         return Vec::new();
     }
@@ -745,10 +754,13 @@ fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
         is_async: false,
         generics: Vec::new(),
         return_type: Some(TsType::named("void")),
-        body: Box::new(TsArrowBody::Expr(Box::new(call(
-            ident("__bynkPgRow"),
-            vec![ident("__o"), names(&instants), names(&ints)],
-        )))),
+        body: Box::new(TsArrowBody::Expr(Box::new(call(ident("__bynkPgRow"), {
+            let mut args = vec![ident("__o"), names(&instants), names(&ints)];
+            if mysql {
+                args.push(TsExpr::Lit(TsLit::Bool(true)));
+            }
+            args
+        })))),
     };
     vec![const_typed("__fix", None, fix), apply_to_rows("__fix")]
 }

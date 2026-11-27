@@ -52,7 +52,7 @@ export function __deserialise_Chain(json: __JsonValue, path: string = "$", depth
     return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["value"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __value = obj["value"];
   const __r_next = __deserialise_Option_Chain(obj["next"], `${path}.next`, depth + 1);

@@ -3,18 +3,18 @@
   "provides": {
     "listing": "c3e6264ecaef1e6f",
     "lookup": "8173d41b5d492636",
-    "save": "e00619628de99d94",
+    "save": "3c3c5fc97f25a6d2",
     "setup": "9c9f7ed81132d5d4",
-    "stock": "393fd11938181c0d",
+    "stock": "2a08252ec11444a7",
     "strange": "b6e830eca7d96cd7"
   },
   "expects": {},
   "provides_shapes": {
     "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Flag\",F(\"active\",B(\"Bool\")),F(\"id\",B(\"String\")),F(\"seen\",O(B(\"Bool\"))))),B(\"String\"))))",
     "lookup": "Svc(\"lookup\",P(\"id\",B(\"String\")),Ret(O(Rec(\"Flag\",F(\"active\",B(\"Bool\")),F(\"id\",B(\"String\")),F(\"seen\",O(B(\"Bool\")))))))",
-    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"active\",B(\"Bool\")),P(\"seen\",O(B(\"Bool\"))),Ret(R(N(\"SqlRun\"),N(\"SqlError\"))))",
+    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"active\",B(\"Bool\")),P(\"seen\",O(B(\"Bool\"))),Ret(R(Rec(\"SqlRun\",F(\"changes\",B(\"Int\")),F(\"lastRowId\",B(\"Int\"))),Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\")))))))",
     "setup": "Svc(\"setup\",Ret(B(\"Bool\")))",
-    "stock": "Svc(\"stock\",P(\"items\",L(Rec(\"Item\",F(\"id\",B(\"String\")),F(\"qty\",B(\"Int\"))))),Ret(R(B(\"Int\"),N(\"SqlError\"))))",
+    "stock": "Svc(\"stock\",P(\"items\",L(Rec(\"Item\",F(\"id\",B(\"String\")),F(\"qty\",B(\"Int\"))))),Ret(R(B(\"Int\"),Sum(\"SqlError\",V(\"Constraint\",F(\"message\",B(\"String\"))),V(\"Failed\",F(\"message\",B(\"String\")))))))",
     "strange": "Svc(\"strange\",P(\"id\",B(\"String\")),Ret(B(\"Bool\")))"
   }
 }

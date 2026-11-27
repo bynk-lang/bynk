@@ -75,7 +75,7 @@ export function __deserialise_Line(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "number", actual: typeof obj["qty"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["qty"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["qty"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __qty = obj["qty"];
   return Ok({ sku: __sku, unit: __unit, discount: __discount, qty: __qty } as Line);
@@ -122,7 +122,7 @@ export function __deserialise_Result_Line_Unit(json: __JsonValue, path: string =
     const __e = undefined;
     return Ok(Err(__e) as Result<Line, void>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Result_Decimal_Unit(value: Result<{ readonly coefficient: bigint; readonly scale: number }, void>): __JsonValue {
@@ -149,5 +149,5 @@ export function __deserialise_Result_Decimal_Unit(json: __JsonValue, path: strin
     const __e = undefined;
     return Ok(Err(__e) as Result<{ readonly coefficient: bigint; readonly scale: number }, void>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

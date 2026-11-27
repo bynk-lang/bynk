@@ -1,0 +1,11 @@
+context app
+
+consumes shapes { Status }
+
+fn label(s: Status) -> String {
+  s.wireName()
+}
+
+fn parse(text: String) -> Option[Status] {
+  Status.fromWireName(text)
+}

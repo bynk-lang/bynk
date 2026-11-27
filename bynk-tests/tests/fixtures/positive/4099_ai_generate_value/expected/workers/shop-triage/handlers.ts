@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError, DecodeError } from "../../__bynk_runtime/errors.js";
-import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __bynkJsonParseMessage } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 import { ChatRole } from "../../bynk/cloudflare.js";
@@ -52,7 +52,7 @@ export const triage = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Triage(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Triage);
@@ -85,7 +85,7 @@ export const triage = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Severity(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Severity);
@@ -127,7 +127,7 @@ export const triage = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: __bynkJsonParseMessage(__e) });
         }
         const __r = __deserialise_Option_Severity(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Option<Severity>);
@@ -184,7 +184,7 @@ export function __deserialise_Severity(json: __JsonValue, path: string = "$"): R
       case "High":
         return Ok({ tag: "High" } as Severity);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -200,7 +200,7 @@ export function __deserialise_Severity(json: __JsonValue, path: string = "$"): R
     case "High":
       return Ok({ tag: "High" } as Severity);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

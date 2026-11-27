@@ -51,6 +51,12 @@ pub(in crate::emitter) fn lower_type_static_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
+    // #4560: `E.fromWireName(s)` on an enum.
+    if matches!(cx.commons().callee(e.id), Some(Callee::EnumFromWireName(_)))
+        && let Some(built) = super::enum_wire::lower_from_wire_name(e, args, cx, pre)
+    {
+        return Some(built);
+    }
     // Static call: receiver is a bare ident naming a declared type — unless
     // the checker resolved it as a test-service address, which a target's
     // service named like a `uses`-imported type it hides is (#1927).

@@ -89,7 +89,7 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "number", actual: typeof obj["total"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["total"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "safe integer", actual: String(obj["total"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.total`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["total"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __total = obj["total"];
   return Ok({ id: __id, total: __total } as Order);
@@ -145,7 +145,7 @@ export function __deserialise_Map_Order_Int(json: __JsonValue, path: string = "$
       return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "number", actual: typeof entryV });
     }
     if (!globalThis.Number.isSafeInteger(entryV)) {
-      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: String(entryV) });
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}][1]`, expected: "safe integer", actual: globalThis.Number.isInteger(entryV) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = entryV;
     out.set(__k as Order, __v as number);

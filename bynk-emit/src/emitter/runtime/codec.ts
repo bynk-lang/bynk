@@ -159,7 +159,8 @@ export function __bynkCodecResult<T, E>(ct: __BynkCodec<T>, ce: __BynkCodec<E>):
         if (r.tag === "Err") return r;
         return Ok(Err(r.value) as Result<T, E>);
       }
-      return mismatch(path, "Ok | Err", String(obj["kind"]));
+      // #4604: never the stored tag (it can be personal data): its class, as the generated codecs do.
+      return mismatch(path, "Ok | Err", typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"]);
     },
   };
 }

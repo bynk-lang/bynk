@@ -35,9 +35,9 @@ export default {
             case "describe": {
               __route = "call describe";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "972f61eeb0f65036") {
-                globalThis.console.error("ContractMismatch app call describe", { service: "describe", expected: "972f61eeb0f65036", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "describe", expected: "972f61eeb0f65036", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "0f0e3e77d1d2472c") {
+                globalThis.console.error("ContractMismatch app call describe", { service: "describe", expected: "0f0e3e77d1d2472c", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "describe", expected: "0f0e3e77d1d2472c", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {

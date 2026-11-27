@@ -4144,6 +4144,14 @@ impl LanguageServer for Backend {
             let items = items.into_iter().map(to_completion_item).collect();
             return Ok(Some(CompletionResponse::Array(items)));
         }
+        // #3959: a binding's right-hand side, `given Store = |`, offers the caller's instances of
+        // the parameter's bound kind, and nothing of another kind.
+        if let Some(items) =
+            bynk_ide::binding_completion::candidates_at(&text, offset, files.as_deref())
+        {
+            let items = items.into_iter().map(to_completion_item).collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
         // #4451: the first argument of `AnalyticsSql.query` / `select` names an `Analytics` instance.
         if let Some(items) =
             bynk_ide::analytics_tooling::instance_candidates_at(&text, offset, files.as_deref())

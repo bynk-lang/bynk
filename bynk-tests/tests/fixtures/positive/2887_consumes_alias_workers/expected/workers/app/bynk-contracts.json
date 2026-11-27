@@ -1,14 +1,14 @@
 {
   "version": 1,
   "provides": {
-    "describe": "972f61eeb0f65036",
+    "describe": "0f0e3e77d1d2472c",
     "hashing": "0bd0cd08bf60f154",
     "name": "a2c616b6d6bb677d",
     "total": "33d600cce42e97f8"
   },
   "expects": {},
   "provides_shapes": {
-    "describe": "Svc(\"describe\",P(\"d\",N(\"CryptoDigest\")),Ret(B(\"String\")))",
+    "describe": "Svc(\"describe\",P(\"d\",Sum(\"CryptoDigest\",V(\"Sha256\"),V(\"Sha384\"),V(\"Sha512\"))),Ret(B(\"String\")))",
     "hashing": "Svc(\"hashing\",P(\"token\",B(\"String\")),Ret(B(\"String\")))",
     "name": "Svc(\"name\",Ret(B(\"String\")))",
     "total": "Svc(\"total\",Ret(B(\"Int\")))"

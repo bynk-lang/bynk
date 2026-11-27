@@ -1,0 +1,15 @@
+context demo
+
+consumes bynk
+consumes bynk.cloudflare { Postgres, MySqlValue, PgValue }
+
+capability Main = Postgres
+
+// #4046: `PgNumeric` and `MySqlDecimal` take a `Decimal`, not a `String`.
+service probe {
+  on call(s: String) -> Effect[Bool] by Caller given Main {
+    let a <- Main.run("insert into t values ($1)", [PgNumeric("12.50")])
+    let b = MySqlDecimal(s)
+    a is Ok(_)
+  }
+}

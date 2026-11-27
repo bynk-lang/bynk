@@ -360,7 +360,7 @@ export function __deserialise_Result_String_Unit(json: __JsonValue, path: string
     const __e = undefined;
     return Ok(Err(__e) as Result<string, void>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
 
 export function __serialise_Result_Unit_Unit(value: Result<void, void>): __JsonValue {
@@ -380,5 +380,5 @@ export function __deserialise_Result_Unit_Unit(json: __JsonValue, path: string =
     const __e = undefined;
     return Ok(Err(__e) as Result<void, void>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

@@ -56,9 +56,9 @@ export default {
             case "save": {
               __route = "call save";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "e740b99bfc611306") {
-                globalThis.console.error("ContractMismatch shop.orders call save", { service: "save", expected: "e740b99bfc611306", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "save", expected: "e740b99bfc611306", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "0ac6a024539a0ae4") {
+                globalThis.console.error("ContractMismatch shop.orders call save", { service: "save", expected: "0ac6a024539a0ae4", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "save", expected: "0ac6a024539a0ae4", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {
@@ -71,7 +71,7 @@ export default {
               const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.id", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["id"]);
               if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_id.error)), { status: 400, headers: { "content-type": "application/json" } });
               const id = __r_id.value;
-              const __r_total = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.total", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["total"]);
+              const __r_total = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.total", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.total", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(argsObj["total"]);
               if (__r_total.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_total.error)), { status: 400, headers: { "content-type": "application/json" } });
               const total = __r_total.value;
               const __r_note = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.note", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["note"]);

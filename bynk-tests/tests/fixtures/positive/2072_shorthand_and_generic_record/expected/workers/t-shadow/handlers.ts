@@ -28,13 +28,13 @@ export const Cents = {
 export const paged = {
   async call(deps: { env: { T_PAY: __ServiceBinding }; identity: string }): globalThis.Promise<number> {
     const size = 0;
-    return __callService(deps.env.T_PAY, "paged", __serialise_Page_t_pay__Cents(({ items: [(10 as Cents), (20 as Cents)], size } as unknown as globalThis.Parameters<typeof __serialise_Page_t_pay__Cents>[0])), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "t.shadow", "b47553082c55c98f", deps.env, "t.pay");
+    return __callService(deps.env.T_PAY, "paged", __serialise_Page_t_pay__Cents(({ items: [(10 as Cents), (20 as Cents)], size } as unknown as globalThis.Parameters<typeof __serialise_Page_t_pay__Cents>[0])), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "t.shadow", "b47553082c55c98f", deps.env, "t.pay");
   },
 };
 
 export const listed = {
   async call(deps: { env: { T_PAY: __ServiceBinding }; identity: string }): globalThis.Promise<number> {
-    return __callService(deps.env.T_PAY, "paged", __serialise_Page_t_pay__Cents(({ items: [(4 as Cents)], size: 1 } as unknown as globalThis.Parameters<typeof __serialise_Page_t_pay__Cents>[0])), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j), "t.shadow", "b47553082c55c98f", deps.env, "t.pay");
+    return __callService(deps.env.T_PAY, "paged", __serialise_Page_t_pay__Cents(({ items: [(4 as Cents)], size: 1 } as unknown as globalThis.Parameters<typeof __serialise_Page_t_pay__Cents>[0])), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: globalThis.Number.isInteger(__v) ? "integer outside the safe range" : "non-integer number" } as __BoundaryError))(__j), "t.shadow", "b47553082c55c98f", deps.env, "t.pay");
   },
 };
 
@@ -75,7 +75,7 @@ export function __deserialise_Page_t_pay__Cents(json: __JsonValue, path: string 
     return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "number", actual: typeof obj["size"] });
   }
   if (!globalThis.Number.isSafeInteger(obj["size"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: String(obj["size"]) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["size"]) ? "integer outside the safe range" : "non-integer number" });
   }
   const __size = obj["size"];
   return Ok({ items: __items, size: __size } as __CommonsPage<t_pay.Cents>);

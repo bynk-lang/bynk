@@ -374,6 +374,11 @@ kernel_ops! {
     OrdOp {
         Compare = "compare", "compare(other: T) -> Ordering";
     }
+/// #4560: the text an enum travels as on the wire, on every enum (a sum whose variants carry no
+/// payload): the variant's `@name`, else its own name. The same table the codecs read.
+    EnumOp {
+        WireName = "wireName", "wireName() -> String";
+    }
 /// The `Bytes` kernel (v0.110, ADR 0142). Equality is an operator (D4, content
 /// compare); the kernel is length plus the String-interop bridge (D3). #2016
 /// (standard-library K1) adds `concat`, `slice`, `compare` (a method: `Bytes`
@@ -545,6 +550,8 @@ pub enum KernelOp {
     Bytes(BytesOp),
     /// #3955: `compare` on any `Ord` value.
     Ord(OrdOp),
+    /// #4560: `wireName` on an enum.
+    Enum(EnumOp),
     Decimal(DecimalOp),
     String(StringOp),
     Option(OptionOp),
@@ -580,6 +587,7 @@ impl KernelOp {
             KernelOp::Forwarded(o) => o.name(),
             KernelOp::Bytes(o) => o.name(),
             KernelOp::Ord(o) => o.name(),
+            KernelOp::Enum(o) => o.name(),
             KernelOp::Decimal(o) => o.name(),
             KernelOp::String(o) => o.name(),
             KernelOp::Option(o) => o.name(),
@@ -1049,6 +1057,7 @@ mod tests {
             SecretOp,
             BytesOp,
             OrdOp,
+            EnumOp,
             DecimalOp,
             StringOp,
             OptionOp,

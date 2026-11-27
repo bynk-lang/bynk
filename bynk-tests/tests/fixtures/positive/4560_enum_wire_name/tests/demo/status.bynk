@@ -1,0 +1,42 @@
+---
+#4560: `wireName` and `fromWireName`, proved at runtime against the codec.
+---
+suite demo.status
+
+case "wireName is the @name, else the variant's own name" {
+  expect Open.wireName() == "open"
+  expect Shipped.wireName() == "shipped-out"
+  expect Delivered.wireName() == "Delivered"
+  expect label(Shipped) == "shipped-out"
+}
+
+case "wireName agrees with the plain codec" {
+  expect Json.encodePlain(Open) == "\"open\""
+  expect Json.encodePlain(Shipped) == "\"shipped-out\""
+  expect Json.encodePlain(Delivered) == "\"Delivered\""
+}
+
+case "fromWireName reads the wire name back" {
+  expect Status.fromWireName("open") == Some(Open)
+  expect Status.fromWireName("shipped-out") == Some(Shipped)
+  expect parse("Delivered") == Some(Delivered)
+}
+
+case "fromWireName is exact: the Bynk name of a renamed variant, case and spaces are not it" {
+  expect Status.fromWireName("Open") == None
+  expect Status.fromWireName("Shipped") == None
+  expect Status.fromWireName("delivered") == None
+  expect Status.fromWireName(" open") == None
+  expect Status.fromWireName("") == None
+}
+
+case "the round trip holds for every variant" {
+  expect Status.fromWireName(Open.wireName()) == Some(Open)
+  expect Status.fromWireName(Shipped.wireName()) == Some(Shipped)
+  expect Status.fromWireName(Delivered.wireName()) == Some(Delivered)
+}
+
+case "a payload-free sum written with pipes is an enum too" {
+  expect Red.wireName() == "Red"
+  expect Light.fromWireName("Green") == Some(Green)
+}

@@ -45,7 +45,7 @@ export function __deserialise_PayError(json: __JsonValue, path: string = "$"): R
       case "Declined":
         return Ok({ tag: "Declined" } as PayError);
       default:
-        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof json === "string" ? "unrecognised variant" : typeof json });
     }
   }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
@@ -57,7 +57,7 @@ export function __deserialise_PayError(json: __JsonValue, path: string = "$"): R
     case "Declined":
       return Ok({ tag: "Declined" } as PayError);
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 
@@ -77,7 +77,7 @@ export function __deserialise_Result_Int_PayError(json: __JsonValue, path: strin
       return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
     }
     if (!globalThis.Number.isSafeInteger(obj["value"])) {
-      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: globalThis.Number.isInteger(obj["value"]) ? "integer outside the safe range" : "non-integer number" });
     }
     const __v = obj["value"];
     return Ok(Ok(__v) as Result<number, PayError>);
@@ -87,5 +87,5 @@ export function __deserialise_Result_Int_PayError(json: __JsonValue, path: strin
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<number, PayError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }

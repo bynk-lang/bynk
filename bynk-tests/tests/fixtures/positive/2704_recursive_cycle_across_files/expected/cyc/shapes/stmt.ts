@@ -46,7 +46,7 @@ export function __deserialise_Stmt(json: __JsonValue, path: string = "$", depth:
       return Ok({ tag: "Eval", expr: __expr } as Stmt);
     }
     default:
-      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: typeof kind === "string" ? "unrecognised variant" : typeof kind });
   }
 }
 

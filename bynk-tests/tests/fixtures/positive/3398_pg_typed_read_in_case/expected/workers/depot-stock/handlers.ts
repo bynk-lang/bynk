@@ -51,5 +51,5 @@ export function __deserialise_Result_PgRun_PgError(json: __JsonValue, path: stri
     const __e = __r_e.value;
     return Ok(Err(__e) as Result<PgRun, PgError>);
   }
-  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: typeof obj["kind"] === "string" ? "unrecognised variant" : typeof obj["kind"] });
 }
