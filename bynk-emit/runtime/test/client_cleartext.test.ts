@@ -103,22 +103,91 @@ test("a lookalike host is remote: the test is on the parsed hostname, not a pref
   }
 });
 
-test("an anonymous call, or one with a cookie only, is unaffected over a remote http://", async () => {
+test("an anonymous call, or one with an empty credential header, is unaffected over a remote http://", async () => {
   const anon = recorder();
   const out = await __call({ baseUrl: "http://api.example.com", fetch: anon.fetch }, undefined, route, build);
   assert.deepEqual(out, { status: 200, kind: "Ok" });
   assert.equal(anon.sent.length, 1);
-  // Cookie credentials are the browser's to govern (`Secure`), not this check's.
-  const cookie = recorder();
-  const withCookie = await __call({ baseUrl: "http://api.example.com", fetch: cookie.fetch }, undefined, route, () =>
-    Ok({ cookies: "sid=abc" }),
+  // An empty authorization or cookie header is no credential.
+  for (const headers of [{ authorization: "" }, { cookie: "" }] as Record<string, string>[]) {
+    const empty = recorder();
+    await __call({ baseUrl: "http://api.example.com", fetch: empty.fetch, headers }, undefined, route, build);
+    assert.equal(empty.sent.length, 1, JSON.stringify(headers));
+  }
+});
+
+// #4631: an explicitly set `Cookie` is a credential like `Authorization`.
+const session = { cookie: "sid=s3ssion-secret" };
+
+test("an explicit Cookie to a remote http:// is refused and nothing is sent, wherever it was set", async () => {
+  const where: [string, (r: ReturnType<typeof recorder>) => Promise<unknown>][] = [
+    ["client headers", (r) => __call({ baseUrl: "http://api.example.com", fetch: r.fetch, headers: session }, undefined, route, build)],
+    ["a header function", (r) => __call({ baseUrl: "http://api.example.com", fetch: r.fetch, headers: async () => session }, undefined, route, build)],
+    ["the call's init", (r) => __call({ baseUrl: "http://api.example.com", fetch: r.fetch }, { headers: session }, route, build)],
+    ["a typed header", (r) => __call({ baseUrl: "http://api.example.com", fetch: r.fetch }, undefined, route, () => Ok({ headers: session }))],
+    ["typed cookies", (r) => __call({ baseUrl: "http://api.example.com", fetch: r.fetch }, undefined, route, () => Ok({ cookies: "sid=s3ssion-secret" }))],
+  ];
+  for (const [name, call] of where) {
+    const r = recorder();
+    await assert.rejects(
+      () => call(r),
+      (e: unknown) => {
+        assert.ok(e instanceof CleartextCredential, name);
+        assert.ok(!e.message.includes("s3ssion-secret"), `the error does not echo the cookie (${name})`);
+        return true;
+      },
+      name,
+    );
+    assert.deepEqual(r.sent, [], `${name} sends nothing`);
+  }
+});
+
+test("an explicit Cookie goes to loopback over http://, and to anywhere over https://", async () => {
+  for (const base of ["http://localhost:8787", "http://127.0.0.1:8787", "http://[::1]:8787", "http://app.localhost", "https://api.example.com"]) {
+    const r = recorder();
+    const out = await __call({ baseUrl: base, fetch: r.fetch, headers: session }, undefined, route, build);
+    assert.deepEqual(out, { status: 200, kind: "Ok" }, base);
+    assert.equal(r.sent.length, 1, base);
+  }
+  // A lookalike host is remote.
+  const r = recorder();
+  await assert.rejects(
+    () => __call({ baseUrl: "http://localhost.evil.com", fetch: r.fetch, headers: session }, undefined, route, build),
+    CleartextCredential,
   );
-  assert.deepEqual(withCookie, { status: 200, kind: "Ok" });
-  assert.equal(cookie.sent.length, 1);
-  // An empty authorization header is no credential.
-  const empty = recorder();
-  await __call({ baseUrl: "http://api.example.com", fetch: empty.fetch, headers: { authorization: "" } }, undefined, route, build);
-  assert.equal(empty.sent.length, 1);
+  assert.deepEqual(r.sent, []);
+});
+
+test("a browser's own cookie jar is unaffected: no header is set, so nothing is checked", async () => {
+  // A page cannot set `Cookie`; it sends `credentials: "include"` and the browser attaches its jar.
+  const had = Object.getOwnPropertyDescriptor(globalThis, "document");
+  try {
+    Object.defineProperty(globalThis, "document", { value: {}, configurable: true });
+    const seen: { credentials?: RequestCredentials; cookie: string | null }[] = [];
+    const fetch = (async (_url: unknown, init?: RequestInit) => {
+      seen.push({ credentials: init?.credentials, cookie: new Headers(init?.headers).get("cookie") });
+      return new Response(null, { status: 200 });
+    }) as typeof globalThis.fetch;
+    const out = await __call({ baseUrl: "http://api.example.com", fetch, credentials: "include" }, undefined, route, build);
+    assert.deepEqual(out, { status: 200, kind: "Ok" });
+    assert.deepEqual(seen, [{ credentials: "include", cookie: null }]);
+  } finally {
+    if (had === undefined) Reflect.deleteProperty(globalThis, "document");
+    else Object.defineProperty(globalThis, "document", had);
+  }
+});
+
+test("a Service Binding call with a Cookie is not checked either", async () => {
+  const seen: string[] = [];
+  const binding = {
+    async fetch(input: unknown) {
+      seen.push(String(input));
+      return new Response(null, { status: 200 });
+    },
+  };
+  const out = await __call({ ...viaBinding(binding, "http://orders"), headers: session }, undefined, route, build);
+  assert.deepEqual(out, { status: 200, kind: "Ok" });
+  assert.deepEqual(seen, ["http://orders/things"]);
 });
 
 test("a relative base URL is resolved against location.origin and checked the same way", async () => {
