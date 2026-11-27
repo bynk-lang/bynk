@@ -1374,8 +1374,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 an authenticated actor, or choose the name from a fixed set. A refined type limits \
                 the shape of a name, not how many there are, so pair a keyed instance with an \
                 authenticated actor or a `RateLimit`. An instance can also declare \
-                `@instances(by: K)`: `send` then takes a `K`, whose construction is where the \
-                names are bounded, and a name from it does not warn.",
+                `@instances(by: K)`: `send` then takes a `K`, but a key limits the shape of a name \
+                and not how many there are, so a keyed instance warns on an open route like any \
+                other and does not on a route served by an authenticated actor.",
         example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\n\
                   service api from http {\n    on GET(\"/render/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {\n        let res <- Renderer.send(\"tenant-\\(tenant)\", req)   // ⚠ any caller picks the instance\n        …\n    }\n}\n\n\
                   service api from http {\n    on GET(\"/render\") () -> Effect[HttpResult[String]] by m: Member given Renderer {\n        let res <- Renderer.send(m.identity, req)       // ✓ the authenticated identity chooses\n        …\n    }\n}",

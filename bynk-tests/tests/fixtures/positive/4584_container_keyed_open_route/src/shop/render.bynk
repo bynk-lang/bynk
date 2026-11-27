@@ -1,0 +1,59 @@
+context shop.render
+
+// #4584: a key type bounds the shape of an instance name, not how many there are, so a keyed
+// instance on a route anyone can call warns like an unkeyed one: `send` on a `by Visitor` route and
+// `receiveBytes` on a sum with an open member. The same key on an authenticated route does not
+// (`sendBytes` here, and see `4112_container_keyed_instances`).
+
+consumes bynk
+consumes bynk.cloudflare { Container, ContainerError }
+
+type TenantId = String where Matches(r"[a-z0-9-]{3,32}")
+
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = TenantId }
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @instances(by: TenantId)
+
+service api from http {
+	on GET("/render/:tenant") (
+		tenant: TenantId
+	) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send(tenant, req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	on GET("/thumb/:tenant") (
+		tenant: TenantId
+	) -> Effect[HttpResult[String]] by who: Member | Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/thumb",
+		}
+		let res <- Renderer.receiveBytes(tenant, req)
+		match res {
+			Ok(r) => Ok(r.body.decodeUtf8().getOrElse("")),
+			Err(_) => ServerError("thumbnail failed"),
+		}
+	}
+
+	on POST("/upload/:tenant") (
+		tenant: TenantId
+	) -> Effect[HttpResult[String]] by m: Member given Renderer {
+		let req = Request {
+			method: Post,
+			url: "http://renderer/upload",
+		}
+		let res <- Renderer.sendBytes(tenant, req, Bytes.fromUtf8("data"))
+		match res {
+			Ok(r) => Ok(r.body.decodeUtf8().getOrElse("")),
+			Err(_) => ServerError("upload failed"),
+		}
+	}
+}
