@@ -2038,6 +2038,31 @@ pub enum CallSitePrincipal {
     BadCredentialArm(BadCredential, String),
 }
 
+/// #3939 (the review of #4595): `bynk.actor.reserved_principal_name` for each actor whose name is a
+/// reserved call-site principal's. `by <Name>` classifies the name before any actor lookup
+/// ([`CallSitePrincipal::of`]), so such an actor could never be acted as in a test.
+pub(crate) fn reserved_principal_names(
+    actors: &HashMap<String, ActorDecl>,
+) -> Vec<bynk_syntax::CompileError> {
+    let mut out: Vec<_> = actors
+        .values()
+        .filter(|a| CallSitePrincipal::of(&a.name.name).is_reserved())
+        .map(|a| {
+            bynk_syntax::CompileError::new(
+                "bynk.actor.reserved_principal_name",
+                a.name.span,
+                format!(
+                    "an actor may not be named `{}`: in a test, `by {}` is the reserved principal of that name, not an actor",
+                    a.name.name, a.name.name
+                ),
+            )
+            .with_note("rename the actor")
+        })
+        .collect();
+    out.sort_by_key(|e| e.span.start);
+    out
+}
+
 impl CallSitePrincipal {
     /// Classify the name written after `by`.
     pub fn of(name: &str) -> CallSitePrincipal {

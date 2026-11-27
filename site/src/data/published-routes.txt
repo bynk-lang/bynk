@@ -1407,6 +1407,7 @@
 /reference/diagnostics/bynk.actor.refinement_base_unsupported/
 /reference/diagnostics/bynk.actor.refinement_in_sum/
 /reference/diagnostics/bynk.actor.refinement_predicate_unsupported/
+/reference/diagnostics/bynk.actor.reserved_principal_name/
 /reference/diagnostics/bynk.actor.scheme_arg_kind/
 /reference/diagnostics/bynk.actor.scheme_not_admissible/
 /reference/diagnostics/bynk.actor.sender_admits_nothing/

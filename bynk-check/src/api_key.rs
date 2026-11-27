@@ -507,20 +507,28 @@ pub(crate) fn expired_needs_ttl(span: Span) -> CompileError {
 pub fn remote_unsupported_api_key(
     case: &bynk_syntax::ast::Case,
     callees: &HashMap<bynk_syntax::ast::ExprId, crate::checker::Callee>,
-    actors: &HashMap<String, ActorDecl>,
+    table: &UnitTable,
 ) -> Option<CompileError> {
     use crate::actors::{BadCredential, CallSitePrincipal};
+    // `by Forged` is refused only where it reaches an `ApiKey` seam: there its key is built from
+    // one minted in process, and its compare count is taken in process.
+    let calls_api_key_route = calls_an_api_key_route(callees, table);
     let mut named: Vec<String> = callees
         .values()
         .filter_map(|c| match c {
             crate::checker::Callee::Principal(CallSitePrincipal::Actor(a))
-                if actors.get(a).is_some_and(is_api_key_actor) =>
+                if table.actors.get(a).is_some_and(is_api_key_actor) =>
             {
                 Some(format!("acts as the `ApiKey` actor `{a}`"))
             }
             crate::checker::Callee::Principal(CallSitePrincipal::BadCredential(
                 b @ (BadCredential::Malformed | BadCredential::Unknown),
             )) => Some(format!("drives `by {}`", b.name())),
+            crate::checker::Callee::Principal(CallSitePrincipal::BadCredential(
+                BadCredential::Forged,
+            )) if calls_api_key_route => {
+                Some("drives `by Forged` at a route an `ApiKey` actor guards".to_string())
+            }
             _ => None,
         })
         .collect();
@@ -542,6 +550,38 @@ pub fn remote_unsupported_api_key(
             "run it in process (`bynk test` without `--against`), or pass `--skip-unsupported` to skip it with this reason",
         ),
     )
+}
+
+/// Whether any address the case calls is an http route of the target that an `ApiKey` actor
+/// guards. The case's principals are not tied to their calls in the callee map, so a case that also
+/// drives `by Forged` at another kind of route is refused with it, the conservative answer.
+fn calls_an_api_key_route(
+    callees: &HashMap<bynk_syntax::ast::ExprId, crate::checker::Callee>,
+    table: &UnitTable,
+) -> bool {
+    callees.values().any(|c| {
+        let crate::checker::Callee::TestService {
+            service,
+            address:
+                crate::checker::HandlerAddress::Http {
+                    verb,
+                    path: Some(path),
+                },
+            ..
+        } = c
+        else {
+            return false;
+        };
+        table.services.get(service).is_some_and(|svc| {
+            svc.handlers.iter().any(|h| {
+                matches!(&h.kind, bynk_syntax::ast::HandlerKind::Http { method, path: p }
+                    if method == verb && p == path)
+                    && h.by_clause
+                        .as_ref()
+                        .is_some_and(|by| by_clause_is_api_key(by, &table.actors))
+            })
+        })
+    })
 }
 
 /// #3939 (D2 D): `bynk.types.secret_at_boundary` for a minted key, or a type that holds one.

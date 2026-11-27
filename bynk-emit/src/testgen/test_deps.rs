@@ -1124,7 +1124,9 @@ fn credential_keys(
 }
 
 /// #3939: `deps.__apiKey`, for a handler's `Actor.mint`: every `ApiKey` actor of the target hashes
-/// under the fixed `TEST_API_KEY_PEPPER`, the pepper the `system` tier also sets on the Worker.
+/// under the fixed `TEST_API_KEY_PEPPER`. (The `system` tier sets the Worker's pepper variable to
+/// the session-key test value instead, with its other keyed secrets; each tier mints and verifies
+/// under its own pepper, so the two need not agree.)
 fn api_key_peppers_entry(
     target_name: &str,
     target_kind: UnitKind,

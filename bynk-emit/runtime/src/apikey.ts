@@ -462,7 +462,8 @@ export async function mintApiKey<R>(
 // ---------------------------------------------------------------------------------------------
 
 /** The key `actor`'s principal `sub` presents in this test run: minted once per harness `env`,
- *  through `store` (the participant's in-process `<Actor>KeyOwner.mint`), under `peppers`. */
+ *  through `store` (the participant's in-process `<Actor>KeyOwner.mint`), under `peppers`, with
+ *  the per-identity ceiling `limit` the generated store enforces. */
 export async function apiKeyForTest(
   env: Record<string, unknown>,
   actor: string,
@@ -471,6 +472,7 @@ export async function apiKeyForTest(
   pepperName: string,
   prefix: string,
   nowMs: number,
+  limit: number,
   store: (req: MintRequest) => Promise<{ readonly tag: "Ok"; readonly value: string } | { readonly tag: "Err"; readonly error: number }>,
 ): Promise<string> {
   const memo = (env.__bynkApiKeys ??= new Map<string, string>()) as Map<string, string>;
@@ -483,7 +485,7 @@ export async function apiKeyForTest(
       prefix,
       "bynk-test",
       nowMs,
-      100,
+      limit,
       store,
     );
     if (minted.tag !== "Ok") throw new Error(`bynk: the test identity \`${sub}\` holds the most keys it may`);

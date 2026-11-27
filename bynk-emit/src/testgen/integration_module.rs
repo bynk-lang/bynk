@@ -511,8 +511,8 @@ pub(super) fn emit_integration_module(
             // itself, one `bynk dev` per distinct map.
             let refusal = test_suites::remote_unsupported(input.case, &callees)
                 .or_else(|| {
-                    let actors = &unit_tables.get(suite)?.actors;
-                    bynk_check::api_key::remote_unsupported_api_key(input.case, &callees, actors)
+                    let table = unit_tables.get(suite)?;
+                    bynk_check::api_key::remote_unsupported_api_key(input.case, &callees, table)
                 })
                 .or_else(|| {
                     (!remote.dev)

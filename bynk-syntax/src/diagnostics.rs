@@ -361,6 +361,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nactor Admin = User where isAdmin(user)   // ✗ not a claim predicate\n\nactor Admin = User where hasClaim(\"admin\")   // ✓",
     },
     Explain {
+        code: "bynk.actor.reserved_principal_name",
+        blurb: "A test case's `by` names the principal it acts as, and some names there are not actors: `Nobody` sends no credential, and `Forged`, `Stale`, `Expired`, `Revoked`, `Malformed`, `Unknown` and the other bad-credential principals drive the seam to refuse. An actor with one of those names could never be acted as, since `by Unknown(\"x\")` would mean the principal, not the actor. So an actor may not take a reserved principal's name. Rename it.",
+        example: "actor Unknown { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }   // ✗ `by Unknown` is a reserved principal\n\nactor Anonymous { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }   // ✓",
+    },
+    Explain {
         code: "bynk.actor.scheme_arg_kind",
         blurb: "A scheme's config values are strings and integers, except that a `SignedCookie` also takes a duration (`ttl = 12.hours`) and a bare name (`sameSite = Lax`). Every other scheme reads a string or an integer, so a duration or a bare name would be dropped without a word: a `Signature` `tolerance = 5.minutes` would read as no tolerance at all, and the replay window would be off. Write a `Signature` tolerance in whole seconds, and quote a string.",
         example: "actor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 5.minutes) }   // ✗ a duration\n\nactor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 300) }   // ✓ seconds",
@@ -5517,8 +5522,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "`by Expired` sends an expired token, so it needs a route whose \
                 seam checks one: a `Bearer` or `Oidc` actor. A public route, or \
                 one guarded by a `Signature` actor, has no token to expire; for a \
-                `Signature` route `by Stale` sends a stale signature. Drive a \
-                route guarded by a `Bearer` or `Oidc` actor. See \
+                `Signature` route `by Stale` sends a stale signature. An `ApiKey` \
+                actor's keys do not expire yet (its `ttl` is a later release), so \
+                its seam has no expired key to refuse; test it with `by Malformed`, \
+                `by Unknown` or `by Forged`. Drive a route guarded by a `Bearer` \
+                or `Oidc` actor. See \
                 `bynk.test.nobody_needs_secured_route` for the same limit on \
                 `Nobody`.",
         example: "// demo/api.bynk\n\
@@ -7720,6 +7728,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.refinement_predicate_unsupported",
         "A refinement actor's `where` predicate is outside the closed claim-predicate set.",
+    ),
+    d(
+        "bynk.actor.reserved_principal_name",
+        "An actor takes the name of a reserved call-site principal (`Nobody` or a bad-credential principal such as `Forged` or `Unknown`).",
     ),
     d(
         "bynk.actor.scheme_arg_kind",
@@ -11213,7 +11225,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.expired_needs_bearer_route",
-        "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum) or an `Oidc` actor; it sends a correctly signed token whose `exp` has passed, so only a `Bearer` or `Oidc` seam can refuse it.",
+        "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum) or an `Oidc` actor; it sends a correctly signed token whose `exp` has passed, so only a `Bearer` or `Oidc` seam can refuse it. An `ApiKey` route's keys do not expire yet (#3939).",
         &["case"],
     ),
     dg(

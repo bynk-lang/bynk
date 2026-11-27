@@ -124,6 +124,7 @@ impl ApiKeyDriver {
                 str_lit(self.secret.clone()),
                 str_lit(self.prefix.clone()),
                 now,
+                num_lit(bynk_project::api_key_agents::KEY_CAP),
                 store,
             ],
         ))
