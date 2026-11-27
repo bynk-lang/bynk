@@ -1,0 +1,9 @@
+[project]
+name = "shared-missing-for-call"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[unstable]
+allow = ["bynk.given.parameters"]

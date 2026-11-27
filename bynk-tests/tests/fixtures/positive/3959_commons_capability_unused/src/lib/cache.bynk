@@ -1,0 +1,12 @@
+---
+#3959, capability parameters slice 1: a commons that selects a capability no function's
+`given` names gets `bynk.commons.capability_unused`, a warning: the selection brings in a
+contract and nothing else, so an unused one misleads a reader about what the library reaches.
+---
+commons lib.cache
+
+consumes bynk.cloudflare { Kv }
+
+fn key(id: String) -> String {
+	"session:\(id)"
+}

@@ -1,0 +1,7 @@
+commons lib.cache
+
+consumes bynk { Logger }
+
+fn note(text: String) -> Effect[()] given Logger {
+	Logger.info(text)
+}

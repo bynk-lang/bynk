@@ -51,6 +51,8 @@ mod integration {
     mod by_on_agent;
     #[path = "call_hierarchy_index.rs"]
     mod call_hierarchy_index;
+    #[path = "capability_binding_fix.rs"]
+    mod capability_binding_fix;
     #[path = "capability_paths.rs"]
     mod capability_paths;
     #[path = "carrier_source_map.rs"]

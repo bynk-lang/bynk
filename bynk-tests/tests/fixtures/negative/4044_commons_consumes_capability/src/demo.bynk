@@ -1,9 +1,10 @@
 ---
-#4044: a capability is not a type, so a commons cannot list one.
+#4044, #3959: a commons may list a capability only from a first-party unit, whose
+contracts its functions name in `given`; a project adapter's capability is not one.
 ---
 commons demo
 
-consumes bynk { Clock }
+consumes logging { Log }
 
 fn id(x: Int) -> Int {
 	x

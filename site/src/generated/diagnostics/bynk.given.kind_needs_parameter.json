@@ -1,0 +1,12 @@
+{
+  "blurb": "A commons is shared by contexts that may hold several instances of a kind, so it never names an instantiable kind (`Kv`, `D1`, `R2`, `Queue`, `Service`, …) bare: that would quietly mean \"the caller's default instance\". Declare a capability parameter bounded by the kind instead, `given Store: Kv`, and each caller binds it to one of its own instances with `given Store = Sessions` (or to its bare `Kv`, which it then writes explicitly). This holds in a test-only commons too. A kind with no instances, such as `Logger`, is named bare as a shared capability.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.kind_needs_parameter",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": "consumes bynk.cloudflare { Kv }\n\nfn forget(id: String) -> Effect[()] given Kv {          // ✗ which `Kv`?\n\tKv.delete(id)\n}\n\nfn forget(id: String) -> Effect[()] given Store: Kv {   // ✓ the caller binds it\n\tStore.delete(id)\n}",
+  "severity": "error",
+  "summary": "A commons function names an instantiable kind bare (`given Kv`); it must be a capability parameter (`given Store: Kv`)."
+}
