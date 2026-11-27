@@ -602,14 +602,13 @@ mod tests {
             });
             (create_d1(&api, "shop-orders", None), api.calls())
         };
-        // What Cloudflare answered for a taken name (400 `7502`, #4056's sandbox check, #4600), a
-        // 409 and a plain 400 adopt alike when the name is found: adoption reads the account.
+        // An undocumented code, a 409 and a plain 400 adopt alike when the name is found.
         for refusal in [
             (
                 400,
                 r#"[{"code":7502,"message":"A database with that name already exists"}]"#,
             ),
-            (409, "[]"),
+            (409, r#"[{"code":10073}]"#),
             (400, "[]"),
         ] {
             let (got, calls) = run(refusal, "u-1");

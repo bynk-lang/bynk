@@ -5,11 +5,8 @@
 //! the listing is paged (`page`, `per_page` up to 500, `result_info.total_pages`) and each entry
 //! has a `queue_id` and a `queue_name`. A queue is created by name but deleted by id, and the
 //! reference has no lookup by name, so a name is found by listing and matching it exactly. The
-//! reference documents `10104 QueueNotFound` for a queue that does not exist, but Cloudflare
-//! answers a delete of a queue already gone with 404 `11000` ("Queue '…' not found"), as the 1D.4
-//! sandbox check recorded (#4056, #4600): both mean gone. A name already taken was answered 409
-//! `11009`, but a refused create is read from the account, not from its code
-//! (`deploy::provisioning`).
+//! reference documents `10104 QueueNotFound` for a queue that does not exist, and no code for a
+//! name already taken: a refused create is read from the account instead (`deploy::provisioning`).
 
 use super::{Method, Request};
 use crate::cloudflare::Idempotent;
@@ -17,10 +14,8 @@ use crate::cloudflare::Idempotent;
 /// The account's queues.
 pub(crate) const QUEUES: &str = "/queues";
 
-/// The codes that mean a queue does not exist: `11000`, which a delete of a queue already gone
-/// answers (recorded by the 1D.4 sandbox check, #4056, #4600), and `10104 QueueNotFound`, which
-/// the Queues error-code reference documents.
-pub(crate) const NOT_FOUND: [u64; 2] = [11000, 10104];
+/// `QueueNotFound`: "Queue does not exist" (the Queues error-code reference).
+pub(crate) const NOT_FOUND: u64 = 10104;
 
 /// How many queues a listing page asks for.
 const PER_PAGE: u32 = 100;

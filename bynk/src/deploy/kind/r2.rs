@@ -472,15 +472,12 @@ mod tests {
                 api.calls(),
             )
         };
-        // The first is what Cloudflare answered for a bucket this account already owns (#4056's
-        // sandbox check, #4600). `10073` means a same-name recreation blocked for 60 s after a
-        // delete, so it is not used here. Adoption reads the account, not the code.
         for refusal in [
             (
                 409,
-                r#"[{"code":10004,"message":"Bucket name already exists."}]"#,
+                r#"[{"code":10073,"message":"Bucket name already exists."}]"#,
             ),
-            (409, "[]"),
+            (400, r#"[{"code":10004}]"#),
             (400, r#"[{"code":10006}]"#),
         ] {
             let (got, calls) = run(refusal, "owned");
@@ -504,7 +501,7 @@ mod tests {
             match op {
                 Op::R2Create { .. } => {
                     Err(
-                        RestError::answered("POST", "/r2/buckets", 409, r#"[{"code":10004}]"#)
+                        RestError::answered("POST", "/r2/buckets", 409, r#"[{"code":10073}]"#)
                             .into(),
                     )
                 }
@@ -515,7 +512,7 @@ mod tests {
             create_r2_bucket(&api, "shop-files", None)
                 .unwrap_err()
                 .to_string(),
-            r#"POST /r2/buckets: Cloudflare answered 409 [{"code":10004}] (asking the account for the bucket by name also failed: GET /r2/buckets/shop-files: Cloudflare answered 500 [])"#
+            r#"POST /r2/buckets: Cloudflare answered 409 [{"code":10073}] (asking the account for the bucket by name also failed: GET /r2/buckets/shop-files: Cloudflare answered 500 [])"#
         );
     }
 
