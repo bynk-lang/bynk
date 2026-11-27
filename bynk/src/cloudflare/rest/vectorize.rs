@@ -6,7 +6,7 @@
 //! (`cosine`, `euclidean` or `dot-product`), and a metadata-index listing is
 //! `{ "metadataIndexes": [{ "propertyName", "indexType" }] }`. The reference documents no
 //! paging for the index listing and no error code for a metadata index that already exists, so
-//! the listing is followed as the plan's own Vectorize listing is, and an existing metadata
+//! the listing is followed while pages are full, within [`MAX_PAGES`], and an existing metadata
 //! index is read from the account (see `deploy::vectorize`).
 
 use super::{Method, Request};
@@ -14,6 +14,13 @@ use crate::cloudflare::Idempotent;
 
 /// The account's indexes.
 pub(crate) const INDEXES: &str = "/vectorize/v2/indexes";
+
+/// The most pages of the index listing read (#4568 review). The reference documents no paging
+/// for it, so the listing is read while pages are full; this bound, and the stop on a page that
+/// brings no new name, keep an endpoint that ignores `?page=N` from being asked forever. A
+/// hundred full pages is far beyond any account the deploy has met: one listed past it reads as
+/// absent, and its create is then refused and reported.
+pub(crate) const MAX_PAGES: u64 = 100;
 
 /// An index's fixed configuration, as the account reports it.
 #[derive(Debug, Clone, PartialEq, Eq)]

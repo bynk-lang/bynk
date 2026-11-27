@@ -43,17 +43,18 @@ pub(crate) fn drift_message(
 /// A failed Vectorize call as the deploy says it, with the permission hint when the token lacks
 /// it.
 fn said(e: CloudflareError) -> String {
-    with_permission_hint(&e)
+    with_permission_hint(&e, e.to_string())
 }
 
 /// #3495: a token without the Vectorize permission is answered with a bare authentication
 /// error. Name the permission the call needs (it covered create, list, get, delete and both
 /// metadata-index calls when checked against a real account); any other failure is said as is.
-fn with_permission_hint(e: &CloudflareError) -> String {
+/// `text` (what is said of `e`), with the hint last.
+fn with_permission_hint(e: &CloudflareError, text: String) -> String {
     if e.is_denied() {
-        format!("{e}\n  hint: the API token needs the Account > Vectorize > Edit permission")
+        format!("{text}\n  hint: the API token needs the Account > Vectorize > Edit permission")
     } else {
-        e.to_string()
+        text
     }
 }
 
@@ -71,10 +72,8 @@ pub(crate) fn read_index_config(
     name: &str,
 ) -> Result<IndexConfig, String> {
     api.vectorize_config(name).map_err(|e| {
-        format!(
-            "{}; so `{name}` was not checked against the source",
-            said(e)
-        )
+        let text = format!("{e}; so `{name}` was not checked against the source");
+        with_permission_hint(&e, text)
     })
 }
 

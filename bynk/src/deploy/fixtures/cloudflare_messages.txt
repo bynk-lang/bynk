@@ -682,8 +682,8 @@
    -> error GET /vectorize/v2/indexes/docs: Cloudflare answered 404 [{"code":10007,"message":"not found"}]; so `docs` was not checked against the source
 == Vectorize get (REST) · 403 with errors
    request: GET /accounts/acct/vectorize/v2/indexes/docs
-   -> error GET /vectorize/v2/indexes/docs: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
-        hint: the API token needs the Account > Vectorize > Edit permission; so `docs` was not checked against the source
+   -> error GET /vectorize/v2/indexes/docs: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]; so `docs` was not checked against the source
+        hint: the API token needs the Account > Vectorize > Edit permission
 == Vectorize get (REST) · 500 without errors
    request: GET /accounts/acct/vectorize/v2/indexes/docs
    -> error GET /vectorize/v2/indexes/docs: Cloudflare answered 500 ; so `docs` was not checked against the source

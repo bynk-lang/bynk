@@ -216,12 +216,13 @@ impl CloudflareApi for Account<'_> {
         }
     }
 
-    /// Followed as the plan's own Vectorize listing is: while a page is full, which, with no
-    /// paging documented, is one request.
+    /// Followed while a page is full, which, with no paging documented, is one request; never
+    /// past [`rest::vectorize::MAX_PAGES`], and not past a page that brings no name not already
+    /// listed (an endpoint that ignored `?page=N` would repeat its first).
     fn vectorize_names(&self) -> Result<Vec<String>, CloudflareError> {
-        let mut names = Vec::new();
+        let mut names: Vec<String> = Vec::new();
         let rule = Numbered {
-            cap: None,
+            cap: Some(rest::vectorize::MAX_PAGES),
             missing_total: MissingTotal::WhileFull,
             stop_on_empty: false,
         };
@@ -230,8 +231,10 @@ impl CloudflareApi for Account<'_> {
             let body = self.send(Purpose::Vectorize, &request)?;
             let (listed, entries) = rest::vectorize::listed(&body)
                 .ok_or_else(|| unreadable(&request, "list of index names"))?;
-            names.extend(listed);
-            Ok(Page::of(&body, entries))
+            let fresh: Vec<String> = listed.into_iter().filter(|n| !names.contains(n)).collect();
+            let repeated = fresh.is_empty();
+            names.extend(fresh);
+            Ok(Page::of(&body, entries).done_if(repeated))
         })?;
         Ok(names)
     }
@@ -519,6 +522,51 @@ mod tests {
             r#"{"success":true,"result":[{"name":"shop-db-old","uuid":"u"}],"result_info":{"page":1,"per_page":100,"count":1}}"#,
         )]);
         assert_eq!(account(base, &root).d1_find("shop-db").unwrap(), None);
+    }
+
+    /// #4568 review: the index listing is followed while pages are full, and stops at a page
+    /// that brings no new name, so an endpoint that ignored `?page=N` is asked twice, not forever.
+    #[test]
+    fn the_index_listing_follows_full_pages_and_stops_on_a_repeat() {
+        let page = |from: usize, to: usize| -> &'static str {
+            Box::leak(
+                format!(
+                    r#"{{"success":true,"result":[{}],"result_info":{{"per_page":2}}}}"#,
+                    (from..to)
+                        .map(|i| format!(r#"{{"name":"ix-{i}"}}"#))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+                .into_boxed_str(),
+            )
+        };
+        let root = std::env::temp_dir();
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, page(0, 2)),
+            (200, page(2, 4)),
+            (200, page(4, 5)),
+        ]));
+        let (base, seen) = answering_in_turn(answers);
+        assert_eq!(
+            account(base, &root).vectorize_names().unwrap(),
+            ["ix-0", "ix-1", "ix-2", "ix-3", "ix-4"]
+        );
+        assert_eq!(
+            seen.join().unwrap(),
+            [
+                "GET /accounts/acct/vectorize/v2/indexes?page=1",
+                "GET /accounts/acct/vectorize/v2/indexes?page=2",
+                "GET /accounts/acct/vectorize/v2/indexes?page=3",
+            ]
+        );
+        let answers: &'static [(u16, &'static str)] =
+            Box::leak(Box::new([(200, page(0, 2)), (200, page(0, 2))]));
+        let (base, seen) = answering_in_turn(answers);
+        assert_eq!(
+            account(base, &root).vectorize_names().unwrap(),
+            ["ix-0", "ix-1"]
+        );
+        assert_eq!(seen.join().unwrap().len(), 2, "the repeated page ends it");
     }
 
     /// 1D.4b: the account answers for its own bucket; a 404 is a bucket it does not hold, and

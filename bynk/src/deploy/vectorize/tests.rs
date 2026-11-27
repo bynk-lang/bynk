@@ -784,13 +784,16 @@ fn a_denied_token_names_the_permission_needed() {
         r#"[{"code":10000,"message":"Authentication error"}]"#,
     )
     .into();
-    let hinted = with_permission_hint(&denied);
+    let hinted = with_permission_hint(&denied, denied.to_string());
     assert!(hinted.starts_with(&denied.to_string()), "{hinted}");
     assert!(hinted.contains("Account > Vectorize > Edit"), "{hinted}");
     // Any other failure is passed through untouched.
     let other: CloudflareError =
         RestError::answered("GET", "/vectorize/v2/indexes/x", 404, r#"[{"code":3002}]"#).into();
-    assert_eq!(with_permission_hint(&other), other.to_string());
+    assert_eq!(
+        with_permission_hint(&other, other.to_string()),
+        other.to_string()
+    );
 }
 
 /// 1D.4c (#4056): a refused metadata-index create that is never listed fails at the timeout,
