@@ -43,9 +43,22 @@ pub struct WorkerLayout {
     /// #3883: the `[deploy.email]` mapping, so a Worker's `email()` accepts the address each
     /// environment claims in place of a `from email` service's own.
     email: crate::email_deploy::EmailDeployConfig,
+    /// #3565: the agent-move phase variants the build writes; empty but mid-move.
+    moves: crate::worker_moves::MoveVariants,
 }
 
 impl WorkerLayout {
+    /// #3565: this layout, with the agent-move phase variants the build is to write.
+    pub fn with_moves(mut self, moves: crate::worker_moves::MoveVariants) -> Self {
+        self.moves = moves;
+        self
+    }
+
+    /// #3565: the agent-move phase variants the build writes.
+    pub fn moves(&self) -> &crate::worker_moves::MoveVariants {
+        &self.moves
+    }
+
     /// The layout of a project with no `[deploy.workers]` group.
     pub fn identity() -> Self {
         Self::default()
@@ -117,6 +130,7 @@ impl WorkerLayout {
             observability,
             tuning,
             email: Default::default(),
+            moves: Default::default(),
         }
     }
 
