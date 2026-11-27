@@ -1,0 +1,2 @@
+# exact
+bynk.template.context_type `Option[String]` cannot fill element text

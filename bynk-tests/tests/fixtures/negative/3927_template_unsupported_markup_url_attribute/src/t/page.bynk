@@ -1,0 +1,10 @@
+// #3927 (typed HTML, slice 1): a URL attribute takes no placeholder until `Href` exists
+commons t.page
+
+uses bynk.html
+
+type F = {
+	v: String,
+}
+
+template shell: F = "embeds/page.html"

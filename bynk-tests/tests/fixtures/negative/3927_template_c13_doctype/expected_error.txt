@@ -1,0 +1,3 @@
+# exact
+bynk.template.placeholder_position a placeholder cannot be in a doctype
+bynk.template.unsupported_markup only a doctype with a plain name

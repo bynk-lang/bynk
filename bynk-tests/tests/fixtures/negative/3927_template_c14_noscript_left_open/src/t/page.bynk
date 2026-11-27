@@ -1,0 +1,6 @@
+// #3927 (typed HTML, slice 1): a template that leaves `<noscript>` open is refused (C14)
+commons t.page
+
+uses bynk.html
+
+template banner = "embeds/page.html"

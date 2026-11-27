@@ -1,0 +1,3 @@
+# exact
+bynk.html.at_boundary `Box` cannot appear in an agent store field
+bynk.html.at_boundary `Box` cannot appear in a service handler signature

@@ -182,6 +182,11 @@ fn field_kind(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> FieldKind 
                 TypeBody::Refined { base, .. } if is_scalar(*base) => FieldKind::Scalar(*base),
                 _ => FieldKind::Other(id.name.clone()),
             },
+            // A secret kind a unit `consumes` from `bynk` is not in the view the template is
+            // checked in; its name alone is enough, since a type of the unit's own would be.
+            None if matches!(id.name.as_str(), "Secret" | "Authorization" | "ApiKeyValue") => {
+                FieldKind::Secret
+            }
             None => FieldKind::Other(id.name.clone()),
         },
         other => FieldKind::Other(bynk_syntax::print::type_ref_to_string(other)),
@@ -680,4 +685,37 @@ pub fn hidden_or_gated_types(
         ));
     }
     out
+}
+
+/// The editor's embed and template phase (`analysis::analyse_project_inner`): every declared embed
+/// names a file in `embeds/` (`embeds::phase_embed_files`), then each template's text is read from
+/// the overlay or the disk ([`read_template_texts`]) and checked ([`phase_templates`]), and joins
+/// `snapshots`, so the language server publishes its diagnostics at the template's own line.
+pub fn editor_phase(
+    (project_root, overlay, parsed, tables, uses): (
+        &Path,
+        &HashMap<std::path::PathBuf, String>,
+        &[ParsedFile],
+        &HashMap<String, UnitTable>,
+        &HashMap<String, Vec<String>>,
+    ),
+    policy: &crate::stability::StabilityPolicy,
+    snapshots: &mut Vec<(std::path::PathBuf, String)>,
+    errors: &mut ErrorSink,
+) {
+    let available = bynk_project::assets::list_embed_files(project_root).ok();
+    crate::embeds::phase_embed_files(parsed, available.as_ref(), errors);
+    let texts = read_template_texts(project_root, parsed, overlay);
+    let units = Units {
+        parsed,
+        tables,
+        uses,
+    };
+    phase_templates(&units, &texts, policy, errors);
+    for (key, text) in texts {
+        let path = std::path::PathBuf::from(&key);
+        if !snapshots.iter().any(|(p, _)| *p == path) {
+            snapshots.push((path, text));
+        }
+    }
 }

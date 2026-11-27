@@ -1,0 +1,2 @@
+# exact
+bynk.template.ambiguous_placeholder `\(logo)` names both a field and an asset in scope

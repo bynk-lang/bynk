@@ -1,0 +1,2 @@
+# exact
+bynk.template.placeholder_in_raw_text a placeholder cannot be inside `<noembed>`

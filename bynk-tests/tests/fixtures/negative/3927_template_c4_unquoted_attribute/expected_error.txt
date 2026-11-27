@@ -1,0 +1,2 @@
+# exact
+bynk.template.unquoted_attribute the placeholder in `alt=` is not quoted

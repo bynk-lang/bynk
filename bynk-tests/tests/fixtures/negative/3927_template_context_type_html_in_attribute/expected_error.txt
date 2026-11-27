@@ -1,0 +1,2 @@
+# exact
+bynk.template.context_type an `Html` value cannot be the value of `title`

@@ -1,0 +1,2 @@
+# exact
+bynk.html.at_boundary `Box` is or holds `Html`, which no codec encodes or decodes

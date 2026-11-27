@@ -1,0 +1,2 @@
+# exact
+bynk.template.placeholder_position a placeholder cannot be inside `<svg>`

@@ -835,15 +835,14 @@ fn analyse_project_inner(
     // -- 6.1. #2618: a public signature naming a private type. --
     project_model::phase_private_in_public(&parsed, &groups, &mut errors);
 
-    // -- 6a0. #1883, slice 1b: every declared asset names a file in the
-    //         `assets/` folder, listed from disk as discovery already reads
-    //         it. An unreadable folder skips the check rather than flagging
-    //         every asset in the editor.
+    // -- 6a0. #1883, slice 1b: every declared asset names a file in the `assets/` folder, listed
+    //         from disk as discovery already reads it. An unreadable folder skips the check.
     let available_assets = bynk_project::assets::list_asset_files(roots.project_root()).ok();
     crate::assets::phase_asset_files(&parsed, available_assets.as_ref(), &mut errors);
-    // #2387, slice 2: likewise every declared embed names a file in `embeds/`.
-    let available_embeds = bynk_project::assets::list_embed_files(roots.project_root()).ok();
-    crate::embeds::phase_embed_files(&parsed, available_embeds.as_ref(), &mut errors);
+    // #2387, #3927: every embed names a file in `embeds/`, and each template's text is checked.
+    let root = roots.project_root();
+    let at = (root, overlay, &*parsed, &unit_tables, &unit_uses);
+    crate::templates::editor_phase(at, &policy, &mut snapshots, &mut errors);
     // #2841: and every suite `fixture` names a file in `fixtures/`.
     let available_fixtures = bynk_project::assets::list_fixture_files(roots.project_root()).ok();
     crate::fixtures::phase_fixture_files(&parsed, available_fixtures.as_ref(), &mut errors);

@@ -1,0 +1,2 @@
+# exact
+bynk.template.unused_field field `subtitle` is used by no placeholder of template `shell`

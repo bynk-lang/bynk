@@ -1,0 +1,10 @@
+// #3927 (typed HTML, slice 1): every `<svg>` a template opens closes in it, and a closer needs an opener: the three-piece `<svg>` case
+commons t.page
+
+uses bynk.html
+
+template open = "embeds/open.html"
+
+template middle = "embeds/middle.html"
+
+template close = "embeds/close.html"
