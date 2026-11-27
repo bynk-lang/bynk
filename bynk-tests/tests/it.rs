@@ -477,6 +477,8 @@ mod system {
     mod http_security_behaviour;
     #[path = "idempotency_workerd.rs"]
     mod idempotency_workerd;
+    #[path = "if_match_narrowing_behaviour.rs"]
+    mod if_match_narrowing_behaviour;
     #[path = "inline_value_names.rs"]
     mod inline_value_names;
     #[path = "int_binding_arithmetic_behaviour.rs"]
