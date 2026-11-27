@@ -936,6 +936,19 @@ pub(in crate::emitter) fn lower_events_emit_call(
             }
         };
         let payload = pre.lower_node(&args[0], cx);
+        // #4632: on `workers` the batch crosses a Durable Object's `fetch` as JSON, so the payload goes
+        // out in the wire form the subscriber's `__deserialise_<E>` reads: a `Map`, a `Set`, `Bytes`, an
+        // `Option` and a `Decimal` have no other JSON form. The bundle dispatches in-process, with the
+        // value as it is.
+        let payload = if matches!(cx.target(), super::super::BuildTarget::Workers) {
+            let event_ty = TypeRef::Named(Ident {
+                name: event_name.clone(),
+                span: e.span,
+            });
+            super::super::serialisation::serialise_expr(&event_ty, &payload, cx.runtime_use())
+        } else {
+            payload
+        };
         // Events track, slice 2 (spine #936): the envelope is minted here,
         // once, before fan-out duplicates this single `__events` entry to
         // every subscriber — so one emission always carries one `eventId`/

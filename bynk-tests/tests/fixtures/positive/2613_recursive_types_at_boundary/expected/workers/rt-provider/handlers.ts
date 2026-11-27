@@ -50,7 +50,7 @@ export const gardener = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Planted", payload: { tree: t }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "rt.provider", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push({ type: "Planted", payload: __serialise_Planted({ tree: t }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "rt.provider", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
       })();
       return undefined;
     })();
@@ -155,6 +155,24 @@ export function __makeKeeper(key: string, env?: { KEEPER?: __DurableObjectNamesp
 export function __resetAgents(): void {
   __KeeperRegistry.reset();
 }
+
+export function __serialise_Planted(value: Planted): __JsonValue {
+  return {
+    tree: __serialise_Tree(value.tree),
+  };
+}
+
+export function __deserialise_Planted(json: __JsonValue, path: string = "$"): Result<Planted, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_tree = __deserialise_Tree(obj["tree"], `${path}.tree`);
+  if (__r_tree.tag === "Err") return __r_tree;
+  const __tree = __r_tree.value;
+  return Ok({ tree: __tree } as Planted);
+}
+
 
 export { __serialise_Dir, __deserialise_Dir, __serialise_Expr, __deserialise_Expr, __serialise_Index, __deserialise_Index, __serialise_Stmt, __deserialise_Stmt, __serialise_Tree, __deserialise_Tree };
 

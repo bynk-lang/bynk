@@ -295,6 +295,32 @@ fn ws_out_roots(commons: &TypedCommons) -> Vec<TypeRef> {
         .collect()
 }
 
+/// #4632: the events this unit emits through `Events.emit`, as types, in name order. The checker records the
+/// event on each call's callee (#4113).
+fn emitted_event_roots(commons: &TypedCommons) -> Vec<TypeRef> {
+    let names: std::collections::BTreeSet<&String> = commons
+        .callees
+        .values()
+        .filter_map(|c| match c {
+            bynk_check::checker::Callee::Capability {
+                event: Some(name),
+                first_party: Some(bynk_check::firstparty::FirstPartyCap::Events),
+                ..
+            } => Some(name),
+            _ => None,
+        })
+        .collect();
+    names
+        .into_iter()
+        .map(|n| {
+            TypeRef::Named(Ident {
+                name: n.clone(),
+                span: Default::default(),
+            })
+        })
+        .collect()
+}
+
 /// Emit boundary serialise/deserialise helpers (v0.8 §3.4 / §5.2) for
 /// every named type declared in this file that flows through a
 /// cross-context call, plus the specialised generic helpers for any
@@ -400,6 +426,11 @@ pub(super) fn emit_boundary_helpers(
             Vec::new()
         };
         agent_call_roots.extend(ws_out_roots(commons));
+        // #4632: on `workers` a publisher encodes each event it emits, so the event types are boundary
+        // types of the publisher's module.
+        if workers {
+            agent_call_roots.extend(emitted_event_roots(commons));
+        }
         let boundary_types_all =
             collect_boundary_types(&commons.types, &services, &agents, &agent_call_roots);
         // Locally-declared boundary types get full helpers in this module. On

@@ -1,0 +1,32 @@
+context ev.sub
+
+consumes ev.pub
+consumes ev.ledger
+
+// Each subscriber records whether its field arrived equal to what the publisher sent.
+service OnPlain from Events(Plain) {
+  on event(e: Plain) -> Effect[()] { ev.ledger.note("plain:\(e.id)") }
+}
+
+service OnMap from Events(WithMap) {
+  on event(e: WithMap) -> Effect[()] {
+    let want: Map[String, Int] = Map.empty().insert("k", 7)
+    ev.ledger.note("map:\(e.m == want)")
+  }
+}
+
+service OnSet from Events(WithSet) {
+  on event(e: WithSet) -> Effect[()] { ev.ledger.note("set:\(e.s == Set.of(["x", "y"]))") }
+}
+
+service OnBytes from Events(WithBytes) {
+  on event(e: WithBytes) -> Effect[()] { ev.ledger.note("bytes:\(e.b == Bytes.fromUtf8("hi"))") }
+}
+
+service OnOption from Events(WithOption) {
+  on event(e: WithOption) -> Effect[()] { ev.ledger.note("option:\(e.o == Some(3))") }
+}
+
+service OnDecimal from Events(WithDecimal) {
+  on event(e: WithDecimal) -> Effect[()] { ev.ledger.note("decimal:\(e.d == 1.25d)") }
+}

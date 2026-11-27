@@ -1,0 +1,15 @@
+context ev.ledger
+
+consumes bynk.cloudflare { Kv }
+
+service note {
+  on call(key: String) -> Effect[()] by Caller given Kv {
+    Kv.put(key, "seen")
+  }
+}
+
+service read {
+  on call(key: String) -> Effect[Option[String]] by Caller given Kv {
+    Kv.get(key)
+  }
+}

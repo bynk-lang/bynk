@@ -336,6 +336,23 @@ export async function dispatchToEventsFanout(
     envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string };
   }>,
 ): Promise<void> {
+  // #4632: each event is encoded on its own, so one that does not encode (the publisher hands over the
+  // wire form, so this is a defect, not a payload shape) is named in the log and cannot take its
+  // siblings from the same handler with it. The body is the batch `JSON.stringify({ events })` writes.
+  const encoded: string[] = [];
+  for (const event of events) {
+    try {
+      encoded.push(JSON.stringify(event));
+    } catch (e) {
+      console.error("EventsFanout dropped an event that does not encode", {
+        type: event.type,
+        eventId: event.envelope.eventId,
+        error: String(e),
+      });
+    }
+  }
+  if (encoded.length === 0) return;
+  const sent = events.map((event) => ({ type: event.type, eventId: event.envelope.eventId }));
   // The whole round trip is wrapped, not just the status check: a rejected
   // `stub.fetch` (a network error, the DO throwing) is exactly as much a
   // fan-out transport failure as a non-`ok` response, and by this point
@@ -347,13 +364,13 @@ export async function dispatchToEventsFanout(
     const response = await stub.fetch("https://_bynk/_bynk/fanout", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ events }),
+      body: `{"events":[${encoded.join(",")}]}`,
     });
     if (!response.ok) {
-      console.error("EventsFanout dispatch failed", { status: response.status });
+      console.error("EventsFanout dispatch failed", { status: response.status, events: sent });
     }
   } catch (e) {
-    console.error("EventsFanout dispatch failed", { error: String(e) });
+    console.error("EventsFanout dispatch failed", { error: String(e), events: sent });
   }
 }
 

@@ -156,13 +156,13 @@ fn handlers(file: &str, source: &str, path: &str) -> String {
 }
 
 /// `Events.emit`: the envelope is one block-bodied IIFE, with the event name and the
-/// publisher as plain strings.
+/// publisher as plain strings. On `workers` the payload goes out in its wire form (#4632).
 #[test]
 fn events_emit_is_a_block_iife_with_the_envelope() {
     let ts = handlers("ledger.bynk", LEDGER, "workers/ledger/handlers.ts");
     assert!(
             ts.contains(
-                "await (async () => {\n        __events.push({ type: \"Bumped\", payload: { amount: amount }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: \"ledger\", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });\n      })();"
+                "await (async () => {\n        __events.push({ type: \"Bumped\", payload: __serialise_Bumped({ amount: amount }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: \"ledger\", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });\n      })();"
             ),
             "{ts}"
         );

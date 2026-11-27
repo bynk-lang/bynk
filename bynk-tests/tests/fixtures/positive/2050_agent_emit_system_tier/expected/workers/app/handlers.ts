@@ -75,7 +75,7 @@ export class Counter {
         return undefined;
       })();
       return (async () => {
-        __events.push({ type: "Bumped", payload: { n: 1 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push({ type: "Bumped", payload: __serialise_Bumped({ n: 1 }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
       })();
     })();
     await this.commitState(__state);
@@ -114,7 +114,7 @@ export const api = {
     const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Bumped", payload: { n: 0 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
+        __events.push({ type: "Bumped", payload: __serialise_Bumped({ n: 0 }), envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
       })();
       return HttpResult.Ok(undefined);
     })();
@@ -128,3 +128,25 @@ export const api = {
 export function __resetAgents(): void {
   __CounterRegistry.reset();
 }
+
+export function __serialise_Bumped(value: Bumped): __JsonValue {
+  return {
+    n: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.n),
+  };
+}
+
+export function __deserialise_Bumped(json: __JsonValue, path: string = "$"): Result<Bumped, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["n"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["n"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+  }
+  const __n = obj["n"];
+  return Ok({ n: __n } as Bumped);
+}
+

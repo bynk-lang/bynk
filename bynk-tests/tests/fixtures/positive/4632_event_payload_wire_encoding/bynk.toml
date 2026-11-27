@@ -1,0 +1,6 @@
+[project]
+name = "event-payload-wire-encoding"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
