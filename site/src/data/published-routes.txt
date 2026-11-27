@@ -1410,6 +1410,7 @@
 /reference/diagnostics/bynk.actor.refinement_base_unsupported/
 /reference/diagnostics/bynk.actor.refinement_in_sum/
 /reference/diagnostics/bynk.actor.refinement_predicate_unsupported/
+/reference/diagnostics/bynk.actor.reserved_principal_name/
 /reference/diagnostics/bynk.actor.scheme_arg_kind/
 /reference/diagnostics/bynk.actor.scheme_not_admissible/
 /reference/diagnostics/bynk.actor.sender_admits_nothing/
@@ -2220,6 +2221,7 @@
 /reference/diagnostics/bynk.test.forged_needs_signature_route/
 /reference/diagnostics/bynk.test.forged_needs_system/
 /reference/diagnostics/bynk.test.helper_given_at_system/
+/reference/diagnostics/bynk.test.key_principal_needs_api_key_route/
 /reference/diagnostics/bynk.test.no_subject_needs_oidc_route/
 /reference/diagnostics/bynk.test.nobody_needs_secured_route/
 /reference/diagnostics/bynk.test.pass_through_address/
@@ -2235,6 +2237,7 @@
 /reference/diagnostics/bynk.test.principal_required/
 /reference/diagnostics/bynk.test.remote_clock_dependent/
 /reference/diagnostics/bynk.test.remote_unsupported_advance/
+/reference/diagnostics/bynk.test.remote_unsupported_api_key/
 /reference/diagnostics/bynk.test.remote_unsupported_asset/
 /reference/diagnostics/bynk.test.remote_unsupported_call/
 /reference/diagnostics/bynk.test.remote_unsupported_env/

@@ -361,6 +361,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nactor Admin = User where isAdmin(user)   // ✗ not a claim predicate\n\nactor Admin = User where hasClaim(\"admin\")   // ✓",
     },
     Explain {
+        code: "bynk.actor.reserved_principal_name",
+        blurb: "A test case's `by` names the principal it acts as, and some names there are not actors: `Nobody` sends no credential, and `Forged`, `Stale`, `Expired`, `Revoked`, `Malformed`, `Unknown` and the other bad-credential principals drive the seam to refuse. An actor with one of those names could never be acted as, since `by Unknown(\"x\")` would mean the principal, not the actor. So an actor may not take a reserved principal's name. Rename it.",
+        example: "actor Unknown { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }   // ✗ `by Unknown` is a reserved principal\n\nactor Anonymous { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }   // ✓",
+    },
+    Explain {
         code: "bynk.actor.scheme_arg_kind",
         blurb: "A scheme's config values are strings and integers, except that a `SignedCookie` also takes a duration (`ttl = 12.hours`) and a bare name (`sameSite = Lax`). Every other scheme reads a string or an integer, so a duration or a bare name would be dropped without a word: a `Signature` `tolerance = 5.minutes` would read as no tolerance at all, and the replay window would be off. Write a `Signature` tolerance in whole seconds, and quote a string.",
         example: "actor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 5.minutes) }   // ✗ a duration\n\nactor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 300) }   // ✓ seconds",
@@ -5599,8 +5604,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "`by Expired` sends an expired token, so it needs a route whose \
                 seam checks one: a `Bearer` or `Oidc` actor. A public route, or \
                 one guarded by a `Signature` actor, has no token to expire; for a \
-                `Signature` route `by Stale` sends a stale signature. Drive a \
-                route guarded by a `Bearer` or `Oidc` actor. See \
+                `Signature` route `by Stale` sends a stale signature. An `ApiKey` \
+                actor's keys do not expire yet (its `ttl` is a later release), so \
+                its seam has no expired key to refuse; test it with `by Malformed`, \
+                `by Unknown` or `by Forged`. Drive a route guarded by a `Bearer` \
+                or `Oidc` actor. See \
                 `bynk.test.nobody_needs_secured_route` for the same limit on \
                 `Nobody`.",
         example: "// demo/api.bynk\n\
@@ -5661,6 +5669,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.test.helper_given_at_system",
         blurb: "A suite helper that declares `given` runs with the capabilities of its target, which a case gets at the `unit` and `integration` tiers. A `system` case cannot name a capability: each context runs as the Worker it deploys as, and the case reaches it only through its addresses. Move the helper to a suite below `system`.",
         example: "suite demo.desk as system {\n    fn seed() -> Effect[()] given Meter { … }   // ✗ a `system` case names no capability\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    fn seed() -> Effect[()] given Meter { … }   // ✓ below `system` the case has the target's capabilities\n\n    case \"the desk checks\" { … }\n}",
+    },
+    Explain {
+        code: "bynk.test.key_principal_needs_api_key_route",
+        blurb: "`by Malformed` and `by Unknown` are an `ApiKey` seam's own refusals: `Malformed` sends a key with the actor's prefix and a bad checksum, which the seam refuses before any lookup, and `Unknown` sends well-formed keys that were never minted, which it refuses after comparing against a dummy digest. Only a route guarded by an `ApiKey` actor has that seam. On another route, test its own seam with `by Nobody`, `by Forged` or `by Expired`.",
+        example: "let r <- api.GET(\"/me\") by Malformed    // ✗ `api` is a `Bearer` service\n\nlet r <- keys.GET(\"/key\") by Malformed  // ✓ `keys` is guarded by an `ApiKey` actor",
     },
     Explain {
         code: "bynk.test.no_subject_needs_oidc_route",
@@ -7807,6 +7820,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.refinement_predicate_unsupported",
         "A refinement actor's `where` predicate is outside the closed claim-predicate set.",
+    ),
+    d(
+        "bynk.actor.reserved_principal_name",
+        "An actor takes the name of a reserved call-site principal (`Nobody` or a bad-credential principal such as `Forged` or `Unknown`).",
     ),
     d(
         "bynk.actor.scheme_arg_kind",
@@ -11340,7 +11357,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.test.expired_needs_bearer_route",
-        "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum) or an `Oidc` actor; it sends a correctly signed token whose `exp` has passed, so only a `Bearer` or `Oidc` seam can refuse it.",
+        "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum) or an `Oidc` actor; it sends a correctly signed token whose `exp` has passed, so only a `Bearer` or `Oidc` seam can refuse it. An `ApiKey` route's keys do not expire yet (#3939).",
         &["case"],
     ),
     dg(
@@ -11366,6 +11383,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.test.helper_given_at_system",
         "A suite helper declares `given` in a `system`-tier suite; a `system` case names no capability for it to be given.",
+    ),
+    d(
+        "bynk.test.key_principal_needs_api_key_route",
+        "`by Malformed` or `by Unknown` on a route no `ApiKey` actor guards (#3939).",
     ),
     dg(
         "bynk.test.no_subject_needs_oidc_route",
@@ -11440,6 +11461,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.test.remote_unsupported_advance",
         "A `system` case moves the harness clock with `advance Clock`, which a run against a real runtime (`bynk test --against`) can't honour: the deployed Workers read wall-clock time.",
         &["case"],
+    ),
+    d(
+        "bynk.test.remote_unsupported_api_key",
+        "A case acting as an `ApiKey` actor, or driving `by Malformed` or `by Unknown`, under `bynk test --against` (#3939).",
     ),
     dg(
         "bynk.test.remote_unsupported_asset",
