@@ -1910,6 +1910,9 @@ const CAPABILITY_SURFACE: &[&str] = &[
     // header and response rules. Binding-to-binding, not a codegen shape.
     "Service",
     "FetchProvider",
+    // #3752 (D13): the `bynk` surface's `Upstream`, which each platform
+    // binding provides as `UpstreamProvider`.
+    "Upstream",
 ];
 
 /// Is `ident` one of ADR 0310's enumerated emit-ABI shapes, or part of the capability

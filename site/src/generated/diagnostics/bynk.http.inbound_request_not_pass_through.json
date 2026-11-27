@@ -1,0 +1,12 @@
+{
+  "blurb": "An `InboundRequest` is the request a pass-through route forwards with `Upstream.forward`, and only an `on ANY` route receives one, as its `request` parameter. An ordinary route reads its request through `headers`, `query`, `cookies` and `body`, so an `InboundRequest` parameter there is refused, and so is one on an `ANY` route under another name. Use the ordinary parameters, or make the route a pass-through route.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.inbound_request_not_pass_through",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/x\") (request: InboundRequest) -> Effect[HttpResult[String]] by Visitor { … }   // ✗\n\non ANY(\"/x/*rest\") (rest: String, request: InboundRequest) -> Effect[PassThrough] by Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "An `InboundRequest` parameter on a route that is not `on ANY`, or not named `request`."
+}

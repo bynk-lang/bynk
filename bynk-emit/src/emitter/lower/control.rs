@@ -309,6 +309,7 @@ pub(super) fn lower_if(
 ) -> Lowered {
     let mut pre = Pre::new();
     let cond_lowered = pre.lower_node(cond, cx);
+    let (cond_lowered, narrowing) = super::expect_narrowing::enter_branches(cond_lowered, cx);
     // If the cond contains `is`-bindings, the then-branch needs a place
     // for the `const name = receiver.field;` declarations — a ternary
     // has no such place. Force the IIFE form. (`ternary_shaped`.)
@@ -333,7 +334,9 @@ pub(super) fn lower_if(
         // expansion always pushes to `pre` — so where `pre` is empty, nothing
         // read it.
         let then_tail = lower_expr(&then_block.tail, cx);
+        narrowing.else_branch(cx);
         let else_tail = lower_expr(&else_block.tail, cx);
+        narrowing.leave(cx);
         if then_tail.pre.is_empty() && else_tail.pre.is_empty() {
             // The `Paren` keeps today's outer brackets.
             return pre.finish(ternary_built(cond_lowered, then_tail.expr, else_tail.expr));
@@ -395,6 +398,7 @@ pub(super) fn lower_if(
         // records them, and the text fallback below drops them (`render_text`).
         block_body_into(&mut then_body, then_block, cx, false);
         cx.shadow_scopes.pop();
+        narrowing.else_branch(cx);
         // #1654: the bindings the condition's falsity proves, scoped to the
         // else-branch the same way.
         cx.shadow_scopes.push(HashMap::new());
@@ -404,6 +408,7 @@ pub(super) fn lower_if(
         else_body.extend(else_bindings.iter().map(stmt_item));
         block_body_into(&mut else_body, else_block, cx, false);
         cx.shadow_scopes.pop();
+        narrowing.leave(cx);
         cx.return_ty = saved;
         cx.tail_slot = saved_slot;
         // #2 review: unlike `lower_match_as_iife`'s IIFE, this one used to never

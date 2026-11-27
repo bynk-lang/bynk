@@ -1,0 +1,7 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+type Held = { request: InboundRequest }
+
+service keep { on call(h: Held) -> Effect[Int] by Caller { Effect.pure(1) } }
