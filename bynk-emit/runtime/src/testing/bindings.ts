@@ -7,6 +7,7 @@
 import { makeTestState, type AiSearchInstance, type D1Database, type DurableObjectState, type AnalyticsDataset, type AnalyticsSqlBinding, type D1PreparedStatement, type D1Result, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type R2GetOptions, type R2MultipartUpload, type R2ObjectBody, type R2ObjectMeta, type R2PutOptions, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerImagesTransformer, type WorkerVersionMetadata } from "../storage.ts";
 import { VECTORIZE_LIMITS, type VectorizeIndex } from "../vectorize.ts";
 import { serialiseAgentClass, type DurableObjectNamespace, type DurableObjectStub } from "../agent.ts";
+import { makeHibernatableTestState, type WebSocketHost } from "./websocket.ts";
 
 /**
  * #1959: an in-memory KV namespace for multi-Worker integration tests. The
@@ -1024,7 +1025,11 @@ export function makeIntegrationDoNamespace(
       const k = String(id);
       let inst = instances.get(k);
       if (inst === undefined) {
-        inst = new (serialiseAgentClass(cls, { waitMs: queueWaitMs }))(makeTestState(k), env);
+        // #3901: the state accepts sockets for hibernation, and their frames reach this instance's own
+        // `webSocketMessage` / `webSocketClose`, as the platform delivers them to a Durable Object.
+        const holder: { host?: WebSocketHost } = {};
+        inst = new (serialiseAgentClass(cls, { waitMs: queueWaitMs }))(makeHibernatableTestState(k, () => holder.host), env);
+        holder.host = inst as unknown as WebSocketHost;
         instances.set(k, inst);
       }
       const target = inst;

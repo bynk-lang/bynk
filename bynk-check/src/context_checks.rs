@@ -192,6 +192,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
         Some(Callee::AnalyticsSelect { row, .. }) => vec![*row],
         // #4099: `Ai.generateValue[T]` decodes the reply as `T`.
         Some(Callee::AiGenerateValue { value, .. }) => vec![*value],
+        // #4101: a typed Vectorize read decodes each match's metadata.
+        Some(Callee::VectorValueRead { meta, .. }) => vec![*meta],
         Some(
             Callee::Fn(decl, ws)
             | Callee::FnValue(decl, ws)
@@ -8687,6 +8689,8 @@ fn validate_queue_handler(
                 "a queue name is 1 to 63 lowercase letters, digits or `-`, and starts and ends with a letter or digit",
             ),
         );
+    } else if let Some(error) = crate::queue_reserved::reserved_name_error(name, handler.span) {
+        errors.push(error);
     }
     // #3880: the delivery parameter is the `QueueDelivery` of `bynk.cloudflare`. A type of the
     // same name that this context declares is the author's own, not the platform's, and is

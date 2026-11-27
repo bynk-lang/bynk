@@ -146,6 +146,18 @@ pub(super) enum RunChecks {
     },
 }
 
+impl RunChecks {
+    /// #3565: a checked build's layout carries the agent-move phase variants to write.
+    pub(super) fn with_moves(mut self, moves: &bynk_project::worker_moves::MoveVariants) -> Self {
+        if let RunChecks::Checked { layout, .. } = &mut self
+            && !moves.is_empty()
+        {
+            *layout = std::mem::take(layout).with_moves(moves.clone());
+        }
+        self
+    }
+}
+
 /// A project's unit groups, kinds and parsed files, as [`resolve_derived`] reads them.
 type DerivedInputs<'a> = (
     &'a BTreeMap<String, Vec<usize>>,

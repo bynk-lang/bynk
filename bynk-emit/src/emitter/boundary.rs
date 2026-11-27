@@ -112,6 +112,10 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                 Some(bynk_check::checker::Callee::AiGenerateValue { value, .. }) => {
                     push_ground(*value, &mut roots);
                 }
+                // #4101: a typed Vectorize read decodes each match's metadata.
+                Some(bynk_check::checker::Callee::VectorValueRead { meta, .. }) => {
+                    push_ground(*meta, &mut roots);
+                }
                 _ => {}
             }
             let ExprKind::MethodCall { args, .. } = &e.kind else {

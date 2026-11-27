@@ -91,7 +91,7 @@ let written <- Docs.upsertValue([VectorOf {
 ```
 
 Metadata is a JSON object on the platform, so the type must encode to one: a bare
-`String` is a fault. Only writes are typed. Reads give the metadata back as text.
+`String` is a fault. Reads can be typed too: see "Read metadata" below.
 
 Keep the properties you filter on plain (`String`, `Int`, `Bool`), not `Option`: an
 `Option` field is written as a tagged object (`{"kind":"Some","value":"x"}`), exactly
@@ -131,13 +131,38 @@ euclidean distance is nearer), and the metadata as text when you ask for it. A
 filter works only on a property in `@indexed`, and only on vectors written after
 that property's metadata index existed.
 
-## Read metadata in two steps
+## Read metadata
 
-Decode what a query returns yourself, with `Json.decode`, instead of asking the
-query to decode it. Metadata outlives the type that wrote it: after a release adds
-a required field, every older vector fails to decode, and one stale vector would otherwise
-fail every query that returns it. Decoding in a second step lets the handler skip,
-repair or count it:
+Metadata outlives the type that wrote it: after a release adds a required field, every
+older vector fails to decode as the new type. `queryValue` and `getByIdsValue` read each
+match's metadata as your type **on its own**, so one stale vector is an `Err` for that match
+and the rest still read:
+
+```bynk,fragment
+type Hit = { url: String, category: String }
+```
+
+```bynk,fragment
+let found <- Docs.queryValue[Meta](values, QueryOptions { topK: 5, returnMetadata: MetadataScope.All })
+match found {
+	Ok(matches) => Ok(matches.filterMap((m) => match m.metadata {
+		Some(Ok(meta)) => Some(Hit { url: m.id, category: meta.category }),
+		_ => None,          // no metadata, or written by an older shape
+	})),
+	Err(_) => ServerError("search is unavailable"),
+}
+```
+
+A match's `metadata` is `Option[Result[Meta, DecodeError]]`: `None` when the vector has none or the
+query omitted it, `Some(Ok(meta))` when it reads, `Some(Err(e))` when it does not. `e` names the path
+and what was expected, but its message can quote part of the stored value, so do not log it
+unredacted. `getByIdsValue(ids)` is the same for `getByIds`. The
+typed reads read what `upsertValue` writes, so use `returnMetadata: All` with them: an `Indexed`
+read returns only the filterable properties, and decodes as `Meta` only when `Meta` has just those
+fields.
+
+`query` and `getByIds` stay, for metadata written outside Bynk, or to decode it yourself with
+`Json.decode`:
 
 ```bynk,fragment
 match Json.decode[Meta](metadata) {

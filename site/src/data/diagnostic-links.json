@@ -1575,6 +1575,10 @@
     "/reference/queue/",
     "/book/guides/entry-points/queue/"
   ],
+  "bynk.queue.reserved_name": [
+    "/reference/queue/#reserved-names",
+    "/reference/spec/static-semantics/#events"
+  ],
   "bynk.queue.return_not_queue_result": [
     "/reference/queue/#handler-form",
     "/reference/queue/",
