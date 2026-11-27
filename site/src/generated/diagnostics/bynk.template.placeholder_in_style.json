@@ -1,0 +1,10 @@
+{
+  "blurb": "CSS has its own escaping and its own URL context, `url(…)`, and a style can leak a page's data without any script. A template has no CSS type, so it refuses a placeholder in `<style>` and in a `style` attribute. Choose among classes the stylesheet defines instead, with the class name as the placeholder.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.placeholder_in_style",
+  "constructs": [],
+  "example": "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<p style=\"color: \\(tone)\">Saved</p>   // ✗ CSS, which a value could break out of\n<p class=\"tone-\\(tone)\">Saved</p>   // ✓",
+  "severity": "error",
+  "summary": "A template placeholder is inside `<style>` or a `style` attribute (#3927)."
+}

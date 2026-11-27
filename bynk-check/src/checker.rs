@@ -92,6 +92,7 @@ mod result_more;
 mod session_calls;
 mod sql_decimal_param;
 mod sum_bad_principal;
+mod template_calls;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::refinement_example;
 pub use refinements::split_regex_flags;
@@ -878,6 +879,9 @@ pub enum Callee {
     /// #3939: `ApiKey.equal(a, b)`, the generated key store's constant-time digest comparison,
     /// reachable only from the agents generated for an `ApiKey` actor. An `Effect[Bool]`.
     ApiKeyEqual,
+    /// Typed HTML (#3927, slice 1): `shell.fill(fields)` on the template
+    /// `template`: its emitted function, applied to the fields record.
+    TemplateFill { template: String },
     /// #3446: `Record.field.cookie(value)` / `Record.field.expire()` on a cookie record: the
     /// `Cookie` the field's decoder reads back (named by its wire name, valued by the decoder's
     /// leaf rules), or its matching deletion.

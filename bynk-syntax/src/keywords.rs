@@ -266,7 +266,7 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
     ),
     k(
         "private",
-        "Before a `fn`, `type`, `messages`, `asset`, `embed` or `const` declaration in a commons or context: visible only within its own unit (and that unit's suites), never through `uses` (`private fn helper(…)`).",
+        "Before a `fn`, `type`, `messages`, `asset`, `embed`, `template` or `const` declaration in a commons or context: visible only within its own unit (and that unit's suites), never through `uses` (`private fn helper(…)`).",
     ),
     k(
         "removed",
@@ -277,6 +277,10 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
         "Renames an agent class (`agent New replaces Old`): the old class's stored data and schema history move to the new one. After a field's type (`name: T replaces old`, `store name: Cell[T] replaces old`) it renames the field: the old name is read where the field is stored, locked or decoded, and the new one is written.",
     ),
     k("store", "A persisted agent-state field."),
+    k(
+        "template",
+        "At item position, declares an HTML template read from `embeds/` (`template shell: PageFields = \"embeds/page.html\"`): its `\\(name)` placeholders are checked against the fields record, each escaped for its context, and `shell.fill(fields)` is `Html` (experimental, behind `bynk.html.typed`). An ordinary name everywhere else.",
+    ),
     k(
         "tests",
         "After `for` in a commons header (`commons shop.kit for tests`): a test-only commons, which only suites and other test-only commons may `uses`, left out of every deployable.",

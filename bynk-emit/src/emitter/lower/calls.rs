@@ -117,6 +117,16 @@ pub(super) fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     if let Some(built) = lower_d1_peek_call(e, cx) {
         return pre.finish(built);
     }
+    // #3927: `shell.fill(fields)` calls the template's function.
+    if let Some(Callee::TemplateFill { template }) = cx.commons().callees.get(&e.id).cloned()
+        && let [fields] = args.as_slice()
+    {
+        let fields = pre.lower_node(fields, cx);
+        return pre.finish(bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Ident(super::super::ts_ident(&template))),
+            args: vec![fields],
+        });
+    }
     if let Some(built) = lower_analytics_select_call(e, args, cx, &mut pre) {
         return pre.finish(built);
     }

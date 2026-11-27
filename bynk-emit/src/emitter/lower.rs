@@ -44,6 +44,7 @@ pub(super) mod expect_was;
 mod ident;
 mod is;
 mod literal;
+pub(super) use literal::escape_ts_template;
 mod mock;
 mod operator;
 mod pattern;

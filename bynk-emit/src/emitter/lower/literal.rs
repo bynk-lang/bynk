@@ -158,7 +158,7 @@ pub(super) fn lower_interp_str(parts: &[InterpPart], cx: &mut LowerCtx) -> Lower
 /// Escape a literal chunk for a TS template-literal context: backslash,
 /// backtick, and `$` (to neutralise `${`), plus the control-char escapes
 /// [`escape_ts_string`] applies. (v0.43.)
-fn escape_ts_template(s: &str) -> String {
+pub(crate) fn escape_ts_template(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {

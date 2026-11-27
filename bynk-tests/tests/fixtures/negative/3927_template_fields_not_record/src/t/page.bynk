@@ -1,0 +1,8 @@
+// #3927 (typed HTML, slice 1): a template's fields type must be a record
+commons t.page
+
+uses bynk.html
+
+type Name = String
+
+template shell: Name = "embeds/page.html"

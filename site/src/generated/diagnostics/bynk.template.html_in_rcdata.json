@@ -1,0 +1,10 @@
+{
+  "blurb": "The text of `<title>` and `<textarea>` is never parsed as markup: a browser shows tags there as text. An `Html` value is markup, so it cannot be the text of either. Pass the text as a `String` field instead, which is escaped as text.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.html_in_rcdata",
+  "constructs": [],
+  "example": "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<title>\\(heading)</title>   // ✗ markup where only text is read\n<h1>\\(heading)</h1>   // ✓",
+  "severity": "error",
+  "summary": "An `Html` value fills the text of `<title>` or `<textarea>` (#3927)."
+}

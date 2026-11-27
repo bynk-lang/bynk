@@ -1,0 +1,2 @@
+bynk.template.placeholder_in_script a placeholder cannot be inside `<script>`
+# exact

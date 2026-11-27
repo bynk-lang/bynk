@@ -1,0 +1,10 @@
+{
+  "blurb": "Inside `<svg>` and `<math>` a browser tokenises by different rules: `<script>` and `<style>` do not switch it to raw text, and SVG's `<script href>` loads code. A template checked on its own cannot see an `<svg>` another piece of markup opened, so every `<svg>` and `<math>` must open and close in the same template, and may not hold `<foreignObject>`, MathML's text points or an HTML element that makes the browser leave it. Close the element in the template that opens it.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.foreign_unbalanced",
+  "constructs": [],
+  "example": "// embeds/page.html\n<svg viewBox=\"0 0 10 10\">   // ✗ never closed here\n<svg viewBox=\"0 0 10 10\"></svg>   // ✓",
+  "severity": "error",
+  "summary": "A template opens an `<svg>` or `<math>` it does not close, closes one it did not open, or holds an integration point or an HTML element inside one (#3927)."
+}

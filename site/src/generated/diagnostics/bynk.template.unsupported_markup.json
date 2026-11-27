@@ -1,0 +1,10 @@
+{
+  "blurb": "The compiler tokenises a template as a browser does and refuses what it does not model, rather than guessing: a repeated attribute (a browser keeps the first), a `<` in an attribute name, an unclosed comment, a `</script` that is not the end tag, a URL attribute, which will take a checked URL. Each of these changes where a value would land. Write the markup the way a browser reads it without recovering.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.unsupported_markup",
+  "constructs": [],
+  "example": "// embeds/page.html\n<p class=\"lead\" class=\"wide\">Hi</p>   // ✗ `class` twice\n<p class=\"lead wide\">Hi</p>   // ✓",
+  "severity": "error",
+  "summary": "A template holds markup the compiler does not model, or markup a browser reads only by error recovery that changes a context (#3927)."
+}

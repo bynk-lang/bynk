@@ -9135,6 +9135,11 @@ pub fn reject_fn_types(
         // memory for the handler that receives it. A record field or sum payload
         // may carry one (that is how a `@multipart` body names its parts), but it
         // is never persisted, sent across a boundary or returned.
+        TypeRef::Named(id)
+            if !stream_passes(what) && crate::templates::type_carries_html(&id.name, types) =>
+        {
+            errors.push(crate::templates::html_at_boundary(id, what));
+        }
         TypeRef::Named(id) if !stream_passes(what) && is_std_file_type(&id.name, types) => {
             errors.push(file_at_boundary(&id.name, &[], id.span, what));
         }

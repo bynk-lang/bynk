@@ -4010,6 +4010,12 @@ pub(crate) fn check_json_static(
                 ));
                 return None;
             }
+            if let Some(err) =
+                crate::templates::html_codec_error(t, &ctx.input.types, tys, args[0].span)
+            {
+                ctx.errors.push(err);
+                return None;
+            }
             if !super::codable::json_codable(t, &ctx.input.types, tys, &ctx.type_vars) {
                 let mut err =
                     CompileError::new(
@@ -4153,6 +4159,10 @@ pub(crate) fn check_json_static(
             }
             if op == "decodeSql" {
                 super::d1::record_decode(&args[0], span, t, ctx);
+            }
+            if let Some(err) = crate::templates::html_codec_error(t, &ctx.input.types, tys, span) {
+                ctx.errors.push(err);
+                return None;
             }
             if !super::codable::json_codable(t, &ctx.input.types, tys, &ctx.type_vars)
                 || t == tys.intern(Ty::Unit)

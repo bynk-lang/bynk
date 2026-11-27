@@ -4013,7 +4013,8 @@ of the file it names.
   mark is dropped and `\r\n` and a bare `\r` are each replaced by `\n`, so the
   same source builds to the same value on every checkout. A trailing newline is
   kept. The text has no interpretation: `\(` and `{{ }}` in the file mean
-  nothing to the language.
+  nothing to the language. A `template` ([below](#templates)) is the
+  declaration whose text is interpreted.
 
 An embed is never served. It is emitted as an exported `string` constant of the
 declaring module, imported like a function by a unit that `uses` it; a bundler
@@ -4021,6 +4022,72 @@ drops one that nothing references. A unit-tier `suite` case names the embeds of
 its target and of the commons the target `uses`. A single file has no project
 root to find `embeds/` under, so building one that declares an embed is
 `bynk.embed.needs_project`; checking it is unaffected.
+
+### Templates {#templates}
+
+A **template** declaration, `template name: F = "path"` or `template name = "path"`
+(#3927, experimental behind `bynk.html.typed`), is an embed whose text is HTML with
+placeholders. Every rule above for an embed's placement, path, name, file and size applies to
+it, and its diagnostics name it a `template`. `template` is a contextual keyword at item position
+only. Every form below is `bynk.stability.experimental` without the gate (under the synthetic
+item `bynk.html.typed.template`, and `bynk.html.Html` for the type).
+
+- The unit MUST `uses bynk.html` (`bynk.template.needs_bynk_html`). `F`, when written, MUST
+  be a non-generic record type (`bynk.template.fields_not_record`) that carries no secret kind
+  (`bynk.template.secret_placeholder`).
+- A **placeholder** is `\(` followed by a name (`[A-Za-z_][A-Za-z0-9_]*`) and `)`, whose
+  backslash does not follow another backslash. Any other `\(` is text, and the file has no
+  other escape.
+- With no `F`, the template MUST have no placeholder
+  (`bynk.template.placeholder_without_fields`), and its name has type `Html`. With `F`, its name
+  is used only as `name.fill(e)` with `e: F`, of type `Html`
+  (`bynk.template.fill_required`).
+- Every placeholder MUST name a field of `F` (`bynk.template.unknown_placeholder`), MUST NOT
+  also name an asset in scope (`bynk.template.ambiguous_placeholder`), and every field MUST
+  be named by a placeholder (`bynk.template.unused_field`).
+- The text is tokenised by the WHATWG rules, scripting on, from the data state, with the tree
+  builder's effect on the tokeniser for raw-text and RCDATA elements, foreign content and
+  `<select>`. A state, or a piece of error recovery that changes a context, the tokeniser
+  does not model MUST NOT occur (`bynk.template.unsupported_markup`); the text MUST end in
+  the data state or after `<plaintext>`. Each `<svg>` and `<math>` MUST close in the same
+  file, a closer MUST have an opener, and neither MAY hold an integration point or an HTML
+  element that leaves foreign content (`bynk.template.foreign_unbalanced`). A `<noscript>`
+  MUST close in the same file (`bynk.template.placeholder_in_raw_text`), and a `<select>`
+  MUST close in it and hold only `<option>`, `<optgroup>` and `<hr>` elements.
+- Each placeholder's **context** is the tokeniser state at it, with the element and
+  attribute around it:
+  - element text (C1) takes a scalar (`String`, `Int`, `Float`, `Bool`, `Decimal`,
+    `Duration`, `Instant` or a refinement of one), written as its text and escaped with
+    `escapeText`, or `Html`, inserted as is; inside `<select>` a scalar only;
+  - the text of `<title>` or `<textarea>` (C2) takes a scalar, escaped with `escapeText`; an
+    `Html` value is `bynk.template.html_in_rcdata`;
+  - a quoted value of an ordinary attribute (C3) takes a scalar, escaped with `escapeAttr`;
+  - every other context takes nothing: an unquoted value (C4,
+    `bynk.template.unquoted_attribute`), `<script>` (C8,
+    `bynk.template.placeholder_in_script`), `<style>` or a `style` attribute (C10,
+    `bynk.template.placeholder_in_style`), an `on*` attribute, `srcdoc`, `<meta content>`
+    beside `http-equiv`, or an attribute whose literal value decides how its element is read
+    (`<script type>`, `<script language>`, `<meta http-equiv>`, `<meta charset>`,
+    `<link rel>`, `<iframe sandbox>`) (C11, `bynk.template.placeholder_in_code_attribute`), a
+    tag or attribute name, a comment, a doctype, CDATA or anything inside foreign content
+    (C13, `bynk.template.placeholder_position`), the text of `<xmp>`, `<iframe>`,
+    `<noembed>`, `<noframes>` or `<noscript>`, or after `<plaintext>` (C14,
+    `bynk.template.placeholder_in_raw_text`), a URL attribute, `srcset`, `imagesrcset` or any
+    attribute of `<base>` (`bynk.template.unsupported_markup`, until `Href`), and a
+    placeholder that continues a character reference or could complete an end tag
+    (`bynk.template.unsupported_markup`).
+  A field of a secret kind is `bynk.template.secret_placeholder` in every context; any other
+  field whose type its context does not take is `bynk.template.context_type`.
+
+A template's diagnostics in its file are reported at the file's line and column, with a
+related location at the declaration. A template with fields is emitted as an exported function
+of its fields record returning `Html`, the file's text with each placeholder replaced by its
+field's escaped text; one with no fields as an exported `Html` constant.
+
+`Html` is `bynk.html`'s opaque type, known by its declaration, never by its name. Outside
+`bynk.html` it has no constructor: `Html.of` is `bynk.html.no_constructor`. A type that
+is or holds `Html` MUST NOT be a request parameter, an agent `store` field, a cross-context
+signature or a codec's subject (`bynk.html.at_boundary`).
 
 ## §5.12b Named constants {#constants}
 

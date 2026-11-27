@@ -1,0 +1,9 @@
+commons t.page
+
+uses bynk.html
+
+type Footer = {
+	year: Int,
+}
+
+template footer: Footer = "embeds/page.html"

@@ -1,0 +1,9 @@
+context t.web
+
+uses t.page
+
+service site from http {
+	on GET("/:title") (title: String) -> Effect[HttpResult[()]] by Visitor {
+		Raw(Bytes.fromUtf8(render(title, "\"' onmouseover=x '\"", "</textarea><script>x</script>").toString()), "text/html; charset=utf-8")
+	}
+}

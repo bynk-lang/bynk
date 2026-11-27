@@ -1,0 +1,9 @@
+commons t.page
+
+uses bynk.html
+
+type Card = {
+	alt: String,
+}
+
+template card: Card = "embeds/page.html"

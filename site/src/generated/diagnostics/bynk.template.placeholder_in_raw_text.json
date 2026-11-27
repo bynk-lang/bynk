@@ -1,0 +1,10 @@
+{
+  "blurb": "The text of these elements is not parsed as markup, and `<noscript>` is read one way with scripting on and another with it off, so a value inside one has no context the compiler can escape for. A template refuses a placeholder in any of them, and every `<noscript>` it opens must close in the same template. Move the value outside the element.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.placeholder_in_raw_text",
+  "constructs": [],
+  "example": "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<noscript>\\(tip)</noscript>   // ✗ read differently with scripting on and off\n<p class=\"tip\">\\(tip)</p>   // ✓",
+  "severity": "error",
+  "summary": "A template placeholder is inside `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>`, `<plaintext>` or `<noscript>`, or a `<noscript>` is left open (#3927)."
+}

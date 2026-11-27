@@ -1,0 +1,6 @@
+[project]
+name = "unsupported-markup-url-attribute"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.html.typed"]

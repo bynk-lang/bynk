@@ -1,0 +1,2 @@
+bynk.template.fill_required template `shell` has fields, so it is used as `shell.fill(fields)`
+# exact

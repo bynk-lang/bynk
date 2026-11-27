@@ -478,8 +478,8 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     if let Some(content) = crate::symbols::describe_test_only_at(text, span.start) {
         return Some(content);
     }
-    // 5a''. #2841: the contextual `fixture` of a suite `fixture` declaration.
-    if let Some(content) = crate::symbols::describe_fixture_at(text, span.start) {
+    // 5a''. #2841, #3927: the contextual `fixture` of a suite fixture, or `template`.
+    if let Some(content) = crate::symbols::describe_template_or_fixture_at(text, span.start) {
         return Some(content);
     }
     // 5b. #2136: a `schedule` / `message` address in a `system`-tier case,

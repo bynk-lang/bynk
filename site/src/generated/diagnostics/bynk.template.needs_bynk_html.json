@@ -1,0 +1,10 @@
+{
+  "blurb": "A template's value is `Html`, which `bynk.html` declares, so a unit with a template uses that commons. Add `uses bynk.html`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.template.needs_bynk_html",
+  "constructs": [],
+  "example": "// t/page.bynk\ncommons t.page   // ✗ with no `uses bynk.html`\n\nuses bynk.html   // ✓\n\ntemplate footer = \"embeds/page.html\"   // ✗",
+  "severity": "error",
+  "summary": "A unit declares a `template` without `uses bynk.html` (#3927)."
+}

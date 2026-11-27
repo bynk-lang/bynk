@@ -1,0 +1,4 @@
+// #3927 (typed HTML, slice 1): a template needs `uses bynk.html`, whose `Html` it is
+commons t.page
+
+template shell = "embeds/page.html"

@@ -2611,6 +2611,16 @@ agent Cart {
         example: "// demo/wallet.bynk\ninvariant nonneg: balance >= 0\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { expect run.all((s) => s.new.balance >= 0) }   // ✗ the invariant says this\nfor all run: History[Wallet] { expect run.all((s) => (s.call is Spend && s.accepted) implies run.upTo(s).any((p) => p.call is TopUp && p.accepted)) }   // ✓ a protocol across steps",
     },
     Explain {
+        code: "bynk.html.at_boundary",
+        blurb: "`Html` is markup the compiler checked, by its template's escaping. A decoded, stored or received one would skip that check, so a type that holds `Html` is not data at a boundary: it has no codec, and is refused as a request parameter and in an agent's `store`. Keep the text and build the markup where it is shown, or send `toString()` where markup must leave the service.",
+        example: "// t/page.bynk\nfn parse(s: String) -> Result[Card, DecodeError] {\n    Json.decode[Card](s)   // ✗ `Card` holds `Html`\n}\n\nfn show(c: Card) -> String {\n    c.body.toString()   // ✓\n}",
+    },
+    Explain {
+        code: "bynk.html.no_constructor",
+        blurb: "`Html` is markup the compiler built: a template's `fill`, or a template with no fields. An opaque type's `of` would turn any `String` into one with no check, a door to unescaped markup that nothing audits, so `Html` has none. Pass the text as a `String` field of a template, which escapes it for where it sits.",
+        example: "// t/page.bynk\nfn quote(text: String) -> Option[Html] {   // ✗\n    match Html.of(text) {   // ✗ any string, unchecked\n        Ok(h) => Some(h),\n        Err(_) => None,\n    }\n}\n\nfn quote(text: String) -> Html {   // ✓\n    card.fill(Card { title: text })   // ✓ escaped for its place\n}",
+    },
+    Explain {
         code: "bynk.http.body_cap_defaulted",
         blurb: "Every body-taking HTTP route has a request-body cap, 1 MiB (1,048,576 bytes) unless the route's `@limit(maxBody: …)` or the service's `limits { maxBody: … }` says otherwise. This hint lists, once per service, the routes that take the default, so a service that used to accept larger bodies finds out at build and not in production: a larger body is answered `413`, and its `details` say that `@limit(maxBody: …)` raises the cap. It is a hint, not an error: if 1 MiB is what you want, leave it, or state it with `limits { maxBody: 1_048_576 }` to silence the hint. A `@raw` route has no default and must declare its cap (`bynk.http.raw_body_unbounded`).",
         example: "type Import = { rows: List[String] }\n\nservice api from http {\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }   // hint: takes the default 1 MiB cap\n}\n\nservice api from http {\n    @limit(maxBody: 26_214_400)   // ✓ the cap is stated\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
@@ -5467,6 +5477,91 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.target.browser_bundle_only",
         blurb: "The `browser` platform builds a module that runs in a web page: one in-process bundle, with nothing to deploy. The `workers` target lays a project out as one Cloudflare Worker per context, joined by Service Bindings, which a browser cannot run. So the two do not combine. Build for the browser with the `bundle` target, which is the default, or build Workers for the `cloudflare` platform.",
         example: "bynk build --target workers --platform browser   // ✗ Workers are not a browser build\n\nbynk build --target bundle --platform browser    // ✓",
+    },
+    Explain {
+        code: "bynk.template.ambiguous_placeholder",
+        blurb: "A placeholder in a code-loading attribute names an asset and anywhere else names a field, so a name that is both could change what it binds to when an asset or a field is renamed. A template refuses the name wherever it appears. Rename the field or the asset.",
+        example: "// t/page.bynk\nasset logo = \"assets/logo.svg\"\n\ntype Card = {\n    logo: String,   // ✗ also the asset `logo`\n    logoText: String,   // ✓\n}\n\n// embeds/page.html\n<p>\\(logo)</p>   // ✗ the field, or the asset?\n<p>\\(logoText)</p>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.context_type",
+        blurb: "Each context takes particular types. Element text takes a scalar (`String`, `Int`, `Float`, `Bool`, `Decimal`, `Duration`, `Instant` or a refinement of one), escaped as text, or `Html`, inserted as is; a quoted attribute value and the text of `<title>` take a scalar. Anything else, such as an `Option` or a record, has no text of its own. Give the field a type the context takes, deciding in Bynk what an absent value shows.",
+        example: "// t/page.bynk\ntype Card = {\n    note: Option[String],   // ✗ an `Option` has no text\n    note: String,   // ✓\n}\n\n// embeds/page.html\n<p>\\(note)</p>   // ✗ element text takes a scalar or `Html`",
+    },
+    Explain {
+        code: "bynk.template.fields_not_record",
+        blurb: "`fill` takes a template's fields as one record, whose field names its placeholders name. A refined type, a sum or a generic record has no such fields. Declare a record for the template.",
+        example: "// t/page.bynk\ntemplate greeting: String = \"embeds/page.html\"   // ✗ not a record\ntemplate greeting: Greeting = \"embeds/page.html\"   // ✓",
+    },
+    Explain {
+        code: "bynk.template.fill_required",
+        blurb: "A template with a fields type is a function of its fields: `card.fill(fields)` takes the whole record and gives the page as `Html`. Only a template with no fields is `Html` as it stands. Call `fill`.",
+        example: "// t/page.bynk\nfn show(title: String) -> Html {\n    card   // ✗ not filled\n    card.fill(Card { title: title })   // ✓\n}",
+    },
+    Explain {
+        code: "bynk.template.foreign_unbalanced",
+        blurb: "Inside `<svg>` and `<math>` a browser tokenises by different rules: `<script>` and `<style>` do not switch it to raw text, and SVG's `<script href>` loads code. A template checked on its own cannot see an `<svg>` another piece of markup opened, so every `<svg>` and `<math>` must open and close in the same template, and may not hold `<foreignObject>`, MathML's text points or an HTML element that makes the browser leave it. Close the element in the template that opens it.",
+        example: "// embeds/page.html\n<svg viewBox=\"0 0 10 10\">   // ✗ never closed here\n<svg viewBox=\"0 0 10 10\"></svg>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.html_in_rcdata",
+        blurb: "The text of `<title>` and `<textarea>` is never parsed as markup: a browser shows tags there as text. An `Html` value is markup, so it cannot be the text of either. Pass the text as a `String` field instead, which is escaped as text.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<title>\\(heading)</title>   // ✗ markup where only text is read\n<h1>\\(heading)</h1>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.needs_bynk_html",
+        blurb: "A template's value is `Html`, which `bynk.html` declares, so a unit with a template uses that commons. Add `uses bynk.html`.",
+        example: "// t/page.bynk\ncommons t.page   // ✗ with no `uses bynk.html`\n\nuses bynk.html   // ✓\n\ntemplate footer = \"embeds/page.html\"   // ✗",
+    },
+    Explain {
+        code: "bynk.template.placeholder_in_code_attribute",
+        blurb: "An event handler such as `onclick` holds code, `srcdoc` holds a whole document, `<meta content>` beside `http-equiv` acts as a header, and attributes such as `<script type>`, `<link rel>` and `<iframe sandbox>` decide how the rest of the element is read. No escape makes a value safe in any of them, so a template refuses a placeholder there. Write the attribute literally, and pass data through an ordinary attribute.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<button onclick=\"buy('\\(item)')\">Buy</button>   // ✗ a value here is code\n<button data-item=\"\\(item)\">Buy</button>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.placeholder_in_raw_text",
+        blurb: "The text of these elements is not parsed as markup, and `<noscript>` is read one way with scripting on and another with it off, so a value inside one has no context the compiler can escape for. A template refuses a placeholder in any of them, and every `<noscript>` it opens must close in the same template. Move the value outside the element.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<noscript>\\(tip)</noscript>   // ✗ read differently with scripting on and off\n<p class=\"tip\">\\(tip)</p>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.placeholder_in_script",
+        blurb: "A script's text is code, and no escape makes a value safe inside it: a string can be closed, and `</script>` ends the element. So a template refuses a placeholder anywhere in `<script>`. Pass data to a script another way, such as a `data-` attribute it reads, which is escaped for an attribute. A JSON data block is a later increment.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<script>greet(\"\\(name)\")</script>   // ✗ a value here is code\n<div id=\"greeting\" data-name=\"\\(name)\"></div>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.placeholder_in_style",
+        blurb: "CSS has its own escaping and its own URL context, `url(…)`, and a style can leak a page's data without any script. A template has no CSS type, so it refuses a placeholder in `<style>` and in a `style` attribute. Choose among classes the stylesheet defines instead, with the class name as the placeholder.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<p style=\"color: \\(tone)\">Saved</p>   // ✗ CSS, which a value could break out of\n<p class=\"tone-\\(tone)\">Saved</p>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.placeholder_position",
+        blurb: "A placeholder fills element text or a quoted attribute value, never the markup's structure: in a tag or attribute name it could make any element or attribute, and in a comment or a doctype it could end it early. Inside `<svg>` and `<math>` a browser parses by other rules, so a placeholder is refused anywhere there. Write the structure literally and put the value in text or a quoted attribute.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<h\\(level)>News</h1>   // ✗ a tag name\n<h1 class=\"level-\\(level)\">News</h1>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.placeholder_without_fields",
+        blurb: "A template with no fields type is `Html` as it stands, so a `\\(name)` in it has nothing to fill it. Declare the fields record, or write the text itself as `&#92;(name)`. Any other backslash and parenthesis, such as MathJax's `\\(x^2\\)`, is already text.",
+        example: "// t/page.bynk\ntemplate footer = \"embeds/page.html\"   // ✗\ntemplate footer: Footer = \"embeds/page.html\"   // ✓\n\n// embeds/page.html\n<p>\\(year)</p>   // ✗ nothing fills it",
+    },
+    Explain {
+        code: "bynk.template.unknown_placeholder",
+        blurb: "Every `\\(name)` in a template must name a field of the record the template declares; the nearest field is suggested. An asset's name fills only a code-loading attribute, such as `<script src>`, so elsewhere it is an unknown placeholder too. Correct the name, or add the field.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<h1>\\(titel)</h1>   // ✗ no field `titel`\n<h1>\\(title)</h1>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.unquoted_attribute",
+        blurb: "An unquoted attribute value ends at the first space, so a value that holds one could add attributes of its own, such as an event handler. Escaping cannot make that safe, so a template refuses a placeholder in an unquoted value. Quote the value; the placeholder is then escaped for an attribute, quotes included.",
+        example: "// t/page.bynk\ntemplate card: Card = \"embeds/page.html\"\n\n// embeds/page.html\n<img alt=\\(alt)>   // ✗ unquoted: a space in `alt` would start a new attribute\n<img alt=\"\\(alt)\">   // ✓",
+    },
+    Explain {
+        code: "bynk.template.unsupported_markup",
+        blurb: "The compiler tokenises a template as a browser does and refuses what it does not model, rather than guessing: a repeated attribute (a browser keeps the first), a `<` in an attribute name, an unclosed comment, a `</script` that is not the end tag, a URL attribute, which will take a checked URL. Each of these changes where a value would land. Write the markup the way a browser reads it without recovering.",
+        example: "// embeds/page.html\n<p class=\"lead\" class=\"wide\">Hi</p>   // ✗ `class` twice\n<p class=\"lead wide\">Hi</p>   // ✓",
+    },
+    Explain {
+        code: "bynk.template.unused_field",
+        blurb: "A template's fields record is its whole contract: every field reaches the page, so a field no placeholder uses is a mistake on one side or the other. Add the placeholder to the template, or remove the field.",
+        example: "// t/page.bynk\ntype Card = {\n    title: String,\n    subtitle: String,   // ✗ no `\\(subtitle)` in the template\n}\n\ntemplate card: Card = \"embeds/page.html\"   // ✗\n\n// embeds/page.html\n<h1>\\(title)</h1>\n<h2>\\(subtitle)</h2>   // ✓",
     },
     Explain {
         code: "bynk.test.actor_identity_required",
@@ -9391,6 +9486,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.history.restates_invariant",
         "A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155).",
     ),
+    d(
+        "bynk.html.at_boundary",
+        "A type that is or holds `Html` is decoded, stored, received or sent (#3927).",
+    ),
+    d(
+        "bynk.html.no_constructor",
+        "`Html.of(s)` is called outside `bynk.html` (#3927).",
+    ),
     hint(d(
         "bynk.http.body_cap_defaulted",
         "A service's body-taking routes rely on the default 1 MiB request-body cap (hint).",
@@ -11354,6 +11457,78 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.target.vendor_required",
         "A deployment unit uses a platform-native capability but the build selects another `--platform`.",
         &["consumes_decl"],
+    ),
+    d(
+        "bynk.template.ambiguous_placeholder",
+        "A template placeholder's name is both a field and an asset in scope (#3927).",
+    ),
+    d(
+        "bynk.template.context_type",
+        "A template field's type is not one its placeholder's context accepts (#3927).",
+    ),
+    d(
+        "bynk.template.fields_not_record",
+        "A template's fields type is not a non-generic record (#3927).",
+    ),
+    d(
+        "bynk.template.fill_required",
+        "A template with fields is named as a value instead of being filled (#3927).",
+    ),
+    d(
+        "bynk.template.foreign_unbalanced",
+        "A template opens an `<svg>` or `<math>` it does not close, closes one it did not open, or holds an integration point or an HTML element inside one (#3927).",
+    ),
+    d(
+        "bynk.template.html_in_rcdata",
+        "An `Html` value fills the text of `<title>` or `<textarea>` (#3927).",
+    ),
+    d(
+        "bynk.template.needs_bynk_html",
+        "A unit declares a `template` without `uses bynk.html` (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_in_code_attribute",
+        "A template placeholder is in an event handler, `srcdoc`, or another attribute whose value is code or decides how markup is read (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_in_raw_text",
+        "A template placeholder is inside `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>`, `<plaintext>` or `<noscript>`, or a `<noscript>` is left open (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_in_script",
+        "A template placeholder is inside `<script>` (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_in_style",
+        "A template placeholder is inside `<style>` or a `style` attribute (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_position",
+        "A template placeholder is in a tag or attribute name, a comment, a doctype, CDATA, or inside `<svg>` or `<math>` (#3927).",
+    ),
+    d(
+        "bynk.template.placeholder_without_fields",
+        "A template declared without a fields type has a placeholder (#3927).",
+    ),
+    d(
+        "bynk.template.secret_placeholder",
+        "A secret kind (`Secret`, `Authorization`, `ApiKeyValue`) reaches a template placeholder or fields type (#3927).",
+    ),
+    d(
+        "bynk.template.unknown_placeholder",
+        "A template placeholder names no field of its fields record (#3927).",
+    ),
+    d(
+        "bynk.template.unquoted_attribute",
+        "A template placeholder fills an unquoted attribute value (#3927).",
+    ),
+    d(
+        "bynk.template.unsupported_markup",
+        "A template holds markup the compiler does not model, or markup a browser reads only by error recovery that changes a context (#3927).",
+    ),
+    d(
+        "bynk.template.unused_field",
+        "A template's fields record has a field no placeholder uses (#3927).",
     ),
     dg(
         "bynk.test.actor_identity_required",
