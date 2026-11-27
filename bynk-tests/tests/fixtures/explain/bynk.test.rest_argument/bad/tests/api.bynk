@@ -1,0 +1,6 @@
+suite api {
+    case "a rest" {
+        let r <- api.GET("/raw/*path", "a/b") by Visitor
+        expect r is Ok(_)
+    }
+}

@@ -1210,13 +1210,25 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
         ));
     }
     let floors = schema_floors(root);
-    let rest = crate::cloudflare::rest::for_purpose("revert", crate::migrate::SWEEP_TOKEN_NEEDS)
-        .map_err(|e| match e {
-            CloudflareError::Credentials(missing) => format!(
+    let rest = match crate::cloudflare::rest::for_purpose(
+        "revert",
+        crate::migrate::SWEEP_TOKEN_NEEDS,
+    ) {
+        Ok(rest) => rest,
+        Err(CloudflareError::Credentials(missing)) => {
+            let message = format!(
                 "{missing}; a revert also reads D1 migrations, so the token needs D1 read access"
-            ),
-            other => other.to_string(),
-        })?;
+            );
+            // #3797: a client that asked for JSON gets the error as data, beside the stderr line.
+            if opts.json
+                && let Some(unset) = crate::cloudflare::rest::missing_credentials()
+            {
+                println!("{}", unset.error_document(&message));
+            }
+            return Err(message);
+        }
+        Err(other) => return Err(other.to_string()),
+    };
     let probe = probe::detect(
         &probe::SystemToolbox,
         "wrangler",

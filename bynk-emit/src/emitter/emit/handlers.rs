@@ -13,7 +13,7 @@ use bynk_syntax::ast::{CommonsItem, Param};
 /// handler. The result is used both as the key on the service object and
 /// as the identifier the Worker fetch handler invokes. Path parameter
 /// segments (`:name`) become `Param_name` to remain distinct from literal
-/// segments. (v0.9 §5.3)
+/// segments, and a rest (`*name`) `Rest_name`. (v0.9 §5.3)
 ///
 /// Slice 1 of `#1542` (the IR cutover, `design/archive/retired-tracks.md`): this used to
 /// have an AST-typed `HttpMethod` twin, `http_handler_method_name` — deleted
@@ -24,18 +24,10 @@ pub fn http_handler_method_name_ir(method: IrHttpMethod, path: &str) -> String {
     http_handler_method_name_from_str(method.as_str(), path)
 }
 
+/// The scheme itself lives in `bynk_check::emitted_names`, so the checker can
+/// refuse two handlers whose names would collide (#3752, D6).
 fn http_handler_method_name_from_str(method: &str, path: &str) -> String {
-    let mut s = format!("http_{method}");
-    for seg in path.split('/').filter(|s| !s.is_empty()) {
-        s.push('_');
-        if let Some(rest) = seg.strip_prefix(':') {
-            s.push_str("Param_");
-            s.push_str(&sanitise_path_segment(rest));
-        } else {
-            s.push_str(&sanitise_path_segment(seg));
-        }
-    }
-    s
+    bynk_check::emitted_names::http_handler_name(method, path)
 }
 
 /// Slice 3 (semantic-debugging track, ADR 0105): the debug-metadata sidecar's
@@ -159,18 +151,6 @@ pub fn cron_handler_method_name(service: &str, index: usize) -> String {
 /// the key identifier-safe without sanitising the name).
 pub fn queue_handler_method_name(service: &str, index: usize) -> String {
     format!("queue_{service}_{index}")
-}
-
-fn sanitise_path_segment(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch);
-        } else {
-            out.push('_');
-        }
-    }
-    out
 }
 
 /// Left-folds `parts` into one `+`-chained `bynk_ts::TsExpr::Binary` tree,

@@ -1,7 +1,0 @@
-context api
-
-service api from http {
-    on GET("/files/*key") () -> Effect[HttpResult[String]] by v: Visitor {
-        Ok("x")
-    }
-}

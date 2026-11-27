@@ -77,6 +77,7 @@ pub mod fixtures;
 pub mod group_triggers;
 pub mod hints;
 pub mod http_rate_limit;
+pub mod http_rest;
 #[cfg(test)]
 mod http_result_extensible_tests;
 pub mod icu;
