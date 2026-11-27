@@ -25,6 +25,7 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 | `Signature` | `secret`, `header`, optional `timestamp` + `tolerance` | none | `http` | HMAC-SHA256 over the raw body; `401` |
 | `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite`, `sessions` | a string-constructible type | `http`, `websocket` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. see [Signed cookies](#signed-cookies) |
 | `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**); optional `trustFrom` | a string-constructible type | `http`, `websocket` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
+| `ApiKey` | `secret = "<ENV>"` (the pepper), optional `prefix`, `header` | a string-constructible type | `http` | an opaque key the service mints, stores only as a peppered hash and looks up in generated agents; the key's store answers the identity; `401`. Experimental. See [API keys](#api-keys) |
 | `Internal` | — | `()`, or `CallerId` for `Caller` | `call`/`cron`/`queue` | a call's per-edge signature proves the calling context; cron and queue are platform-dispatched |
 | `Foreign` | `secret = "<ENV>"`, optional `worker = "<name>"` | none | `call` | the caller, a Worker that is not Bynk, signs the call as the actor under the secret ([wire format](/reference/wire-format/#foreign-callers)); `401` unsigned, `403` where the handler does not admit it |
 
@@ -32,10 +33,10 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
   capability reads), not the key itself.
 - A `Bearer` or `Oidc` actor's **`identity`** must be a context-owned,
   string-constructible type, so the minted value is sealed to the context.
-- A route guarded by a `Bearer`, `Oidc`, `SignedCookie` or `Signature` actor sends
+- A route guarded by a `Bearer`, `Oidc`, `SignedCookie`, `Signature` or `ApiKey` actor sends
   `Cache-Control: private` on every response unless it declares its own `@cache`
   ([Authenticated responses](/reference/http/#authenticated-responses)).
-- The seam **consumes** a `Bearer`, `Oidc` or `Signature` credential, as it does a `SignedCookie`'s: the
+- The seam **consumes** a `Bearer`, `Oidc`, `Signature` or `ApiKey` credential, as it does a `SignedCookie`'s: the
   handler's `headers: RequestHeaders` omits the `Authorization` header (so `bearer()` is `None`), or the
   signature header, and the handler sees only the identity ([Request headers](/reference/http/#request-headers)).
 - On a **WebSocket**, a `Bearer` or `Oidc` token's `exp`, or a session cookie's, is checked once at the upgrade and again at every frame: a
@@ -268,6 +269,142 @@ second binder ([In an actor sum](#in-an-actor-sum)). Two
 cookie members, or two members of one scheme, are still refused (`bynk.actor.duplicate_sum_scheme`), as is
 a refinement in a sum (`bynk.actor.refinement_in_sum`).
 
+## API keys
+
+An `ApiKey` actor authenticates opaque, revocable keys that the service mints and hands to its
+customers. The compiler generates the key format, the storage, the constant-time comparison and the
+verification seam, so no handler writes any of it.
+
+```bynk,fragment
+actor Client {
+	auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"),
+	identity = AccountId
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `secret` | The environment variable holding the **pepper**, the key every stored hash is made with. Required. `bynk deploy` mints it when unset, as it mints a `SignedCookie` key |
+| `prefix` | The key's leading tag, 2 to 16 lower-case letters and digits, starting with a letter. Default `bk`. Each `ApiKey` actor in a context needs its own (`bynk.actor.api_key_prefix_shared`) |
+| `header` | A header to read the key from, such as `x-api-key`. Absent, the key is read from `Authorization: Bearer <key>` |
+
+The config keys are a closed set (`bynk.actor.api_key_unknown_key`). `ttl` (key expiry) and
+`previous` (pepper rotation) are reserved for a later release and are refused until then, so a key
+does not expire yet and the pepper cannot be rotated without ending every key. The identity is a
+context-owned, string-constructible type. The pepper's variable may not be another actor's `secret`
+or `previous` (`bynk.actor.api_key_secret_shared`). The scheme, its types and its warning are
+experimental: list the types in `[unstable] allow`.
+
+### The key
+
+```text
+acme_3kTq9…(33 characters)_Zp0x…(43 characters)Hc81Qa
+^^^^ ^^^^^^^^^^^^^^^^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+prefix  key id                secret             checksum
+```
+
+- **The id** is public: safe to log, to show in a console and to name a key by. It is 24 random
+  bytes: a 16-byte handle naming the key's store, then an 8-byte key number in it. Nothing in it is
+  derived from the identity, so a key does not reveal whose it is.
+- **The secret** is 32 bytes from the platform's random generator. It is shown once, when the key is
+  minted, and never stored or logged.
+- **The checksum** is a CRC32 of everything before it. It is not a security control: it lets a secret
+  scanner confirm a leaked key offline, and lets the seam refuse a mistyped key without a lookup.
+
+Every field is big-endian base62 (`0-9A-Za-z`), padded with `0` to its width, so a key is at most
+100 characters and has exactly one spelling. A presented key longer than 128 characters is refused
+before it is parsed.
+
+### What is stored
+
+The service stores only `HMAC-SHA-256(pepper, secret)`, in two agents the compiler generates and
+names after the actor:
+
+- **`<Actor>Keys`**, keyed by the handle in each key's id, holds one identity's keys: the hash, the
+  pepper it was made under, the label and when it was created. It is the only agent a request asks.
+- **`<Actor>KeyOwner`**, keyed by the identity, holds that identity's handle. Only `mint` uses it.
+
+They are ordinary agents in the schema lock and the deploy migration. Their names are reserved in the
+context (`bynk.actor.api_key_agent_name_reserved`). The pepper never reaches either: the seam and
+`mint` compute the hash and send it, so a copy of the agents' storage is useless without the Worker's
+secrets. One identity holds at most 100 keys.
+
+### Verification
+
+Before the handler runs, the seam:
+
+1. reads the key from the actor's `header`, or from `Authorization: Bearer`. A missing key, or a
+   header sent more than once, is `401`;
+2. parses it: the length, the prefix, the three parts, base62 and the checksum. A malformed key is
+   `401` **with no lookup**;
+3. computes the hash under the pepper. A missing or short pepper faults the request, naming the
+   variable and never its value;
+4. asks `<Actor>Keys(handle)`, which compares the hash in constant time against the record's. A key
+   number its store never held, or a handle no store holds, is compared against a fixed dummy hash,
+   so the work is the same as for a wrong secret;
+5. mints the identity through the identity type's `of`;
+6. runs the handler. The key's header is hidden from the handler's `headers: RequestHeaders`, and a
+   typed `headers` field that reads it is `bynk.http.headers_field_consumed`.
+
+Every refusal from step 2 on is the same `401`, with the same body and headers, whatever failed. A
+key-store fault is never an admission and never a `401`, so a client does not conclude its key is
+bad: an unreachable store faults the request (`500`), and a store that cannot answer in time is
+`503` with `Retry-After: 1`, as on any route that calls an agent.
+
+Nothing is cached, so a key stops working on the next request after it is removed. The price is one
+Durable Object round trip on every authenticated request, and every key of one identity is checked
+by that identity's one store, which runs one request at a time. Give each client process its own
+key rather than sharing one at a high rate.
+
+**Limit requests before the key is checked.** Anyone can make a well-formed key (the checksum is
+public), and each one costs a key-store request. A route an `ApiKey` actor guards should carry
+`@rateLimit(Limiter, key: clientIp)`, which is asked before authentication; one that does not is
+the warning `bynk.actor.api_key_unlimited`. A service rate-limited at its edge can leave the
+warning. A `key: identity` limit does not help, because a fabricated key never verifies, and it is
+not yet available on an `ApiKey` route.
+
+An `ApiKey` actor is HTTP only: on a WebSocket `on open` it is `bynk.actor.scheme_not_admissible`,
+because the upgrade does not ask the key store, so a removed key would keep its socket. It is not
+yet admissible as a member of an actor sum either.
+
+### Minting a key
+
+```bynk,fragment
+consumes bynk { Clock, ApiKeyLabel, ApiKeySecret }
+
+type NewKey = { label: ApiKeyLabel }
+
+service console from http {
+	@rateLimit(PerIp, key: clientIp)
+	on POST("/keys") (body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by u: User given Clock {
+		let r <- Client.mint(u.identity, body.label)
+		match r {
+			Ok(key) => Created(key),
+			Err(_) => Conflict("too many keys"),
+		}
+	}
+}
+```
+
+| Member | Type | Notes |
+|---|---|---|
+| `mint(identity, label)` | `Effect[Result[ApiKeySecret, TooManyKeys]]` | Needs `given Clock`. Only in a service handler, where the pepper is (`bynk.actor.api_key_mint_outside_handler`). `TooManyKeys` when the identity already holds 100 |
+
+- **`ApiKeySecret`** is `{ id: ApiKeyId, key: ApiKeyValue, label: ApiKeyLabel, created: Instant,
+  expires: Option[Instant] }`. `expires` is `None`: keys do not expire yet.
+- **`ApiKeyValue`** is the key itself, a third secret kind beside `Secret` and `Authorization`: it has
+  no string form, is not `Eq`, a `Key` or `Codable`, and cannot be stored, sent or interpolated
+  (`bynk.types.secret_at_boundary`). Anywhere it would be printed it renders as `<secret>`. Its one
+  way out is an HTTP handler returning the `ApiKeySecret` that `mint` answered,
+  `Effect[HttpResult[ApiKeySecret]]`, which sends the key itself, once. A record, event or store
+  field that holds an `ApiKeySecret`, and every other handler parameter or result, is refused.
+- **`ApiKeyId`** is public and string-constructible, so it can be a path parameter.
+- **`ApiKeyLabel`** is 1 to 64 characters, none of them a control character.
+
+A key is a bearer credential: anyone holding it is the client. Nothing stops a handler from writing
+the minted key somewhere unsafe before it returns it; the types make that hard, not impossible.
+Listing and revoking keys arrive in a later release.
+
 ## Reading claims
 
 The binder of an `Oidc` actor, of a `Bearer` actor, and of a refinement of a
@@ -411,10 +548,12 @@ names the context as its `realm`:
 | `Bearer`, `Oidc` | `Bearer realm="<context>"`, plus `error="invalid_token"` when the request presented a bearer token (RFC 6750 §3); a request with no token gets the bare challenge, and there is never an `error_description` |
 | `Signature` | `Bynk-Signature realm="<context>", header="<the actor's header>"` |
 | `SignedCookie` | `Bynk-Cookie realm="<context>"` |
+| `ApiKey`, the default header | `Bearer realm="<context>"`, with `error="invalid_token"` as for `Bearer` |
+| `ApiKey` with `header` | `Bynk-ApiKey realm="<context>", header="<the actor's header>"` |
 | a sum of actors | one challenge per member, in the sum's order |
 | `Visitor`, or any other route | `Bynk realm="<context>"` |
 
-`Bynk-Signature` and `Bynk-Cookie` are not registered schemes: HMAC signatures and cookies
+`Bynk-Signature`, `Bynk-Cookie` and `Bynk-ApiKey` are not registered schemes: HMAC signatures, cookies and API keys in a custom header
 have none, so these satisfy the RFC without implying a protocol a generic client might try
 to speak. A handler's own `Unauthorized` carries the route's challenge too, and `on rejected`
 keeps it when it renders a `401` body. A service with CORS adds `WWW-Authenticate` to
@@ -516,8 +655,9 @@ them `missing_by_on_http`, `scheme_not_admissible`, `signature_requires_body`,
 `oidc_identity_not_string_constructible`,
 `foreign_missing_secret`, `foreign_reserved_secret`,
 `foreign_name_is_context_name`, `foreign_identity_unsupported`,
-`foreign_secret_not_string`, `foreign_duplicate_secret`, and the `signed_cookie_*` family
-(among them `signed_cookie_issue_on_safe_method`, a warning).
+`foreign_secret_not_string`, `foreign_duplicate_secret`, the `signed_cookie_*` family
+(among them `signed_cookie_issue_on_safe_method`, a warning), and the `api_key_*` family (among
+them `api_key_unlimited`, a warning).
 
 ## Who, not whose
 

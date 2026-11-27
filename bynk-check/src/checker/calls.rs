@@ -5148,7 +5148,9 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
         BadCredential::Forged
         | BadCredential::Stale
         | BadCredential::Expired
-        | BadCredential::Revoked => return None,
+        | BadCredential::Revoked
+        | BadCredential::Malformed
+        | BadCredential::Unknown => return None,
     };
     Some(OidcOnlyPrincipal {
         code,
@@ -5631,7 +5633,19 @@ pub(crate) fn check_effect_let_principal(
             by.is_some_and(|by| crate::actors::route_refuses_bad_token(by, &ctx.test_actors));
         // #3052: an `Oidc` route's seam refuses a bad token too.
         let oidc = by.is_some_and(|by| crate::actors::by_clause_is_oidc(by, &ctx.test_actors));
+        let api_key =
+            by.is_some_and(|by| crate::api_key::by_clause_is_api_key(by, &ctx.test_actors));
         match (bad, sig_seam) {
+            // #3939: `Malformed` and `Unknown` are an `ApiKey` seam's refusals.
+            (BadCredential::Malformed | BadCredential::Unknown, _) if !api_key => {
+                let err = crate::api_key::key_principal_needs_api_key_route(name, p.span);
+                ctx.errors.push(with_open_sum_note(err, &handler, ctx));
+            }
+            (BadCredential::Malformed | BadCredential::Unknown, _) => {}
+            // #3939: an `ApiKey` key does not expire yet (`ttl` is a later slice).
+            (BadCredential::Expired, _) if api_key => {
+                ctx.errors.push(crate::api_key::expired_needs_ttl(p.span));
+            }
             (BadCredential::Expired, _) if !bearer && !oidc => {
                 let err = CompileError::new(
                     "bynk.test.expired_needs_bearer_route",
@@ -6005,7 +6019,9 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
             let CallSitePrincipal::BadCredential(bad) = kind else {
                 unreachable!("matched above")
             };
-            let err = if bad == BadCredential::Revoked {
+            let err = if matches!(bad, BadCredential::Malformed | BadCredential::Unknown) {
+                crate::api_key::key_principal_needs_api_key_route(name, p.span)
+            } else if bad == BadCredential::Revoked {
                 CompileError::new(
                     "bynk.test.revoked_needs_sessions_route",
                     p.span,

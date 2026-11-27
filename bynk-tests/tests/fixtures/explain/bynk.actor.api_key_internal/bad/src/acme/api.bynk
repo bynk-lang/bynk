@@ -1,8 +1,0 @@
-context acme.api
-
-service compare {
-	on call(a: Bytes, b: Bytes) -> Effect[Bool] by Caller {
-		let same <- ApiKey.equal(a, b)
-		Effect.pure(same)
-	}
-}

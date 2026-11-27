@@ -370,6 +370,14 @@ pub(super) fn emit_integration_module(
     {
         exposed.push(suite.to_string());
     }
+    // #3939: an `ApiKey` actor's drivers mint the acting principal's key into its key store through
+    // the participant's `env`, and count the store's comparisons.
+    if super::api_key_driver::suite_has_api_key(unit_tables.get(suite)) {
+        if !exposed.contains(&suite.to_string()) {
+            exposed.push(suite.to_string());
+        }
+        stmts.extend(super::api_key_driver::preamble());
+    }
     if peeks {
         for p in harness_participants {
             let has_d1 = bindings_of(p)
@@ -501,19 +509,24 @@ pub(super) fn emit_integration_module(
             // #2138 (§3.7): and, against a named target, its `env` must agree
             // with the target's `vars`. Under `dev` the runner applies `env`
             // itself, one `bynk dev` per distinct map.
-            let refusal = test_suites::remote_unsupported(input.case, &callees).or_else(|| {
-                (!remote.dev)
-                    .then(|| {
-                        bynk_check::test_env::remote_env_disagreement(
-                            &input.case.name,
-                            input.case.name_span,
-                            &input.env,
-                            &remote.vars,
-                            &remote.secrets,
-                        )
-                    })
-                    .flatten()
-            });
+            let refusal = test_suites::remote_unsupported(input.case, &callees)
+                .or_else(|| {
+                    let actors = &unit_tables.get(suite)?.actors;
+                    bynk_check::api_key::remote_unsupported_api_key(input.case, &callees, actors)
+                })
+                .or_else(|| {
+                    (!remote.dev)
+                        .then(|| {
+                            bynk_check::test_env::remote_env_disagreement(
+                                &input.case.name,
+                                input.case.name_span,
+                                &input.env,
+                                &remote.vars,
+                                &remote.secrets,
+                            )
+                        })
+                        .flatten()
+                });
             let Some(refusal) = refusal else {
                 if remote.dev {
                     if !envs.contains(&input.env) {

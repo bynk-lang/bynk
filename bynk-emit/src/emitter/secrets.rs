@@ -112,12 +112,22 @@ pub(crate) fn declared_secrets(table: &UnitTable) -> BTreeSet<String> {
 /// and `bynk dev` uses a per-run one. (The optional `previous` key is the operator's, so it is
 /// not listed.) Every `SignedCookie` actor of the context counts, so a context that only issues
 /// the cookie (a login service) still gets its key.
+///
+/// #3939 (track §18, K1): an `ApiKey` actor's pepper takes the same path. It has the session key's
+/// form (unpadded base64url of at least 32 bytes) and lifecycle: `deploy` mints it when unset and
+/// never replaces a set one, since a new pepper ends every key stored under the old one.
 pub(crate) fn session_keys(table: &UnitTable) -> Vec<(String, String)> {
+    let peppers = table
+        .actors
+        .values()
+        .filter_map(|a| bynk_check::api_key::api_key_seam_of(a, None))
+        .map(|s| (s.actor, s.secret));
     let mut keys: Vec<(String, String)> = table
         .actors
         .values()
         .filter_map(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
         .map(|s| (s.actor, s.secret))
+        .chain(peppers)
         .collect();
     keys.sort();
     keys.dedup();

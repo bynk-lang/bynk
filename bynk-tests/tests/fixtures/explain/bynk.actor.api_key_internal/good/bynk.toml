@@ -1,6 +1,0 @@
-[project]
-name = "explain"
-version = "0.1.0"
-
-[unstable]
-allow = ["bynk.crypto"]
