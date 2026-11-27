@@ -1,6 +1,8 @@
 # Supported moves of agent-owning contexts between Workers
 
-- **Status:** Settling. Spine bynk-lang/bynk#3565 (label `track`). It follows on from #3562
+- **Status:** Settled (27 November 2026). The maintainer ruled D1 (an explicit `--move-agent`
+  flag) and D12 (refuse route and custom-domain moves unless S9 passes), and accepted every
+  other decision as recommended ([ruling](https://github.com/bynk-lang/bynk/issues/3565#issuecomment-7210442841)). Spine bynk-lang/bynk#3565 (label `track`). It follows on from #3562
   (Worker grouping, #551) and its V0 verification
   ([#3562 comment](https://github.com/bynk-lang/bynk/issues/3562#issuecomment-6896203799)).
 - **Ruling already given (maintainer, 27 November 2026, on #3565):** this goes into 1.0. The
@@ -422,7 +424,11 @@ schema migration runs per instance, on read, wherever the class lives.
 
 ## 8. Decisions
 
-### D1. The move is opt-in, per context — **Maintainer ruling needed**
+### D1. The move is opt-in, per context — **Ruled (27 November 2026): an explicit flag**
+
+**Ruling** ([#3565](https://github.com/bynk-lang/bynk/issues/3565#issuecomment-7210442841)): a move happens only with `bynk deploy --move-agent <context>`;
+without the flag the move stays refused as it is today, and a re-run resumes an open move
+without the flag (D8). The recommendation below is what was ruled.
 
 **[DECISION]** Recommend `--move-agent <context>`, repeatable and never a blanket, as ADR 0874's
 future-work paragraph sketched; without it a move stays refused. The refusal's `override`
@@ -431,10 +437,9 @@ discarding the state. A `--move-agent` name that matches no move is an error
 (`bynk.deploy.move_agent_unused`), as for the fresh flag.
 *Rejected:* moving automatically whenever a context changes script (one manifest edit would
 start a run with an outage in it, unannounced); `--yes` implying it (`--yes` only skips
-confirmation, nowhere a refusal). This is a product call because it decides whether adopting
-groups is one step or two for every user with agents.
+confirmation, nowhere a refusal). 
 
-### D2. The phases run as two nodes of the order, with callers rebound between them
+### D2. The phases run as two nodes of the order, with callers rebound between them — **accepted in review: as recommended**
 
 **[DECISION]** Recommend §3.2. Phase 1 pushes each receiver with the moved contexts as
 forwarded members. Then every caller of a moved context is pushed, rebound to the receiver.
@@ -449,7 +454,7 @@ checkout has none); one run per phase (two runs with an outage open between them
 separate `bynk move` command (the move is a consequence of the manifest the deploy already
 plans).
 
-### D3. The phases are generated config variants pushed by the existing push
+### D3. The phases are generated config variants pushed by the existing push — **accepted in review: as recommended**
 
 **[DECISION]** Recommend the emitter writes `wrangler.receive.toml` and `wrangler.commit.toml`
 (names to settle in slice 2) beside the Worker's normal config, and a stub Worker for a
@@ -458,33 +463,33 @@ dissolved source, and the push takes the config path. *Rejected:* editing the ge
 REST upload (ADR 1075 keeps the push on wrangler, and `wrangler versions upload` cannot carry
 lifecycle changes).
 
-### D4. The ledger records the move set and its step, before and after each push
+### D4. The ledger records the move set and its step, before and after each push — **accepted in review: as recommended**
 
 **[DECISION]** Recommend the additive `agent_moves` table, the five steps of §3.3, the per-Worker `done` list, a deployment-id baseline for every Worker taken before phase 1, and a `move` id carried in each phase version's facts.
 *Rejected:* recording only completed phases (an interrupted phase 2 would be invisible, and
 the re-run could not tell "not pushed" from "pushed but not recorded" without trusting the
 account alone); recording the namespaces themselves (ADR 0194 D1).
 
-### D5. `version = 2` while a move is open
+### D5. `version = 2` while a move is open — **accepted in review: as recommended**
 
 **[DECISION]** Recommend it, so an older bynk refuses a ledger mid-move instead of silently
 ignoring the record (§4.1). *Rejected:* a permanent bump to 2 (it forces every user on to the
 new bynk for a field most never write); leaving it at 1 (an older bynk could push `Sf` with
 the classes live after the commit).
 
-### D6. Facts: an additive `transfer` field, `K` out of `classes` while not live
+### D6. Facts: an additive `transfer` field, `K` out of `classes` while not live — **accepted in review: as recommended**
 
 **[DECISION]** Recommend §4.2. *Rejected:* `FACTS_VERSION = 2` (every new version becomes "no
 facts" to an older revert).
 
-### D7. The account is read before each phase; no lock
+### D7. The account is read before each phase; no lock — **accepted in review: as recommended**
 
 **[DECISION]** Recommend reading the namespace listing and the deployments before each phase,
 and recording deployment ids (§3.4, §7.2). *Rejected:* an account-side lock (none exists for
 deploys; a lock Worker or KV key is new infrastructure on the user's account for one
 feature); trusting the ledger alone (a second checkout's ledger is not this one's).
 
-### D8. Resuming needs no flag; a changed manifest while a move is open is refused
+### D8. Resuming needs no flag; a changed manifest while a move is open is refused — **accepted in review: as recommended**
 
 **[DECISION]** Recommend that an open record resumes on the next plain `bynk deploy`, and that
 a manifest which no longer asks for the move is refused (`bynk.deploy.move_open`). Before
@@ -499,7 +504,7 @@ and the only way is forward. *Rejected:* requiring `--move-agent` again on resum
 refuse a half-done move it should finish); cancelling implicitly when the manifest changes
 (a typo in `bynk.toml` would undo a move).
 
-### D9. Which moves are supported in the first version
+### D9. Which moves are supported in the first version — **accepted in review: as recommended**
 
 **[DECISION]** Recommend: into a group, out of a group (dissolved, or one that stays: the
 `transferred` tombstone is how a class leaves a Worker that keeps running, so
@@ -524,18 +529,23 @@ manifest edit stay the same.
 user to edit the manifest one member at a time (each edit is a deploy with its own window,
 and the intermediate groups are not ones the user wants).
 
-### D10. Revert refuses across a move; undo is a forward move
+### D10. Revert refuses across a move; undo is a forward move — **accepted in review: as recommended**
 
 **[DECISION]** Recommend §6, with two new codes. *Rejected:* a revert that reverses a move by
 transferring back (a revert is a version rollback, and Cloudflare cannot roll back across
 the change).
 
-### D11. The window: accepted, measured, documented
+### D11. The window: accepted, measured, documented — **accepted in review: as recommended**
 
 Settled by the ruling; recommended form in §5: a plan warning, a guide section with the
 measured numbers, and the caller table. No draining.
 
-### D12. Routes and custom domains that change script with the context — **Maintainer ruling needed**
+### D12. Routes and custom domains that change script with the context — **Ruled (27 November 2026): refuse unless S9 passes**
+
+**Ruling** ([#3565](https://github.com/bynk-lang/bynk/issues/3565#issuecomment-7210442841)): in v1 a move whose routes or custom domains would change script is
+refused (`reason = "routes"`), unless live check S9 shows phase 1 can claim them cleanly
+behind the forwarding, in which case they are supported from the start. The recommendation
+below is what was ruled.
 
 ADR 0874 lists this as an open limit: a domain attaches to one Worker at a time, so a context
 whose own routes move to `St` has them on `Sf` until `St` claims them. With phase 1
@@ -546,10 +556,10 @@ would change script (`reason = "routes"`), unless live check S9 shows phase 1 ca
 cleanly. If it can, they move in phase 1, behind the forwarding. *Rejected:* moving them in
 phase 3 (between phase 2 and the claim, requests to the route would reach `Sf` without `c`,
 which is still within the window but leaves the claim itself, an account-side change that
-can fail, inside it). It is a product call because many real projects reach a context
+can fail, inside it). It was a product call because many real projects reach a context
 through a route, and the refusal would keep them off groups.
 
-### D13. `bynk dev` needs nothing
+### D13. `bynk dev` needs nothing — **accepted in review: as recommended**
 
 **[DECISION]** Recommend no code. `bynk dev` runs each Worker in its own build directory
 (`bynk/src/dev/run.rs`, `current_dir(workers_dir.join(&s.worker))`), so wrangler's local state
@@ -560,7 +570,7 @@ state is disposable; the run-locally guide gets one sentence saying so. *Rejecte
 local state between Workers (no user has asked, and it is a second implementation of the
 move for a store that is wiped freely).
 
-### D14. A dissolved source becomes a stub, then an orphan
+### D14. A dissolved source becomes a stub, then an orphan — **accepted in review: as recommended**
 
 **[DECISION]** Recommend that phase 2 pushes a stub for a source the build no longer has (it
 answers `503` and exports `K` in code with the `transferred` tombstones), and that the orphan
