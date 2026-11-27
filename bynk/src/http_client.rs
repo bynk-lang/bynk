@@ -397,12 +397,11 @@ fn routes_of(
             continue;
         };
         // #3752 (D6): a rest binds a path with `/` in it, which one encoded segment can't carry.
-        if bynk_check::http_rest::rest_name(path).is_some() {
+        if let Some(why) = crate::openapi::left_out::left_out_because(path) {
             skipped.push(format!(
-                "`{} {path}` of `{}`: {}",
+                "`{} {path}` of `{}`: {why}",
                 method.as_str(),
                 sel.service.name.name,
-                crate::openapi::REST_LEFT_OUT
             ));
             continue;
         }
