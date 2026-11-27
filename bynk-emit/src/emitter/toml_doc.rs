@@ -30,6 +30,7 @@ use bynk_project::wrangler_keys::WranglerKey;
 /// (including the last — confirmed against every current
 /// `expected/**/wrangler.toml` golden fixture, which all end in a trailing
 /// blank line).
+#[derive(Clone)]
 pub struct TomlDocument {
     header_comment: &'static str,
     root: Vec<TomlEntry>,
@@ -65,6 +66,12 @@ impl TomlDocument {
     /// #1305's own guardrail against a silently-unpatched JS artefact whose
     /// manifest still names the stripped `.ts` entry: this method reports
     /// the miss, it doesn't decide it's fine).
+    /// #3565: keep only the blocks `keep` accepts, in order (an agent move's phase
+    /// variants drop a class's binding and its plain `exports` entry).
+    pub(crate) fn retain_blocks(&mut self, keep: impl FnMut(&TomlBlock) -> bool) {
+        self.blocks.retain(keep);
+    }
+
     #[must_use]
     pub fn set_main(&mut self, value: impl Into<String>) -> bool {
         for entry in &mut self.root {
@@ -81,11 +88,13 @@ impl TomlDocument {
 /// order. Always headed — the document's own root block is
 /// [`TomlDocument`]'s own field, not constructible as a `TomlBlock` (review
 /// of #1304, finding 3).
+#[derive(Clone)]
 pub struct TomlBlock {
     header: TomlHeader,
     entries: Vec<TomlEntry>,
 }
 
+#[derive(Clone)]
 enum TomlHeader {
     Table(&'static str),
     ArrayTable(&'static str),
@@ -126,9 +135,26 @@ impl TomlBlock {
     }
 }
 
+impl TomlBlock {
+    /// #3565: whether this is the `[[path]]` block one of whose entries is `key = value`.
+    pub(crate) fn is_array_entry(&self, path: WranglerKey, key: &str, value: &str) -> bool {
+        matches!(self.header, TomlHeader::ArrayTable(h) if h == path.header())
+            && self
+                .entries
+                .iter()
+                .any(|e| e.key == key && matches!(&e.value, TomlValue::Str(v) if v == value))
+    }
+
+    /// #3565: whether this is the `[parent.key]` block.
+    pub(crate) fn is_keyed(&self, parent: WranglerKey, key: &str) -> bool {
+        matches!(&self.header, TomlHeader::KeyedTable(h, k) if *h == parent.header() && k == key)
+    }
+}
+
 /// One `key = value` line, with an optional trailing `# comment` — TOML's
 /// own comment syntax, not an escape hatch; `wrangler.toml`'s one instance
 /// today is the KV namespace id's `# set at deploy time`.
+#[derive(Clone)]
 pub(crate) struct TomlEntry {
     key: std::borrow::Cow<'static, str>,
     value: TomlValue,
@@ -170,6 +196,7 @@ impl TomlEntry {
 /// `simple = { limit = 100, period = 60 }`). No float and no nesting beyond
 /// one section level: none of those appear in the current output, and
 /// widening this when a real future value needs it is cheap.
+#[derive(Clone)]
 pub(crate) enum TomlValue {
     Str(String),
     Int(i64),

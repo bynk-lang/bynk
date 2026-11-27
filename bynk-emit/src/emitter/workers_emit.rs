@@ -10,6 +10,7 @@ use crate::emit_model::{Document, ImportExt, StagedFile};
 use crate::emit_model::{
     called_cross_context_services, worker_assets_dir, worker_reaches_wasm_module,
 };
+use crate::emitter::workers_moves;
 use bynk_check::checker::ExprId;
 use bynk_check::firstparty;
 use bynk_check::project_model::AdapterBinding;
@@ -412,6 +413,26 @@ impl WorkersEmit<'_> {
                 .collect();
             self.finish_worker(&worker, compiled, staged_assets);
         }
+        // #3565: a dissolved source of an agent move, as the stub its commit phase pushes.
+        for (dir, (script, outgoing)) in &layout.moves().stubs {
+            let file = |name: &str| PathBuf::from(format!("workers/{dir}/{name}"));
+            compiled.push(StagedFile {
+                output_path: file(workers_moves::COMMIT_CONFIG),
+                document: Document::Toml(workers_moves::stub_config(
+                    script,
+                    self.compatibility_flags,
+                    outgoing,
+                )),
+                source_map: None,
+                debug_metadata: None,
+            });
+            compiled.push(StagedFile {
+                output_path: file(workers_moves::STUB_ENTRY),
+                document: Document::Ts(workers_moves::stub_entry(script)),
+                source_map: None,
+                debug_metadata: None,
+            });
+        }
     }
 
     /// One Worker's whole-Worker files, from its members' parts: `wrangler.toml`
@@ -427,59 +448,16 @@ impl WorkersEmit<'_> {
         staged_assets: &mut BTreeMap<PathBuf, Vec<u8>>,
     ) {
         let WorkersEmit {
-            compatibility_flags,
             d1_migrations,
             layout,
-            workers,
             ..
         } = *self;
         let first = members[0].0.context.as_str();
         let bindings = self.bindings.of_worker(&layout.dir(first));
-        let union = |of: fn(&MemberParts) -> &Vec<String>| -> Vec<String> {
-            let mut all: Vec<String> = members.iter().flat_map(|(p, _)| of(p).clone()).collect();
-            all.sort();
-            all.dedup();
-            all
-        };
-        let mut tombstones = emitter::ClassTombstones::default();
-        for (_, table) in members {
-            let one = emitter::ClassTombstones::of(table);
-            tombstones.renamed.extend(one.renamed);
-            tombstones.deleted.extend(one.deleted);
-        }
-        tombstones.renamed.sort();
-        tombstones.deleted.sort();
-        tombstones.deleted.dedup();
-        let mut wrangler_doc = emitter::emit_wrangler_toml(
-            first,
-            layout,
-            bindings,
-            &union(|p| &p.crons),
-            &union(|p| &p.queues),
-            &members
-                .iter()
-                .flat_map(|(p, _)| p.queue_deliveries.iter().cloned())
-                .collect::<Vec<_>>(),
-            &union(|p| &p.addresses),
-            compatibility_flags,
-            workers.workers_dev,
-            &tombstones,
-            d1_migrations,
-        );
+        let wrangler_doc = self.worker_config(members, &[], staged_assets);
         stage_binding_files(bindings, layout, first, d1_migrations, compiled);
-        let tables: Vec<(&str, &UnitTable)> = members
-            .iter()
-            .map(|(parts, table)| (parts.context.as_str(), *table))
-            .collect();
-        // #4127: Workers Logs, with this Worker's group override laid over the project's.
-        wrangler_doc.push_block(emitter::observability_block(
-            layout.observability(first, workers.observability),
-        ));
-        // #4128: the CPU limit and placement, the same way.
-        for block in emitter::tuning_blocks(layout.tuning(first, workers.tuning)) {
-            wrangler_doc.push_block(block);
-        }
-        self.stage_worker_extras(&tables, &mut wrangler_doc, staged_assets);
+        // #3565: an agent move's phase variants of this Worker, beside its own files.
+        self.stage_move_variants(members, compiled, staged_assets, &wrangler_doc);
         // #3477: the Durable Object classes of this Worker's containers.
         if let Some(program) = emitter::emit_containers_ts(bindings) {
             compiled.push(StagedFile {
@@ -532,13 +510,125 @@ impl WorkersEmit<'_> {
                     debug_metadata: None,
                 });
             }
-            let entry = self.group_entry(first, members, bindings);
+            let entry = self.group_entry(first, members, bindings, &[]);
             compiled.push(StagedFile {
                 output_path: layout.worker_file(first, "index.ts"),
                 document: Document::Ts(entry),
                 source_map: None,
                 debug_metadata: None,
             });
+        }
+    }
+
+    /// A Worker's `wrangler.toml`, from its members' parts (their bindings, crons, queues and
+    /// addresses merged, an identical capability one binding), with the Worker's Workers Logs,
+    /// tuning and extras. #3565: the crons, queues and addresses of the members in `without`
+    /// are left out, as an agent move's receive phase leaves them on the source.
+    fn worker_config(
+        &self,
+        members: &[(&MemberParts, &UnitTable)],
+        without: &[&str],
+        staged_assets: &mut BTreeMap<PathBuf, Vec<u8>>,
+    ) -> crate::emitter::toml_doc::TomlDocument {
+        let WorkersEmit {
+            compatibility_flags,
+            d1_migrations,
+            layout,
+            workers,
+            ..
+        } = *self;
+        let first = members[0].0.context.as_str();
+        let bindings = self.bindings.of_worker(&layout.dir(first));
+        let kept = || {
+            members
+                .iter()
+                .filter(|(p, _)| !without.contains(&p.context.as_str()))
+        };
+        let union = |of: fn(&MemberParts) -> &Vec<String>| -> Vec<String> {
+            let mut all: Vec<String> = kept().flat_map(|(p, _)| of(p).clone()).collect();
+            all.sort();
+            all.dedup();
+            all
+        };
+        let mut tombstones = emitter::ClassTombstones::default();
+        for (_, table) in members {
+            let one = emitter::ClassTombstones::of(table);
+            tombstones.renamed.extend(one.renamed);
+            tombstones.deleted.extend(one.deleted);
+        }
+        tombstones.renamed.sort();
+        tombstones.deleted.sort();
+        tombstones.deleted.dedup();
+        let mut wrangler_doc = emitter::emit_wrangler_toml(
+            first,
+            layout,
+            bindings,
+            &union(|p| &p.crons),
+            &union(|p| &p.queues),
+            &kept()
+                .flat_map(|(p, _)| p.queue_deliveries.iter().cloned())
+                .collect::<Vec<_>>(),
+            &union(|p| &p.addresses),
+            compatibility_flags,
+            workers.workers_dev,
+            &tombstones,
+            d1_migrations,
+        );
+        let tables: Vec<(&str, &UnitTable)> = members
+            .iter()
+            .map(|(parts, table)| (parts.context.as_str(), *table))
+            .collect();
+        // #4127: Workers Logs, with this Worker's group override laid over the project's.
+        wrangler_doc.push_block(emitter::observability_block(
+            layout.observability(first, workers.observability),
+        ));
+        // #4128: the CPU limit and placement, the same way.
+        for block in emitter::tuning_blocks(layout.tuning(first, workers.tuning)) {
+            wrangler_doc.push_block(block);
+        }
+        self.stage_worker_extras(&tables, &mut wrangler_doc, staged_assets);
+        wrangler_doc
+    }
+
+    /// #3565: the phase variants of an agent move this Worker takes part in
+    /// (`workers_moves`): the receive config and entry of a receiver, the commit config of a
+    /// source. Nothing for a Worker no move names.
+    fn stage_move_variants(
+        &self,
+        members: &[(&MemberParts, &UnitTable)],
+        compiled: &mut Vec<StagedFile>,
+        staged_assets: &mut BTreeMap<PathBuf, Vec<u8>>,
+        own: &crate::emitter::toml_doc::TomlDocument,
+    ) {
+        let layout = self.layout;
+        let first = members[0].0.context.as_str();
+        let dir = layout.dir(first);
+        let staged = |path: &str, document: Document| StagedFile {
+            output_path: layout.worker_file(first, path),
+            document,
+            source_map: None,
+            debug_metadata: None,
+        };
+        if let Some(incoming) = layout.moves().receive.get(&dir) {
+            let without: Vec<&str> = incoming.iter().map(|i| i.context.as_str()).collect();
+            let mut config = self.worker_config(members, &without, staged_assets);
+            workers_moves::receive_config(&mut config, incoming);
+            compiled.push(staged(
+                workers_moves::RECEIVE_CONFIG,
+                Document::Toml(config),
+            ));
+            let entry = if layout.is_member(first) {
+                let bindings = self.bindings.of_worker(&dir);
+                self.group_entry(first, members, bindings, incoming)
+            } else {
+                workers_moves::standalone_receive_entry(&incoming[0])
+            };
+            compiled.push(staged(workers_moves::RECEIVE_ENTRY, Document::Ts(entry)));
+        }
+        if let Some(outgoing) = layout.moves().commit.get(&dir) {
+            let mut config = own.clone();
+            workers_moves::commit_config(&mut config, outgoing);
+            compiled.push(staged(workers_moves::COMMIT_CONFIG, Document::Toml(config)));
         }
     }
 
@@ -578,10 +668,23 @@ impl WorkersEmit<'_> {
         first: &str,
         members: &[(&MemberParts, &UnitTable)],
         bindings: &[emitter::bindings::WorkerBinding],
+        // #3565: the members an agent move's receive phase forwards to their old script.
+        forwarded: &[workers_moves::Incoming],
     ) -> bynk_ts::TsProgram {
         let layout = self.layout;
+        let is_forwarded = |context: &str| forwarded.iter().any(|i| i.context == context);
+        let forwards: Vec<emitter::GroupForward> = forwarded
+            .iter()
+            .map(|i| emitter::GroupForward {
+                context: i.context.clone(),
+                specifier: layout.own_module_specifier(&i.context, "index.ts"),
+                classes: i.classes.clone(),
+                binding: workers_moves::forward_binding(&i.context),
+            })
+            .collect();
         let facts: Vec<emitter::GroupMember> = members
             .iter()
+            .filter(|(parts, _)| !is_forwarded(&parts.context))
             .map(|(parts, _)| emitter::GroupMember {
                 context: parts.context.clone(),
                 specifier: layout.own_module_specifier(&parts.context, "index.ts"),
@@ -594,6 +697,7 @@ impl WorkersEmit<'_> {
         emitter::emit_group_entry(&emitter::GroupEntry {
             key: &layout.dir(first),
             members: &facts,
+            forwards: &forwards,
             container_classes: &emitter::container_class_names(bindings),
             has_fanout: members.iter().any(|(parts, _)| parts.publishes),
             has_events: members.iter().any(|(parts, _)| parts.has_events),
