@@ -1,0 +1,10 @@
+context svc
+
+// Durable event delivery D2 (#3898), §6 "user code names an event queue": `bynk-dl-` is the
+// compiler's event dead-letter prefix, so a `deadLetter` may not use it.
+service outbox from queue("outbound-email") {
+  delivery { deadLetter: "bynk-dl-outbound" }
+  on message(message: String) -> Effect[QueueResult] by Producer {
+    Ack
+  }
+}

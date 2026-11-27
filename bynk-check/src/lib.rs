@@ -104,6 +104,7 @@ pub mod project_model;
 pub mod queue_consumers;
 pub mod queue_delivery;
 pub mod queue_producers;
+mod queue_reserved;
 pub mod recovery;
 pub mod refinement_consts;
 pub mod regex_groups;

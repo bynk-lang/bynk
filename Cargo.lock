@@ -362,6 +362,7 @@ dependencies = [
  "schemars",
  "semver",
  "serde",
+ "sha2",
  "toml",
 ]
 
