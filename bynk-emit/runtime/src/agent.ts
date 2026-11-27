@@ -215,11 +215,26 @@ export function encodeAgentResult(wire: AgentWire, method: string, result: unkno
 // strip covers `env` at any depth, not only the top. The runtime cannot tell a
 // provider from plain data, so one replacer drops every `env` key. Every agent
 // call (handler, service, ws lifecycle body) funnels through here.
-// #3939 (D2 B): `__apiKey` holds the `ApiKey` actors' peppers, which never enter an
-// agent, so it is dropped the same way.
-function stripRebuiltDeps(deps: unknown): unknown {
+//
+// #4554: the strip is an allowlist for compose-private entries. Compose puts its
+// own bookkeeping in `deps` under `__`-prefixed keys: `__session` (the signing keys
+// of a context's `SignedCookie` actors), `__exec`, `__eventsDispatch`, and whatever
+// a later feature adds (the API-key pepper's `__apiKey`). A Durable Object rebuilds
+// every one it needs from its own `env`, and never reads the caller's copy, so
+// none of them may ride the request body, where a tail worker or request log can
+// read key material. Every `__`-prefixed key is dropped at any depth unless it is
+// named in `WIRE_SAFE_DEPS_KEYS`, so a new compose-private entry is private by
+// default, and nothing has to be added here to keep a secret off the wire. A key
+// that must cross is added to the list, on purpose, in review.
+export const WIRE_SAFE_DEPS_KEYS: ReadonlySet<string> = new Set<string>();
+
+export function stripRebuiltDeps(deps: unknown): unknown {
   if (typeof deps !== "object" || deps === null) return deps;
-  return JSON.parse(JSON.stringify(deps, (k, v: unknown) => (k === "env" || k === "__apiKey" ? undefined : v)));
+  return JSON.parse(
+    JSON.stringify(deps, (k, v: unknown) =>
+      k === "env" || (k.startsWith("__") && !WIRE_SAFE_DEPS_KEYS.has(k)) ? undefined : v,
+    ),
+  );
 }
 
 export async function callDurableObjectMethod(
