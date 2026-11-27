@@ -1,0 +1,19 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+// #3752 (D11): an `InboundRequest` lives for its request, so a type that holds
+// one is never sent: here, as a service's input.
+type Held = { request: InboundRequest }
+
+service keep {
+  on call(held: Held) -> Effect[Int] by Caller {
+    Effect.pure(1)
+  }
+}
+
+service proxy from http {
+  on ANY("/blog/*path") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor {
+    Respond(NotFound)
+  }
+}

@@ -2638,6 +2638,11 @@ agent Cart {
         example: "@cache(maxAge: 5.minutes)   // ✗ a `POST` changes something\non POST(\"/refresh\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ a read\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.cache_on_pass_through",
+        blurb: "`@cache` sets a response's freshness, `Cache-Control`, for a route whose answer the service makes. A pass-through route's forwarded answer is the upstream's, and the upstream's own `Cache-Control` is its freshness, so `@cache` is refused on an `on ANY` route. Set the header at the upstream. A `Respond(…)` answer is shaped by the router as on any route.",
+        example: "@cache(maxAge: 5.minutes)   // ✗\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }\n\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✓ the upstream sets `Cache-Control`",
+    },
+    Explain {
         code: "bynk.http.cache_public_authenticated",
         blurb: "A route guarded by an actor that carries a credential (`Bearer`, `Oidc`, `SignedCookie` or `Signature`, or a sum with one) answers for whoever authenticated, and `scope: public` lets a shared cache, such as a CDN or a corporate proxy, store that response and serve it to anyone who asks for the URL. So it is refused, as `bynk.http.cache_public_reads_cookies` refuses it for a handler that reads `cookies`. Such a route sends `Cache-Control: private` by default; use `scope: private`, or move a response that is really the same for everyone to a `Visitor` route.",
         example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)    // ✗ one member's answer, stored for everyone\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
@@ -2763,6 +2768,11 @@ agent Cart {
         example: "cors { origins: [\"https://app.example.com\"], credentials: true, expose: [\"*\"] }                 // ✗ credentials need named headers\n\ncors { origins: [\"https://app.example.com\"], credentials: true, expose: [\"x-request-id\"] }   // ✓",
     },
     Explain {
+        code: "bynk.http.cors_with_pass_through",
+        blurb: "A forwarded response carries the upstream's own `Access-Control-*` headers, and the router passes a preflight to the upstream, so a service's own `cors { }` policy would put two policies on one answer, and both can't be right. A service that declares an `on ANY` pass-through route therefore may not declare `cors { }`. Put the proxy in its own `from http` service, and keep `cors` on the service whose routes the service answers itself.",
+        example: "service proxy from http {\n    cors { origins: [\"https://app.example.com\"] }   // ✗\n    on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }\n}\n\nservice proxy from http {\n    on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✓\n}",
+    },
+    Explain {
         code: "bynk.http.duplicate_rejected",
         blurb: "`on rejected` renders every refusal the router makes for a service's routes, so a service has one and it must handle every case: a second would leave the router choosing between them. Merge the two into one that matches on `why`. Its required shape is `bynk.http.rejected_signature`.",
         example: "on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] { … }\non rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] { … }   // ✗ already declared above\n\non rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {\n    match why {\n        MethodNotAllowed => RawError(MethodNotAllowed, Bytes.empty(), \"text/plain\")   // ✓ one hook, all cases\n        _ => RawError(BadRequest, Bytes.empty(), \"text/plain\")\n    }\n}",
@@ -2864,6 +2874,11 @@ agent Cart {
         example: "on GET(\"/whoami\") (headers: String) -> Effect[HttpResult[String]] by v: Visitor { … }           // ✗\n\non GET(\"/whoami\") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
+        code: "bynk.http.inbound_request_not_pass_through",
+        blurb: "An `InboundRequest` is the request a pass-through route forwards with `Upstream.forward`, and only an `on ANY` route receives one, as its `request` parameter. An ordinary route reads its request through `headers`, `query`, `cookies` and `body`, so an `InboundRequest` parameter there is refused, and so is one on an `ANY` route under another name. Use the ordinary parameters, or make the route a pass-through route.",
+        example: "on GET(\"/x\") (request: InboundRequest) -> Effect[HttpResult[String]] by Visitor { … }   // ✗\n\non ANY(\"/x/*rest\") (rest: String, request: InboundRequest) -> Effect[PassThrough] by Visitor { … }   // ✓",
+    },
+    Explain {
         code: "bynk.http.invalid_path",
         blurb: "The router matches a route against the request's path, which always begins with `/`, so a route that does not is refused rather than guessed at. A `:` segment must also carry a name, since the name is what binds the value to a handler parameter. Start the route with `/` and name each parameter, as in `\"/items/:id\"`. A route under a reserved prefix is `bynk.http.reserved_prefix`.",
         example: "on GET(\"items\") () -> Effect[HttpResult[String]] by v: Visitor { … }    // ✗ no leading `/`\n\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
@@ -2952,6 +2967,16 @@ agent Cart {
         code: "bynk.http.limits_unknown_field",
         blurb: "A `limits { }` section sets the request-body ceilings of a service. Its fields are `maxBody` and, for `@multipart` routes, `maxFile` and `maxParts`; on a `from websocket` service the one field is `maxFrame`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the routes with a ceiling you did not set. Rename it or remove it. A field with a bad value is `bynk.http.limits_invalid_field`; the per-route form is `bynk.http.limit_unknown_arg`.",
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: 1_000_000, maxSize: 10 }    // ✗ not a field of `limits`\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }                 // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.http.pass_through_not_emitted",
+        blurb: "An `on ANY` pass-through route type-checks, but its router (the suspended `ETag`, `HEAD`, `OPTIONS` and CORS behaviour) and the `Upstream` exchange arrive in the next increment. Until then a build that would emit one is refused, rather than built without its routes, which would answer `404` where the program says it forwards. `bynk check` accepts the route meanwhile.",
+        example: "on ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗ for `bynk build` and `bynk test`, until the router lands\n\non GET(\"/blog/*path\") (path: String) -> Effect[HttpResult[String]] by Visitor { … }   // ✓ until then, an ordinary route builds",
+    },
+    Explain {
+        code: "bynk.http.pass_through_signature",
+        blurb: "`on ANY(…)` declares a pass-through route: it receives every method the platform delivers, `HEAD` and `OPTIONS` included, and answers `Effect[PassThrough]`, either `Forward(response)` with an upstream's answer or `Respond(result)` with an `HttpResult[()]`. It takes its path parameters, a rest, `request: InboundRequest` and `cf`; the body belongs to the upstream, so `body`, `@raw`, `@form` and `@multipart` are refused, and the headers, query and cookies are read through `request`. Only an `ANY` route returns `Effect[PassThrough]`. `PassThrough` and `InboundRequest` are `bynk`'s (`consumes bynk { PassThrough, InboundRequest }`).",
+        example: "on ANY(\"/blog/*path\") (path: String) -> Effect[HttpResult[String]] by Visitor { … }   // ✗\n\non ANY(\"/blog/*path\") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor { … }   // ✓",
     },
     Explain {
         code: "bynk.http.path_param_not_stringy",
@@ -6423,6 +6448,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "fn sign(n: Int) -> String {\n    if n > 0 { \"positive\" }    // ✗ no `else`, so the value would be `()`\n}\n\nfn sign(n: Int) -> String {\n    if n > 0 { \"positive\" } else { \"not positive\" }    // ✓\n}",
     },
     Explain {
+        code: "bynk.types.inbound_request_at_boundary",
+        blurb: "An `InboundRequest` is the request a pass-through route is answering, and a `Forwarded` an upstream's answer streaming through it. Each lives for that request: a record or sum may hold one, but no value holding one is stored, sent, encoded or returned across a boundary, and it has no codec. Read what you need from it (`request.method()`, `request.headers().get(…)`, `response.status()`) and store or send that. `Upstream.forward`, which takes one and returns the other, is where they belong.",
+        example: "type Held = { request: InboundRequest }\nservice keep { on call(h: Held) -> Effect[Int] by Caller { … } }   // ✗\n\ntype Seen = { method: String }\nservice keep { on call(s: Seen) -> Effect[Int] by Caller { … } }   // ✓",
+    },
+    Explain {
         code: "bynk.types.interpolation_non_scalar",
         blurb: "A `\\(…)` hole in a string takes a `String`, `Int`, `Float`, `Bool`, \
                 `Decimal`, `Instant`, `Duration`, or a refined type over one of them, and \
@@ -9266,6 +9296,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.cache_on_non_get",
         "A `@cache` annotation is placed on a handler that is not `on http GET` (`@cache(noStore: true)` is also legal on any other HTTP route).",
     ),
+    dg(
+        "bynk.http.cache_on_pass_through",
+        "An `on ANY` pass-through route carries `@cache`; the upstream's `Cache-Control` is its answer's freshness.",
+        &["http_handler"],
+    ),
     d(
         "bynk.http.cache_public_authenticated",
         "A `@cache(scope: public)` route is guarded by an actor that carries a credential, so a shared cache could replay one caller's response to another.",
@@ -9388,6 +9423,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `cors` policy combines `credentials: true` with `expose: [\"*\"]`.",
     ),
     dg(
+        "bynk.http.cors_with_pass_through",
+        "A service that declares an `on ANY` pass-through route also declares `cors { }`.",
+        &["http_handler"],
+    ),
+    dg(
         "bynk.http.duplicate_rejected",
         "A `from http` service declares `on rejected` more than once.",
         &["rejected_handler"],
@@ -9483,6 +9523,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["http_handler"],
     ),
     dg(
+        "bynk.http.inbound_request_not_pass_through",
+        "An `InboundRequest` parameter on a route that is not `on ANY`, or not named `request`.",
+        &["http_handler"],
+    ),
+    dg(
         "bynk.http.invalid_path",
         "An HTTP route path is malformed.",
         &["http_handler"],
@@ -9559,6 +9604,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.multipart_large_cap",
         "A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning).",
     )),
+    dg(
+        "bynk.http.pass_through_not_emitted",
+        "A build reaches an `on ANY` pass-through route, which this release checks but does not yet build.",
+        &["http_handler"],
+    ),
+    dg(
+        "bynk.http.pass_through_signature",
+        "An `on ANY` route does not return `Effect[PassThrough]` or takes a parameter it may not, or another route returns `Effect[PassThrough]`.",
+        &["http_handler"],
+    ),
     dg(
         "bynk.http.path_param_not_stringy",
         "A path parameter's type is not one a single path segment can carry.",
@@ -11763,6 +11818,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.if_without_else_requires_unit",
         "An `if` with no `else` branch has a non-unit then-branch; the missing else defaults to `()`, so the branch must be `()` or `Effect[()]`.",
         &["if_expr"],
+    ),
+    dg(
+        "bynk.types.inbound_request_at_boundary",
+        "An `InboundRequest` or `Forwarded`, or a type holding one, where a value is stored, sent or returned across a boundary.",
+        &["http_handler"],
     ),
     d(
         "bynk.types.interpolation_non_scalar",

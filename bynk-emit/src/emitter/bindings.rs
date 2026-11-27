@@ -135,6 +135,8 @@ fn context_bindings(
         // L7 (#2414): Workers Cache is a Worker-wide `[cache]` setting, not an
         // `env` binding.
         .filter(|(_, d)| !d.is_edge_cache())
+        // #3752: an `Upstream` reaches its origin with `fetch`, so it has no binding.
+        .filter(|(_, d)| !(d.base_unit == firstparty::BYNK_UNIT && d.base_cap == "Upstream"))
         .map(|(cap, d)| (cap, instance_binding(cap, d, unit.signed_queues.get(cap))))
         .collect();
     instances.sort_by(|a, b| a.0.cmp(b.0));

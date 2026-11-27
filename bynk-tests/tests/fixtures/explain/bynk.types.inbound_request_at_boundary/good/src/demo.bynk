@@ -1,0 +1,7 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+type Seen = { method: String }
+
+service keep { on call(s: Seen) -> Effect[Int] by Caller { Effect.pure(1) } }

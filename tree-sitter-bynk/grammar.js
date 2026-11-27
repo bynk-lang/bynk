@@ -1400,7 +1400,8 @@ module.exports = grammar({
         optional(field("given", $.given_clause)),
         field("body", $.block),
       ),
-    http_method: () => choice("GET", "POST", "PUT", "PATCH", "DELETE"),
+    // #3752 (D7): `ANY` declares a pass-through route.
+    http_method: () => choice("GET", "POST", "PUT", "PATCH", "DELETE", "ANY"),
     // v0.44: `on schedule("<expr>") (at: Int?) -> Effect[Result[(), E]] { … }`.
     cron_handler: ($) =>
       seq(

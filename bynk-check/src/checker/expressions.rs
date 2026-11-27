@@ -2187,7 +2187,14 @@ pub(crate) fn variant_owner<'a, D: AsRef<TypeDecl>>(
     if let [only] = owners {
         return Some(only);
     }
-    let exp = expected?;
+    let mut exp = expected?;
+    // #3752 (§12): a body returning `Effect[T]` is checked against it, and a
+    // variant is never itself an `Effect`, so the sum it names is `T`'s. Without
+    // this, `bynk`'s `PassThrough.Forward` would make an email handler's bare
+    // `Forward` ambiguous beside `EmailVerdict.Forward`.
+    if let Ty::Effect(inner) = &*tys.get(exp) {
+        exp = *inner;
+    }
     let Ty::Named { name, .. } = &*tys.get(exp) else {
         return None;
     };

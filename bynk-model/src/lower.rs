@@ -1016,6 +1016,7 @@ fn lower_http_method_ir(m: HttpMethod) -> IrHttpMethod {
         HttpMethod::Put => IrHttpMethod::Put,
         HttpMethod::Patch => IrHttpMethod::Patch,
         HttpMethod::Delete => IrHttpMethod::Delete,
+        HttpMethod::Any => IrHttpMethod::Any,
     }
 }
 

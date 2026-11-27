@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+// #3752 (D7): only an `ANY` route returns `Effect[PassThrough]`.
+service proxy from http {
+  on GET("/blog/*path") (path: String) -> Effect[PassThrough] by Visitor {
+    Respond(NotFound)
+  }
+}
