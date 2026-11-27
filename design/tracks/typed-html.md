@@ -399,18 +399,22 @@ A unit opts in with `uses bynk.html`. No user name becomes reserved.
 | `h.toString()` | `String` | markup out, for tests and other bodies |
 | `escapeText`, `escapeAttr` | `String -> String` | ADR 0993, unchanged and still bare |
 
-`Html` is not data at a boundary. It may be a record field (a fields record
-needs it), but a type containing it is refused by the codec, as a request
-parameter, by `Json.decode` and in agent `store` fields
-(`bynk.html.at_boundary`). Markup from outside enters only through
-`Html.unsafe`. To send markup as JSON, send `h.toString()`.
+`Html` and `Href` are not data at a boundary. Either may be a record field (a
+fields record needs them), but a type containing either is refused by the
+codec, as a request parameter, by `Json.decode` and in agent `store` fields
+(`bynk.html.at_boundary`). For `Href` this matters most: a decoded `Href`
+would skip `Href.of`, and a `javascript:` URL would reach C5 unchecked. So
+markup from outside enters only through `Html.unsafe`, and a URL from outside
+only through `Href.of`. To send either as JSON, send its `toString()`; to
+store a URL, store the `String` and call `Href.of` on read.
 
 ### 5.2 Contexts, one by one
 
 The compiler tokenises a template or fragment as a browser does, and records
 the tokeniser state at each placeholder. That state, plus the element and
 attribute names around it, is the context. Every context has exactly one
-treatment and one fixture that pins it (slice named):
+treatment and one fixture that pins it (slice named). A state the table does
+not name is refused (`bynk.template.unsupported_markup`):
 
 | # | Context | Accepts | Output | Fixture (slice) |
 |---|---|---|---|---|
@@ -420,17 +424,23 @@ treatment and one fixture that pins it (slice named):
 | C4 | Unquoted attribute value | nothing | refused: `bynk.template.unquoted_attribute`, fix adds quotes | `<img alt=\(a)>` (1) |
 | C5 | Quoted URL attribute, whole value | `Href` | `escapeAttr` of the checked string | `href="\(h)"` with a `String` field is refused; with `Href.of("javascript:x")`, `None` (2) |
 | C6 | Quoted URL attribute, after a safe literal prefix (§5.4) | a scalar | `percentEncode()`, then `escapeAttr` | `/orders/\(id)` with `id = "a/../b?x#y"` renders `/orders/a%2F..%2Fb%3Fx%23y`; `https://\(x)` refused (2) |
-| C7 | Code-loading attribute | an `Asset` (a name in scope in a template; an `Asset` expression in a fragment) | its `.url`, filled at compile time in a template | `<script src="\(app)">` with an asset compiles to its hashed path; with a field, refused (2) |
+| C7 | Code-loading attribute, whole value only | an `Asset` (a name in scope in a template; an `Asset` expression in a fragment) | its `.url`, filled at compile time in a template | `<script src="\(app)">` with an asset compiles to its hashed path; with a field, refused; `<script src="/static/\(name).js">` and `<link rel="stylesheet" href="/css/\(x)">` refused (2) |
 | C8 | `<script>` body (any type but JSON data) | nothing | refused: `bynk.template.placeholder_in_script` | (1) |
-| C9 | `<script type="application/json">` or `application/ld+json`, whole body | a value of a `Codable` type | JSON, with `<`, `>`, `&`, U+2028 and U+2029 as `<`, `>`, `&`, ` `, ` ` | a string field of `</script><script>x` stays one JSON string; a `Secret` is refused (not `Codable`) (7) |
+| C9 | `<script type="application/json">` or `application/ld+json`, whole body | a value of a `Codable` type | JSON, with `<`, `>`, `&`, U+2028 and U+2029 as `\u003c`, `\u003e`, `\u0026`, `\u2028`, `\u2029` | a string field of `</script><script>x` stays one JSON string; a `Secret` is refused (not `Codable`) (7) |
 | C10 | `<style>` body, `style` attribute | nothing | refused: `bynk.template.placeholder_in_style` | (1) |
 | C11 | `on*` attribute, `srcdoc`, `<meta content>` beside `http-equiv` | nothing | refused: `bynk.template.placeholder_in_code_attribute` | (1) |
 | C12 | `srcset`, `imagesrcset` | nothing in this track | refused: `bynk.template.srcset` | (2) |
 | C13 | Tag name, attribute name, comment, doctype, CDATA, inside `<svg>`/`<math>` | nothing | refused: `bynk.template.placeholder_position` | (1) |
+| C14 | Other raw text and `<noscript>`: inside `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>`, `<plaintext>` or `<noscript>` | nothing | refused: `bynk.template.placeholder_in_raw_text` | a placeholder in each of the six; a fragment that leaves `<noscript>` open (1) |
 
 So script and style take no placeholder at all, with one exception that needs
 an explicit typed value: a JSON data block (C9) whose whole body is one
 `Codable` value, which is data, not code, and is not executed.
+
+A placeholder in a code-loading attribute that is not the whole value is
+refused (`bynk.template.code_loading_not_asset`): C6 never applies there,
+because a value after a safe prefix could still pick any script on the origin,
+such as a JSONP endpoint or an upload.
 
 **URL attributes** (C5, C6): `href`, `src`, `action`, `formaction`, `poster`,
 `cite`, `ping`, `background`, `longdesc`, `manifest`, `codebase`, `data` (except
@@ -443,9 +453,13 @@ takes one `Href` (a space-separated list is not built).
 **Code-loading attributes** (C7): `<script src>`, `<link href>` unless `rel` is
 literally a navigational value (`canonical`, `alternate`, `icon`, `prev`,
 `next`, `author`, `license`), `<object data>`, `<embed src>`,
-`<iframe src>` when it has no `sandbox` attribute, and SVG's `<script href>` and
+`<iframe src>` unless its `sandbox` attribute is a literal (no placeholder)
+that does not grant both `allow-scripts` and `allow-same-origin`, and SVG's `<script href>` and
 `<script xlink:href>`. They decide what code a page runs, so only code the
-service ships may fill them. `<base href>` takes no placeholder at all: it
+service ships may fill them. `sandbox` follows the same rule as `rel`: it
+must be *literally* safe, because `allow-scripts allow-same-origin` gives no
+isolation at all, so a placeholder in `sandbox` is refused
+(`bynk.template.placeholder_in_code_attribute`). `<base href>` takes no placeholder at all: it
 would re-root every relative URL on the page, and no asset is a base.
 
 The SVG entries cannot be reached while placeholders inside `<svg>` are
@@ -486,6 +500,14 @@ would pass a rule about tokeniser state alone. So:
 An `Html` value can therefore never end inside foreign content, and composition
 cannot place one there. Static inline icons (`<svg>…</svg>` with no
 placeholders) keep working. A template file follows the same rules.
+
+`<noscript>` is RAWTEXT when scripting is on and ordinary markup when it is
+off, so its context depends on the browser, not the file. It is treated like
+foreign content: a placeholder anywhere inside it is refused (C14), and a
+template or fragment must close every `<noscript>` it opens. The tokeniser and
+the `html5ever` differential both run with scripting on, the state every
+browser serving these pages is in. `<plaintext>` never ends, so a placeholder
+after it is refused as C14, and an `html"…"` fragment may not contain one.
 
 ### 5.4 `Href` and URL safety
 
@@ -778,6 +800,12 @@ base-uri 'none'`, where `<hashes>` is the union of the SHA-256 hashes of every
 static inline script and style in the templates and fragments the service's
 units compile, and `frame-ancestors` is appended per ADR 0954 D.
 
+- **Normalisation.** A browser hashes a script after HTML input-stream
+  preprocessing, which turns CRLF and a lone CR into LF. So template and
+  fragment text is normalised the same way when it is read, before it is
+  tokenised, emitted or hashed. A template checked out with CRLF emits LF
+  and hashes what the browser will hash.
+
 - **Precedence.** `csp: computed` and `csp: "…"` are one field, so a service has
   one or the other, never a merge. An explicit string always wins because it
   is the only policy there is.
@@ -788,8 +816,10 @@ units compile, and `frame-ancestors` is appended per ADR 0954 D.
   `pass-through-http.md` holds unchanged, and a computed policy can never
   overwrite an upstream's own.
 - **What it blocks.** Anything inserted with `Html.unsafe`, and every static
-  `on*` handler unless the author adds `'unsafe-hashes'` by writing the policy
-  by hand. That is the right failure for a security header, but it would
+  `on*` handler and every static inline `style="…"` attribute (through the
+  `style-src-attr` fallback) unless the author adds `'unsafe-hashes'` by
+  writing the policy by hand. Inline `style` attributes are far more common
+  than handlers, so the listing and the docs name both. That is the right failure for a security header, but it would
   surprise people, so it is never the default, and the `--unsafe-html` listing
   names the call sites it will block.
 - **Rejected:** per-response policies, which need to track which fragments
@@ -815,7 +845,7 @@ test-only library without changing `Html`.
 
 ### 11.2 Tests for the guarantee
 
-- **Per context.** Each of C1–C13 has the positive or negative fixture named in
+- **Per context.** Each of C1–C14 has the positive or negative fixture named in
   §5.2, plus a negative fixture for every code in §16.1.
 - **Tokeniser conformance.** The `html5lib-tests` tokeniser corpus, run in the
   checker's tests over every state the model implements, with a test that
@@ -832,7 +862,8 @@ test-only library without changing `Html`.
 - **Escaper properties,** in `bynk.html`'s own suite, as Bynk `property` tests
   over generated `String`s: `escapeText(s)` contains no `<` or `>`, and every `&`
   in it starts one of the escapes it writes; `escapeAttr(s)` also contains no
-  `"`, `'` or backtick; decoding the five references gives `s` back.
+  `"`, `'` or backtick; decoding the references each one writes (three for `escapeText`, six for
+  `escapeAttr`) gives `s` back.
 - **`Href` properties.** For every generated string, `Href.of(s)` is `Some` only
   if the WHATWG URL parser (the `url` crate, dev-only, run on the same corpus
   in the Rust tests) reads either no scheme or one of the four; every string
@@ -901,6 +932,8 @@ test-only library without changing `Html`.
 | Partial URL | `//evil.example`, `/\evil.example`, a host chosen by the value | safe prefix required, with a fixed host when absolute; value percent-encoded (`.` and `..` segments are a known limit) |
 | Code-loading attribute | a script from the attacker's origin | `Asset` only |
 | `<base href>` | re-rooting every relative URL | no placeholder |
+| `<iframe sandbox>` | a value granting `allow-scripts allow-same-origin` | `sandbox` must be literal and not grant both, or `src` is code-loading |
+| `<noscript>`, other raw text | a context that differs by browser setting | refused; differential runs with scripting on |
 | `<script>`, `on*` | code injection | refused |
 | `<style>`, `style` | CSS injection, exfiltration | refused |
 | JSON data block | `</script>` in a string | `<`, `>`, `&`, U+2028, U+2029 escaped as `\u` sequences |
@@ -935,13 +968,14 @@ changes meaning:
 - **`template name: F = "path"`** is a parse error today: no item starts with
   an identifier. `template` becomes a contextual keyword at item position only;
   `template` as a binding, field or function name elsewhere keeps working.
-  This is the one grammar touch, and it is flagged here for the 1.0 grammar
+  This is one of two grammar touches, both flagged here for the 1.0 grammar
   freeze.
 - **`html"…"` and `html"""`** lex today as the identifier `html` directly
   followed by a string, which is a parse error in every position (Bynk has no
   juxtaposition). So the prefix changes only programs that do not compile. An
   identifier `html` followed by a space and a string is unchanged, and
-  `"""html` keeps its ADR 0739 meaning.
+  `"""html` keeps its ADR 0739 meaning. This is the second grammar touch, a
+  lexical one (`lexical-grammar.md`).
 - **`Html`, `Href` and `Template[F]`** are new names in `bynk.html`, reached
   only with `uses bynk.html`. They are not built-ins, so no user `type Html` or
   `type Href` is broken. A unit that already `uses bynk.html` and declares its
@@ -959,9 +993,14 @@ changes meaning:
 
 **Every new form enters as experimental.** One gate, `bynk.html.typed`, is
 added to `BUILTIN_EXPERIMENTAL`, and `BUILTIN_GATED` maps `bynk.html.Html`,
-`bynk.html.Href`, `bynk.html.Template`, `template`, `html"…"`, `Page`,
-`PageError` and `csp: computed` to it, as the API keys track did for its types.
-None joins the frozen surface until promoted. Because the change is additive
+`bynk.html.Href`, `bynk.html.Template` and the synthetic paths below to it, as the API keys track did for its types.
+`StabilityPolicy::blocks` works on dotted item paths, and `template`,
+`html"…"`, `Page`, `PageError` and `csp: computed` are syntax or variants,
+not items of `bynk.html`. So slice 1 (and slices 4 and 8 for theirs) adds a
+`policy.check` at each syntax site under a synthetic path
+(`bynk.html.typed.template`, `bynk.html.typed.literal`, `bynk.html.typed.page`,
+`bynk.html.typed.computedCsp`), as `check_rest` does for rest segments, so the
+gate holds in the build and the editor alike. None joins the frozen surface until promoted. Because the change is additive
 and experimental, it does not have to land before 1.0, and the slices can run
 either side of it.
 
@@ -975,14 +1014,14 @@ otherwise it waits for the next breaking window.
 | # | Slice | Depends on | Done when |
 |---|---|---|---|
 | 0 | Settle this doc; land D1–D5 (§16) | — | D1–D5 have merged with numbers, the spine's checklist links them, and this doc's status reads Settled. |
-| 1 | `Html` in `bynk.html`; the `template` declaration and `fill`; placeholder recognition (§6); the tokeniser and contexts C1–C4, C8, C10, C11, C13; every refusal, foreign-content balance (§5.3), the secret refusal (§5.5); `Html` refused at a boundary; the editor reads template text; the gate | 0 | A template with C1, C2 and C3 placeholders fills and renders at unit and workerd tiers with the escapes of §5.2; each of C1–C4, C8, C10, C11 and C13 has its fixture; every slice-1 code in §16.1 has a negative fixture, including `\(` that is not a placeholder, `&#92;(name)` and the three-fragment `<svg>` case; a `Secret` field is `bynk.template.secret_placeholder`; the `html5lib-tests` conformance test, the `proptest` differential and the fuzz target run in CI; the editor shows a template error at the template line; every new form needs `[unstable] allow`; the corpus survey for `Html` clashes is recorded in the PR. |
-| 2 | `Href` and its constructors; URL and code-loading attributes (C5–C7, C12); partial URLs; `<base>` | 1 | Each of C5, C6, C7 and C12 has its fixture; the `Href` property tests and the bypass corpus of §11.2 pass; `/orders/\(id)` percent-encodes; `https://\(x)`, `//x` and `/\x` prefixes are refused; `<script src>` takes only an asset; `<link rel="canonical" href>` takes an `Href`. |
+| 1 | `Html` in `bynk.html`; the `template` declaration and `fill`; placeholder recognition (§6); the tokeniser and contexts C1–C4, C8, C10, C11, C13, C14; every refusal, foreign-content balance (§5.3), the secret refusal (§5.5); `Html` refused at a boundary; the editor reads template text; the gate | 0 | A template with C1, C2 and C3 placeholders fills and renders at unit and workerd tiers with the escapes of §5.2; each of C1–C4, C8, C10, C11, C13 and C14 has its fixture; every slice-1 code in §16.1 has a negative fixture, including `\(` that is not a placeholder, `&#92;(name)` and the three-fragment `<svg>` case; a `Secret` field is `bynk.template.secret_placeholder`; the `html5lib-tests` conformance test, the `proptest` differential and the fuzz target run in CI; the editor shows a template error at the template line; every new form needs `[unstable] allow`; the corpus survey for `Html` clashes is recorded in the PR. |
+| 2 | `Href` and its constructors; URL and code-loading attributes (C5–C7, C12); partial URLs; `<base>` | 1 | Each of C5, C6, C7 and C12 has its fixture; the `Href` property tests and the bypass corpus of §11.2 pass; `/orders/\(id)` percent-encodes; `https://\(x)`, `//x` and `/\x` prefixes are refused; `<script src>` takes only an asset; `<link rel="canonical" href>` takes an `Href`; a partial placeholder in `<script src>` is `code_loading_not_asset`; `<iframe sandbox="\(s)">` and `sandbox="allow-scripts allow-same-origin"` make `src` code-loading; decoding a record with an `Href` field (`Json.decode`, a request parameter, a `store` field) is `bynk.html.at_boundary`. |
 | 3 | `html"…"` and `html"""…"""` literals; `Html.join`, `empty`, `text`, `unsafe`, `toString`; the fragment rule; `bynk check --unsafe-html` | 1 | The §4.2 examples compile and render; a fragment ending inside a tag is `bynk.template.fragment_unclosed_state`; `Html.unsafe` with a non-literal reason is refused and with a literal markup gets the hint; the listing prints a dependency's call site under its package; the escaper property tests are in `bynk.html`'s suite. |
 | 4 | `Page` and `PageError`, with ADR 0954's defaults; composition with `PassThrough` once it exists | 1, and #3752's `PassThrough` for the composition fixture | `Page(h)` answers 200 with `text/html; charset=utf-8`, `frame-ancestors 'none'` and a weak `ETag`; `PageError(NotFound, h)` answers 404; a user `Page` variant still compiles; once #3752 lands, `Respond(Page(h))` compiles on an `ANY` route and no expression turns a `Forwarded` into `Html` (a negative fixture). |
 | 5 | Tooling: tree-sitter, formatter, vscode-bynk, the site grammar and `site-theme`, the language server (§12) | 1; 2 and 3 for the complete set | tree-sitter and the formatter accept every form in §4 and leave `html"…"` markup unchanged; vscode-bynk highlights `html"…"`, `template` and placeholders in a template file; the site grammar copy is updated and `site-theme` released with the placeholder colour; hover, completion, go to definition, rename and the quick fixes of §12 work in a template file and a fragment, each with an IDE test. |
 | 6 | The book | 2, 3, 4, 5 | The serve-a-page guide uses `template`, `Href`, `Page` and no hand-written escaping or "leftover `{{`" test; the docs delta (§18) is applied. |
 | 7 | JSON data blocks (C9) | 3 | C9's fixture passes, including a `</script>` string and U+2028; a non-`Codable` value is refused. |
-| 8 | Opt-in hash-based CSP, `security { csp: computed }` (§10) | 4 | A service with `csp: computed` sends the hashes of its static inline scripts and styles and `frame-ancestors`; `csp: "…"` beside it is impossible by construction; a `Forward` response is never given the computed policy (a fixture once #3752 lands). |
+| 8 | Opt-in hash-based CSP, `security { csp: computed }` (§10) | 3, 4 | A service with `csp: computed` sends the hashes of its static inline scripts and styles and `frame-ancestors`; a template checked out with CRLF line endings produces the same hashes as with LF, and its scripts run; a page with a static `style="…"` attribute is reported by the listing; `csp: "…"` beside it is impossible by construction; a `Forward` response is never given the computed policy (a fixture once #3752 lands). |
 
 Slices 7 and 8 are not needed for the end state and may be cut.
 
@@ -993,7 +1032,7 @@ Slices 7 and 8 are not needed for the end state and may be cut.
   (automatic) and `Html.unsafe` (explicit). `Html` does not cross a boundary,
   and `Forwarded` never becomes `Html`. This revises ADR 0143's "Bynk does not
   template HTML" for HTML responses, and the matching `http.md` passages.
-- **D2. The context model.** The contexts C1–C13 of §5.2, what each accepts,
+- **D2. The context model.** The contexts C1–C14 of §5.2, what each accepts,
   and that anything else is refused at compile time; secret kinds refused in
   every context. Includes the tokeniser decision (hand-written, WHATWG states,
   corpus, differential and fuzz tests) and the fragment and foreign-content
@@ -1005,7 +1044,8 @@ Slices 7 and 8 are not needed for the end state and may be cut.
   honouring ADR 0608 F; `\(name)` placeholders recognised as in §6; a declared
   nominal fields record; asset names only in code-loading attributes. `embed`
   stays verbatim.
-- **D5. `Href`.** An opaque type in `bynk.html`; `Href.of`'s scheme rule
+- **D5. `Href`.** An opaque type in `bynk.html`, not `Codable` and refused at
+  every boundary, so `Href.of` is its only door from outside; `Href.of`'s scheme rule
   (`http`, `https`, `mailto`, `tel`; no control characters, spaces or
   backslashes; no `//` prefix); no decoding; the partial-URL rule.
 
@@ -1030,6 +1070,7 @@ registers it with its explainer, and may rename it, saying so in its ADR.
 | `bynk.template.placeholder_in_style` | a placeholder in `<style>` or a `style` attribute | 1 |
 | `bynk.template.placeholder_in_code_attribute` | a placeholder in `on*`, `srcdoc` or `<meta http-equiv>`'s `content` | 1 |
 | `bynk.template.placeholder_position` | a placeholder in a tag or attribute name, a comment, a doctype, CDATA, `<base href>` or foreign content | 1, 2 |
+| `bynk.template.placeholder_in_raw_text` | a placeholder in `<xmp>`, `<iframe>`, `<noembed>`, `<noframes>`, `<plaintext>` or `<noscript>`, or a `<noscript>` left open | 1 |
 | `bynk.template.foreign_unbalanced` | an `<svg>`/`<math>` left open, closed without an opener, or holding an integration point | 1 |
 | `bynk.template.unsupported_markup` | markup the tokeniser does not model, or error recovery that changes a context (§6) | 1 |
 | `bynk.template.secret_placeholder` | a secret kind, or a record carrying one, reaches a placeholder or a fields type | 1 |
@@ -1066,7 +1107,7 @@ field names (§4.1).
    *Rejected:* `html5ever` as a compiler dependency (a tree builder for a
    fraction of its use, and its recovery is what the model must refuse); a
    restricted grammar of our own, which would refuse valid pages.
-3. **Q3. Contexts.** *Settled:* C1–C13 (§5.2): unquoted attributes refused,
+3. **Q3. Contexts.** *Settled:* C1–C14 (§5.2): unquoted attributes refused,
    script and style refused except a whole-body JSON data block taking a
    `Codable` value, code-loading attributes split from URL attributes.
    *Rejected:* a `Css` type; Go's choice of letting any URL fill
@@ -1131,7 +1172,7 @@ field names (§4.1).
 |---|---|---|
 | Q1 | `\(name)` placeholders, literal `\(` otherwise | Accepted in review: as recommended |
 | Q2 | Hand-written tokeniser; corpus, differential and fuzz tests | Accepted in review: as recommended |
-| Q3 | Contexts C1–C13; script and style refused except JSON data | Accepted in review: as recommended |
+| Q3 | Contexts C1–C14; script and style refused except JSON data | Accepted in review: as recommended |
 | Q4 | Opaque `Href`; four schemes; no decoding; `srcset` refused | Accepted in review: as recommended |
 | Q5 | `Html.unsafe(markup, reason)`; dependencies allowed and listed | Ruled: as recommended |
 | Q6 | `join`/`empty`/`text`; nominal fields record; no partial fill | Accepted in review: as recommended |
