@@ -6109,13 +6109,26 @@ impl SuiteView {
         // of them recorded no callee. A braced list leaves the types it does not name out.
         for table in participants.iter().filter_map(|p| unit_tables.get(p)) {
             for unit in &table.first_party_consumes {
-                if let Some(t) = unit_tables.get(unit) {
-                    queue.extend(
-                        t.types
-                            .keys()
-                            .filter(|n| !table.unselected_consumed_types.contains(*n))
-                            .cloned(),
-                    );
+                let Some(t) = unit_tables.get(unit) else {
+                    continue;
+                };
+                // Filed from the unit it was consumed from, so a name two first-party units
+                // share is the consumed one's. `unlisted_consumed_types` is every type the
+                // braces do not list, including those a listed capability's signature reaches,
+                // which the target cannot name.
+                let mut names: Vec<&String> = t
+                    .types
+                    .keys()
+                    .filter(|n| !table.unlisted_consumed_types.contains(*n))
+                    .collect();
+                names.sort();
+                for n in names {
+                    if let Some(decl) = t.types.get(n)
+                        && !self.types.contains_key(n)
+                    {
+                        queue.extend(crate::project_model::type_decl_ref_names(decl));
+                        self.types.insert(n.clone(), decl.clone());
+                    }
                 }
             }
         }
@@ -7339,6 +7352,40 @@ service check {
             ("shop/tests/orders.test.bynk", &bad),
         ])
         .assert_reports("bynk.resolve.unknown_field");
+    }
+
+    /// A braced `consumes` brings in only the names it lists: the view holds `CloseInfo`, which
+    /// the target consumed, and not `Cookie`, a `bynk` type the braces leave out, so a wrong
+    /// field is refused on the one and the other record is not seeded into the view.
+    #[test]
+    fn a_prelude_type_a_braced_consumes_leaves_out_is_not_seeded_into_a_system_view() {
+        let orders = ORDERS.replace(
+            "consumes bynk { CloseInfo, Cookie }",
+            "consumes bynk { CloseInfo }",
+        );
+        let orders = orders
+            .split("service one {")
+            .next()
+            .expect("the part before `one`")
+            .to_string();
+        let case = |record: &str| {
+            let suite = format!(
+                "suite shop.orders as system {{\n  case \"c\" {{\n    let r = {record}\n    expect true\n  }}\n}}\n"
+            );
+            crate::testkit::analyse(&[
+                ("shop/orders.bynk", &orders),
+                ("shop/tests/orders.test.bynk", &suite),
+            ])
+            .categories()
+            .contains(&"bynk.resolve.unknown_field")
+        };
+        assert!(case(
+            "CloseInfo { code: 1, reason: \"r\", clean: true, nope: 1 }"
+        ));
+        assert!(
+            !case("Cookie { name: \"a\", value: \"b\", nope: 1 }"),
+            "`Cookie` is not in the view, so its record is not checked"
+        );
     }
 
     /// The same holds for a consuming context: a call is typed by the callee's signature
