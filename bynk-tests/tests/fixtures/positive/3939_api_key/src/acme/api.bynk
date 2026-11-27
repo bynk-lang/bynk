@@ -1,6 +1,6 @@
 context acme.api
 
-consumes bynk { Clock, ApiKeyLabel, ApiKeySecret }
+consumes bynk { Clock, ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret }
 consumes bynk.cloudflare { RateLimit }
 
 type AccountId = String where NonEmpty && MaxLength(64)
@@ -42,5 +42,37 @@ service api from http {
 			Ok(key) => Created(key),
 			Err(_) => Conflict("too many keys"),
 		}
+	}
+
+	// #3939 (slice 2): `list` answers the identity's keys, never a secret or a digest.
+	@rateLimit(PerIp, key: clientIp)
+	on GET("/accounts/:id/keys") (id: AccountId) -> Effect[HttpResult[List[ApiKeyInfo]]] by Visitor given Clock {
+		let keys <- Client.list(id)
+		Ok(keys)
+	}
+
+	// `revoke` answers `false` for a key that is not the identity's, or is already gone.
+	@rateLimit(PerIp, key: clientIp)
+	on DELETE("/accounts/:id/keys/:key") (id: AccountId, key: ApiKeyId) -> Effect[HttpResult[()]] by Visitor {
+		let gone <- Client.revoke(id, key)
+		if gone { NoContent } else { NotFound }
+	}
+
+	// `revokeAll` is legal in an agent's handler too, as an account-closure workflow needs.
+	@rateLimit(PerIp, key: clientIp)
+	on POST("/accounts/:id/close") (id: AccountId) -> Effect[HttpResult[Int]] by Visitor {
+		let n <- Accounts(id).close()
+		Ok(n)
+	}
+}
+
+agent Accounts {
+	key id: AccountId
+
+	store closed: Cell[Bool] = false
+
+	on call close() -> Effect[Int] {
+		closed := true
+		Client.revokeAll(self.id)
 	}
 }

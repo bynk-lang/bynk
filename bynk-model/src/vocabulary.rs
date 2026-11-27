@@ -716,6 +716,8 @@ pub fn block_uses_erase(b: &Block, callees: &HashMap<ExprId, bynk_check::checker
 /// #1960: whether a body reaches the Worker `env` on the Workers target: it
 /// calls a consumed context's service (through its Service Binding) or
 /// constructs a local agent (through its Durable Object namespace).
+/// #3939: an `ApiKey` actor's `list`, `revoke` or `revokeAll` reaches its key
+/// store's agents, so it does too.
 pub fn block_reaches_worker_env(
     b: &Block,
     callees: &HashMap<ExprId, bynk_check::checker::Callee>,
@@ -728,6 +730,7 @@ pub fn block_reaches_worker_env(
                 Some(
                     bynk_check::checker::Callee::Cross { .. }
                         | bynk_check::checker::Callee::AgentInit(_)
+                        | bynk_check::checker::Callee::ApiKeyMember { .. }
                 )
             )
         {
