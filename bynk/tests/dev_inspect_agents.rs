@@ -7,7 +7,7 @@
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 #[path = "support/dev_child.rs"]
@@ -90,7 +90,7 @@ fn project(tag: &str) -> PathBuf {
 }
 
 fn bynk(proj: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_bynk"))
+    dev_child::bynk_command()
         .current_dir(proj)
         .args(args)
         .stdin(Stdio::null())
@@ -136,7 +136,7 @@ fn a_running_session_lists_its_instances_and_reads_their_state() {
     let log = proj.join("bynk-dev.log");
     let (out, err) = dev_child::log_to(&log);
     dev_child::warm_wrangler();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
+    let mut cmd = dev_child::bynk_command();
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut dev = Group(
         cmd.arg("dev")
@@ -268,10 +268,10 @@ fn body_of(reply: &str) -> String {
 fn serve_deploy_build(dir: &Path, port: u16, log: &Path) -> Group {
     let (out, err) = dev_child::log_to(log);
     let mut cmd = if dev_child::have("wrangler") {
-        Command::new("wrangler")
+        dev_child::tool_command("wrangler")
     } else {
         dev_child::wrangler_warm::warm();
-        let mut c = Command::new("npx");
+        let mut c = dev_child::tool_command("npx");
         c.args(["-y", dev_child::wrangler_warm::SPEC]);
         c
     };
@@ -388,7 +388,7 @@ fn a_dev_session_behaves_as_a_deploy_build_does() {
     let on_log = on.join("bynk-dev.log");
     let (out, err) = dev_child::log_to(&on_log);
     dev_child::warm_wrangler();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
+    let mut cmd = dev_child::bynk_command();
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut dev = Group(
         cmd.arg("dev")
@@ -464,7 +464,7 @@ fn a_session_records_each_committed_transition_and_not_a_refused_one() {
     let log = proj.join("bynk-dev.log");
     let (out, err) = dev_child::log_to(&log);
     dev_child::warm_wrangler();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
+    let mut cmd = dev_child::bynk_command();
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut dev = Group(
         cmd.arg("dev")

@@ -91,6 +91,7 @@ pub fn warm_unless_installed() {
         // Through `cmd /C` on Windows, so an installed `wrangler.cmd` resolves.
         let installed = shell("wrangler")
             .arg("--version")
+            .env(TELEMETRY_OFF.0, TELEMETRY_OFF.1)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
