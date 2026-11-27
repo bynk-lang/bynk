@@ -69,6 +69,7 @@ const MODULES = [
   "container",
   "auth",
   "session",
+  "apikey",
   "connection",
   "messages",
   "locale",

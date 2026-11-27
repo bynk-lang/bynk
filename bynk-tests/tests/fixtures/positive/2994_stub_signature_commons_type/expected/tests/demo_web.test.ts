@@ -19,7 +19,11 @@ class __Stub_Locale {
   }
 
   async current(): globalThis.Promise<__ns_bynk_locale_types.LocaleTag> {
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -45,6 +49,7 @@ class __Stub_Locale {
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
     type Uuid = __ns_bynk.Uuid;
     if (this.__case === "a stub over a capability whose type the context does not use") {
       return ("pl" as any);
@@ -75,7 +80,11 @@ async function test_a_stub_over_a_capability_whose_type_the_context_does_not_use
     const { greeting } = __ns_demo_messages;
     const { LocaleTag } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -101,6 +110,7 @@ async function test_a_stub_over_a_capability_whose_type_the_context_does_not_use
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
     type Uuid = __ns_bynk.Uuid;
     const r = await api.call(deps);
     if (!(r === "hello")) { throw __bynkExpectFailure("tests/demo/web.bynk:10:9", 317, 329, "expect r == \"hello\"\n  expected: r == \"hello\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("hello"))); }

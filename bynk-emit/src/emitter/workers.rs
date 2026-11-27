@@ -902,14 +902,14 @@ pub(super) fn err_failure(result: TsExpr) -> TsStmt {
     ])))
 }
 
-fn refused(failure: Failure, status: &str) -> TsStmt {
+pub(super) fn refused(failure: Failure, status: &str) -> TsStmt {
     let result = member(ident("HttpResult"), status);
     failure(result)
 }
 
 /// The call of the handler a verified wrapper ends with: the route's params, then
 /// `deps`, extended by `extras` when the seam leaves a principal.
-fn handler_return(
+pub(super) fn handler_return(
     sname: &str,
     method_key: &str,
     mut param_args: Vec<TsExpr>,

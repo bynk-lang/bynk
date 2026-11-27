@@ -325,6 +325,34 @@ fn of_probe(name: &str, arg: TsExpr) -> TsStmt {
 /// (`{ of?: (json: unknown) => Result<unknown, ValidationError> }`) is a
 /// [`TsType::Fn`] with named parameters (1A.18b), and its three-line ternary a
 /// [`TsExpr::multiline_conditional`] (1A.38a).
+/// The JSON a refined or opaque value serialises to: the value itself, as its wire primitive.
+/// #3939 (D2 D): an `ApiKeyValue` is a runtime `BynkSecret` whose text no generic path reads, so
+/// its one encoding, inside the `ApiKeySecret` a handler returns from `mint`, reveals the key.
+/// The checker refuses an `ApiKeyValue` at every other boundary.
+fn serialised_scalar(decl: &TypeDecl, prim: &str) -> bynk_ts::TsExpr {
+    if bynk_check::context_checks::secret_kind(decl)
+        == Some(bynk_check::context_checks::SecretKind::ApiKeyValue)
+    {
+        let revealer = TsType::Object(vec![bynk_ts::TsTypeMember::method(
+            "reveal",
+            Vec::new(),
+            TsType::named("string"),
+        )]);
+        return crate::ts_build::method_call(
+            crate::ts_build::paren(as_expr(
+                as_expr(ident("value"), TsType::named("unknown")),
+                revealer,
+            )),
+            "reveal",
+            Vec::new(),
+        );
+    }
+    as_expr(
+        as_expr(ident("value"), TsType::named("unknown")),
+        TsType::named(prim),
+    )
+}
+
 pub(super) fn emit_refined(
     name: &str,
     decl: &TypeDecl,
@@ -379,10 +407,7 @@ pub(super) fn emit_refined(
             Some(TsType::named(ty.clone())),
         )],
         return_type: Some(TsType::named("__JsonValue")),
-        body: vec![ret(as_expr(
-            as_expr(ident("value"), TsType::named("unknown")),
-            TsType::named(prim),
-        ))],
+        body: vec![ret(serialised_scalar(decl, prim))],
         is_async: false,
         inline: false,
     }));

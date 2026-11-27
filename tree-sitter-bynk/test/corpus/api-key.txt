@@ -1,0 +1,28 @@
+================================================================================
+#3939: an ApiKey actor with a prefix and a header
+================================================================================
+
+context demo {
+  actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme", header = "x-api-key"), identity = AccountId }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (actor_decl
+      (identifier)
+      (scheme)
+      (scheme_config
+        (scheme_arg
+          (identifier)
+          (string_literal))
+        (scheme_arg
+          (identifier)
+          (string_literal))
+        (scheme_arg
+          (identifier)
+          (string_literal)))
+      (identifier))))

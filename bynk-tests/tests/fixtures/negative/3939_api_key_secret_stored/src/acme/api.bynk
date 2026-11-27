@@ -1,0 +1,13 @@
+context acme.api
+
+consumes bynk { ApiKeySecret }
+
+// #3939 (D2 D): a minted key holds an `ApiKeyValue`, which is never stored.
+agent Vault {
+	key id: String
+	store kept: Cell[Option[ApiKeySecret]] = None
+
+	on call clear() -> Effect[()] {
+		kept := None
+	}
+}

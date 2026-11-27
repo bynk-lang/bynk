@@ -104,6 +104,56 @@ impl Explain {
 /// project trees `bad/` and `good/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.actor.api_key_agent_name_reserved",
+        blurb: "An `ApiKey` actor's keys live in two agents the compiler generates and names after it: `<Actor>Keys`, which holds one identity's keys and is the only agent a request asks, and `<Actor>KeyOwner`, which maps an identity to its key store. Their names are reserved in the declaring context, so an author's agent, type, function, service, actor or capability with one of them is refused. Rename it.",
+        example: "agent ClientKeys {   // ✗ the name of `Client`'s generated key store\n    key id: String\n}\n\nagent ClientLedger {   // ✓\n    key id: String\n}",
+    },
+    Explain {
+        code: "bynk.actor.api_key_bad_arg",
+        blurb: "Each `ApiKey` key takes one kind of value. `secret` names the environment variable holding the pepper, as a string. `prefix` is 2 to 16 lower-case letters and digits starting with a letter, and every key starts with it. `header` is an HTTP header name to read the key from; omit it to read `Authorization: Bearer <key>`, and it cannot be `Authorization`, `Cookie`, `Host`, `Content-Length` or `Content-Type`. A key given twice is refused too, since the first would win quietly.",
+        example: "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"Acme\"), identity = AccountId }   // ✗ upper case\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"acme\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_identity_not_string_constructible",
+        blurb: "An `ApiKey` actor's key store answers the identity a key was minted for as a string, and the seam mints it through the identity type's `of` before the handler runs. So the identity must be a context-owned type built from a `String`: a refined or opaque `String`.",
+        example: "type Account = { id: Int }\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = Account }     // ✗ a record\n\ntype AccountId = String where NonEmpty\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_internal",
+        blurb: "`ApiKey` names an actor scheme, not a value, so a program has no `ApiKey` members to call. The key store the compiler generates for an `ApiKey` actor compares digests with an internal constant-time comparison, the same one `bynk.crypto`'s `Crypto.equal` uses, which only that generated code can reach. To compare a secret in your own code, use `Secret.matches` or `Crypto.equal`.",
+        example: "let same <- ApiKey.equal(a, b)   // ✗ internal to the generated key store\n\nlet same <- Crypto.equal(a, b)   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_mint_outside_handler",
+        blurb: "`Actor.mint(identity, label)` hashes the new key under the pepper, and the pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's. So `mint` is legal only in a service handler. Mint the key there and return it; a provider or agent gets what it needs from the handler.",
+        example: "agent Accounts {\n    key id: AccountId\n}\n\non call open(label: ApiKeyLabel) -> Effect[()] given Clock {\n    let _ <- Client.mint(self.id, label)   // ✗ in an agent\n}\n\non POST(\"/accounts/:id/keys\") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {\n    let r <- Client.mint(id, body.label)   // ✓ in a service handler\n}",
+    },
+    Explain {
+        code: "bynk.actor.api_key_missing_secret",
+        blurb: "An `ApiKey` actor stores each key as an HMAC keyed with a pepper, an environment secret the store never sees, so the compiler needs to know which variable holds it. Name it: `ApiKey(secret = \"CLIENT_KEY_PEPPER\")`. The string is the variable's name, never the pepper; `bynk deploy` mints a pepper when the variable is unset.",
+        example: "actor Client { auth = ApiKey, identity = AccountId }                                // ✗ no pepper named\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_prefix_shared",
+        blurb: "Every key an `ApiKey` actor mints starts with its `prefix`, which makes a leaked key recognisable and, in an actor sum, tells the seam which actor a key is for without a lookup. Two `ApiKey` actors in one context with the same prefix (the default is `bk`) make their keys indistinguishable, so give each its own.",
+        example: "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }\nactor Robot { auth = ApiKey(secret = \"ROBOT_KEY_PEPPER\"), identity = RobotId }   // ✗ both `bk`\n\nactor Robot { auth = ApiKey(secret = \"ROBOT_KEY_PEPPER\", prefix = \"rbt\"), identity = RobotId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_secret_shared",
+        blurb: "An `ApiKey` actor's pepper hashes its own keys only. A variable that is also another actor's `secret` or `previous` would be one key doing two jobs, so a credential of one scheme could be checked against the other. Give each actor its own variable.",
+        example: "actor User { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }\nactor Client { auth = ApiKey(secret = \"AUTH_SECRET\"), identity = AccountId }          // ✗ shared\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_unknown_key",
+        blurb: "An `ApiKey` actor's config keys are a closed set: `secret`, `prefix` and `header`. Any other key is refused rather than ignored, because an ignored key is a rule you believed you had written. `ttl` (key expiry) and `previous` (pepper rotation) are reserved for a later release and refused until then: a key does not expire yet, and changing the pepper ends every key.",
+        example: "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefx = \"acme\"), identity = AccountId }   // ✗ misspelt\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\", prefix = \"acme\"), identity = AccountId }   // ✓",
+    },
+    Explain {
+        code: "bynk.actor.api_key_unlimited",
+        blurb: "A well-formed key is cheap to fabricate (its checksum is public), and each one the seam parses costs a key-store request. A route guarded by an `ApiKey` actor should therefore limit requests by client address before it authenticates, with `@rateLimit(Limiter, key: clientIp)`. This is a warning, not an error, so a service rate-limited at its edge still builds. A `key: identity` limit does not help here, because a fabricated key never verifies and so never reaches it.",
+        example: "on GET(\"/orders\") () -> Effect[HttpResult[List[Order]]] by c: Client { … }   // ⚠ no limit before authentication\n\n@rateLimit(PerIp, key: clientIp)\non GET(\"/orders\") () -> Effect[HttpResult[List[Order]]] by c: Client { … }   // ✓",
+    },
+    Explain {
         code: "bynk.actor.bearer_bad_arg",
         blurb: "A `Bearer` actor's `issuer`, `audience` and `trustFrom` are non-empty strings: the `iss` and `aud` its tokens must carry, and the name of the environment variable whose JSON `{ \"issuer\", \"audience\" }` replaces them at run time. An empty string or another kind of value is refused. Write the claim as a string, as `issuer = \"web\"`.",
         example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"\"), identity = UserId }      // ✗ an empty issuer\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\"), identity = UserId }   // ✓",
@@ -7498,6 +7548,46 @@ pub fn lookup(code: &str) -> Option<&'static DiagnosticInfo> {
 
 /// Every diagnostic code the compiler emits, sorted by code.
 pub const REGISTRY: &[DiagnosticInfo] = &[
+    d(
+        "bynk.actor.api_key_agent_name_reserved",
+        "An author's declaration takes the name of an agent the compiler generates for an `ApiKey` actor (`<Actor>Keys`, `<Actor>KeyOwner`) (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_bad_arg",
+        "An `ApiKey` config value has the wrong kind, or a key is repeated (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_identity_not_string_constructible",
+        "An `ApiKey` actor's identity is not a string-constructible type (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_internal",
+        "A program names `ApiKey.equal`, the generated key store's internal comparison (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_mint_outside_handler",
+        "`Actor.mint` on an `ApiKey` actor is called outside a service handler, where the pepper is not (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_missing_secret",
+        "An `ApiKey` actor does not name its pepper (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_prefix_shared",
+        "Two `ApiKey` actors in one context share a key prefix (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_secret_shared",
+        "An `ApiKey` actor's pepper is also another actor's secret (#3939).",
+    ),
+    d(
+        "bynk.actor.api_key_unknown_key",
+        "An `ApiKey` config has a key outside the closed set, or one not supported yet (#3939).",
+    ),
+    warn(d(
+        "bynk.actor.api_key_unlimited",
+        "A route guarded by an `ApiKey` actor applies no rate limit before authentication (warning, #3939).",
+    )),
     d(
         "bynk.actor.bearer_bad_arg",
         "A `Bearer` actor's `issuer`, `audience` or `trustFrom` is not a non-empty string (#3821).",
