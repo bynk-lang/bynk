@@ -258,11 +258,35 @@ service proxy from http {
 - **Experimental.** It needs `bynk.http.ANY` (and `bynk.http.rest` for a rest) in
   `[unstable] allow`, beside the `bynk` items it uses.
 
-> [!NOTE]
-> This release checks a pass-through route. Its router, which forwards the request and
-> passes the answer through without the `ETag`, `HEAD`, `OPTIONS`, `405` and CORS behaviour
-> an ordinary route gets, arrives in the next increment. Until then a build with a
-> pass-through route is refused (`bynk.http.pass_through_not_emitted`).
+### What a pass-through answer keeps and suspends {#pass-through-suspensions}
+
+A `Forward(response)` sends the upstream's answer through as it came: status, headers and a
+streamed body, never buffered. On a path an `ANY` route owns, the router synthesises
+nothing of its own:
+
+| Behaviour | On a pass-through path |
+|---|---|
+| Weak `ETag`, the router's `304` | **Suspended.** The upstream's own `ETag` passes as sent, strong or weak. |
+| `HEAD` from `GET` | **Suspended.** `HEAD` is forwarded as `HEAD`. |
+| `OPTIONS`, `405` and `Allow` | **Suspended.** The method is forwarded. A path an ordinary route owns keeps them. |
+| CORS, the preflight | **Suspended.** The upstream's `Access-Control-*` pass, and a preflight is forwarded. A CORS service's preflight never answers for a pass-through path. |
+| Status | **Any** the upstream sends. A `101` is answered `502`. |
+| Methods | `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` and `OPTIONS` are forwarded. Any other method, and any `Upgrade` request, is answered `501` before the handler runs. |
+| Hop-by-hop headers, `proxy-authenticate` | **Stripped** from the answer. |
+| `Set-Cookie` | **Stripped**: an upstream's cookie never lands on the proxy's origin. |
+| `Strict-Transport-Security` | **Always removed** from the upstream's answer, then the service's own `security { }` policy is stamped, if it declares `hsts`. |
+| `X-Content-Type-Options: nosniff` | **Kept**, from the service's `security { }`. |
+| `Content-Security-Policy`, `Referrer-Policy` | **Filled, not overwritten**: stamped on a `text/html` answer only where the upstream sent none. |
+| `Cache-Control`, `Vary`, `Expires`, `Age` | **Passed through.** |
+| Error shapes, `on rejected` | **Not applied** to the upstream's body: its `404` page is the page. The router's own refusals (`400 MalformedPath`, an actor's `401` or `403`, `429`, `501`) and every `Respond(…)` are shaped as on an ordinary route. |
+
+A `Respond(result)` is an ordinary `HttpResult[()]` answer, without CORS; to a `HEAD` it
+has no body.
+
+The request reaches the upstream with its method, the path given to `forward` and its raw
+query. The body streams through unread. This release forwards **no** header the client
+sent; the forwarding policy, which passes the end-to-end headers and replaces the
+`X-Forwarded-*` ones, is the next increment's.
 
 ## Request headers
 

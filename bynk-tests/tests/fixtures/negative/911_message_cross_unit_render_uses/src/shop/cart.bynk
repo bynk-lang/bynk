@@ -1,0 +1,8 @@
+commons shop.cart
+
+uses bynk.locale.types
+uses shop.messages
+
+fn banner(tag: LocaleTag, m: Message) -> String {
+  render(tag, m)
+}

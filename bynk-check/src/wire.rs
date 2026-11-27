@@ -426,6 +426,11 @@ pub fn collect_boundary_types(
         if !seen.insert(name.clone()) {
             continue;
         }
+        // #3752 (D11): a type holding an `InboundRequest` or a `Forwarded` (an `ANY`
+        // route's `request` and `PassThrough`) is never encoded, so has no codec.
+        if crate::http_pass_through::held_in(&name, types).is_some() {
+            continue;
+        }
         out.push(name.clone());
         let Some(decl) = types.get(&name) else {
             continue;

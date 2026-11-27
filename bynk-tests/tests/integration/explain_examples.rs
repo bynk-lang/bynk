@@ -74,6 +74,10 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
 const WARNING_ONLY: &[(&str, &str)] = &[
     (
+        "bynk.locale.render_shadows_bundle",
+        "a warning; `positive/911_message_codes_per_unit` holds it (`shop.mixed`) with `expected_warnings.txt`",
+    ),
+    (
         "bynk.container.unbounded_instances",
         "a warning; `positive/4112_container_unbounded_instances` holds it with `expected_warnings.txt`, and `positive/4112_container_bounded_instances` holds the good cases",
     ),
@@ -653,11 +657,7 @@ fn compile_failures(code: &str, bad: &Side, good: &Side) -> Vec<String> {
             code, bad.name
         ));
     }
-    // #3752 (slice 3a): a build refuses every `on ANY` route until its router
-    // lands (slice 3b retires this), and only once the program checks clean; so
-    // a good side refused for that alone is one the checker accepted.
-    let built_later = |e: &Reported| e.code == "bynk.http.pass_through_not_emitted";
-    if !good.errors.is_empty() && !good.errors.iter().all(built_later) {
+    if !good.errors.is_empty() {
         let got: Vec<(&str, usize)> = good.errors.iter().map(|e| (&*e.code, e.line)).collect();
         out.push(format!(
             "{}: {} must compile, but its errors are {got:?}",

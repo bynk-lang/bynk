@@ -1,0 +1,1 @@
+bynk.locale.render_shadows_bundle `render` here is `bynk.locale`'s, which reads no message bundle and returns the code; `shop.cart` declares one

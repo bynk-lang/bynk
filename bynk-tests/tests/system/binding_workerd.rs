@@ -210,7 +210,7 @@ fn run_smoke(
 /// nowhere else), as `bynk dev` sets a Hyperdrive binding's local connection
 /// string (#3319).
 #[allow(clippy::too_many_arguments)]
-fn run_smoke_with(
+pub(super) fn run_smoke_with(
     project: &str,
     ctx: &str,
     source: &str,
