@@ -2930,6 +2930,15 @@ never share a key by accident. A subscriber that must not apply one emission
 twice deduplicates on `env.eventId` with this pair: the idiom is a documented
 convention, not syntax ([ADR 0294](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0294-events-idempotency-idiom-is-documented-convention.md)).
 
+**Reserved queue names.** Event delivery is moving onto queues the compiler owns
+([#3898](https://github.com/bynk-lang/bynk/issues/3898)): each subscribing service
+will get an event queue named `bynk-ev-<slug>-<hash>` and a dead-letter queue named
+`bynk-dl-<slug>-<hash>`. A queue name that a program writes MUST NOT start with
+`bynk-ev-` or `bynk-dl-`, whether in a `Queue @name("…")` instance, a
+`from queue("…")` consumer or a `delivery { deadLetter: "…" }`
+(`bynk.queue.reserved_name`). Only these two prefixes are reserved, not `bynk-` as
+a whole ([Reserved names](/reference/queue/#reserved-names)).
+
 ## §5.8 Boundaries & cross-context
 
 `consumes` MUST appear only in a context, an adapter or a `commons` (a `suite`

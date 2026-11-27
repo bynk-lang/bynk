@@ -4605,6 +4605,11 @@ agent Cart {
         example: "// shop/fulfil.bynk\ncontext shop.fulfil\n\nactor FromOrders = Producer where IsContext(shop.orders)   // ✗ `shop.orders` declares no `Queue` for `order-events`\n\nservice fulfil from queue(\"order-events\") {\n\x20 delivery { deadLetter: None }\n\x20 on message(order: Order) -> Effect[QueueResult] by FromOrders { … }\n}\n\n// shop/orders.bynk\ncontext shop.orders\n\nconsumes bynk.cloudflare { Queue }\n\ncapability OrderEvents = Queue @name(\"order-events\")   // ✓ a producer of the queue",
     },
     Explain {
+        code: "bynk.queue.reserved_name",
+        blurb: "Bynk delivers events through queues it creates and names itself: each `from Events` service gets an event queue whose name starts with `bynk-ev-` and a dead-letter queue whose name starts with `bynk-dl-`. A queue the program names under either prefix could collide with one of them, or send into or consume event traffic the compiler owns, so the two prefixes are refused wherever a queue is named: a `Queue @name(\"…\")` instance, a `from queue(\"…\")` consumer and a `deadLetter: \"…\"`. Only these two prefixes are reserved; other names that start with `bynk-` are fine. Rename the queue.",
+        example: "capability Audit = Queue @name(\"bynk-ev-audit\")   // ✗ `bynk-ev-` is reserved for event queues\ncapability Audit = Queue @name(\"audit-events\")   // ✓\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"bynk-dl-outbound\" }   // ✗ `bynk-dl-` is reserved for event dead-letter queues\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
+    },
+    Explain {
         code: "bynk.queue.retry_delay_out_of_range",
         blurb: "`RetryAfter(reason, delay)` retries a message after `delay`, and Cloudflare retries after a whole number of seconds, from 1 second to 24 hours. A delay written as a literal outside that range is refused here: under a second it would round to no delay at all, and over 24 hours the platform would not honour it. Write a delay between 1 second and 24 hours. A delay computed at run time, such as `30.seconds * delivery.attempts`, cannot be checked, so it is rounded up to whole seconds and clamped to the range, with the clamp logged. A fault would retry with no delay, the opposite of what the handler asked for.",
         example: "on message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
@@ -10664,6 +10669,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.queue.producer_never_sends",
         "A `Producer` refinement admits a context that declares no `Queue` for the queue, so it never sends to it.",
+    ),
+    d(
+        "bynk.queue.reserved_name",
+        "A `Queue @name`, `from queue` or `deadLetter` names a queue under a prefix Bynk reserves for event delivery (`bynk-ev-`, `bynk-dl-`).",
     ),
     d(
         "bynk.queue.retry_delay_out_of_range",

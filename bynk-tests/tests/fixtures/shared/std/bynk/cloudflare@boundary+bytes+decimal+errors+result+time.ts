@@ -1351,9 +1351,10 @@ export const Vector = {
 
 /**
  * One vector to write with typed metadata: a `Vector` whose `metadata` is a
- * value of `M`, which `upsertValue` encodes with `M`'s codec. Reading is not
- * typed: `getByIds` and a query's matches give the metadata as text, so a
- * vector stored by an older version of `M` can be skipped or repaired.
+ * value of `M`, which `upsertValue` encodes with `M`'s codec. `getByIds` and a
+ * query's matches give the metadata as text; `queryValue` and `getByIdsValue`
+ * read it as `M` for each vector on its own, so a vector stored by an older
+ * version of `M` is one `Err`, not a failed query.
  * Keep the properties a query filters on plain (not `Option`): an `Option` is
  * written as a tagged object, as `Json.encode` writes it, so a filter on it
  * would never match.
@@ -1476,6 +1477,39 @@ export interface VectorMatch {
 }
 
 export const VectorMatch = {
+};
+
+/**
+ * One match of `Vectorize.queryValue[M]`: a `VectorMatch` whose `metadata` is
+ * read as `M`, on its own. `metadata` is `None` when the vector has none or the
+ * query omitted it, `Some(Ok(m))` when it reads as `M`, and `Some(Err(e))` when it
+ * does not (a vector written by an older shape of `M`): the match is still here
+ * and the rest are unaffected. The error names the path and what was expected, but
+ * its message can quote part of the stored value, so do not log it unredacted.
+ */
+export interface VectorMatchOf<M> {
+  readonly id: string;
+  readonly score: number;
+  readonly values: Option<readonly number[]>;
+  readonly metadata: Option<Result<M, DecodeError>>;
+  readonly namespace: Option<string>;
+}
+
+export const VectorMatchOf = {
+};
+
+/**
+ * One vector read by `Vectorize.getByIdsValue[M]`: a `Vector` whose `metadata` is
+ * read as `M`, on its own, as in `VectorMatchOf[M]`.
+ */
+export interface VectorReadOf<M> {
+  readonly id: string;
+  readonly values: readonly number[];
+  readonly metadata: Option<Result<M, DecodeError>>;
+  readonly namespace: Option<string>;
+}
+
+export const VectorReadOf = {
 };
 
 /**
@@ -2321,6 +2355,14 @@ export const __MySqlToken: symbol = globalThis.Symbol("MySql");
  * `Queue.sendValue` encodes a message. `query(vector, options)` returns the
  * nearest matches, best first. `getByIds` reads vectors back, `deleteByIds`
  * removes them, and `describe` reports the index's dimensions and metric.
+ * `queryValue[M](vector, options)` and `getByIdsValue[M](ids)` are `query` and
+ * `getByIds` with each vector's metadata read as `M` on its own: the metadata
+ * of a `VectorMatchOf[M]` (or `VectorReadOf[M]`) is `Option[Result[M,
+ * DecodeError]]`, so one stale vector is an `Err` for that match and the rest
+ * still read. They read what `upsertValue` writes (`M`'s tagged JSON), and the
+ * text operations stay for metadata written outside Bynk. A query that returns
+ * only the `@indexed` properties (`returnMetadata: Indexed`) reads as `M` only if
+ * `M` has just those fields: use `All` with a typed read.
  * Metadata is JSON text: write it with `Json.encode` and read it with
  * `Json.decode`, so a vector stored by an older version of the program can be
  * skipped or repaired instead of failing the query. The embeddings of

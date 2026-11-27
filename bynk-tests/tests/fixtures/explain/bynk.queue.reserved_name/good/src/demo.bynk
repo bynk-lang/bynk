@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk.cloudflare { Queue }
+
+capability Audit = Queue @name("audit-events")
+
+service outbox from queue("outbound-email") {
+  delivery { deadLetter: "outbound-email-dlq" }
+  on message(message: String) -> Effect[QueueResult] by Producer { Ack }
+}
