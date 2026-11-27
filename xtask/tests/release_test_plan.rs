@@ -224,6 +224,31 @@ fn a_manual_dispatch_always_runs_every_leg() {
 }
 
 #[test]
+fn a_backstop_run_on_the_tagged_commit_answers_when_it_has_no_push_run() {
+    // ci.yml has no `push` trigger: `main` is tested by a scheduled backstop.
+    // The queue run has only the Linux unit tier; the backstop on the same
+    // commit has the rest.
+    let f = Fixture::new("backstop");
+    f.nightly(&[(MAC, "success"), (WIN, "success")]);
+    f.commit("aaa", "feat: x", "someone", "p");
+    f.run("aaa", "merge_group", 2, &[(LINUX, "success")]);
+    f.run(
+        "aaa",
+        "schedule",
+        3,
+        &[
+            (LINUX, "success"),
+            (SYSTEM, "success"),
+            (MAC, "success"),
+            (WIN, "success"),
+        ],
+    );
+    if let Some(m) = f.plan("push", "aaa") {
+        assert_eq!(m, "[]");
+    }
+}
+
+#[test]
 fn the_queue_run_answers_for_jobs_the_push_run_skipped() {
     let f = Fixture::new("queue");
     f.nightly(&[(MAC, "success"), (WIN, "success")]);

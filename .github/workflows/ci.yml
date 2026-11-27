@@ -2,7 +2,8 @@ name: CI
 
 # Stages. Each event runs what is worth its cost at that point, and no more
 # (ADR "ci-staged-gates"). Path filters (`changes`) apply on top, in every
-# stage but the nightly. `changes` names the stage (`stage` output).
+# stage but the backstop and the nightly. `changes` names the stage (`stage`
+# output).
 #
 #   draft          A draft PR's pushes: fast feedback, Linux only. lint,
 #                  clippy, API docs, the Linux unit + integration tiers and
@@ -14,25 +15,52 @@ name: CI
 #                  draft that `promote` marks ready in this same run): the
 #                  draft set plus the ready set (`ready-gate`): the Windows
 #                  leg, plus macOS when the repository variable
-#                  MACOS_ON_PRS is 'true' (`test-os`), the Linux system tier, the
-#                  Node floor and MSRV (on a global change). Off Linux the
+#                  MACOS_ON_PRS is 'true' (`test-os`) and the Linux system
+#                  tier. (The Node floor and MSRV are in the ready set but
+#                  run on the nightly only; see those jobs.) Off Linux the
 #                  legs run `ci-os`: the whole suite minus the corpus-wide
 #                  tsc/node passes, which are OS-independent and run on Linux
 #                  in the system tier. The ready set starts once the fast
 #                  gates pass (`ci-fast`), so a PR that fails fmt or clippy
 #                  spends no Windows or macOS minutes.
 #   merge_group    Integration only: the draft set, on top of the entries
-#                  ahead. Each entry already passed the ready set at its own
-#                  head; the queue checks what combining them can break, on
-#                  Linux, where that is cheapest. An ejection costs minutes.
-#   push (main)    The backstop: every job the queue did NOT pass on this
-#                  commit (see `queue_passed`), which now includes the ready
-#                  set, plus what only `main` does (saving Rust caches;
-#                  deploy-site.yml follows this run).
-#   schedule       Nightly, on `main`, unfiltered: every job, the full `ci`
-#                  profile on all three OSes, coverage, the Dev Container
-#                  feature and installer smokes. A failure opens (or comments
-#                  on) one tracking issue (`nightly-report`).
+#                  ahead, minus API docs, the wasm builds, the browser
+#                  artefacts, the docs site and the Dev Container feature.
+#                  Each entry passed those at its own head. Combining entries
+#                  can still break two of them: rustdoc's `-D warnings` and
+#                  the site's link checker fail when one entry renames what
+#                  another newly links to. Such a break lands on `main`,
+#                  turns later Rust or site PRs red (their runs test the merge
+#                  ref), and is named by the next backstop's failure issue,
+#                  up to 3 h later. That is the accepted cost of the runners
+#                  saved; the backstop runs the first four on `main`, the
+#                  nightly the fifth. Each entry already passed the ready set
+#                  at its own head; the queue checks what combining them can
+#                  break, on Linux, where that is cheapest. An ejection costs
+#                  minutes.
+#   backstop       Every three hours, on `main`'s head, unfiltered: every job
+#                  but the nightly-only ones, the full `ci` profile on all
+#                  three OSes, and saving Rust caches. It replaced a run on
+#                  every push to `main` (see "Why the backstop is scheduled").
+#   nightly        Daily, on `main`, unfiltered: the backstop plus coverage,
+#                  the Node floor, MSRV, the Dev Container feature, the
+#                  installer smokes and the Apple cross-build.
+#
+#   A failed backstop or nightly opens (or comments on) one tracking issue
+#   (`nightly-report`), since no PR is waiting on either.
+#
+# Why the backstop is scheduled (November 2026): `push` on `main` started a
+# full run for every merge and every stamp commit. Over 5 hours on 24-25
+# November that was 30 runs, 19 of them cancelled by the next push, each full
+# one ~75 runner-minutes (Windows, macOS, the system tier, ...) on the same
+# hosted pool the PRs and the queue wait on. Almost all of it had already
+# passed on the PR's head or in the queue. A scheduled run tests the same
+# tree, `main`'s head, which contains every commit since the last one. The
+# cost: a break that shows only on `main` (only off Linux, after PRs combine)
+# is found up to three hours after it lands instead of ~25 min, and a
+# rust-cache key change (a Cargo.lock edit) reaches `main`'s caches at the
+# next backstop, not at the merge. The queue_passed machinery in `changes`
+# only acts on a `push` and is inert while there is none.
 #
 # Why the ready set moved out of the queue (November 2026): with Windows,
 # macOS and the system tier first running in the queue, 34 of its 100 runs
@@ -48,8 +76,9 @@ name: CI
 # of ~8 min in November 2026. A draft's pushes are the most frequent, and the
 # cheapest place to keep that pressure off.
 on:
-  push:
-    branches: [main]
+  # No `push` trigger: `main` is covered by the scheduled backstop (see the
+  # stage table), not by a run per commit.
+  #
   # The activity types are listed so `ready_for_review` starts the ready set
   # when a person marks a PR ready. `promote` marks a draft ready with the
   # GITHUB_TOKEN, whose events start no runs, so a promoted draft gets its
@@ -73,10 +102,20 @@ on:
   # no one has opened a PR, and so the full `ci` profile runs on every OS (the
   # queue runs `ci-os` off Linux). Daily 07:00 UTC; it was weekly before the
   # PR and queue stages were narrowed.
+  #
+  # The second line is the backstop: every three hours, skipping the 07:00
+  # nightly's slot. The `stage` step tells the two apart by
+  # `github.event.schedule`, so the nightly's cron string appears there and
+  # in `concurrency` too: change all three together.
   schedule:
     - cron: "0 7 * * *"
+    - cron: "40 1,4,10,13,16,19,22 * * *"
 
 # A new push to a PR branch cancels the superseded run for that ref.
+#
+# (The rest of this note dates from when every push to `main` started a run;
+# the scheduled backstop replaced that in November 2026. It is kept because
+# the reasoning still holds if a `push` trigger ever comes back.)
 #
 # Cancellation is scoped to pull requests DELIBERATELY. When it applied to every
 # ref, a merge to `main` was routinely cancelled ~60s later by the stamp commit's
@@ -100,11 +139,11 @@ on:
 # whichever push run on `main` passes next. It has its own non-cancelling
 # concurrency group.
 #
-# The nightly gets a group of its own. A concurrency group keeps only one
-# PENDING run, so sharing `main`'s group would let the next push to `main`
-# displace a nightly that was still waiting for the previous push's run.
+# The nightly and the backstop each get a group of their own. A concurrency
+# group keeps only one PENDING run, so sharing one would let a backstop
+# displace a nightly that was still waiting for a runner.
 concurrency:
-  group: ci-${{ github.ref }}${{ github.event_name == 'schedule' && '-nightly' || '' }}
+  group: ci-${{ github.ref }}${{ github.event_name == 'schedule' && (github.event.schedule == '0 7 * * *' && '-nightly' || '-backstop') || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Least privilege by default; jobs that need more opt in (changes needs
@@ -145,7 +184,7 @@ jobs:
   # requires only the `ci-green` aggregator below — not the individual (now
   # skippable) job names.
   #
-  # `all` is the escape hatch: on push/main and the nightly schedule, or when a
+  # `all` is the escape hatch: on the backstop and the nightly, or when a
   # global file changed (a workflow, the lockfile, the toolchain), every job
   # runs regardless of which paths the diff touched. On a push, that is every
   # job the merge queue did not already pass on the same commit (`queue_passed`).
@@ -158,11 +197,10 @@ jobs:
   # can affect the result, so a Rust entry ahead is tested on its own group, and
   # if that group fails every group behind it is rebuilt on a new base. A docs-
   # or extension-only entry no longer waits ~15 min on a test matrix that its
-  # own diff cannot affect. The post-merge push run on `main` is the backstop
-  # for what the queue skipped: it runs every job the queue did NOT pass on the
-  # same commit (see `queue_passed`). The queue runs Linux only; the ready
-  # set (`ready-gate`), including the Windows and macOS legs, never runs
-  # there, and so always runs on `main`.
+  # own diff cannot affect. The scheduled backstop on `main` covers what the
+  # queue skipped: it runs every job, unfiltered, on `main`'s head. The queue
+  # runs Linux only; the ready set (`ready-gate`), including the Windows and
+  # macOS legs, never runs there, and so always runs in the backstop.
   # ---------------------------------------------------------------------------
   changes:
     name: Detect changed paths
@@ -189,7 +227,8 @@ jobs:
       installer_scripts: ${{ steps.filter.outputs.installer_scripts }}
       release_workflow: ${{ steps.filter.outputs.release_workflow }}
       all: ${{ steps.all.outputs.value }}
-      # The CI stage of this run: draft | ready | queue | main | nightly (see
+      # The CI stage of this run: draft | ready | queue | backstop | nightly
+      # (`main` only for a push run, which is no longer triggered; see
       # the stage table at the top). A draft that `promote` marks ready keeps
       # `draft` here; `ready-gate` reads the promotion.
       stage: ${{ steps.stage.outputs.value }}
@@ -232,8 +271,8 @@ jobs:
       # was on until November 2026, when ready PRs, the merge queue and pushes
       # to `main` together left macOS jobs waiting 15+ min for a runner and then
       # cancelled, blocking `CI green` on PRs that had passed everything else.
-      # Pushes to `main` and the nightly still run macOS, so a macOS-only break
-      # is caught within hours and the nightly opens its failure issue.
+      # The backstop and the nightly still run macOS, so a macOS-only break
+      # is caught within three hours and opens the failure issue.
       #
       # The cost, measured rather than guessed: across the last five green
       # three-OS runs the Windows leg took 463-500s against Linux's 156-212s, so
@@ -449,16 +488,19 @@ jobs:
               - 'bynk-lsp/Cargo.toml'
       # The stage table at the top, as one value. The draft flag is read from
       # the event, so the run that `promote` flips keeps `draft`.
+      # A schedule is the nightly only on the nightly's own cron line (see
+      # `on.schedule`); every other line is the backstop.
       - id: stage
         env:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
+          SCHEDULE: ${{ github.event.schedule }}
         run: |
           case "$EVENT" in
             pull_request) [ "$DRAFT" = true ] && value=draft || value=ready ;;
             merge_group) value=queue ;;
             push) value=main ;;
-            schedule) value=nightly ;;
+            schedule) [ "$SCHEDULE" = "0 7 * * *" ] && value=nightly || value=backstop ;;
             *) echo "::error::no CI stage for event '$EVENT'"; exit 1 ;;
           esac
           echo "Stage: $value"
@@ -823,9 +865,12 @@ jobs:
     # published API docs can't rot; the deploy regenerates the same tree leniently.
     name: API docs (cargo doc)
     needs: changes
+    # Not in the merge queue: each entry passed this at its own head, and
+    # the backstop runs it on `main` (see the stage table).
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'API docs (cargo doc)')
+      && needs.changes.outputs.stage != 'queue'
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
@@ -977,7 +1022,9 @@ jobs:
       # stage (`test-system`), and they were ~900 of the ~2100
       # test-seconds on the 3-core macOS runner. Byte-for-byte emit checks
       # (the integration tier) and the OS-touching system tests (CLI, paths,
-      # workerd) still run here. The nightly runs the full `ci` profile.
+      # workerd) still run here. The backstop and the nightly (both
+      # `schedule`) run the full `ci` profile, so release-test-plan.sh can
+      # trust any schedule run's leg as a full one.
       - name: Run tests (OS tier)
         if: matrix.os != 'ubuntu-latest' && github.event_name != 'schedule'
         run: cargo nextest run --workspace --locked --profile ci-os
@@ -1182,12 +1229,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       # Two checks that used to follow the suite in the `test` job, serially,
       # where they put ~2 min on every merge-queue entry's critical path. They
-      # run here instead: in every ready PR's run and every push to `main`
-      # (the queue never passes this job, so `main` never skips it), and in the
+      # run here instead: in every ready PR's run, the backstop and the
       # nightly. Not in the merge queue: each entry already passed both on its
       # own PR. A break that only stacking reveals (an API rename in one entry,
       # a README example using the old name in another) is caught by this job's
-      # run on the merged tree in the push run on `main`, as for the system
+      # run on the merged tree in the next backstop, as for the system
       # tier. This job builds every test binary, so the tier probe's
       # `nextest list` calls compile nothing.
       #
@@ -1223,12 +1269,16 @@ jobs:
     name: Node floor (oldest supported Node)
     needs: [changes, ready-gate]
     # Ready set (see `ready-gate` and `test-os` for the `!cancelled()` form).
+    # Nightly only (November 2026): a Node API newer than the floor is rare,
+    # found within a day and easy to attribute, so it is not worth ~5 min of a
+    # runner on every ready PR and every backstop.
     if: >-
       !cancelled()
       && needs.ready-gate.result == 'success'
       && needs.ready-gate.outputs.run == 'true'
       && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Node floor (oldest supported Node)')
+      && needs.changes.outputs.stage == 'nightly'
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 30
     steps:
@@ -1297,12 +1347,16 @@ jobs:
     # while a plain `**/*.rs` PR no longer pays for a redundant full-workspace
     # build (the main 1.98 legs already compile that code on the same toolchain).
     # Ready set (see `ready-gate` and `test-os` for the `!cancelled()` form).
+    # Nightly only (November 2026): while `rust-version` equals the pinned
+    # toolchain (the tripwire below fails when they diverge), this re-checks
+    # what every other leg already compiles. A day's delay costs nothing.
     if: >-
       !cancelled()
       && needs.ready-gate.result == 'success'
       && needs.ready-gate.outputs.run == 'true'
       && (needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'MSRV (cargo check on declared rust-version)')
+      && needs.changes.outputs.stage == 'nightly'
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
@@ -1374,7 +1428,7 @@ jobs:
     name: Coverage (report-only)
     needs: changes
     if: >-
-      github.event_name == 'schedule'
+      needs.changes.outputs.stage == 'nightly'
       && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && contains(fromJSON(needs.changes.outputs.test_os), 'ubuntu-latest')
     runs-on: ubuntu-latest
@@ -1405,9 +1459,12 @@ jobs:
     # executing the wasm in a browser/node harness lands with the REPL shell.
     name: wasm32 build (bynk-wasm)
     needs: changes
+    # Not in the merge queue: each entry passed this at its own head, and
+    # the backstop runs it on `main` (see the stage table).
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'wasm32 build (bynk-wasm)')
+      && needs.changes.outputs.stage != 'queue'
     runs-on: ${{ fromJSON(needs.changes.outputs.linux_runner_extra) }}
     timeout-minutes: 25
     steps:
@@ -1434,9 +1491,12 @@ jobs:
     # natively and through the .wasm on Node.
     name: Registry core wasm (build, size, parity)
     needs: changes
+    # Not in the merge queue: each entry passed this at its own head, and
+    # the backstop runs it on `main` (see the stage table).
     if: >-
       (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Registry core wasm (build, size, parity)')
+      && needs.changes.outputs.stage != 'queue'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -1486,9 +1546,12 @@ jobs:
     # tag, and a failure there blocks the whole GitHub Release.
     name: Browser artefacts (package)
     needs: changes
+    # Not in the merge queue: each entry passed this at its own head, and
+    # the backstop runs it on `main` (see the stage table).
     if: >-
       (needs.changes.outputs.web_assets == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Browser artefacts (package)')
+      && needs.changes.outputs.stage != 'queue'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -1558,9 +1621,12 @@ jobs:
     # highlighting consumes.
     name: Docs site (astro build)
     needs: changes
+    # Not in the merge queue: each entry passed this at its own head, and
+    # the backstop runs it on `main` (see the stage table).
     if: >-
       (needs.changes.outputs.site == 'true' || needs.changes.outputs.all == 'true')
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Docs site (astro build)')
+      && needs.changes.outputs.stage != 'queue'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # `packages: read` lets `npm ci` fetch the site theme
@@ -1858,7 +1924,8 @@ jobs:
     name: Dev Container feature (test)
     needs: changes
     if: >-
-      (needs.changes.outputs.features == 'true' || github.event_name == 'schedule')
+      (needs.changes.outputs.features == 'true' || needs.changes.outputs.stage == 'nightly')
+      && needs.changes.outputs.stage != 'queue'
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Dev Container feature (test)')
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1911,7 +1978,7 @@ jobs:
     name: Installer smoke (${{ matrix.os }})
     needs: changes
     if: >-
-      needs.changes.outputs.installer_scripts == 'true' || github.event_name == 'schedule'
+      needs.changes.outputs.installer_scripts == 'true' || needs.changes.outputs.stage == 'nightly'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
@@ -1980,7 +2047,7 @@ jobs:
     name: Apple targets (cross-build)
     needs: changes
     if: >-
-      needs.changes.outputs.release_workflow == 'true' || github.event_name == 'schedule'
+      needs.changes.outputs.release_workflow == 'true' || needs.changes.outputs.stage == 'nightly'
     runs-on: macos-15-intel
     timeout-minutes: 45
     steps:
@@ -2204,14 +2271,16 @@ jobs:
   # ---------------------------------------------------------------------------
   # Whether this run runs the ready set (see the stage table at the top): the
   # Windows and macOS legs (`test-os`), the Linux system tier, the Node
-  # floor and MSRV. Each of those jobs needs this one and checks `run`.
+  # floor and MSRV (those two on the nightly only). Each of those jobs needs
+  # this one and checks `run`.
   #
   #   draft    only if `promote` marked the PR ready in this run;
   #   ready    once the fast gates passed, so a PR that fails fmt or clippy
   #            spends no Windows or macOS minutes (the failure is red anyway);
   #   queue    never: the queue checks integration, on Linux;
-  #   main     always, whatever the fast gates did: `main` is the backstop,
-  #   nightly  and its record must be complete.
+  #   backstop always, whatever the fast gates did: these runs test
+  #   nightly  `main`, and their record must be complete (`main` too, for a
+  #   main     push run, which the workflow no longer triggers).
   #
   # It waits for `ci-fast` (~1-2 min) and `promote`, not for `test`: the
   # system tier runs alongside the Linux unit tier (see `test-system`), as
@@ -2236,7 +2305,7 @@ jobs:
           PROMOTED: ${{ needs.promote.outputs.promoted }}
         run: |
           case "$STAGE" in
-            main|nightly) run=true ;;
+            main|backstop|nightly) run=true ;;
             ready) [ "$FAST" = success ] && run=true || run=false ;;
             draft) [ "$PROMOTED" = true ] && run=true || run=false ;;
             queue) run=false ;;
@@ -2351,15 +2420,16 @@ jobs:
           READY_SET: ${{ needs.ready-gate.outputs.run }}
         run: |
           if [ "$STAGE" = draft ] && [ "$READY_SET" != true ]; then
-            echo "::error::Draft PR: only the draft-stage checks ran. Mark the PR ready for review to run the full check (Windows, macOS when MACOS_ON_PRS is 'true', the Linux system tier, the Node floor); 'CI green' passes once it has."
+            echo "::error::Draft PR: only the draft-stage checks ran. Mark the PR ready for review to run the full check (Windows, macOS when MACOS_ON_PRS is 'true', the Linux system tier); 'CI green' passes once it has."
             exit 1
           fi
           echo "Stage $STAGE: the checks this stage requires have run."
 
   # ---------------------------------------------------------------------------
-  # Nightly failure report. The nightly is the only stage that runs the full
-  # `ci` profile off Linux, coverage, and the release-facing smokes, and no PR
-  # is waiting on it, so a red nightly would otherwise go unseen. One open
+  # Backstop and nightly failure report. They are the only stages that run
+  # the full `ci` profile off Linux (and the nightly coverage and the
+  # release-facing smokes), and no PR is waiting on either, so a red one would
+  # otherwise go unseen. One open
   # issue tracks it: the first failure opens it, later ones comment on it, and
   # whoever fixes the cause closes it. Not gating (see ci-green's EXEMPT).
   # ---------------------------------------------------------------------------
@@ -2381,9 +2451,10 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           SHA: ${{ github.sha }}
+          KIND: ${{ github.event.schedule == '0 7 * * *' && 'nightly' || 'three-hourly backstop' }}
         run: |
           title="Nightly CI failed"
-          body="The nightly CI run failed on \`main\` at $SHA: $RUN_URL"
+          body="The $KIND CI run failed on \`main\` at $SHA: $RUN_URL"
           number="$(gh issue list --state open --search "in:title \"$title\"" --json number,title \
             --jq "[.[] | select(.title == \"$title\")][0].number // empty")"
           if [ -n "$number" ]; then
@@ -2392,5 +2463,5 @@ jobs:
           else
             gh issue create --title "$title" --body "$body
 
-          The nightly runs the full suite on all three OSes, coverage, and the installer and Dev Container smokes (see the stage table at the top of ci.yml). Close this issue once the cause is fixed; the next failure opens a new one."
+          The backstop (every three hours) and the nightly run the full suite on all three OSes; the nightly adds coverage, the Node floor, MSRV, and the installer and Dev Container smokes (see the stage table at the top of ci.yml). Close this issue once the cause is fixed; the next failure opens a new one."
           fi
