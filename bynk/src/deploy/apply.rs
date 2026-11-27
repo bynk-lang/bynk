@@ -136,6 +136,10 @@ pub(crate) fn apply_kind<K: ResourceKind>(
                 });
             }
         }
+        // Said once the step's work is on the account and recorded (#4602).
+        for note in &applied.notes {
+            note.print();
+        }
         if let Some(failure) = applied.stopped {
             return Err(failure);
         }

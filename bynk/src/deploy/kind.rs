@@ -414,6 +414,9 @@ pub(crate) struct Applied<K: ResourceKind> {
     pub(crate) bound: Vec<(String, K::Bound)>,
     /// What to record, each written in order before anything else is asked of the account.
     pub(crate) commits: Vec<Commit<K::Change>>,
+    /// #4602: what to tell the user the step did that its plan line did not forecast (a namespace
+    /// made again, a queue adopted), printed once its commits are written.
+    pub(crate) notes: Vec<Notice>,
     /// The failure that stopped the step part-way, returned once `commits` are written: what it
     /// did to the account before failing is recorded (#3999).
     pub(crate) stopped: Option<DeployFailure>,
@@ -425,6 +428,7 @@ impl<K: ResourceKind> Applied<K> {
         Applied {
             bound: Vec::new(),
             commits: Vec::new(),
+            notes: Vec::new(),
             stopped: None,
         }
     }
@@ -434,8 +438,15 @@ impl<K: ResourceKind> Applied<K> {
         Applied {
             bound: vec![(binding.to_string(), bound)],
             commits: Vec::new(),
+            notes: Vec::new(),
             stopped: None,
         }
+    }
+
+    /// And `note` to print after the step's commits are written (#4602).
+    pub(crate) fn noting(mut self, note: Notice) -> Self {
+        self.notes.push(note);
+        self
     }
 
     /// And `commit` to write.
@@ -494,8 +505,19 @@ pub(crate) enum Notice {
     Plain(String),
 }
 
+#[cfg(test)]
+thread_local! {
+    /// What [`Notice::print`] has said on this thread, for a test of when a note is said (#4602).
+    pub(crate) static PRINTED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
 impl Notice {
     pub(crate) fn print(&self) {
+        #[cfg(test)]
+        PRINTED.with(|printed| {
+            let (Notice::Styled(text) | Notice::Plain(text)) = self;
+            printed.borrow_mut().push(text.clone());
+        });
         match self {
             Notice::Styled(text) => emsg!("{text}"),
             Notice::Plain(text) => eprintln!("{text}"),

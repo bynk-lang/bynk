@@ -355,7 +355,12 @@ impl ResourceKind for Kv {
             .map_err(|e| DeployFailure::driver(format!("could not create {what}: {e}")))?;
         // Recorded before the push, so an interrupted run never makes a second namespace.
         let record = cx.recording(binding, KvNamespace::of(&id), &format!("created {what}"));
-        Ok(Applied::bound(binding, id).with(record))
+        let applied = Applied::bound(binding, id).with(record);
+        // #4602: the plan said `reuse`, so say that this run made the namespace again.
+        Ok(match recorded {
+            Some(_) => applied.noting(Notice::Plain(kv_recreated_note(&what))),
+            None => applied,
+        })
     }
 
     fn materialise(
@@ -406,6 +411,12 @@ pub(crate) fn kv_title(worker: &str, binding: &str, environment: &str) -> String
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct KvNamespace {
     pub(crate) id: String,
+}
+
+/// #4602: what the apply says of a namespace whose recorded id has gone from the account. The
+/// plan, read before the live ids, still said `reuse`.
+fn kv_recreated_note(what: &str) -> String {
+    format!("bynk: note: re-created {what} (the recorded id was gone from the account)")
 }
 
 /// One recorded KV namespace the build no longer declares (S4b, #1967): the
@@ -715,6 +726,54 @@ fn already_deleted(e: &CloudflareError) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #4602: a recorded namespace the account no longer has is made again, and the run says so
+    /// (the plan said `reuse`); one made for the first time is not called "re-created".
+    #[test]
+    fn a_namespace_made_again_says_so_after_the_plan_said_reuse() {
+        use crate::cloudflare::fake::Recording;
+        let lock = lock_of(&[("default", "shop", "KV", "kv-gone")]);
+        let api = Recording::new(|op: &crate::cloudflare::Op<'_>| match op {
+            crate::cloudflare::Op::KvCreate { .. } => Ok::<_, CloudflareError>("kv-new".into()),
+            _ => Ok(String::new()),
+        });
+        let tools = Tools {
+            api: &api,
+            project_root: Path::new("/nonexistent"),
+        };
+        let resources = project(vec![("shop", Resources::default().needs_kv())]);
+        let live = BTreeSet::from(["kv-other".to_string()]);
+        let apply = |decision: KvDecision| {
+            Kv::apply(
+                &StepCx {
+                    environment: "default",
+                    worker: "shop",
+                    project: &resources,
+                    lock: &lock,
+                    live: Some(&live),
+                    tools,
+                },
+                &KvStep {
+                    binding: "KV",
+                    decision,
+                },
+            )
+            .expect("the namespace is made")
+        };
+        let again = apply(KvDecision::Reuse {
+            id: "kv-gone".to_string(),
+        });
+        assert_eq!(again.bound, [("KV".to_string(), "kv-new".to_string())]);
+        assert_eq!(
+            again.notes,
+            [Notice::Plain(
+                "bynk: note: re-created KV namespace for `shop` (the recorded id was gone from the account)"
+                    .to_string()
+            )]
+        );
+        // A first creation has nothing recorded to have lost.
+        assert!(apply(KvDecision::Create).notes.is_empty());
+    }
 
     #[test]
     fn should_trust_recorded_kv_only_when_the_id_is_live_or_unchecked() {
