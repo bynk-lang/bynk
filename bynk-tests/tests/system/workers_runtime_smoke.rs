@@ -59,6 +59,9 @@ fn boot_answer(
     url: &str,
 ) -> Result<String, String> {
     let body = std::cell::RefCell::new(None);
+    // What the last probe said, as the old loops kept it: a Ready Worker that never answers `200`
+    // is told apart from one that never answered at all by that status line.
+    let last_err = std::cell::RefCell::new(String::new());
     wrangler::wait_until_ready_or_exit(
         log_path,
         port,
@@ -67,7 +70,10 @@ fn boot_answer(
                 *body.borrow_mut() = Some(answer);
                 true
             }
-            Err(_) => false,
+            Err(e) => {
+                *last_err.borrow_mut() = e;
+                false
+            }
         },
         &mut || {
             child
@@ -87,7 +93,7 @@ fn boot_answer(
             !logs.contains("Address already in use"),
             "wrangler dev could not bind its ports ({why}): {logs}"
         );
-        format!("{why}\n{logs}")
+        format!("{why}; last probe: {}\n{logs}", last_err.borrow())
     })
 }
 
