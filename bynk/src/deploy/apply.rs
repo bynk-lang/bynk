@@ -869,6 +869,24 @@ fn push_worker(
 mod tests {
     use super::*;
 
+    /// #4623 review: the combined failure keeps the stopping failure's exit code, whatever the
+    /// write's, and says the stopping failure first.
+    #[test]
+    fn both_failures_keep_the_stopping_failures_code_and_say_it_first() {
+        let both = both_failures(
+            DeployFailure {
+                message: "the push stopped".into(),
+                code: 7,
+            },
+            DeployFailure::driver("the record could not be written".into()),
+        );
+        assert_eq!(both.code, 7);
+        assert_eq!(
+            both.message,
+            "the push stopped; and then the record could not be written"
+        );
+    }
+
     fn scratch(name: &str) -> std::path::PathBuf {
         let dir =
             std::env::temp_dir().join(format!("bynk-1d2-writer-{name}-{}", std::process::id()));
