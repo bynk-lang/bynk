@@ -140,7 +140,7 @@ carries the full ambient set:
 `headers: Map[String, String]` for any other request header. All four are
 optional (`None`, or an empty map), so a request needs only `method` and `url`.
 `Response` carries `status`, `headers` (keys
-lowercased) and `body`. See
+lowercased), `body` and `setCookies` (every `set-cookie` value, separately). See
 [the `bynk` capabilities reference](/reference/bynk-capabilities/#request-and-response-headers)
 for the conflict and forbidden-header rules, which return `Err(InvalidHeader)`.
 

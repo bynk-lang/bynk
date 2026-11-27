@@ -6139,13 +6139,16 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.extensible_match_needs_wildcard",
         blurb: "Some standard-library enums, among them `FetchError` and `Method`, are \
-                extensible: a minor release may add a variant. A `match` that names every \
+                extensible: a minor release may add a variant. So is the built-in \
+                `HttpResult`, whose RFC 9110 status vocabulary grows in 1.x minor releases. \
+                A `match` that names every \
                 variant they have today would then stop covering them, so the compiler asks \
                 for a wildcard arm now, and the `match` keeps compiling when a variant \
                 arrives. Listing every current variant is not enough. Add `_`, or `Err(_)` \
                 where the enum is wrapped, and put there whatever should happen for a \
                 variant you did not name. An enum of your own with the same name is not \
-                extensible; the rule follows the first-party enum. For an ordinary enum, a \
+                extensible; the rule follows the first-party enum (`HttpResult` is a reserved \
+                name). A `match` in a suite case is not checked. For an ordinary enum, a \
                 missing arm is `bynk.types.non_exhaustive_match`.",
         example: "fn verb(m: Method) -> String {\n    match m {           // ✗ every variant, but no wildcard\n        Get => \"read\"\n        Post => \"write\"\n        Put => \"write\"\n        Delete => \"write\"\n        Patch => \"write\"\n        Head => \"read\"\n        Options => \"read\"\n    }\n}\n\n\
                   fn verb(m: Method) -> String {\n    match m {\n        Get => \"read\"\n        _ => \"write\"       // ✓ also covers variants added later\n    }\n}",
@@ -11359,7 +11362,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.extensible_match_needs_wildcard",
-        "A `match` covers an extensible standard-library enum (`FetchError`, `Method`) without a wildcard; it may gain variants in a minor release.",
+        "A `match` covers an extensible standard-library enum (`FetchError`, `Method`) or the built-in `HttpResult` without a wildcard; it may gain variants in a minor release.",
     ),
     dg(
         "bynk.types.field_access_on_non_record",

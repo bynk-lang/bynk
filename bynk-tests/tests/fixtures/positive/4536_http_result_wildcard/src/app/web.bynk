@@ -1,0 +1,18 @@
+// #4536: a `match` on an `HttpResult` with a wildcard arm compiles, and the
+// wildcard, which covers the statuses a later release may add, is not
+// unreachable.
+context app.web
+
+fn label(r: HttpResult[String]) -> String {
+	match r {
+		Ok(_) => "ok",
+		NotFound => "missing",
+		_ => "other",
+	}
+}
+
+service api from http {
+	on GET("/item") () -> Effect[HttpResult[String]] by Visitor {
+		Ok(label(NotFound))
+	}
+}

@@ -147,7 +147,7 @@ class __Stub_Renderer {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a stubbed send returns its response") {
-      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: "<svg/>" });
+      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: "<svg/>", setCookies: [] });
     }
     if (this.__case === "an unavailable container is matched") {
       return Err(ContainerError.Unavailable);

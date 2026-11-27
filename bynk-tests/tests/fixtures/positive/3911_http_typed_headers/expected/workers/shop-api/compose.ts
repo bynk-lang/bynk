@@ -12,7 +12,7 @@ export function compose(env: Env) {
     async http_GET_probe(headers: handlers.UploadHeaders) {
       return handlers.api.http_GET_probe(headers, deps);
     },
-    async http_GET_raw(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
+    async http_GET_raw(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }) {
       return handlers.api.http_GET_raw(headers, deps);
     },
   };

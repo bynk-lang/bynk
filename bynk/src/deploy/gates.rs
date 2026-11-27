@@ -482,7 +482,7 @@ pub(crate) struct AccountCx<'a> {
 }
 
 /// #4056 Decision E: a run whose steps will call the account's REST API for a resource kind
-/// (KV since 1D.4a) needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, checked here, after
+/// (KV since 1D.4a, R2 and D1 since 1D.4b) needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, checked here, after
 /// the plan and before the confirmation, so a missing one is refused before anything is created.
 /// The first kind in list order that needs them reports, in its own words. A run that needs
 /// nothing asks nothing: a redeploy with everything recorded still works with `wrangler login`.
@@ -512,10 +512,19 @@ pub(crate) fn resource_credentials(
         crate::cloudflare::rest::Purpose,
     ) -> Result<(), crate::cloudflare::CloudflareError>,
 ) -> Result<(), String> {
-    if !kv_calls_the_account(project, kv_orphans, prune) {
-        return Ok(());
+    use crate::cloudflare::rest::Purpose;
+    let needed = [
+        (
+            Purpose::Kv,
+            kv_calls_the_account(project, kv_orphans, prune),
+        ),
+        (Purpose::R2, r2_calls_the_account(project)),
+        (Purpose::D1, d1_calls_the_account(project)),
+    ];
+    for (purpose, _) in needed.into_iter().filter(|(_, needed)| *needed) {
+        credentials(purpose).map_err(|e| e.to_string())?;
     }
-    credentials(crate::cloudflare::rest::Purpose::Kv).map_err(|e| e.to_string())
+    Ok(())
 }
 
 /// What the account checks found, for the apply: the wrangler to run, the ids each stored secret

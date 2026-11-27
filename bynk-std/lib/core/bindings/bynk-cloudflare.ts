@@ -262,7 +262,7 @@ export class FetchProvider implements Fetch {
     redirect: "follow" | "manual",
     read: (res: globalThis.Response) => B | Promise<B>,
     headOnly = false,
-  ): Promise<Result<{ status: number; headers: Map<string, string>; body: B }, FetchError>> {
+  ): Promise<Result<{ status: number; headers: Map<string, string>; setCookies: readonly string[]; body: B }, FetchError>> {
     // K5b (#2604): a body is refused before anything is sent when HTTP forbids
     // it (`Get`, `Head`) — `fetch` would throw a TypeError, which would read as
     // `Err(Network)` — or when `sendBytes` was given one while `req.body` was
@@ -358,7 +358,8 @@ export class FetchProvider implements Fetch {
       // So `set-cookie` is set aside and rebuilt from `getSetCookie()` where
       // the runtime has it, then joined like every other header: undici and
       // workerd agree on the result. The join is lossy for cookies — an
-      // `Expires` attribute holds a comma — as the `Response` doc says.
+      // `Expires` attribute holds a comma — so the values also arrive one by one, intact, in
+      // `setCookies` (#4115), and as the `Response` doc says `headers` keeps the joined form.
       // `forEach`, not `for…of`: the latter needs the `DOM.Iterable` lib,
       // which a consumer's tsconfig may omit.
       const resHeaders = new Map<string, string>();
@@ -375,7 +376,7 @@ export class FetchProvider implements Fetch {
       if (cookies.length > 0) {
         resHeaders.set("set-cookie", cookies.join(", "));
       }
-      return Ok({ status: res.status, headers: resHeaders, body: await read(res) });
+      return Ok({ status: res.status, headers: resHeaders, setCookies: cookies, body: await read(res) });
     } catch (e) {
       // K5c (#2627): the caller's own stream threw while it was sent — a
       // fault, not a network failure a retry could fix.

@@ -25,7 +25,7 @@ function __makeHarness() {
 }
 
 <<bynk-shared: testing/jwt_signer>>
-async function __sysdrive_blobs_http_PUT_blobs_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_blobs_http_PUT_blobs_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __it = body[globalThis.Symbol.asyncIterator]();
   const __body = new globalThis.ReadableStream<Uint8Array>({ async pull(c) {
   const r = await __it.next();
@@ -37,13 +37,13 @@ async function __sysdrive_blobs_http_PUT_blobs_Param_name(name: string, body: As
   const __res = await __h.env.STORE_BLOBS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_blobs_http_PUT_blobs_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_raw_blobs_http_PUT_blobs_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/blobs/${name}`, { method: "PUT", headers: { "content-type": "text/plain; charset=utf-8", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: new globalThis.ReadableStream<Uint8Array>({ start(c) { c.enqueue(new globalThis.TextEncoder().encode(body)); c.close(); } }), ...({ duplex: "half" } as object) });
   const __res = await __h.env.STORE_BLOBS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_blobs_http_PUT_zips_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_blobs_http_PUT_zips_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __it = body[globalThis.Symbol.asyncIterator]();
   const __body = new globalThis.ReadableStream<Uint8Array>({ async pull(c) {
   const r = await __it.next();
@@ -55,7 +55,7 @@ async function __sysdrive_blobs_http_PUT_zips_Param_name(name: string, body: Asy
   const __res = await __h.env.STORE_BLOBS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_blobs_http_PUT_zips_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_raw_blobs_http_PUT_zips_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/zips/${name}`, { method: "PUT", headers: { "content-type": "text/plain; charset=utf-8", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: new globalThis.ReadableStream<Uint8Array>({ start(c) { c.enqueue(new globalThis.TextEncoder().encode(body)); c.close(); } }), ...({ duplex: "half" } as object) });
   const __res = await __h.env.STORE_BLOBS.fetch(__req);
@@ -67,7 +67,7 @@ async function __sysdrive_wrongmethod_blobs(method: string, path: string) {
   const __res = await __h.env.STORE_BLOBS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
 }
-async function __sysdrive_rendered_http_PUT_rendered_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_rendered_http_PUT_rendered_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __it = body[globalThis.Symbol.asyncIterator]();
   const __body = new globalThis.ReadableStream<Uint8Array>({ async pull(c) {
   const r = await __it.next();
@@ -79,7 +79,7 @@ async function __sysdrive_rendered_http_PUT_rendered_Param_name(name: string, bo
   const __res = await __h.env.STORE_BLOBS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_rendered_http_PUT_rendered_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_raw_rendered_http_PUT_rendered_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/rendered/${name}`, { method: "PUT", headers: { "content-type": "text/plain; charset=utf-8", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: new globalThis.ReadableStream<Uint8Array>({ start(c) { c.enqueue(new globalThis.TextEncoder().encode(body)); c.close(); } }), ...({ duplex: "half" } as object) });
   const __res = await __h.env.STORE_BLOBS.fetch(__req);

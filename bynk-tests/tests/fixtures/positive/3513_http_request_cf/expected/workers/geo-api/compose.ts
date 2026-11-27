@@ -12,7 +12,7 @@ export function compose(env: Env) {
     async http_GET_hello(cf: handlers.RequestCf) {
       return handlers.api.http_GET_hello(cf, deps);
     },
-    async http_GET_greet_Param_name(name: string, cf: handlers.RequestCf, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
+    async http_GET_greet_Param_name(name: string, cf: handlers.RequestCf, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }) {
       return handlers.api.http_GET_greet_Param_name(name, cf, headers, deps);
     },
     async http_GET_eu(cf: handlers.RequestCf) {

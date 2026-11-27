@@ -1861,7 +1861,8 @@ MUST report `bynk.types.non_exhaustive_match` (asking for a wildcard arm) rather
 than accept it, and MUST NOT report an arm unreachable.
 
 **Extensible enums** (standard-library S3, #1963). A standard-library enum
-marked extensible in the first-party registry (`FetchError`, `Method`) may gain
+marked extensible in the first-party registry (`FetchError`, `Method`), and
+the built-in `HttpResult` (#4536, marked beside its variant registry), may gain
 variants in a minor release, so its coverage counts one more shape than its
 declared variants: a future variant that only an irrefutable pattern (`_` or a
 binding) covers. A `match` that covers an extensible enum at any depth
@@ -2827,7 +2828,15 @@ schema registry, `bynk.schema.lock`. A new event starts at version 1, or at its
 `@schema(N)`. An unchanged shape keeps its version; an additive change, in which
 every added field has a default and no field is removed, retyped, or loses a
 default, increments it by one; any other change is
-`bynk.event.non_additive_schema_change`. A field declared `replaces old` is the
+`bynk.event.non_additive_schema_change`. A field whose type reaches a record or a sum
+is judged by the positions inside it, as a stored value is (§5.4.3), rooted at the
+field's wire name: a nested field removed or retyped, added without a default, or that
+lost a default, is a non-additive change, a nested field added with a default or a new
+variant is additive, and a nested wire key (`@name`) or field that changed is accepted
+only when the field says `replaces <the old key>`. A record type's own name is no part (renaming it, fields unchanged, leaves the schema number as it was)
+of the shape, since the wire carries its fields and not its name. A lock written before
+this records no positions for such a field: an unchanged build keeps its version and
+fills them in, and a field whose type changed is a retype as before. A field declared `replaces old` is the
 recorded field `old` renamed: the reconcile renames the recorded field first, so a
 rename on its own is additive (it increments the version and records `renamed_from`
 on the field), and one beside another change is judged by that change. `old` MUST be

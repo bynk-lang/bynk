@@ -108,16 +108,23 @@ impl CloudflareApi for Recording {
         .map(drop)
     }
 
-    fn d1_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<String, WranglerError> {
-        self.call(Op::D1Create { name, jurisdiction })
+    fn d1_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<String, CloudflareError> {
+        self.rest(Op::D1Create { name, jurisdiction })
     }
 
-    fn d1_list(&self) -> Result<String, WranglerError> {
-        self.call(Op::D1List)
+    /// Logged as the `d1 list --json` it replaced; the reply is the id found, or empty for none.
+    fn d1_find(&self, _name: &str) -> Result<Option<String>, CloudflareError> {
+        let id = self.rest(Op::D1List)?;
+        Ok(Some(id.trim().to_string()).filter(|id| !id.is_empty()))
     }
 
-    fn r2_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<(), WranglerError> {
-        self.call(Op::R2Create { name, jurisdiction }).map(drop)
+    fn r2_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<(), CloudflareError> {
+        self.rest(Op::R2Create { name, jurisdiction }).map(drop)
+    }
+
+    /// The reply `"owned"` is a bucket this account holds; any other `Ok` is one it does not.
+    fn r2_owned(&self, name: &str, jurisdiction: Option<&str>) -> Result<bool, CloudflareError> {
+        Ok(self.rest(Op::R2Owned { name, jurisdiction })? == "owned")
     }
 
     fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {

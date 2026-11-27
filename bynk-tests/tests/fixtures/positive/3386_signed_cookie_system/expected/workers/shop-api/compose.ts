@@ -30,7 +30,7 @@ export function compose(env: Env) {
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_GET_theme(cookies, { ...deps, identity: __id.value });
     },
-    async http_GET_cookie_header(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
+    async http_GET_cookie_header(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }) {
       const __cookie = __sessionCookieOf(request, "__Host-session");
       if (__cookie === null) return HttpResult.Unauthorized;
       const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY_PREV"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY_PREV"] }, "User", 43200);
