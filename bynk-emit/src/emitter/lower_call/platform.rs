@@ -726,8 +726,7 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
     if let Some(Callee::ApiKeyMint { actor }) = cx.commons().callees.get(&e.id).cloned() {
         return super::api_key::lower_api_key_mint(e, &actor, args, cx, pre);
     }
-    if let Some(Callee::ApiKeyMember { actor, member }) = cx.commons().callees.get(&e.id).cloned()
-    {
+    if let Some(Callee::ApiKeyMember { actor, member }) = cx.commons().callees.get(&e.id).cloned() {
         return super::api_key::lower_api_key_member(e, (&actor, &member), args, cx, pre);
     }
     let Some(Callee::SignedCookie { actor, issue }) = cx.commons().callees.get(&e.id).cloned()
