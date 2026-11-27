@@ -2,7 +2,7 @@
 // except to a loopback host. The check is on the parsed URL's hostname.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { __call, __cleartextRemote, CleartextCredential, type ClientOptions } from "../src/client/http_client.ts";
+import { __call, __cleartextRemote, CleartextCredential, viaBinding, type ClientOptions } from "../src/client/http_client.ts";
 import { Ok } from "../src/result.ts";
 
 const route = { method: "GET", path: "/things", replies: { 200: [{ kind: "Ok", body: "none" as const }] } };
@@ -154,4 +154,30 @@ test("the shared test serves a ws: URL as it serves an http: one", () => {
   assert.equal(__cleartextRemote("wss://api.example.com/socket"), false);
   assert.equal(__cleartextRemote("https://api.example.com"), false);
   assert.equal(__cleartextRemote("not a url"), false, "an unparseable URL is left to fetch to reject");
+});
+
+test("a Service Binding call is not checked: it never reaches the network, whatever baseUrl says", async () => {
+  const seen: string[] = [];
+  const binding = {
+    async fetch(input: unknown) {
+      seen.push(String(input));
+      return new Response(null, { status: 200 });
+    },
+  };
+  // `viaBinding(env.API, "http://orders")` with a forwarded Authorization header is not exposed.
+  const out = await __call({ ...viaBinding(binding, "http://orders"), headers: bearer }, undefined, route, build);
+  assert.deepEqual(out, { status: 200, kind: "Ok" });
+  assert.deepEqual(seen, ["http://orders/things"]);
+  // The same URL through any other `fetch` is still refused: the skip is for the binding's own fetch only.
+  const r = recorder();
+  await assert.rejects(
+    () => __call({ baseUrl: "http://orders", fetch: r.fetch, headers: bearer }, undefined, route, build),
+    CleartextCredential,
+  );
+  // Nothing a caller sets on the options switches the check off.
+  await assert.rejects(
+    () => __call({ baseUrl: "http://orders", fetch: r.fetch, headers: bearer, local: true } as ClientOptions, undefined, route, build),
+    CleartextCredential,
+  );
+  assert.deepEqual(r.sent, []);
 });

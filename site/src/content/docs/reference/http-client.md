@@ -119,15 +119,22 @@ switch (res.kind) {
 | `credentials` | Passed to `fetch`. `"include"` sends cookies to another origin; that needs a [`cors`](/reference/http/) policy with `credentials: true` and explicit origins. |
 | `origin` | Sent as the `Origin` header. See [Cookies and CSRF](#cookies-and-csrf). |
 
+### Credentials over cleartext
+
 **A credential is never sent over cleartext.** A call that carries an `Authorization` header (a
 bearer or OIDC token, from `headers`, the call's `init` or a typed `headers` record) to an `http:` or
 `ws:` URL throws a `CleartextCredential` before anything is sent, unless the host is loopback:
 `localhost`, a `*.localhost` name, `127.0.0.0/8` or `[::1]`, as `bynk dev` and the test tiers use.
 Use an `https://` base URL for anything else. A relative `baseUrl` is checked against
-`location.origin`. Anonymous calls are unaffected, and so are cookie credentials, which the browser
-governs with `Secure`. A WebSocket `connect` follows the same rule: a bearer or OIDC token (given, or
+`location.origin`. A WebSocket `connect` follows the same rule: a bearer or OIDC token (given, or
 read by `reconnect.credentials`) to a remote `ws:` or `http:` base URL throws `CleartextCredential`
 before a socket is made.
+
+Not covered: anonymous calls, and a `Cookie`. A browser governs its own cookies with `Secure`; a
+server-side call that forwards a `Cookie` through `headers` (Node, a framework's server, a Worker) is
+not checked, so give it an `https://` base URL too. A [Service Binding](#calling-through-a-service-binding)
+made with `viaBinding` is not checked either: its calls never reach the network, and the host of its
+`baseUrl` is ignored.
 
 Each function takes the route's parameters in order (path parameters, then the
 `body`, then the `query`) and an optional last `init`, a standard `RequestInit`
@@ -139,7 +146,8 @@ a service that would share a name are refused, naming both.
 ## What a call returns
 
 A call returns `Promise<RouteResponse | CallFailure>` and never throws for an HTTP
-status or a network failure.
+status or a network failure. It throws in two cases only: a `StreamFailure` while iterating a
+stream, and a `CleartextCredential` before anything is sent (see [below](#credentials-over-cleartext)).
 
 `RouteResponse` is a union with one member for each answer `bynk openapi`
 documents for the route: the declared success when the handler can return it, each
@@ -379,7 +387,7 @@ the call with a `signal`, cancels the body. The body is read only when iteration
 that is never iterated leaves the response open until the `signal` aborts it, so check the
 `status` first and abort what you will not read. A stream that fails after its status was sent
 cannot become a `CallFailure`: the iteration throws a `StreamFailure` (exported, with `reason`
-holding what the body rejected with), the one place the client throws. Two edges are the server's framing: an
+holding what the body rejected with), the only throw once a request is sent. Two edges are the server's framing: an
 element containing a bare `\r` is split by a reader (the server splits on `\n` only), so it
 does not round-trip, and an empty element is an event with empty data.
 
@@ -530,7 +538,8 @@ conn.onClose(({ code, reason, clean }) => log(code, reason, clean));
 ```
 
 `connect` returns the connection, or a `CallFailure` (`Invalid` for a route parameter the server would refuse,
-which is checked before anything is opened) and never throws.
+which is checked before anything is opened) and throws only the `CleartextCredential` of a token
+offered over cleartext (see [the rule for credentials](#credentials-over-cleartext)).
 
 **The route's parameters** are the `on open` parameters, typed and checked as an HTTP path parameter is, and
 sent in the query string of the upgrade, which is where the Worker reads them.
