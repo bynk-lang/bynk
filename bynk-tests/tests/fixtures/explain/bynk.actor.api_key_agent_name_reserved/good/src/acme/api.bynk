@@ -1,0 +1,14 @@
+context acme.api
+
+
+type AccountId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER"), identity = AccountId }
+
+agent ClientLedger {
+	key id: String
+	store n: Cell[Int] = 0
+	on call read() -> Effect[Int] {
+		n
+	}
+}

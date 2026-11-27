@@ -218,7 +218,7 @@ stopped: exit 1: could not create the Hyperdrive config `shop-new` for `shop`'s 
 +147 [environments.default.workers.shop-cart.expects]
 +148 
 -- call 21 fails: queues create outbound
-stopped: exit 1: could not create the queue `outbound`: ✘ [ERROR] the stand-in failed call 21
+stopped: exit 1: could not create the queue `outbound`: Cloudflare answered 500 to call 21
 + 20 [environments.default.kv_instances.shop.KV_CART]
 + 21 id = "kv-shop-cart"
 + 22 
@@ -752,7 +752,7 @@ stopped: exit 1: could not delete the orphaned Hyperdrive config `shop-main-was`
 -123     "returns@example.com",
 -124 ]
 -- call 32 fails: queues delete old-jobs
-stopped: exit 1: could not delete the orphaned queue `old-jobs`: ✘ [ERROR] the stand-in failed call 32
+stopped: exit 1: could not delete the orphaned queue `old-jobs`: Cloudflare answered 500 to call 32
 +  7     "outbound",
 - 11 [environments.default.kv.gone]
 - 12 id = "kv-gone-default"
@@ -2213,7 +2213,7 @@ stopped: exit 1: could not create the Hyperdrive config `shop-new-staging` for `
 +192 
 +193 [environments.staging.workers.shop-cart.expects]
 -- call 23 fails: queues create outbound-staging
-stopped: exit 1: could not create the queue `outbound-staging`: ✘ [ERROR] the stand-in failed call 23
+stopped: exit 1: could not create the queue `outbound-staging`: Cloudflare answered 500 to call 23
 +127 queues = [
 +128     "old-jobs",
 +129     "shared-feed",
@@ -2529,7 +2529,7 @@ stopped: exit 1: wrangler deploy failed for `shop-staging` (exit 1)
 +219 
 +220 [environments.staging.workers.shop-cart.expects]
 -- call 27 fails: queues delete old-jobs-staging
-stopped: exit 1: could not delete the orphaned queue `old-jobs-staging`: ✘ [ERROR] the stand-in failed call 27
+stopped: exit 1: could not delete the orphaned queue `old-jobs-staging`: Cloudflare answered 500 to call 27
 +127 queues = [
 +128     "intake",
 +129     "old-jobs",

@@ -28,6 +28,7 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+pub mod api_key_agents;
 pub mod assets;
 pub mod consistency;
 pub mod containers;

@@ -66,6 +66,7 @@ pub(crate) mod equality;
 pub mod keying;
 pub mod ordering;
 use equality::EqScope;
+mod api_key_calls;
 mod effect_more;
 mod erase;
 mod expressions;
@@ -862,6 +863,12 @@ pub enum Callee {
     /// #3938: `Actor.revokeAll(identity)` on a `SignedCookie` actor with `sessions = true`: end
     /// every session of the identity in its session agent. An `Effect[()]`.
     SessionRevokeAll { actor: String },
+    /// #3939: `Actor.mint(identity, label)` on a local `ApiKey` actor: make, store and answer a key
+    /// once. An `Effect[Result[ApiKeySecret, TooManyKeys]]`.
+    ApiKeyMint { actor: String },
+    /// #3939: `ApiKey.equal(a, b)`, the generated key store's constant-time digest comparison,
+    /// reachable only from the agents generated for an `ApiKey` actor. An `Effect[Bool]`.
+    ApiKeyEqual,
     /// #3446: `Record.field.cookie(value)` / `Record.field.expire()` on a cookie record: the
     /// `Cookie` the field's decoder reads back (named by its wire name, valued by the decoder's
     /// leaf rules), or its matching deletion.

@@ -430,6 +430,16 @@ fn resolve_qualified_from(
                         .map(|(_, sig)| sig);
                     return;
                 }
+                // #3939: `Client.mint(identity, label)` on an `ApiKey` actor.
+                CommonsItem::Actor(a)
+                    if a.name.name == recv && crate::api_key_completion::is_api_key_actor(a) =>
+                {
+                    out = crate::api_key_completion::members(a)
+                        .into_iter()
+                        .find(|(label, _)| *label == member)
+                        .map(|(_, sig)| sig);
+                    return;
+                }
                 // `Cap.op` — a capability operation.
                 CommonsItem::Capability(c) if c.name.name == recv => {
                     if let Some(op) = c.ops.iter().find(|o| o.name.name == member) {

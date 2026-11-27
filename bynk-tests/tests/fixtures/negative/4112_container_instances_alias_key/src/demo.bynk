@@ -1,0 +1,9 @@
+context demo
+
+// #4112: a plain alias of `String` adds no check, so it would not bound the names.
+
+consumes bynk.cloudflare { Container }
+
+type TenantId = String
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @instances(by: TenantId)
