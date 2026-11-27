@@ -479,12 +479,15 @@ impl MoveRun<'_> {
                 .with("contexts", contexts),
             ));
         }
-        self.check_interleaved(&record)?;
-        let all = Self::record(writer, self.environment, move_id);
-        let fresh = AgentMoveRecord {
-            done: Vec::new(),
-            ..all
-        };
+        // Ruling 2 (#3565): before any commit, a cancel goes ahead over a deployment the move did
+        // not make, so it is the way out of a `move_interleaved` stop; it checks nothing here.
+        // The record goes back to `receiving` first, so a cancel cut short is resumed by
+        // receiving again, never by a commit the cancelled receiver no longer expects.
+        self.write(writer, move_id, |r| {
+            r.step = MoveStep::Receiving;
+            r.done.clear();
+        })?;
+        let fresh = Self::record(writer, self.environment, move_id);
         let outcome = self.push_all(writer, &fresh, Phase::Cancel, &receivers(&fresh));
         if !outcome.stop.is_empty() {
             return Err(outcome.stop);
@@ -595,13 +598,12 @@ impl MoveRun<'_> {
         // refuses that (`phase_one_transfer_target_class_provisioned`).
         let unconfirmed: BTreeSet<String> = match self.unconfirmed(record) {
             Ok(u) => u.into_iter().map(|u| u.class).collect(),
+            // Unread, nothing is known class by class: the record stays as it was (its
+            // `committed` and `done` included), and the next run repeats the commit, which is
+            // refused again until the listing can say which classes went back.
             Err(e) => {
                 stop.failures.extend(e.failures);
-                record
-                    .moves
-                    .iter()
-                    .flat_map(|m| m.classes.clone())
-                    .collect()
+                return stop;
             }
         };
         let committed: Vec<String> = record
@@ -609,6 +611,7 @@ impl MoveRun<'_> {
             .iter()
             .flat_map(|m| m.classes.iter())
             .filter(|c| !unconfirmed.contains(*c))
+            .chain(record.committed.iter())
             .cloned()
             .collect::<BTreeSet<_>>()
             .into_iter()

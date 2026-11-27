@@ -522,8 +522,8 @@ fn deploy(
         plan = plan.with_refusal(refusals::recreate_needs_yes(refusal));
     }
     let plan = print_plan_then_forward_warnings(plan, opts, &order, &resources, project_root);
+    note_cancel(cancelling, placed.as_ref(), opts.dry_run);
     if opts.dry_run {
-        note_dry_cancel(cancelling, placed.as_ref());
         return Ok(());
     }
     build_move_variants(project_root, &build_dir, opts, &placed, &lock, &resources)?;
@@ -684,13 +684,23 @@ fn cancelling_set(
     Err(Stop::refused(entry))
 }
 
-/// #3565 (D8): what `--cancel-move` would cancel, said by a dry run, which pushes nothing.
-fn note_dry_cancel(cancelling: Option<usize>, placed: Option<&crate::deploy::agent_move::Placed>) {
+/// #3565 (D8): what `--cancel-move` cancels, said before the confirmation: the run cancels that
+/// move and pushes nothing else of the plan above (a dry run, nothing at all).
+fn note_cancel(
+    cancelling: Option<usize>,
+    placed: Option<&crate::deploy::agent_move::Placed>,
+    dry_run: bool,
+) {
     if let (Some(n), Some(placed)) = (cancelling, placed)
         && let Some(r) = &placed.resumes[n]
     {
+        let what = if dry_run {
+            "--dry-run pushes nothing"
+        } else {
+            "this run pushes nothing else of the plan above"
+        };
         colour::eprint(&format!(
-            "bynk: --cancel-move would cancel the agent move `{}` (at step `{}`); --dry-run pushes nothing\n",
+            "bynk: --cancel-move would cancel the agent move `{}` (at step `{}`); {what}\n",
             r.move_id, r.step
         ));
     }

@@ -12,11 +12,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::process::ExitCode;
 
-use bynk_driver::emsg;
+use bynk_driver::{colour, emsg};
+
+use super::edge_slots::record_edge_slots;
 use bynk_emit::emitter::workers_moves::{CANCEL_CONFIG, COMMIT_CONFIG, RECEIVE_CONFIG};
 use bynk_project::worker_moves::{Incoming, MoveVariants, Outgoing};
 
-use super::agent_move::{MOVE_OPEN, Placed};
+use super::agent_move::{AGENT_MOVE_REFUSED, MOVE_OPEN, Placed};
 use super::facts::{self, Facts, Transfer};
 use super::ledger::{AgentMoveEntry, AgentMoveRecord, DeployLock};
 use super::move_apply::{
@@ -171,6 +173,9 @@ impl MovePusher for LivePusher<'_> {
             (file.as_ref().map(|f| f.path()), first),
         );
         drop(file);
+        if first && pushed == Ok(Pushed::Ok) {
+            report_first_version_bindings(&secrets, &deployed_worker_name(environment, worker));
+        }
         match pushed {
             Ok(Pushed::Ok) => PhasePush::Landed,
             Ok(Pushed::Interrupted) => PhasePush::Interrupted,
@@ -198,7 +203,16 @@ impl MovePusher for LivePusher<'_> {
                     record_worker(lock, environment, self, worker, declared);
                 }
             }
-            Phase::Receive | Phase::Cancel => {}
+            // A new receiver is on the account from its phase 1 on: a resume must not take it for
+            // a first deploy, which would mint edge keys its callers get and it never does.
+            Phase::Receive => {
+                if self.prepared.get(worker).is_some_and(|p| p.first_deploy)
+                    && !lock.is_deployed(environment, worker)
+                {
+                    lock.record_deployed(environment, worker, None);
+                }
+            }
+            Phase::Cancel => {}
         }
     }
 }
@@ -293,7 +307,7 @@ fn prepare_set(
     set: &MoveSet,
     under_way: bool,
     resolved: &mut BTreeMap<String, String>,
-    only: Option<&[String]>,
+    (only, cancel): (Option<&[String]>, bool),
 ) -> Result<BTreeMap<String, PreparedPush>, MoveStop> {
     let opts = apply.opts;
     let keys = apply.keys;
@@ -331,8 +345,24 @@ fn prepare_set(
             run,
             &apply.plan.contexts[i],
             &[RECEIVE_CONFIG, COMMIT_CONFIG, CANCEL_CONFIG],
+            !cancel,
         )
         .map_err(MoveStop::from_failure)?;
+        if p.first_deploy && !p.secrets.is_empty() && !apply.with_upload {
+            // A new receiver's secrets must ride its phase 1 (`--secrets-file`): set after it,
+            // each would be a deployment the move could not tell from someone else's.
+            return Err(MoveStop::from_refusal(
+                Entry::new(
+                    AGENT_MOVE_REFUSED,
+                    format!(
+                        "`{}` is a new Worker that receives an agent move and needs secrets, which this wrangler cannot upload with its first version (`--secrets-file` needs wrangler {SECRETS_FILE_MIN} or later); upgrade wrangler and deploy again.",
+                        deployed_worker_name(&opts.environment, &worker)
+                    ),
+                )
+                .with("reason", "secrets_file")
+                .with("worker", worker.as_str()),
+            ));
+        }
         if under_way && !p.first_deploy && !p.secrets.is_empty() {
             let names: Vec<String> = p.secrets.iter().map(|(n, _)| n.clone()).collect();
             return Err(MoveStop::from_refusal(
@@ -349,10 +379,45 @@ fn prepare_set(
                 .with("secrets", names),
             ));
         }
-        apply_prepared_secrets(run, &p).map_err(MoveStop::from_failure)?;
+        // A retired edge key's delete is a deployment too: while a move is under way it waits
+        // for the run after the move closes, which still finds it retired.
+        apply_prepared_secrets(run, &p, !under_way).map_err(MoveStop::from_failure)?;
+        hand_off_and_record_slots(apply, writer, &worker)?;
         prepared.insert(worker, p);
     }
     Ok(prepared)
+}
+
+/// What [`apply_one`] does once a Worker's secrets are set: hand each foreign caller's newly
+/// minted secret to its operator (the only time the value is shown), and record the edge-key
+/// slots its rotations left retiring (#4526).
+fn hand_off_and_record_slots(
+    apply: &PlanApply<'_>,
+    writer: &mut LedgerWriter<'_>,
+    worker: &str,
+) -> Result<(), MoveStop> {
+    let (env, keys) = (apply.opts.environment.as_str(), apply.keys);
+    for caller in &apply.resources[worker].foreign_callers {
+        if let Some(ForeignKey::Set {
+            value,
+            minted: true,
+        }) = keys
+            .foreign_keys
+            .get(&(worker.to_string(), caller.binding.clone()))
+        {
+            colour::eprint(&foreign_hand_off(env, worker, caller, value, apply.runner));
+        }
+    }
+    writer
+        .change(|lock| {
+            record_edge_slots(lock, env, worker, (&keys.edge_keys, &keys.cleaned.borrow()));
+        })
+        .map_err(|e| {
+            MoveStop::from_failure(DeployFailure::driver(format!(
+                "could not record `{worker}`'s edge keys in {}: {e}",
+                writer.path().display()
+            )))
+        })
 }
 
 fn names_phrase(names: &[String]) -> String {
@@ -368,15 +433,17 @@ fn live_pusher<'a>(
     apply: &PlanApply<'a>,
     set: &MoveSet,
     prepared: BTreeMap<String, PreparedPush>,
+    committed: &[String],
 ) -> LivePusher<'a> {
     let environment = apply.opts.environment.as_str();
     let mut incoming: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut outgoing: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     for m in &set.moves {
+        // A class already committed is live on its receiver (§4.2), even in a second phase 1.
         incoming
             .entry(m.to_worker.clone())
             .or_default()
-            .extend(m.classes.iter().cloned());
+            .extend(m.classes.iter().filter(|c| !committed.contains(c)).cloned());
         for c in &m.classes {
             outgoing
                 .entry(m.from_worker.clone())
@@ -415,9 +482,16 @@ pub(crate) fn cancel_set(
         .clone();
     let receivers = set.receivers();
     let mut resolved = BTreeMap::new();
-    let prepared = prepare_set(apply, writer, set, true, &mut resolved, Some(&receivers))
-        .map_err(|stop| report(&stop))?;
-    let pusher = live_pusher(apply, set, prepared);
+    let prepared = prepare_set(
+        apply,
+        writer,
+        set,
+        true,
+        &mut resolved,
+        (Some(&receivers), true),
+    )
+    .map_err(|stop| report(&stop))?;
+    let pusher = live_pusher(apply, set, prepared, &[]);
     let run = MoveRun {
         environment: apply.opts.environment.as_str(),
         account: apply
@@ -453,9 +527,26 @@ pub(crate) fn apply_placed(
             Step::Receive(n) => {
                 let set = &placed.sets[*n];
                 let resumes = placed.resumes[*n].as_ref();
-                let prepared = prepare_set(apply, writer, set, resumes.is_some(), resolved, None)
-                    .map_err(|stop| report(&stop))?;
-                let pusher = live_pusher(apply, set, prepared);
+                let prepared = prepare_set(
+                    apply,
+                    writer,
+                    set,
+                    resumes.is_some(),
+                    resolved,
+                    (None, false),
+                )
+                .map_err(|stop| report(&stop))?;
+                let committed: Vec<String> = resumes
+                    .and_then(|r| {
+                        writer
+                            .lock()
+                            .open_moves(environment)
+                            .iter()
+                            .find(|o| o.move_id == r.move_id)
+                            .map(|o| o.committed.clone())
+                    })
+                    .unwrap_or_default();
+                let pusher = live_pusher(apply, set, prepared, &committed);
                 let move_id = match resumes {
                     Some(r) => r.move_id.clone(),
                     None => {
@@ -583,6 +674,41 @@ mod tests {
         assert_eq!(v.commit["pay"][0].to_script, "core-staging");
         assert_eq!(v.stubs["shop-orders"].0, "shop-orders");
         assert_eq!(v.stubs["shop-orders"].1[0].class, "Cart");
+    }
+
+    /// A new receiver is recorded as on the account when its phase 1 lands, so a resume decides
+    /// its keys as for a deployed Worker and does not mint edge keys it would never get.
+    #[test]
+    fn a_new_receivers_phase_1_records_it_as_deployed() {
+        let dir = scratch("deployed");
+        let api = Account::new(Wrangler::scripted("exit 0", &dir));
+        let groups = GroupNames::of(&dir);
+        let resources = BTreeMap::new();
+        let pusher = LivePusher {
+            api: &api,
+            environment: "default",
+            wrangler_args: &[],
+            workers_dir: &dir,
+            prepared: BTreeMap::from([(
+                "core".to_string(),
+                PreparedPush {
+                    worker: "core".into(),
+                    worker_dir: dir.join("core"),
+                    first_deploy: true,
+                    secrets: Vec::new(),
+                    facts: Facts::default(),
+                },
+            )]),
+            incoming: BTreeMap::new(),
+            outgoing: BTreeMap::new(),
+            groups: &groups,
+            resources: &resources,
+        };
+        let mut lock: DeployLock = toml::from_str("version = 1\n").unwrap();
+        assert!(!lock.is_deployed("default", "core"));
+        pusher.record(&mut lock, "core", Phase::Receive);
+        assert!(lock.is_deployed("default", "core"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// S7: a commit that finds no pending transfer on the receiver is a lost transfer, which the

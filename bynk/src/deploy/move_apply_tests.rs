@@ -28,6 +28,8 @@ enum Act {
     Lose,
     /// A commit that lands without the namespace moving.
     LandWithoutCommit,
+    /// A lost transfer, after which the namespace listing cannot be read.
+    LoseUnlisted,
 }
 
 #[derive(Default)]
@@ -42,6 +44,8 @@ struct World {
     pushes: Vec<String>,
     /// (worker, phase) → the next pushes' acts; a push with none lands.
     acts: BTreeMap<(String, u8), VecDeque<Act>>,
+    /// The namespace listing fails.
+    unlisted: bool,
 }
 
 impl World {
@@ -120,7 +124,11 @@ impl Fake {
 
 impl MoveAccount for Fake {
     fn namespaces(&self) -> Result<Vec<Namespace>, CloudflareError> {
-        Ok(self.world().namespaces.clone())
+        let world = self.world();
+        if world.unlisted {
+            return Err("the listing failed".into());
+        }
+        Ok(world.namespaces.clone())
     }
 
     fn deployments(&self, script: &str) -> Result<Vec<Deployment>, CloudflareError> {
@@ -163,6 +171,10 @@ impl MovePusher for Fake {
             Act::Fail => return PhasePush::Failed(failure()),
             Act::Interrupt => return PhasePush::Interrupted,
             Act::Lose => return PhasePush::TransferLost(failure()),
+            Act::LoseUnlisted => {
+                world.unlisted = true;
+                return PhasePush::TransferLost(failure());
+            }
             Act::Land | Act::LandThenInterrupt | Act::LandWithoutCommit => {}
         }
         let facts = Facts {
@@ -1156,28 +1168,70 @@ fn a_cancel_after_a_commit_may_have_landed_is_refused() {
     assert!(ledger.lock.has_open_move());
 }
 
-/// A cancel cut short leaves the cancelled receiver not `done`: a resume receives it again, and
-/// its cancel push is the move's own.
+/// A cancel cut short, from `received`, sends the record back to `receiving`: the next run
+/// receives every receiver again rather than commit to one that no longer expects the class.
 #[test]
-fn a_cancel_cut_short_resumes_by_receiving_again() {
+fn a_cancel_cut_short_from_received_resumes_by_receiving_again() {
     let (fake, mut ledger) = (fake(&fan_out()), Ledger::new());
     open(&mut ledger, &fake, fan_out()).unwrap();
     ledger.with(|w| run(&fake).receive(w, "m1")).unwrap();
-    // `received` → back to `receiving` is not a step a run takes; a cancel happens before the
-    // commit, so put the record where a cancel finds it mid-phase 1.
-    ledger
-        .with(|w| {
-            w.change(|lock| {
-                let r = lock.open_move_mut(ENV, "m1").unwrap();
-                r.step = MoveStep::Receiving;
-                r.done = vec!["billing".into(), "orders".into()];
-            })
-        })
-        .unwrap();
+    assert_eq!(ledger.record().unwrap().step, MoveStep::Received);
     fake.act("orders", 4, &[Act::Fail]);
     let stop = ledger.with(|w| run(&fake).cancel(w, "m1")).unwrap_err();
     assert_eq!(stop.failures.len(), 1);
-    assert_eq!(ledger.record().unwrap().done, ["orders"]);
+    let record = ledger.record().unwrap();
+    assert_eq!(
+        (record.step, record.done.clone()),
+        (MoveStep::Receiving, vec![])
+    );
+    let before = fake.pushes().len();
     nodes(&mut ledger, &fake).unwrap();
+    let mut receives = fake.pushes()[before..before + 2].to_vec();
+    receives.sort();
+    assert_eq!(receives, ["billing:1", "orders:1"]);
     assert!(!ledger.lock.has_open_move());
+}
+
+/// Ruling 2: before any commit, a cancel is the way out of a `move_interleaved` stop, so it goes
+/// ahead over the deployment the move did not make.
+#[test]
+fn a_cancel_goes_ahead_after_an_interleaved_stop() {
+    let (fake, mut ledger) = (fake(&one_move()), Ledger::new());
+    fake.act("core", 1, &[Act::Fail]);
+    open(&mut ledger, &fake, one_move()).unwrap();
+    nodes(&mut ledger, &fake).unwrap_err();
+    fake.foreign_deploy("core");
+    let stop = nodes(&mut ledger, &fake).unwrap_err();
+    assert_eq!(codes(&stop), [MOVE_INTERLEAVED]);
+    assert!(stop.refusals[0].message.contains("--cancel-move"));
+    ledger.with(|w| run(&fake).cancel(w, "m1")).unwrap();
+    assert!(!ledger.lock.has_open_move());
+    assert_eq!(fake.pushes().last().map(String::as_str), Some("core:4"));
+}
+
+/// A lost transfer whose listing cannot be read changes nothing: what an earlier run recorded as
+/// committed, and each landed commit's `done`, stay as they were.
+#[test]
+fn a_lost_transfer_with_an_unreadable_listing_keeps_the_record() {
+    let (fake, mut ledger) = (fake(&fan_in()), Ledger::new());
+    fake.act("shop-billing", 2, &[Act::LoseUnlisted]);
+    open(&mut ledger, &fake, fan_in()).unwrap();
+    ledger
+        .with(|w| {
+            w.change(|lock| {
+                lock.open_move_mut(ENV, "m1").unwrap().committed = vec!["Earlier".into()];
+            })
+        })
+        .unwrap();
+    let stop = nodes(&mut ledger, &fake).unwrap_err();
+    assert!(
+        stop.failures
+            .iter()
+            .any(|f| f.message.contains("the listing failed")),
+        "{stop:?}"
+    );
+    let record = ledger.record().unwrap();
+    assert_eq!(record.step, MoveStep::Committing);
+    assert_eq!(record.committed, ["Earlier"]);
+    assert_eq!(record.done, ["shop-orders"]);
 }

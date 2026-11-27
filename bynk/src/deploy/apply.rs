@@ -586,6 +586,7 @@ pub(crate) fn apply_worker(
         bound: BTreeMap::new(),
         outcome: Ok(None),
         prepare: None,
+        migrate: true,
     };
     for_each_apply_phase(&mut apply);
     apply
@@ -614,6 +615,7 @@ pub(crate) fn prepare_worker(
     run: &mut RunCx<'_, '_, '_>,
     context: &ContextPlan<'_>,
     variants: &[&str],
+    migrate: bool,
 ) -> Result<PreparedPush, DeployFailure> {
     let steps = context.steps();
     let Some((worker, declared)) = steps.worker else {
@@ -640,6 +642,7 @@ pub(crate) fn prepare_worker(
         bound: BTreeMap::new(),
         outcome: Ok(None),
         prepare: Some(None),
+        migrate,
     };
     for_each_apply_phase(&mut apply);
     apply.outcome?;
@@ -654,6 +657,7 @@ pub(crate) fn prepare_worker(
 pub(crate) fn apply_prepared_secrets(
     run: &mut RunCx<'_, '_, '_>,
     prepared: &PreparedPush,
+    edge_deletes: bool,
 ) -> Result<(), DeployFailure> {
     if prepared.first_deploy {
         return Ok(());
@@ -665,6 +669,9 @@ pub(crate) fn apply_prepared_secrets(
         &prepared.secrets,
         run.environment,
     )?;
+    if !edge_deletes {
+        return Ok(());
+    }
     apply_edge_deletes(
         run.tools.api,
         run.secrets,
@@ -690,6 +697,8 @@ struct ApplyWorker<'p, 'a, 'w, 's, 'r> {
     /// #3565: `Some` when preparing a Worker of a move set ([`prepare_worker`]): the push slot
     /// prepares instead of pushing, and leaves what it prepared here.
     prepare: Option<Option<PreparedPush>>,
+    /// #3565: whether to apply D1 migrations (not for a `--cancel-move`, which changes no code).
+    migrate: bool,
 }
 
 impl ApplyWorker<'_, '_, '_, '_, '_> {
@@ -862,7 +871,8 @@ impl ApplyVisitor for ApplyWorker<'_, '_, '_, '_, '_> {
                 }
                 Ok(())
             }),
-            ApplySlot::Migrations => self.phase(Self::migrations),
+            ApplySlot::Migrations if self.migrate => self.phase(Self::migrations),
+            ApplySlot::Migrations => {}
             ApplySlot::Push if self.prepare.is_some() => self.phase(|this| {
                 let prepared =
                     prepare_push(this.run, this.worker, &this.worker_dir, this.declared)?;
