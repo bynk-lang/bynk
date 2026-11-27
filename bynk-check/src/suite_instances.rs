@@ -20,8 +20,11 @@ use std::collections::{BTreeMap, HashMap};
 
 /// The unit tables the test phase checks and emits against: `None` when no
 /// suite declares an instance (the project's own tables serve), else a copy in
-/// which each commons target's table holds its suites' instances. The errors
-/// are the refusals of the instances that could not be added.
+/// which each commons target's table holds its suites' instances. An instance
+/// is shared by every suite of its target, as the target's `deps` factory is, so
+/// a name is declared once per target: a second declaration, in the same suite
+/// file or another, is `bynk.resolve.duplicate_capability`. The errors are the
+/// refusals of the instances that could not be added.
 pub fn suite_instance_tables(
     test_groups: &BTreeMap<String, Vec<usize>>,
     parsed: &[ParsedFile],
@@ -31,6 +34,8 @@ pub fn suite_instance_tables(
 ) -> (Option<HashMap<String, UnitTable>>, Vec<CompileError>) {
     let mut errors = Vec::new();
     let mut tables: Option<HashMap<String, UnitTable>> = None;
+    // `(target, name)` to the instance that first declared it.
+    let mut declared: HashMap<(&str, &str), &CapabilityDecl> = HashMap::new();
     for (target, indices) in test_groups {
         for &i in indices {
             let Some(suite) = parsed[i].test() else {
@@ -44,12 +49,17 @@ pub fn suite_instance_tables(
                     errors.push(outside_commons_suite(c));
                     continue;
                 }
+                if let Some(first) = declared.get(&(target.as_str(), c.name.name.as_str())) {
+                    errors.push(declared_twice(c, first, target));
+                    continue;
+                }
                 let tables = tables.get_or_insert_with(|| unit_tables.clone());
                 let Some(table) = tables.get_mut(target) else {
                     continue;
                 };
                 match instance(c, table, unit_tables) {
                     Ok((decl, inst)) => {
+                        declared.insert((target.as_str(), c.name.name.as_str()), c);
                         table.capabilities.insert(c.name.name.clone(), decl);
                         table.derived.insert(c.name.name.clone(), inst);
                     }
@@ -121,6 +131,23 @@ fn instance(
         span: c.span,
     };
     Ok((decl, inst))
+}
+
+/// `bynk.resolve.duplicate_capability` for a suite-local instance whose name an
+/// earlier suite of the same target already declares.
+fn declared_twice(c: &CapabilityDecl, first: &CapabilityDecl, target: &str) -> CompileError {
+    CompileError::new(
+        "bynk.resolve.duplicate_capability",
+        c.name.span,
+        format!(
+            "suite-local instance `{}` is already declared by a suite of `{target}`",
+            c.name.name
+        ),
+    )
+    .with_label(first.name.span, "first declared here")
+    .with_note(format!(
+        "a suite-local instance is shared by every suite of its commons, as their doubles are: declare it once and name it from any suite of `{target}`, or give this one another name"
+    ))
 }
 
 /// `bynk.capability.derived_outside_context` for an instance in a suite whose

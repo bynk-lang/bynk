@@ -412,6 +412,148 @@ function __makeTestDeps(__case?: string) {
 }
 
 // case tier: unit
+async function test_another_suite_of_the_commons_names_the_shared_instance() {
+  try {
+    const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Archive: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Logger: ["debug", "error", "info", "log", "warn"] }, __obs);
+    const { copy, remember } = __ns_lib_cache;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
+    type Authorization = __ns_bynk.Authorization;
+    type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
+    type Claim = __ns_bynk.Claim;
+    type CloseInfo = __ns_bynk.CloseInfo;
+    type ContentRange = __ns_bynk.ContentRange;
+    type Cookie = __ns_bynk.Cookie;
+    type CronSchedule = __ns_bynk.CronSchedule;
+    type EventEnvelope = __ns_bynk.EventEnvelope;
+    type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
+    type LogLevel = __ns_bynk.LogLevel;
+    type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
+    type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
+    type Request = __ns_bynk.Request;
+    type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
+    type SseEvent = __ns_bynk.SseEvent;
+    type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
+    type Uuid = __ns_bynk.Uuid;
+    const { AiError, AnalyticsReadError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailActions, EmailAttachment, EmailError, EmailHeader, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    type AiError = __ns_bynk_cloudflare.AiError;
+    type AnalyticsReadError = __ns_bynk_cloudflare.AnalyticsReadError;
+    type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
+    type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
+    type AnalyticsSqlStatistics = __ns_bynk_cloudflare.AnalyticsSqlStatistics;
+    type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
+    type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
+    type ContainerError = __ns_bynk_cloudflare.ContainerError;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
+    type EmailActions = __ns_bynk_cloudflare.EmailActions;
+    type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
+    type EmailError = __ns_bynk_cloudflare.EmailError;
+    type EmailHeader = __ns_bynk_cloudflare.EmailHeader;
+    type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
+    type EmailReply = __ns_bynk_cloudflare.EmailReply;
+    type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
+    type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
+    type Generation = __ns_bynk_cloudflare.Generation;
+    type ImageFit = __ns_bynk_cloudflare.ImageFit;
+    type ImageFormat = __ns_bynk_cloudflare.ImageFormat;
+    type ImageInfo = __ns_bynk_cloudflare.ImageInfo;
+    type ImageResult = __ns_bynk_cloudflare.ImageResult;
+    type ImageStream = __ns_bynk_cloudflare.ImageStream;
+    type ImagesError = __ns_bynk_cloudflare.ImagesError;
+    type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
+    type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
+    type MySqlError = __ns_bynk_cloudflare.MySqlError;
+    type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
+    type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
+    type MySqlStatement = __ns_bynk_cloudflare.MySqlStatement;
+    type MySqlValue = __ns_bynk_cloudflare.MySqlValue;
+    type OutputOptions = __ns_bynk_cloudflare.OutputOptions;
+    type Overlay = __ns_bynk_cloudflare.Overlay;
+    type PgError = __ns_bynk_cloudflare.PgError;
+    type PgReadError = __ns_bynk_cloudflare.PgReadError;
+    type PgRun = __ns_bynk_cloudflare.PgRun;
+    type PgStatement = __ns_bynk_cloudflare.PgStatement;
+    type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
+    type QueueDelay = __ns_bynk_cloudflare.QueueDelay;
+    type QueueDelivery = __ns_bynk_cloudflare.QueueDelivery;
+    type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type RequestCf = __ns_bynk_cloudflare.RequestCf;
+    type RetrievalType = __ns_bynk_cloudflare.RetrievalType;
+    type SearchAnswer = __ns_bynk_cloudflare.SearchAnswer;
+    type SearchError = __ns_bynk_cloudflare.SearchError;
+    type SearchHit = __ns_bynk_cloudflare.SearchHit;
+    type SearchOptions = __ns_bynk_cloudflare.SearchOptions;
+    type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type TransformOptions = __ns_bynk_cloudflare.TransformOptions;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
+    type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
+    const __r0 = await deps.Kv.put("k", "v");
+    const moved = await copy("k", { From: deps.Kv, To: deps.Archive });
+    if (!(moved)) { throw __bynkExpectFailure("tests/archive.bynk:12:9", 377, 382, "expect moved"); }
+    if (!(((__obs.log["Archive.put"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/archive.bynk:13:9", 391, 414, "expect Archive.put called once"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
 async function test_the_kind_double_is_bound__stubbed_and_observed() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
@@ -855,11 +997,17 @@ async function test_a_given_suite_helper_seeds_the_kind_double() {
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["the kind double is bound, stubbed and observed", "a suite-local instance is a second, distinct double", "a given suite helper seeds the kind double"];
+export const __bynkCases: readonly string[] = ["another suite of the commons names the shared instance", "the kind double is bound, stubbed and observed", "a suite-local instance is a second, distinct double", "a given suite helper seeds the kind double"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
+  if (want("another suite of the commons names the shared instance")) {
+    const started = __bynkCaseNow();
+    const r = { name: "another suite of the commons names the shared instance", ...(await test_another_suite_of_the_commons_names_the_shared_instance()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   if (want("the kind double is bound, stubbed and observed")) {
     const started = __bynkCaseNow();
     const r = { name: "the kind double is bound, stubbed and observed", ...(await test_the_kind_double_is_bound__stubbed_and_observed()), durationMs: __bynkCaseSince(started) };

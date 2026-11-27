@@ -1703,7 +1703,9 @@ case holds the double of every capability its commons selects, named by the kind
 as a capability the suite file `consumes`; a binding's right-hand side may be such
 a double. A commons suite MAY declare a suite-local instance `capability X = K`,
 under the derived-capability rules below (`K` selected by the commons, with
-instances): a fresh double, with no binding and no deploy effect. A suite whose
+instances): a fresh double, with no binding and no deploy effect. It is in scope in every
+suite of the commons, and its name MUST be declared once across them
+(`bynk.resolve.duplicate_capability`). A suite whose
 target is not a commons MUST NOT declare one
 (`bynk.capability.derived_outside_context`).
 

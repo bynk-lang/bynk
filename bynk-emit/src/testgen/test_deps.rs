@@ -45,6 +45,16 @@ fn events_emit_loop() -> TsStmt {
     )
 }
 
+/// Whether a target's deps are built from its capabilities. #3959: a commons
+/// suite's are the doubles of the first-party capabilities its commons selects
+/// (track §9), built as a context's flattened ones are.
+fn builds_target_deps(kind: UnitKind) -> bool {
+    matches!(
+        kind,
+        UnitKind::Context | UnitKind::Adapter | UnitKind::Commons
+    )
+}
+
 /// #1479: returns the real [`TsStmt`] itself (was pre-printed `String`) — the
 /// one real declaration this function ever built; its caller now prints it
 /// directly via `bynk_ts::print_stmt`, the same shape it always used, just
@@ -62,16 +72,6 @@ fn events_emit_loop() -> TsStmt {
 /// review).
 ///
 /// #4190: `wire` is `Some` at `integration`, where a stubbed service crosses its wire codecs.
-/// Whether a target's deps are built from its capabilities. #3959: a commons
-/// suite's are the doubles of the first-party capabilities its commons selects
-/// (track §9), built as a context's flattened ones are.
-fn builds_target_deps(kind: UnitKind) -> bool {
-    matches!(
-        kind,
-        UnitKind::Context | UnitKind::Adapter | UnitKind::Commons
-    )
-}
-
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_test_deps(
     target_name: &str,

@@ -188,7 +188,9 @@ fn session(id: String) -> Effect[String] given Sessions, Logger {
   `remember(key, given Store = Kv)`, and stubs and observes `Kv`; a shared capability's
   double is observed the same way (`expect Logger.info called`). Each double is fresh per
   case. For a second double of one kind, a commons suite declares a suite-local instance,
-  `capability Archive = Kv`, with no binding and no deploy effect; a context's suite cannot
+  `capability Archive = Kv`, with no binding and no deploy effect. It is shared by every
+  suite of the commons, so it is declared once (`bynk.resolve.duplicate_capability`
+  otherwise) and named from any of them. A context's suite cannot
   (`bynk.capability.derived_outside_context`), nor can a commons itself. A `given` suite
   helper names the doubles it uses (`fn seed() -> Effect[()] given Kv`), and setup over a
   parameter lives in a test-only commons, which a case calls with a binding. Naming a
