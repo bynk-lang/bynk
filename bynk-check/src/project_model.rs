@@ -7848,6 +7848,7 @@ mod native_platform_closure_tests {
             consumed_type_aliases: StdHashMap::new(),
             unselected_consumed_types: Default::default(),
             unlisted_consumed_types: Default::default(),
+            first_party_consumes: Default::default(),
             assets: StdHashMap::new(),
             embeds: StdHashMap::new(),
             consts: StdHashMap::new(),
@@ -7944,6 +7945,61 @@ mod view_closure_tests {
         let pf = ParsedFile::new(path.clone(), path, None, src.to_string(), unit, kind, false);
         let mut errors = Vec::new();
         build_unit_table(name, kind, &[0], &[pf], &mut errors)
+    }
+
+    /// #4618: a first-party type a service signature reaches is in the contract table, and a name
+    /// it reaches that the context binds to a declaration of its own keeps the first-party meaning
+    /// under a qualified key, so the context's `SameSite` is not the one `Cookie.sameSite` has.
+    #[test]
+    fn an_adapter_type_keeps_its_own_names_where_the_context_declares_the_same_one() {
+        use bynk_syntax::ast::{TypeBody, TypeRef};
+        let bynk = table(
+            "bynk",
+            UnitKind::Adapter,
+            "adapter bynk {\n  exports transparent { Cookie, SameSite }\n  type SameSite = enum { Strict, Lax }\n  type Cookie = { name: String, sameSite: SameSite }\n}\n",
+        );
+        let mut orders = table(
+            "t.orders",
+            UnitKind::Context,
+            "context t.orders\n\nconsumes bynk { Cookie }\n\ntype SameSite = enum { Mine, Yours }\n\ntype Session = { cookie: Cookie, mine: SameSite }\n\nservice s {\n  on call() -> Effect[Session] by Caller { Effect.pure(Session { cookie: Cookie { name: \"a\" }, mine: Mine }) }\n}\n",
+        );
+        orders.first_party_consumes.insert("bynk".to_string());
+        let tables: HashMap<String, UnitTable> =
+            [("bynk".to_string(), bynk), ("t.orders".to_string(), orders)].into();
+        let (types, _) = crate::symbols::contract_types_for(
+            "t.orders",
+            &tables,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        let TypeBody::Record(cookie) = &types["Cookie"].body else {
+            panic!("Cookie is a record");
+        };
+        let TypeRef::Named(id) = &cookie.fields[1].type_ref else {
+            panic!("sameSite names a type");
+        };
+        assert_eq!(
+            id.name, "bynk__SameSite",
+            "Cookie's reference is the first-party one"
+        );
+        let TypeBody::Sum(prelude) = &types["bynk__SameSite"].body else {
+            panic!("the first-party SameSite is a sum");
+        };
+        let variants = |s: &bynk_syntax::ast::SumBody| {
+            s.variants
+                .iter()
+                .map(|v| v.name.name.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(variants(prelude), ["Strict", "Lax"]);
+        let TypeBody::Sum(own) = &types["SameSite"].body else {
+            panic!("the context's SameSite is a sum");
+        };
+        assert_eq!(
+            variants(own),
+            ["Mine", "Yours"],
+            "the context's own type is untouched"
+        );
     }
 
     /// Review of #1814: a table built without a kind (`UnitTable::default()`,

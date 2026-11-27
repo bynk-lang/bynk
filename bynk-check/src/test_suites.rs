@@ -7203,6 +7203,83 @@ service session {
             .assert_reports("bynk.types.unknown_field");
     }
 
+    /// A prelude type a record of the context's own holds is resolved as well: the walk goes
+    /// through the context's own types, not only the ones a signature names.
+    const WRAPPED: &str = "context shop.orders
+
+consumes bynk { Cookie }
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }
+
+service api from http {
+  on GET(\"/ping\") () -> Effect[HttpResult[String]] by u: User {
+    Ok(\"pong\")
+  }
+}
+
+type Session = { cookie: Cookie, user: String }
+
+service session {
+  on call() -> Effect[Session] by Caller {
+    Effect.pure(Session { cookie: Cookie { name: \"sid\", value: \"a\" }, user: \"ada\" })
+  }
+}
+";
+
+    #[test]
+    fn a_prelude_type_inside_a_record_of_the_context_resolves() {
+        let suite = "suite shop.orders as system {\n  case \"c\" {\n    let s <- shop.orders.session()\n    expect s.cookie.name == \"sid\"\n  }\n}\n";
+        crate::testkit::analyse(&[
+            ("shop/orders.bynk", WRAPPED),
+            ("shop/tests/orders.test.bynk", suite),
+        ])
+        .assert_clean();
+        crate::testkit::analyse(&[
+            ("shop/orders.bynk", WRAPPED),
+            (
+                "shop/web.bynk",
+                "context shop.web\n\nconsumes shop.orders\n\nservice w {\n  on call() -> Effect[String] by Caller {\n    let s <- shop.orders.session()\n    Effect.pure(s.cookie.name)\n  }\n}\n",
+            ),
+        ])
+        .assert_clean();
+    }
+
+    /// `bynk.crypto` is a first-party adapter too.
+    #[test]
+    fn a_crypto_type_in_a_signature_resolves() {
+        let orders = "context shop.orders
+
+consumes bynk.crypto { CryptoError }
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }
+
+service api from http {
+  on GET(\"/ping\") () -> Effect[HttpResult[String]] by u: User {
+    Ok(\"pong\")
+  }
+}
+
+service check {
+  on call() -> Effect[Result[String, CryptoError]] by Caller {
+    Effect.pure(Ok(\"fine\"))
+  }
+}
+";
+        let suite = "suite shop.orders as system {\n  case \"c\" {\n    let r <- shop.orders.check()\n    expect r is Ok(_)\n  }\n}\n";
+        let a = crate::testkit::analyse(&[
+            ("shop/orders.bynk", orders),
+            ("shop/tests/orders.test.bynk", suite),
+        ]);
+        // `bynk.crypto` is experimental, which is reported; the call's result is not read as `()`.
+        assert!(
+            !a.categories().contains(&"bynk.effect.bind_on_non_effect"),
+            "{:?}",
+            a.categories()
+        );
+    }
+
     /// The same holds for a consuming context: a call is typed by the callee's signature
     /// whether or not the caller names the prelude record itself.
     #[test]
