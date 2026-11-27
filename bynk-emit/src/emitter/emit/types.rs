@@ -270,8 +270,8 @@ fn emit_refined_type(
 
 /// #3752 (D8, D11): `bynk`'s `InboundRequest` and `Forwarded` are runtime views (the
 /// router's request, an upstream's answer), not strings, and only the router and
-/// `Upstream.forward` make one, so each is the branded view type with no companion
-/// (`of`, `unsafe`) to build one from text.
+/// `Upstream.forward` make one, so each is the branded view type, with an empty
+/// companion: no `of` or `unsafe` builds one from text.
 fn pass_through_carrier_type(
     t: &TypeDecl,
     is_opaque: bool,
@@ -288,14 +288,25 @@ fn pass_through_carrier_type(
         "__brand",
         bynk_ts::TsType::named(format!("\"{brand_prefix}{name}\"")),
     )]);
-    Some(vec![bynk_ts::TsStmt::decl(
+    let alias = bynk_ts::TsStmt::decl(
         bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::TypeAlias {
-            name,
+            name: name.clone(),
             type_params: Vec::new(),
             ty: bynk_ts::TsType::intersection(vec![bynk_ts::TsType::named(carrier), brand_ty]),
         })),
         None,
-    )])
+    );
+    // The companion every `bynk` type pairs with (a plain record's is `{}` too), so
+    // an import or a suite's namespace destructure binds the name as for any type.
+    let companion = bynk_ts::TsStmt::decl(
+        bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
+            name,
+            ty: None,
+            init: bynk_ts::TsExpr::object(vec![]),
+        })),
+        None,
+    );
+    Some(vec![alias, companion])
 }
 
 /// The statements of a refined or opaque type's `of(value)`: its guards, then the

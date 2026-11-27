@@ -116,6 +116,12 @@ fn upstream(seen: Seen) -> u16 {
                     ),
                     "/status/304" => ("304 Not Modified", "etag: \"u1\"\r\n".into(), String::new()),
                     "/status/404" => ("404 Not Found", "content-type: text/html\r\n".into(), "<p>missing</p>".into()),
+                    // D16: an off-host redirect, passed through and never followed.
+                    "/status/302off" => (
+                        "302 Found",
+                        "location: https://elsewhere.example/landing\r\n".into(),
+                        String::new(),
+                    ),
                     "/status/308" => ("308 Permanent Redirect", "location: /posts/x/\r\n".into(), String::new()),
                     "/echo" => (
                         "200 OK",
@@ -406,6 +412,22 @@ fn a_pass_through_route_forwards_to_a_loopback_upstream_on_workerd() {
                 "§8 SSRF into the upstream's own private paths via `..`: refused, nothing sent",
                 send(port, "GET", "/blog/..%2F..%2Fadmin", none, ""),
                 &|a| a.status == 400,
+            );
+            check(
+                &mut f,
+                "§8 SSRF into the upstream's own private paths via `..`: a mixed-case `%2E%2e` segment never reaches it",
+                send(port, "GET", "/blog/%2E%2e/admin", none, ""),
+                &|a| a.status == 400 || a.status == 404,
+            );
+            check(
+                &mut f,
+                "§8 open redirect via the upstream (D16): an off-host Location passes unchanged and is never followed",
+                send(port, "GET", "/blog/status/302off", none, ""),
+                &|a| {
+                    a.status == 302
+                        && a.header("location").as_deref()
+                            == Some("https://elsewhere.example/landing")
+                },
             );
             check(
                 &mut f,

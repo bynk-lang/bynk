@@ -389,16 +389,30 @@ pub(crate) fn held_at_boundary(
     .with_note(instead)
 }
 
-/// #3752 (slice 3a): `bynk.http.pass_through_not_emitted`, for the `on ANY` route
-/// `path` a build reaches. The driver reports it once the program checks clean;
-/// slice 3b, which builds the route, retires it.
-pub fn not_emitted_error(path: &str, span: bynk_syntax::span::Span) -> CompileError {
-    CompileError::new(
-        "bynk.http.pass_through_not_emitted",
-        span,
-        format!("the pass-through route `ANY {path}` checks, but this release can't build it yet"),
+/// #3752 (slice 3b): `bynk.test.pass_through_address` when a suite case addresses
+/// `service.<verb>("<path>")` and the service's route at `path` is an `ANY` route.
+/// A suite drives a pass-through route through its unit-tier double, which a later
+/// slice (3c) adds, so until then the case is refused rather than run wrong.
+pub(crate) fn suite_address_refusal<'a>(
+    mut kinds: impl Iterator<Item = &'a HandlerKind>,
+    service: &str,
+    verb: &bynk_syntax::ast::Ident,
+    path: &str,
+) -> Option<CompileError> {
+    kinds.find(
+        |k| matches!(k, HandlerKind::Http { method: HttpMethod::Any, path: p } if p == path),
+    )?;
+    Some(
+        CompileError::new(
+            "bynk.test.pass_through_address",
+            verb.span,
+            format!(
+                "`{service}.{}(\"{path}\")` addresses the pass-through route `ANY {path}`, which a suite case can't drive yet",
+                verb.name
+            ),
+        )
+        .with_note("a pass-through route's test double (a stub of `Upstream.exchange`, `Forwarded.of`) and its suite addresses arrive in a later release; until then, test the functions its handler calls"),
     )
-    .with_note("its router and the `Upstream` exchange arrive in the next increment; `bynk check` accepts it meanwhile")
 }
 
 #[cfg(test)]

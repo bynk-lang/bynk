@@ -733,10 +733,7 @@ pub(super) fn emit_project_imports(
                     )
                 {
                     parts.push(format!("{n} as {}", commons_alias(n)));
-                } else if is_subscribed_event_type
-                    || is_consumed_context_type
-                    || is_pass_through_view(n, &commons.types)
-                {
+                } else if is_subscribed_event_type || is_consumed_context_type {
                     // Events track, slice 0 (spine #936): under Workers, a
                     // context deploys as its own separate Worker script —
                     // there is no shared module graph to import a peer
@@ -927,17 +924,4 @@ fn relative_to(from: &Path, target: &Path) -> PathBuf {
         out.push(".");
     }
     out
-}
-
-/// #3752 (D8, D11): `bynk`'s `InboundRequest` and `Forwarded` are type aliases of
-/// runtime views with no companion value, so a module imports them type-only.
-fn is_pass_through_view(
-    name: &str,
-    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
-) -> bool {
-    use bynk_check::http_pass_through::{PassThroughType, pass_through_type};
-    matches!(
-        pass_through_type(name, types),
-        Some(PassThroughType::InboundRequest | PassThroughType::Forwarded)
-    )
 }

@@ -1,0 +1,6 @@
+suite demo {
+  case "a pass-through route" {
+    let r <- proxy.ANY("/blog/*path", "/posts/x") by Visitor
+    expect true
+  }
+}
