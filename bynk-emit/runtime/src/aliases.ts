@@ -11,7 +11,7 @@ import { bearerTrust, oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJw
 import { apiKeyEqual, apiKeyCountCompares, apiKeyPeppersOf, mintApiKey, apiKeyDummyDigest, apiKeyFirstDigest, apiKeyPresented, apiKeyCredentialOf, apiKeyDigests, apiKeyIdOf, formatApiKey, freshApiKey, loadApiKeyPeppers, newApiKeyHandle, newApiKeyPepper, parseApiKey, parseApiKeyId } from "./apikey.ts";
 import { currentSession, expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
 import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, renameStoredFields, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
-import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketAuthExpired, webSocketBearerRefusal, webSocketClosing, webSocketAdmit, webSocketErrored, webSocketOriginAllowed, webSocketUpgradeResponse } from "./connection.ts";
+import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, registerFrameEncoder, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketAuthExpired, webSocketBearerRefusal, webSocketClosing, webSocketAdmit, webSocketErrored, webSocketOriginAllowed, webSocketUpgradeResponse } from "./connection.ts";
 import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
@@ -184,6 +184,7 @@ export {
   readCapped as __readBodyCapped,
   renameStoredFields as __renameStoredFields,
   reportUnknownStoredKeys as __reportUnknownStoredKeys,
+  registerFrameEncoder as __registerFrameEncoder,
   resolveConnection as __resolveConnection,
   responseToHttpOutcome as __responseToHttpOutcome,
   responseToHttpResult as __responseToHttpResult,

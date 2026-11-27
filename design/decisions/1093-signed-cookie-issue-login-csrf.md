@@ -1,0 +1,13 @@
+# 1093 — A route that issues a signed-cookie session is checked for login CSRF
+
+- **Status:** Accepted (v0.817)
+
+**Context.** The cross-site check (`csrfAllowed`: fetch metadata, then `Origin` against the service's `cors` origins) ran only on routes guarded by a `SignedCookie` actor. The route that issues the session cannot be guarded by it, because the caller has no session yet, so it was the one route nothing protected from login CSRF: a hostile page makes a signed-out visitor's browser post the attacker's own credential, and the victim then works signed in as the attacker. `SameSite` does not help, because the attacker wants the cookie set (#3825).
+
+**Decision A — the issuing route reuses `csrfAllowed` unchanged, so a headerless request is refused.** The check is the existing guarded-route rule, run in the route wrapper before the body. This deliberately differs from the issue text, which says a request with no `Origin` and no `Sec-Fetch-Site` passes: the guarded rule refuses it, and a weaker rule on a login route would be the wrong direction (the check exists to protect that route). The cost is that a non-browser client posting to a sign-in route must send an `Origin` listed in `cors` or `Sec-Fetch-Site: same-origin`, or the route should use a Bearer actor; that is recorded in the breaking note. Detection is syntactic: a handler that is not a GET, is not guarded by a signed-cookie actor, and whose body calls `Actor.issue(...)` on a `SignedCookie` actor.
+
+**Decision B — no opt-out.** There is no field to turn the check off. A service with no `cors` accepts an issuing request from its own origin only, documented and with no new diagnostic. A test that must exercise the route cross-site sends the headers it wants; the system driver defaults `Sec-Fetch-Site: same-origin` for an issuing route.
+
+**Decision C — a GET that issues warns.** A GET is outside the check (a link click, a prefetch and an image all send one), so `bynk.actor.signed_cookie_issue_on_safe_method` warns and steers the author to `POST`. It is a warning, not an error, because a GET sign-in link is a legitimate pattern for some flows and the author may have other controls.
+
+**Consequences.** Login CSRF on a signed-cookie service is refused by default, and a refused request never reaches the body (a counter in the system fixture proves it did not run). Existing issuing routes called by non-browser clients, or from an origin the service does not list, now see 403 until the client sends a listed `Origin` or the service lists it.
